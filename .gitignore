@@ -29,3 +29,5 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+nerava-backend-v9/.venv
+nerava-backend-v9/nerava.db*
