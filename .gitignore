@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+.venv/
+venv/
+env/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Node / PWA
+node_modules/
+dist/
+.next/
+.turbo/
+
+# Databases / data
+*.db
+*.db-shm
+*.db-wal
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
