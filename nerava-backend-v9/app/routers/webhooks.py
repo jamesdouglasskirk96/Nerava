@@ -1,33 +1,38 @@
-# app/routers/webhooks.py
-from fastapi import APIRouter
-from pydantic import BaseModel
-from typing import Optional
-from ..services.cache import clicks
-from ..services.wallet import credit_wallet  # you already have wallet endpoints
+from datetime import datetime, timedelta
 
-router = APIRouter(prefix="/v1/webhooks", tags=["webhooks"])
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
-class OrderEvent(BaseModel):
-    user_id: str
-    hub_id: str
-    merchant: str
-    order_id: str
-    subtotal_cents: int
-    source: str  # "doordash" | "opentable"
+from app.db import get_db
+from app.models_extra import UtilityEvent, IncentiveRule
 
-@router.post("/doordash")
-def dd_credit(evt: OrderEvent):
-    # find last click to same merchant by same user (optional)
-    _ = clicks.last_for(evt.user_id, evt.merchant, hours=6)
-    # demo: 5% cashback
-    bonus = int(round(evt.subtotal_cents * 0.05))
-    new_bal = credit_wallet(evt.user_id, bonus)
-    return {"ok": True, "added_cents": bonus, "new_balance_cents": new_bal}
+router = APIRERouter = APIRouter(prefix="/v1/webhooks", tags=["utility"])
 
-@router.post("/opentable")
-def ot_credit(evt: OrderEvent):
-    _ = clicks.last_for(evt.user_id, evt.merchant, hours=6)
-    # demo: flat $1.00
-    bonus = 100
-    new_bal = credit_wallet(evt.user_id, bonus)
-    return {"ok": True, "added_cents": bonus, "new_balance_cents": new_bal}
+@router.post("/utility/austin_energy/fake_event")
+def fake_event(db: Session = Depends(get_db)):
+    """
+    Simulate a utility event and temporarily boost OFF_PEAK_BASE to the next 60 minutes.
+    """
+    now = datetime.utcnow()
+    window = {
+        "start": now.strftime("%H:%M"),
+        "end": (now + timedelta(minutes=60)).strftime("%H:%M"),
+    }
+
+    db.add(
+        UtilityEvent(
+            provider="austin_energy",
+            kind="DR_EVENT",
+            window={"start_iso": now.isoformat() + "Z", "end_iso": (now + timedelta(minutes=60)).isoformat() + "Z"},
+            payload={"demo": True},
+        )
+    )
+
+    rule = db.query(IncentiveRule).filter(IncentiveRule.code == "OFF_PEAK_BASE").first()
+    if rule:
+        rule.params = {"cents": 50, "window": [window["start"], window["end"]]}
+    else:
+        db.add(IncentiveRule(code="OFF_PEAK_BASE", active=True, params={"cents": 50, "window": [window["start"], window["end"]]}))
+
+    db.commit()
+    return {"ok": True, "off_peak_now_to_plus_60m": window}

@@ -25,3 +25,6 @@ jobs:
       - name: Test
         run: |
           pytest -q || true
+      - name: Run regression tests
+        run: |
+          pytest -q --disable-warnings --maxfail=1

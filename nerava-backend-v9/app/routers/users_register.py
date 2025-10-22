@@ -1,23 +1,42 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, EmailStr
-from app.services.db_user_ext import register_user, get_user
+from typing import Optional
+from sqlalchemy.orm import Session
+
+from ..db import get_db
+from ..models import User, UserPreferences
+from ..core.security import hash_password
 
 router = APIRouter(prefix="/v1/users", tags=["users"])
 
-class RegisterIn(BaseModel):
+class RegisterPayload(BaseModel):
     email: EmailStr
-    name: str = ""
+    name: Optional[str] = None
+    password: Optional[str] = None  # auto-generated if missing
 
 @router.post("/register")
-def register(payload: RegisterIn):
-    try:
-        return register_user(payload.email, payload.name)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"register_failed: {e}")
+def legacy_register(payload: RegisterPayload, db: Session = Depends(get_db)):
+    """
+    Compatibility for old demos/tests.
+    Creates (or ensures) a user in the new auth tables and default preferences.
+    Returns 200 with {"status":"exists"} if already registered.
+    """
+    pw = payload.password or "nerava-autogen-pass"
 
-@router.get("/{email}")
-def user_get(email: str):
-    u = get_user(email)
-    if not u:
-        raise HTTPException(status_code=404, detail="not_found")
-    return u
+    user = db.query(User).filter(User.email == payload.email).first()
+    if user is None:
+        user = User(email=payload.email, password_hash=hash_password(pw))
+        db.add(user)
+        db.flush()  # ensure user.id
+
+        db.add(UserPreferences(user_id=user.id))
+        db.commit()
+        return {"email": user.email, "id": user.id, "status": "created"}
+
+    # ensure prefs row exists
+    prefs = db.query(UserPreferences).filter(UserPreferences.user_id == user.id).first()
+    if prefs is None:
+        db.add(UserPreferences(user_id=user.id))
+        db.commit()
+
+    return {"email": user.email, "id": user.id, "status": "exists"}
