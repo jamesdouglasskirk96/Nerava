@@ -1,0 +1,24 @@
+:root{
+  --blue:#0B5FFF; --bg:#0b0d10; --card:#13161b; --text:#e8eef6; --muted:#91a3bc;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Inter,Arial;background:var(--bg);color:var(--text)}
+.topbar{position:fixed;top:0;left:0;right:0;height:56px;display:flex;align-items:center;gap:10px;padding:0 14px;background:var(--blue);color:white;z-index:10}
+.logo{height:28px}
+.brand{font-weight:700;letter-spacing:.4px}
+#app{padding-top:56px;padding-bottom:64px;height:calc(100% - 120px);position:relative}
+#map{position:absolute;inset:0}
+.card{position:absolute;left:12px;right:12px;bottom:80px;background:var(--card);border:1px solid #1c222b;border-radius:14px;padding:12px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.card.hidden{display:none}
+.card-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0}
+.card-title{font-weight:700}
+.card-sub{color:var(--muted);font-size:14px;margin-bottom:10px}
+.pill{padding:4px 10px;border-radius:999px;background:#223047;color:#9fc1ff;font-size:12px;border:1px solid #2b3b52}
+.btn{padding:10px 12px;border-radius:10px;border:1px solid #2a3342;background:#151a20;color:var(--text);font-weight:600}
+.btn-primary{background:var(--blue);border-color:transparent}
+.btn-ghost{background:transparent}
+.merchants{display:flex;gap:10px;overflow:auto;padding:6px 2px}
+.merchants img{height:28px;width:28px;border-radius:6px;display:block;border:1px solid #2a3342;background:#0f1318}
+.bottombar{position:fixed;bottom:0;left:0;right:0;height:62px;background:#0f1318;border-top:1px solid #1f2730;display:flex;justify-content:space-around;align-items:center;z-index:10}
+.navbtn{background:transparent;border:none;color:#91a3bc;font-weight:600}
+.navbtn.active{color:#fff}

@@ -1,4 +1,168 @@
-const BASE  = window.NERAVA_BASE;
+#!/usr/bin/env python3
+import os, sys, shutil, datetime
+
+ROOT = os.path.abspath(os.getcwd())
+UI_DIR = os.path.join(ROOT, "ui-mobile")
+INDEX = os.path.join(UI_DIR, "index.html")
+CSS   = os.path.join(UI_DIR, "css", "style.css")
+JS    = os.path.join(UI_DIR, "js", "app.js")
+
+NEW_INDEX = r"""<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+    <title>Nerava</title>
+    <link rel="manifest" href="manifest.json"/>
+    <link rel="stylesheet" href="css/style.css"/>
+    <script>
+      // Configure your backend origin here if needed
+      window.NERAVA_BASE  = window.NERAVA_BASE  || (location.origin.includes('127.0.0.1') ? 'http://127.0.0.1:8000' : location.origin);
+      window.NERAVA_USER  = window.NERAVA_USER  || 'demo@nerava.app';
+      window.NERAVA_PREFS = window.NERAVA_PREFS || (localStorage.getItem('NERAVA_PREFS') || 'coffee_bakery,quick_bite');
+    </script>
+    <link rel="icon" href="assets/icon-192.png"/>
+  </head>
+  <body>
+    <div class="topbar">
+      <div class="brand">Nerava</div>
+      <div class="spacer"></div>
+    </div>
+
+    <!-- Incentive banner (hidden unless an off-peak window is active) -->
+    <div id="incentive-banner" class="banner hidden">Cheaper charging now</div>
+
+    <div id="map"></div>
+
+    <!-- Recommended hub card -->
+    <div id="recommend-card" class="card hidden">
+      <div class="card-row">
+        <div class="card-title" id="rec-name">Recommended hub</div>
+        <div class="pill" id="rec-status">open</div>
+      </div>
+      <div class="card-sub" id="rec-sub">2 free • PREMIUM</div>
+      <div class="card-row logos" id="merchant-strip"></div>
+      <div class="card-row">
+        <button id="btn-reserve" class="btn btn-primary">Reserve</button>
+        <button id="btn-directions" class="btn btn-ghost">Directions</button>
+      </div>
+    </div>
+
+    <!-- VIEW: Plan a Charge (QR + current session) -->
+    <section id="view-plan-charge" class="view hidden">
+      <div class="card">
+        <div class="card-title">Charge</div>
+        <div class="card-sub">Scan station QR or view your current session.</div>
+        <div class="card-row">
+          <button id="btn-scan" class="btn btn-primary">Scan QR</button>
+          <button id="btn-session" class="btn btn-ghost">View Session</button>
+        </div>
+        <div id="session-info" class="mt"></div>
+        <video id="qr-video" class="hidden" playsinline></video>
+        <canvas id="qr-canvas" class="hidden"></canvas>
+      </div>
+    </section>
+
+    <!-- VIEW: Plan a Trip (placeholder) -->
+    <section id="view-plan-trip" class="view hidden">
+      <div class="card">
+        <div class="card-title">Plan a Trip</div>
+        <div class="card-sub">Multi-stop planning coming soon—today we focus on hubs & perks.</div>
+      </div>
+    </section>
+
+    <!-- VIEW: Wallet -->
+    <section id="view-wallet" class="view hidden">
+      <div class="card">
+        <div class="card-row">
+          <div class="card-title">Wallet</div>
+          <div class="pill" id="wallet-balance">—</div>
+        </div>
+        <div id="wallet-history" class="list"></div>
+      </div>
+    </section>
+
+    <!-- VIEW: Profile -->
+    <section id="view-profile" class="view hidden">
+      <div class="card">
+        <div class="card-title">Profile</div>
+        <div class="card-sub">Signed in as <span id="profile-email"></span></div>
+        <div class="grid prefs">
+          <label><input type="checkbox" id="pref_coffee"> Coffee & Bakery</label>
+          <label><input type="checkbox" id="pref_food"> Quick Bites</label>
+          <label><input type="checkbox" id="pref_dog"> Dog Friendly</label>
+          <label><input type="checkbox" id="pref_kid"> Kid Friendly</label>
+          <label><input type="checkbox" id="pref_shopping"> Shopping</label>
+          <label><input type="checkbox" id="pref_exercise"> Exercise</label>
+        </div>
+        <div class="card-row">
+          <button id="btn-save-prefs" class="btn btn-primary">Save Preferences</button>
+          <button id="btn-recommend-refresh" class="btn btn-ghost">See New Recommendation</button>
+        </div>
+        <div id="prefs-impact" class="mt muted"></div>
+      </div>
+    </section>
+
+    <nav class="bottombar">
+      <button class="navbtn active" data-view="home"><span>Plan a Charge</span></button>
+      <button class="navbtn" data-view="plan-trip"><span>Plan a Trip</span></button>
+      <button class="navbtn" data-view="plan-charge"><span>Charge</span></button>
+      <button class="navbtn" data-view="wallet"><span>Wallet</span></button>
+      <button class="navbtn" data-view="profile"><span>Profile</span></button>
+    </nav>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>
+"""
+
+NEW_CSS = r"""/* Base */
+:root{
+  --bg:#0b0f14;
+  --fg:#ffffff;
+  --muted:#9fb1c6;
+  --card:#121821;
+  --accent:#17e6a1;
+}
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; background:var(--bg); color:var(--fg); font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Text', Roboto, Segoe UI, Arial, sans-serif; }
+a{ color:var(--fg); text-decoration:none; }
+
+.topbar{ position:fixed; top:0; left:0; right:0; height:56px; display:flex; align-items:center; padding:0 14px; background:rgba(10,14,18,0.8); backdrop-filter: blur(6px); border-bottom:1px solid rgba(255,255,255,.06); z-index:10; }
+.brand{ font-weight:800; letter-spacing:.3px; }
+.spacer{ flex:1; }
+
+#map{ position:fixed; top:56px; bottom:64px; left:0; right:0; }
+
+.card{ position:fixed; left:12px; right:12px; bottom:84px; padding:12px; background:var(--card); border:1px solid rgba(255,255,255,.08); border-radius:14px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+.card-title{ font-weight:800; }
+.card-sub{ color:var(--muted); margin-top:4px; }
+.card-row{ display:flex; align-items:center; justify-content:space-between; margin-top:10px; gap:10px; }
+.card-row.logos img{ width:36px; height:36px; border-radius:18px; margin-right:8px; object-fit:cover; }
+.btn{ padding:10px 14px; border-radius:10px; font-weight:600; cursor:pointer; }
+.btn-primary{ background:#17e6a1; color:#053; }
+.btn-ghost{ background:transparent; border:1px solid rgba(255,255,255,.12); color:#fff; }
+.pill{ background:rgba(255,255,255,.08); padding:6px 10px; border-radius:999px; }
+
+/* Bottom nav */
+.bottombar{ position:fixed; left:0; right:0; bottom:0; height:64px; display:flex; align-items:center; justify-content:space-around; background:rgba(10,14,18,0.9); border-top:1px solid rgba(255,255,255,.06); z-index:10; }
+.navbtn{ appearance:none; border:none; background:transparent; color:#9fb1c6; font-weight:600; border-radius:12px; padding:8px 12px; }
+.navbtn.active{ color:#fff; background:rgba(255,255,255,.06); }
+
+/* New helpers */
+.view.hidden{ display:none }
+.list{ margin-top:10px; }
+.list-item{ padding:10px 0; border-top:1px solid rgba(255,255,255,.06); }
+.muted{ color: var(--muted); }
+.mt{ margin-top:10px; }
+.grid.prefs{ display:grid; grid-template-columns:1fr 1fr; gap:8px 14px; margin-top:10px; }
+.banner{ position:fixed; top:56px; left:0; right:0; padding:8px 12px; text-align:center; background:#00e676; color:#063; font-weight:700; z-index:9; }
+.banner.warn{ background:#ffde59; color:#1a1a00; }
+"""
+
+NEW_JS = r"""const BASE  = window.NERAVA_BASE;
 const USER  = window.NERAVA_USER;
 let PREFS_CSV = window.NERAVA_PREFS;
 let map, userMarker, hubMarker, lastRecBeforePrefs = null;
@@ -191,3 +355,47 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   await loadHome();
   document.querySelectorAll('.navbtn').forEach(btn => btn.addEventListener('click', ()=> showView(btn.dataset.view)));
 });
+"""
+
+def ensure_exists(path, kind):
+  if not os.path.exists(path):
+    print(f"[!] Missing {kind}: {path}")
+    sys.exit(1)
+
+def backup(path):
+  ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+  bdir = os.path.join(os.path.dirname(path), ".backup")
+  os.makedirs(bdir, exist_ok=True)
+  bpath = os.path.join(bdir, os.path.basename(path) + f".{ts}.bak")
+  shutil.copy2(path, bpath)
+  return bpath
+
+def write_file(path, content):
+  os.makedirs(os.path.dirname(path), exist_ok=True)
+  with open(path, "w", encoding="utf-8") as f:
+    f.write(content)
+
+def main():
+  print("== Nerava UI Upgrade (one-shot) ==")
+  ensure_exists(UI_DIR, "UI directory")
+  ensure_exists(INDEX, "index.html")
+  ensure_exists(CSS, "style.css")
+  ensure_exists(JS, "app.js")
+
+  b_index = backup(INDEX)
+  b_css   = backup(CSS)
+  b_js    = backup(JS)
+
+  write_file(INDEX, NEW_INDEX)
+  write_file(CSS, NEW_CSS)
+  write_file(JS, NEW_JS)
+
+  print("✓ Updated files:")
+  print(f"  - {INDEX}  (backup: {b_index})")
+  print(f"  - {CSS}    (backup: {b_css})")
+  print(f"  - {JS}     (backup: {b_js})")
+  print("\nRun the backend and open the UI:\n  uvicorn app.main:app --reload\n  (then open http://127.0.0.1:8000/app if you mounted /app)\n")
+  print("Or serve static UI directly:\n  cd ui-mobile && python3 -m http.server 5173  # open http://127.0.0.1:5173\n")
+
+if __name__ == "__main__":
+  main()

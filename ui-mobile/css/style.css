@@ -1,24 +1,42 @@
+/* Base */
 :root{
-  --blue:#0B5FFF; --bg:#0b0d10; --card:#13161b; --text:#e8eef6; --muted:#91a3bc;
+  --bg:#0b0f14;
+  --fg:#ffffff;
+  --muted:#9fb1c6;
+  --card:#121821;
+  --accent:#17e6a1;
 }
-*{box-sizing:border-box}
-html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Inter,Arial;background:var(--bg);color:var(--text)}
-.topbar{position:fixed;top:0;left:0;right:0;height:56px;display:flex;align-items:center;gap:10px;padding:0 14px;background:var(--blue);color:white;z-index:10}
-.logo{height:28px}
-.brand{font-weight:700;letter-spacing:.4px}
-#app{padding-top:56px;padding-bottom:64px;height:calc(100% - 120px);position:relative}
-#map{position:absolute;inset:0}
-.card{position:absolute;left:12px;right:12px;bottom:80px;background:var(--card);border:1px solid #1c222b;border-radius:14px;padding:12px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
-.card.hidden{display:none}
-.card-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0}
-.card-title{font-weight:700}
-.card-sub{color:var(--muted);font-size:14px;margin-bottom:10px}
-.pill{padding:4px 10px;border-radius:999px;background:#223047;color:#9fc1ff;font-size:12px;border:1px solid #2b3b52}
-.btn{padding:10px 12px;border-radius:10px;border:1px solid #2a3342;background:#151a20;color:var(--text);font-weight:600}
-.btn-primary{background:var(--blue);border-color:transparent}
-.btn-ghost{background:transparent}
-.merchants{display:flex;gap:10px;overflow:auto;padding:6px 2px}
-.merchants img{height:28px;width:28px;border-radius:6px;display:block;border:1px solid #2a3342;background:#0f1318}
-.bottombar{position:fixed;bottom:0;left:0;right:0;height:62px;background:#0f1318;border-top:1px solid #1f2730;display:flex;justify-content:space-around;align-items:center;z-index:10}
-.navbtn{background:transparent;border:none;color:#91a3bc;font-weight:600}
-.navbtn.active{color:#fff}
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; background:var(--bg); color:var(--fg); font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Text', Roboto, Segoe UI, Arial, sans-serif; }
+a{ color:var(--fg); text-decoration:none; }
+
+.topbar{ position:fixed; top:0; left:0; right:0; height:56px; display:flex; align-items:center; padding:0 14px; background:rgba(10,14,18,0.8); backdrop-filter: blur(6px); border-bottom:1px solid rgba(255,255,255,.06); z-index:10; }
+.brand{ font-weight:800; letter-spacing:.3px; }
+.spacer{ flex:1; }
+
+#map{ position:fixed; top:56px; bottom:64px; left:0; right:0; }
+
+.card{ position:fixed; left:12px; right:12px; bottom:84px; padding:12px; background:var(--card); border:1px solid rgba(255,255,255,.08); border-radius:14px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+.card-title{ font-weight:800; }
+.card-sub{ color:var(--muted); margin-top:4px; }
+.card-row{ display:flex; align-items:center; justify-content:space-between; margin-top:10px; gap:10px; }
+.card-row.logos img{ width:36px; height:36px; border-radius:18px; margin-right:8px; object-fit:cover; }
+.btn{ padding:10px 14px; border-radius:10px; font-weight:600; cursor:pointer; }
+.btn-primary{ background:#17e6a1; color:#053; }
+.btn-ghost{ background:transparent; border:1px solid rgba(255,255,255,.12); color:#fff; }
+.pill{ background:rgba(255,255,255,.08); padding:6px 10px; border-radius:999px; }
+
+/* Bottom nav */
+.bottombar{ position:fixed; left:0; right:0; bottom:0; height:64px; display:flex; align-items:center; justify-content:space-around; background:rgba(10,14,18,0.9); border-top:1px solid rgba(255,255,255,.06); z-index:10; }
+.navbtn{ appearance:none; border:none; background:transparent; color:#9fb1c6; font-weight:600; border-radius:12px; padding:8px 12px; }
+.navbtn.active{ color:#fff; background:rgba(255,255,255,.06); }
+
+/* New helpers */
+.view.hidden{ display:none }
+.list{ margin-top:10px; }
+.list-item{ padding:10px 0; border-top:1px solid rgba(255,255,255,.06); }
+.muted{ color: var(--muted); }
+.mt{ margin-top:10px; }
+.grid.prefs{ display:grid; grid-template-columns:1fr 1fr; gap:8px 14px; margin-top:10px; }
+.banner{ position:fixed; top:56px; left:0; right:0; padding:8px 12px; text-align:center; background:#00e676; color:#063; font-weight:700; z-index:9; }
+.banner.warn{ background:#ffde59; color:#1a1a00; }
