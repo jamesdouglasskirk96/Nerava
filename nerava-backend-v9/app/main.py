@@ -7,6 +7,7 @@ from .middleware.logging import LoggingMiddleware
 from .middleware.metrics import MetricsMiddleware
 from .middleware.ratelimit import RateLimitMiddleware
 from .services.async_wallet import async_wallet
+from .lifespan import lifespan
 
 from fastapi.staticfiles import StaticFiles
 import os
@@ -33,7 +34,7 @@ from .routers import (
 from .routers.auth import router as auth_router
 from .routers.user_prefs import router as prefs_router
 
-app = FastAPI(title="Nerava Backend v9", version="0.9.0")
+app = FastAPI(title="Nerava Backend v9", version="0.9.0", lifespan=lifespan)
 
 # Mount UI after app is defined
 UI_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "ui-mobile"))
@@ -81,13 +82,4 @@ app.include_router(merchants_local.router, prefix="/v1/local", tags=["local_merc
 app.include_router(incentives.router)
 app.include_router(energyhub.router)
 
-# Startup and shutdown events
-@app.on_event("startup")
-async def startup_event():
-    """Start background services"""
-    await async_wallet.start_worker()
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Stop background services"""
-    await async_wallet.stop_worker()
+# Lifespan events are now handled in lifespan.py

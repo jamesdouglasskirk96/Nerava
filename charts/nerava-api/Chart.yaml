@@ -1,0 +1,17 @@
+apiVersion: v2
+name: nerava-api
+description: Nerava Backend API Helm Chart
+type: application
+version: 0.1.0
+appVersion: "0.9.0"
+keywords:
+  - nerava
+  - charging
+  - energy
+  - api
+home: https://github.com/jamesdouglasskirk96/Nerava
+sources:
+  - https://github.com/jamesdouglasskirk96/Nerava
+maintainers:
+  - name: Nerava Team
+    email: team@nerava.com
