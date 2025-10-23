@@ -250,6 +250,12 @@ body {
   --text:  #0a1528;
   --muted: #5b6b80;
   --shadow: 0 20px 50px rgba(10,21,40,.08);
+
+  /* New brand colors for header and controls */
+  --brand-blue:#2a6bf2;
+  --brand-text:#0a1528;
+  --bolt-yellow:#FFD000;
+  --surface-elev:#f7f9fc;
 }
 
 /* ===== Map fills viewport behind sheet & nav ===== */
@@ -340,3 +346,76 @@ body {
 
 /* Utility: page bottoms never collide even if not in sheet */
 .page{ padding-bottom: calc(96px + var(--sa-bottom)); }
+
+/* ===== Header: centered with yellow bolt ===== */
+.app-header{
+  position: sticky; top:0; z-index:20;
+  padding: calc(10px + var(--sa-top)) 16px 10px;
+  background: linear-gradient(180deg, rgba(255,255,255,.92) 0%, rgba(255,255,255,.75) 100%);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(10,21,40,.06);
+}
+.app-header .header-center{
+  display:flex; align-items:center; justify-content:center; gap:10px;
+  font-weight:800; letter-spacing:.28em; color:var(--brand-text);
+}
+.app-header .header-center .bolt{
+  color: var(--bolt-yellow); filter: drop-shadow(0 1px 0 rgba(0,0,0,.1));
+}
+
+/* ===== Floating Action Buttons ===== */
+.fab{
+  position: fixed; z-index: 24; width:56px; height:56px; border-radius:28px;
+  background:#fff; border:none; box-shadow: var(--shadow);
+  display:grid; place-items:center; font-size:22px; color:var(--brand-text);
+}
+.fab-primary{ right:16px; bottom: calc(16px + var(--sa-bottom)); color:#fff; background:var(--brand-blue); }
+.fab-secondary{ right:16px; bottom: calc(86px + var(--sa-bottom)); }
+.fab-avatar{ right:16px; top: calc(10px + var(--sa-top)); width:44px; height:44px; border-radius:22px; overflow:hidden; }
+.fab-avatar img{ width:100%; height:100%; object-fit:cover; }
+
+/* ===== Account Sheet (Venmo-style) ===== */
+.account-sheet::backdrop{ background: rgba(6,20,40,.35); backdrop-filter: blur(2px); }
+.account-sheet{ border:none; padding:0; width:100%; max-width:480px; height:100dvh; }
+.account-sheet .sheet{
+  position:fixed; inset:0; background:var(--surface); border-radius:16px 16px 0 0;
+  margin-top: calc(8px + var(--sa-top)); overflow:auto; box-shadow: var(--shadow);
+}
+.account-sheet .grip{
+  width:54px; height:6px; border-radius:3px; background:rgba(10,21,40,.15);
+  margin:12px auto 8px;
+}
+.acct-hero{ display:flex; align-items:center; gap:12px; padding:12px 16px; }
+.acct-hero .avatar{ width:56px; height:56px; border-radius:28px; object-fit:cover; }
+.acct-hero .who h2{ margin:0; font-size:18px; }
+.acct-hero .who .sub{ margin:2px 0 0; opacity:.65; }
+.wallet-card{
+  margin:8px 16px; padding:16px; border-radius:14px; background:var(--surface-elev);
+  display:flex; justify-content:space-between; align-items:center; gap:10px;
+}
+.wallet-card .amount{ font-size:32px; font-weight:800; }
+.wallet-card .tier{ position:relative; height:8px; background:#e9eef6; border-radius:6px; overflow:hidden; margin-top:8px; }
+.wallet-card .tier span{ position:absolute; left:0; top:0; bottom:0; width:0%; background:linear-gradient(90deg, #7dd3fc, #2a6bf2); transition:width 900ms ease; }
+.activity, .social, .settings{ padding:12px 16px; }
+.feed{ list-style:none; padding:0; margin:0; }
+.feed li{ padding:12px 0; border-bottom:1px solid rgba(10,21,40,.08); }
+.following{ display:flex; gap:10px; overflow-x:auto; padding-bottom:8px; }
+.following img{ width:44px; height:44px; border-radius:22px; object-fit:cover; box-shadow: var(--shadow); }
+.btn.solid{ background:var(--brand-blue); color:#fff; border:none; border-radius:10px; padding:10px 12px; box-shadow: var(--shadow); }
+.pill.small{ border:1px solid rgba(10,21,40,.12); background:#fff; padding:6px 10px; border-radius:999px; font-weight:600; }
+
+/* ===== No-nav layout adjustments ===== */
+.app-root.no-nav{
+  padding-bottom: calc(12px + var(--sa-bottom));
+}
+
+/* Ensure Explore card never collides with bottom fab */
+.sheet-explore{ padding-bottom: calc(120px + var(--sa-bottom)); }
+
+/* Raise nearby card contrast slightly */
+.place .title{ color:var(--brand-text); font-weight:800; }
+.place .rating{ color:#1d4ed8; background:#e8f0ff; }
+
+/* Pulse helper for CTA hint */
+@keyframes pulseOnce{ 0%{transform:scale(1)} 40%{transform:scale(1.04)} 100%{transform:scale(1)} }
+.pulse{ animation: pulseOnce 600ms ease; }

@@ -24,10 +24,16 @@
   <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js" defer></script>
 </head>
 <body>
-  <div id="app">
+  <div id="app" class="app-root no-nav">
     <!-- Header -->
-    <header class="app-header">
-      <h1 style="letter-spacing:0.16em;">NERAVA <span class="header-bolt">⚡</span></h1>
+    <header id="appHeader" class="app-header">
+      <div class="header-center">
+        <span class="brand">NERAVA</span>
+        <svg class="bolt" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M13 2L3 14h7l-1 8 11-14h-7l1-6z" fill="currentColor"/>
+        </svg>
+      </div>
+      <!-- right-side controls will be floating; keep header minimal -->
     </header>
 
     <!-- Map is global and behind -->
@@ -41,7 +47,7 @@
           <h2 style="margin:0;">Explore</h2>
         </div>
 
-        <div class="sheet__body">
+        <div class="sheet__body sheet-explore">
           <!-- Incentive banner lives inside the sheet now -->
           <div id="incentive-banner" class="badge" style="display:none;align-self:center;"></div>
 
@@ -168,22 +174,59 @@
         </section>
       </section>
 
-    <!-- Bottom navigation (unchanged ids; icons appear brighter via CSS) -->
-    <nav id="bottom-nav">
-      <button id="tabExplore" class="tab active">
-        <img class="icon" src="assets/nav-explore.svg" alt=""><span>Explore</span>
-      </button>
-      <button id="tabCharge" class="tab">
-        <img class="icon" src="assets/nav-charge.svg" alt=""><span>Charge</span>
-      </button>
-      <button id="tabWallet" class="tab">
-        <img class="icon" src="assets/nav-wallet.svg" alt=""><span>Wallet</span>
-      </button>
-      <button id="tabProfile" class="tab">
-        <img class="icon" src="assets/nav-profile.svg" alt=""><span>Profile</span>
-      </button>
-    </nav>
+    <!-- Floating Controls -->
+    <button id="btnLocate" class="fab fab-secondary" aria-label="Locate me">⌖</button>
+    <button id="btnAction" class="fab fab-primary" aria-label="Start charging">⚡</button>
+    <button id="btnAvatar" class="fab fab-avatar" aria-label="Open account">
+      <img src="/app/img/avatar-demo.svg" alt="User Avatar"/>
+    </button>
   </div>
+
+  <!-- Account Sheet (Venmo-style): full-screen modal with wallet & activity -->
+  <dialog id="accountSheet" class="account-sheet" aria-label="Account">
+    <div class="sheet">
+      <div class="grip" role="presentation"></div>
+      <section class="acct-hero">
+        <img class="avatar" src="/app/img/avatar-demo.svg" alt="User avatar"/>
+        <div class="who">
+          <h2>James Kirk</h2>
+          <p class="sub">demo@nerava.app</p>
+        </div>
+        <button class="pill small" id="btnManage">Manage</button>
+      </section>
+
+      <section class="wallet-card">
+        <div class="left">
+          <div class="label">Wallet balance</div>
+          <div class="amount" id="acctBalance">$0.00</div>
+          <div class="tier"><span id="acctTierProgress" style="width:0%"></span></div>
+          <div class="streak" id="acctStreak">0-day charging streak 🔥</div>
+        </div>
+        <div class="right">
+          <button id="btnAddFunds" class="btn solid">Add / withdraw</button>
+        </div>
+      </section>
+
+      <section class="activity">
+        <h3>Recent Activity</h3>
+        <ul id="acctActivity" class="feed"></ul>
+      </section>
+
+      <section class="social">
+        <h3>Following</h3>
+        <div id="acctFollowing" class="following"></div>
+      </section>
+
+      <section class="settings">
+        <h3>Settings</h3>
+        <ul class="list">
+          <li><button class="row">Notifications</button></li>
+          <li><button class="row">Privacy</button></li>
+          <li><button class="row">Sign out</button></li>
+        </ul>
+      </section>
+    </div>
+  </dialog>
 
   <script src="js/animations.js"></script>
   <script src="js/app.js?v=10" defer></script>

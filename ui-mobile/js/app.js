@@ -5,17 +5,7 @@
   const on = (el, ev, fn)=>el && el.addEventListener(ev, fn, {passive:true});
 
   // Tab handling: Explore uses sheet; others are padded
-  function setActive(tab){
-    ['Explore','Charge','Wallet','Profile'].forEach(n=>{
-      $('tab'+n)?.classList.toggle('active', n===tab);
-      const page = $('page'+n);
-      if(page) page.classList.toggle('active', n===tab);
-    });
-    const sheet = $('exploreSheet');
-    if(sheet) sheet.style.display = (tab==='Explore') ? 'flex' : 'none';
-    // incentive banner only within Explore sheet body
-    $('incentive-banner')?.style && ( $('incentive-banner').style.display = (tab==='Explore') ? '' : 'none');
-  }
+  // setActive function removed - no longer using bottom nav tabs
 
   // Ensure map sizes between header and nav (fixed)
   let map, routingCtl;
@@ -679,15 +669,82 @@
   window.addEventListener('resize', repaintMap);
   window.addEventListener('orientationchange', repaintMap);
 
-  // Wire tabs
+  // ===== Floating Controls =====
+  function wireFloating(){
+    const btnLocate = document.getElementById('btnLocate');
+    const btnAction = document.getElementById('btnAction');
+    const btnAvatar = document.getElementById('btnAvatar');
+
+    if(btnLocate) btnLocate.addEventListener('click', ()=>{ 
+      if(map && navigator.geolocation){
+        navigator.geolocation.getCurrentPosition(p=>{
+          map.setView([p.coords.latitude, p.coords.longitude], 14);
+        });
+      }
+    });
+
+    if(btnAction) btnAction.addEventListener('click', ()=>{
+      // focus Explore sheet CTA
+      const start = document.getElementById('btnStartCharge') || document.querySelector('[data-action="start-charge"]');
+      if(start){ 
+        start.scrollIntoView({behavior:'smooth', block:'center'}); 
+        start.classList.add('pulse'); 
+        setTimeout(()=>start.classList.remove('pulse'), 1600); 
+      }
+    });
+
+    if(btnAvatar) btnAvatar.addEventListener('click', openAccountSheet);
+  }
+
+  // ===== Account Sheet =====
+  async function openAccountSheet(){
+    const dlg = document.getElementById('accountSheet');
+    if(!dlg) return;
+    
+    // Populate wallet
+    try{
+      const balanceEl = document.getElementById('acctBalance');
+      const tierBar   = document.getElementById('acctTierProgress');
+      const streakEl  = document.getElementById('acctStreak');
+      const activity  = document.getElementById('acctActivity');
+
+      // Demo: compute from recent activity list on Charge tab if available
+      const walletBalance = document.getElementById('wallet-balance');
+      if(walletBalance){
+        balanceEl.textContent = walletBalance.textContent.trim();
+      }
+      
+      // Streak from localStorage
+      const streak = parseInt(localStorage.getItem('nerava_charging_streak') || '0');
+      streakEl.textContent = `${streak}-day charging streak 🔥`;
+      
+      // Progress demo to next tier ($25)
+      const amt = parseFloat((balanceEl.textContent || '0').replace('$',''))||0;
+      const pct = Math.max(0, Math.min(100, Math.round((amt%25)/25*100)));
+      tierBar.style.width = pct + '%';
+
+      // Activity (recentActivity UL on Charge page)
+      activity.innerHTML = '';
+      document.querySelectorAll('#recentActivity li')?.forEach(li=>{
+        const copy = document.createElement('li'); 
+        copy.textContent = li.textContent; 
+        activity.appendChild(copy);
+      });
+    }catch(e){ console.warn('Account prep failed', e); }
+
+    if(typeof dlg.showModal === 'function') dlg.showModal();
+  }
+
+  // Close account sheet on escape
+  document.addEventListener('keydown', (e)=>{
+    if(e.key === 'Escape'){ document.getElementById('accountSheet')?.close(); }
+  });
+
+  // Wire floating controls and account sheet
   document.addEventListener('DOMContentLoaded', ()=>{
     ensureMap();
     renderNearby();
-    $('tabExplore')?.addEventListener('click', ()=>setActive('Explore'));
-    $('tabCharge') ?.addEventListener('click', ()=>setActive('Charge'));
-    $('tabWallet') ?.addEventListener('click', ()=>setActive('Wallet'));
-    $('tabProfile')?.addEventListener('click', ()=>setActive('Profile'));
-    setActive('Explore'); // default
+    wireFloating();
     
     // Guarantee the Explore sheet has enough bottom padding (if not using .page wrapper)
     const pages = document.querySelectorAll('.page, #pageExplore, #pageCharge, #pageWallet, #pageProfile');
