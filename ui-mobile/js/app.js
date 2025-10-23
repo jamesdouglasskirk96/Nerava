@@ -182,9 +182,18 @@
     const active = windows.find(w => w.active_now);
     if (!active) { banner.style.display = 'none'; return; }
 
-    banner.textContent = active.id === 'green_hour'
-      ? 'Cheaper charging now — 2× rewards'
+    const newText = active.id === 'green_hour'
+      ? '⚡ Green Hour Active — 2× Rewards'
       : 'Cheaper charging now';
+    
+    // Animate banner transition if text changed
+    if (banner.textContent !== newText && banner.style.display === 'block') {
+      if (window.Animations) {
+        window.Animations.bannerTransition(banner);
+      }
+    }
+    
+    banner.textContent = newText;
     banner.style.display = 'block';
   }
 
@@ -241,6 +250,13 @@
       };
       setActiveSession(s);
       syncChargeUI();
+      
+      // Animate charge start
+      const startBtn = document.getElementById('btnStartCharge');
+      if (startBtn && window.Animations) {
+        window.Animations.chargeStart(startBtn);
+      }
+      
       showToast('Charging started');
     } catch (e) {
       showToast('Could not start session', false);
@@ -295,8 +311,17 @@
       li.textContent = `${new Date().toLocaleString()} — ${kwh} kWh • +$${earned}`;
       document.getElementById('recentActivity')?.prepend(li);
 
-      // Update wallet balance display
+      // Update wallet balance display with animation
       updateWalletBalance();
+      
+      // Animate wallet balance increment
+      const walletBalance = document.getElementById('wallet-balance');
+      if (walletBalance && window.Animations) {
+        const currentBalance = parseFloat(walletBalance.textContent.replace('$', ''));
+        const newBalance = currentBalance + earned;
+        window.Animations.chargeStop(walletBalance, currentBalance, newBalance);
+        walletBalance.textContent = `$${newBalance.toFixed(2)}`;
+      }
 
       // If you already surface wallet balance elsewhere, trigger a refresh there
       // (e.g., fetch('/v1/wallet?user_id=demo@nerava.app') and update UI)
