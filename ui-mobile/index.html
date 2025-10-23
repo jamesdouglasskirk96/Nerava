@@ -25,81 +25,48 @@
 </head>
 <body>
   <div id="app">
-    <!-- MAP lives behind everything -->
-    <div id="map"></div>
-
-    <!-- Top bar -->
-    <header class="ui-layer app-top">
-      <div class="brandbar">
-        <span class="brand-word">NERAVA</span>
-        <svg class="brand-bolt" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" style="margin-left:6px; fill: var(--brand-yellow-500);">
-          <path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"></path>
-        </svg>
-      </div>
+    <!-- Header -->
+    <header class="app-header">
+      <div class="app-title">NERAVA</div>
+      <i class="app-bolt" aria-hidden="true"></i>
     </header>
 
-    <!-- PAGES -->
-    <main class="ui-layer main-layer">
-      <!-- EXPLORE: Map-first + Bottom Sheet -->
-      <section id="pageExplore" class="page active">
-        <div id="map" class="map"></div>
+    <!-- Map is global and behind -->
+    <div id="map" role="img" aria-label="Map"></div>
 
-        <!-- Incentive banner -->
-        <div id="incentive-banner" class="banner" style="display:none"></div>
-
-        <!-- Bottom Sheet (Place Panel) -->
-        <div id="place-sheet" class="sheet" aria-modal="true" aria-labelledby="place-title" role="dialog">
-          <div class="sheet__grabber" aria-hidden="true"></div>
-
-          <!-- Large Title & Meta -->
-          <div class="sheet__header">
-            <h2 id="place-title" class="ios-title">Tesla Supercharger</h2>
-            <div class="meta-row">
-              <span class="chip"><span class="icon">🚗</span><span id="chip_chargers">12 Chargers</span></span>
-              <span class="chip"><span class="icon">💲</span><span id="chip_pricing">Paid</span></span>
-              <span class="chip"><span class="icon">📏</span><span id="chip_distance">3.4 mi</span></span>
-            </div>
-            <div class="actions">
-              <button class="act" id="act_nav"    aria-label="Navigate">🧭<span>7 min</span></button>
-              <button class="act" id="act_call"   aria-label="Call">📞<span>Call</span></button>
-              <button class="act" id="act_web"    aria-label="Website">🧷<span>Website</span></button>
-              <button class="act" id="act_more"   aria-label="More">⋯<span>More</span></button>
-            </div>
-          </div>
-
-          <!-- Sections -->
-          <div class="section">
-            <h3 class="section__title">Chargers</h3>
-            <ul id="charger-list" class="list list--chargers"></ul>
-          </div>
-
-          <div class="section">
-            <h3 class="section__title">Nearby Places</h3>
-            <div id="nearby-places" class="cards cards--nearby"></div>
-          </div>
-
-          <div class="section section--rate">
-            <h3 class="section__title">Rate This Place</h3>
-            <div class="rate-row">
-              <button class="rate-btn" id="rate_up"  aria-label="Thumbs up">👍</button>
-              <button class="rate-btn" id="rate_down" aria-label="Thumbs down">👎</button>
-            </div>
-          </div>
-
-          <div class="section">
-            <div class="section__title-row">
-              <h3 class="section__title">Activity</h3>
-              <a class="view-all" id="activity_view_all">View all</a>
-            </div>
-            <ul id="place-activity" class="feed feed--compact"></ul>
-          </div>
-
-          <div style="height: 24px"></div>
+    <!-- Explore page: sheet over map -->
+    <section id="pageExplore" class="page active">
+      <div class="sheet" id="exploreSheet">
+        <div class="sheet-header">
+          <h2 style="margin:0;font-size:22px;">Explore</h2>
         </div>
-      </section>
+        <div class="sheet-body" id="exploreContent">
+          <!-- Incentive banner lives inside the sheet now -->
+          <div id="incentive-banner" class="badge" style="display:none;align-self:center;"></div>
 
-      <!-- Charge -->
-      <section id="pageCharge" class="page">
+          <!-- Hub card (example) -->
+          <div class="card" id="hubCard">
+            <h3 style="margin:0 0 8px 0; font-size:20px;">Nerava Hub</h3>
+            <div style="display:flex; gap:8px; margin-bottom:10px;">
+              <span class="badge" id="hubAvail">3 of 4 ports free</span>
+              <span class="badge" id="hubDeal">10% cheaper</span>
+            </div>
+            <button id="chargeHereBtn" class="btn btn-primary" style="width:100%;">Start Charging</button>
+          </div>
+
+          <!-- Nearby places (Apple-style list container) -->
+          <div class="card">
+            <h4 style="margin:0 0 10px 0;">Nearby Places</h4>
+            <div id="nearbyList" style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+              <!-- JS fills in demo tiles; keep markup minimal -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+      <!-- Charge / Wallet / Profile now padded pages (not overlay sheets) -->
+      <section id="pageCharge" class="page page-padded">
         <div id="chargePane" class="pane">
           <div class="card" id="chargeStatusCard" style="margin:12px;">
             <h3>Charging activity</h3>
@@ -158,8 +125,7 @@
         </div>
       </section>
 
-      <!-- Wallet -->
-      <section id="pageWallet" class="page">
+      <section id="pageWallet" class="page page-padded">
         <section class="card content-card">
           <h2 class="section-title">Wallet</h2>
           <div class="balance" id="wallet-balance">$19.00</div>
@@ -183,8 +149,7 @@
         </section>
       </section>
 
-      <!-- Profile -->
-      <section id="pageProfile" class="page">
+      <section id="pageProfile" class="page page-padded">
         <section class="card content-card">
           <h2 class="section-title">Profile</h2>
           <p class="muted">Signed in as demo@nerava.app</p>
@@ -201,21 +166,20 @@
           </div>
         </section>
       </section>
-    </main>
 
-    <!-- Bottom nav -->
-    <nav class="ui-layer bottom-nav">
+    <!-- Bottom navigation (unchanged ids; icons appear brighter via CSS) -->
+    <nav id="bottom-nav">
       <button id="tabExplore" class="tab active">
-        <img src="assets/nav-explore.svg" alt=""><span>Explore</span>
+        <img class="icon" src="assets/nav-explore.svg" alt=""><span>Explore</span>
       </button>
       <button id="tabCharge" class="tab">
-        <img src="assets/nav-charge.svg" alt=""><span>Charge</span>
+        <img class="icon" src="assets/nav-charge.svg" alt=""><span>Charge</span>
       </button>
       <button id="tabWallet" class="tab">
-        <img src="assets/nav-wallet.svg" alt=""><span>Wallet</span>
+        <img class="icon" src="assets/nav-wallet.svg" alt=""><span>Wallet</span>
       </button>
       <button id="tabProfile" class="tab">
-        <img src="assets/nav-profile.svg" alt=""><span>Profile</span>
+        <img class="icon" src="assets/nav-profile.svg" alt=""><span>Profile</span>
       </button>
     </nav>
   </div>
@@ -224,3 +188,4 @@
   <script src="js/app.js?v=10" defer></script>
 </body>
 </html>
+

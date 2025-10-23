@@ -4,31 +4,28 @@
   const $  = (id)=>document.getElementById(id);
   const on = (el, ev, fn)=>el && el.addEventListener(ev, fn, {passive:true});
 
-  function setActive(tabName){
-    // tabs
+  // Tab handling: Explore uses sheet; others are padded
+  function setActive(tab){
     ['Explore','Charge','Wallet','Profile'].forEach(n=>{
-      const btn = $('tab'+n);
-      if(btn) btn.classList.toggle('active', n===tabName);
+      $('tab'+n)?.classList.toggle('active', n===tab);
+      const page = $('page'+n);
+      if(page) page.classList.toggle('active', n===tab);
     });
-    // pages
-    ['Explore','Charge','Wallet','Profile'].forEach(n=>{
-      const pg = $('page'+n);
-      if(pg) pg.classList.toggle('active', n===tabName);
-    });
-    // banner only on Explore
-    const banner = $('dealBanner');
-    if(banner) banner.style.display = (tabName==='Explore') ? '' : 'none';
+    const sheet = $('exploreSheet');
+    if(sheet) sheet.style.display = (tab==='Explore') ? 'flex' : 'none';
+    // incentive banner only within Explore sheet body
+    $('incentive-banner')?.style && ( $('incentive-banner').style.display = (tab==='Explore') ? '' : 'none');
   }
 
-  // Map & route
+  // Ensure map sizes between header and nav (fixed)
   let map, routingCtl;
   function ensureMap(){
     if(typeof L==='undefined'){ setTimeout(ensureMap,120); return; }
     if(map) return;
-    map = L.map('map',{ zoomControl:false });
-    map.setView([HUB.lat, HUB.lng], 14);
+    map = L.map('map', { zoomControl:false });
+    map.setView([HUB.lat, HUB.lng], 12);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-      {maxZoom:19, attribution:'&copy; OpenStreetMap'}).addTo(map);
+      {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
 
     // Hub marker
     L.circleMarker([HUB.lat, HUB.lng], {radius:8, color:'#55ffc7', weight:4, fill:true, fillOpacity:.5})
@@ -631,62 +628,32 @@
     renderActivityFeed(items);
   }
 
-  // boot
+  // Nearby places demo tiles (do not block layout)
+  function renderNearby(){
+    const list = $('nearbyList'); if(!list) return;
+    const items = [
+      {name:'Target', rating:'93%', photo:''},
+      {name:'Arepitas', rating:'96%', photo:''},
+      {name:'Starbucks', rating:'88%', photo:''},
+      {name:'Trader Joe\'s', rating:'92%', photo:''}
+    ];
+    list.innerHTML = items.map(x=>`
+      <div class="card" style="padding:10px;">
+        <div style="height:90px;background:#eef2f7;border-radius:12px;margin-bottom:8px;"></div>
+        <div style="font-weight:800">${x.name}</div>
+        <div style="color:var(--text-subtle)">${x.rating}</div>
+      </div>`).join('');
+  }
+
+  // Wire tabs
   document.addEventListener('DOMContentLoaded', ()=>{
-    wireUI();
     ensureMap();
-    // draw a route after map is ready
-    setTimeout(()=>{ ensureMap(); drawRouteToHub(); }, 500);
-
-    // new: hydrate panel once we have a location (fallback to hub)
-    if (navigator.geolocation){
-      navigator.geolocation.getCurrentPosition(pos=>{
-        hydratePlacePanel(pos.coords.latitude, pos.coords.longitude);
-      }, _=>{
-        hydratePlacePanel(30.4022, -97.7249);
-      }, { enableHighAccuracy:true, timeout:3000 });
-    } else {
-      hydratePlacePanel(30.4022, -97.7249);
-    }
-    
-    // Initialize charging flow
-    refreshRewardPreview();
-    refreshIncentiveBanner();
-    updateStreakDisplay();
-    updateCumulativeDisplay(); // Initialize cumulative kWh display
-    setInterval(refreshRewardPreview, 30000);
-    setInterval(refreshIncentiveBanner, 30000);
-
-    wireChargeHandlers();
-    syncChargeUI();
-
-    // Community feed setup
-    const feedAllBtn = document.getElementById('feedAllBtn');
-    const feedFollowingBtn = document.getElementById('feedFollowingBtn');
-    let currentFeedScope = 'all';
-    if (feedAllBtn && feedFollowingBtn){
-      feedAllBtn.addEventListener('click', ()=>{ currentFeedScope='all'; feedAllBtn.classList.add('active'); feedFollowingBtn.classList.remove('active'); refreshActivity(currentFeedScope); });
-      feedFollowingBtn.addEventListener('click', ()=>{ currentFeedScope='following'; feedFollowingBtn.classList.add('active'); feedAllBtn.classList.remove('active'); refreshActivity(currentFeedScope); });
-    }
-    refreshActivity(currentFeedScope);
-    setInterval(()=>refreshActivity(currentFeedScope), 30000);
-
-    // Checkbox interaction polish
-    document.querySelectorAll('input[type=checkbox].pref-toggle').forEach(cb=>{
-      cb.classList.add('checkbox-pop');
-      cb.addEventListener('change', ()=>{
-        cb.classList.add('pop');
-        setTimeout(()=>cb.classList.remove('pop'), 120);
-      }, {passive:true});
-    });
-
-    // If you have bottom nav, hook into it so we refresh when switching tabs:
-    const nav = document.getElementById('bottom-nav');
-    if (nav) nav.addEventListener('click', () => setTimeout(() => {
-      refreshRewardPreview();
-      refreshIncentiveBanner();
-      updateStreakDisplay();
-    }, 80));
+    renderNearby();
+    $('tabExplore')?.addEventListener('click', ()=>setActive('Explore'));
+    $('tabCharge') ?.addEventListener('click', ()=>setActive('Charge'));
+    $('tabWallet') ?.addEventListener('click', ()=>setActive('Wallet'));
+    $('tabProfile')?.addEventListener('click', ()=>setActive('Profile'));
+    setActive('Explore'); // default
   });
 })();
 
