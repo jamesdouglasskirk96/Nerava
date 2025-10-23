@@ -664,6 +664,17 @@
     });
   }
 
+  // Recompute map inset on rotate/resize and when bottom safe area changes
+  function resizeMapArea(){
+    const map = document.getElementById('map');
+    if(!map) return;
+    // We rely on CSS fixed + safe-area; force a reflow on iOS after rotate:
+    map.style.transform = 'translateZ(0)'; // hint GPU + trigger repaint
+    requestAnimationFrame(()=>{ map.style.transform = ''; });
+  }
+  window.addEventListener('resize', resizeMapArea);
+  window.addEventListener('orientationchange', resizeMapArea);
+
   // Wire tabs
   document.addEventListener('DOMContentLoaded', ()=>{
     ensureMap();
@@ -673,6 +684,11 @@
     $('tabWallet') ?.addEventListener('click', ()=>setActive('Wallet'));
     $('tabProfile')?.addEventListener('click', ()=>setActive('Profile'));
     setActive('Explore'); // default
+    
+    // Guarantee the Explore sheet has enough bottom padding (if not using .page wrapper)
+    const pages = document.querySelectorAll('.page, #pageExplore, #pageCharge, #pageWallet, #pageProfile');
+    pages.forEach(p => { p.style.paddingBottom = `calc(96px + env(safe-area-inset-bottom, 12px))`; });
+    resizeMapArea();
   });
 })();
 

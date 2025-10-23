@@ -1,33 +1,74 @@
 :root{
-  /* Light theme (Apple-ish) */
-  --bg: #f6f7fb;
-  --surface: #ffffff;
-  --surface-2: #f3f5f8;
-  --text: #0c1b2a;
-  --text-subtle:#5a6b7a;
-  --brand: #2a6bf2;            /* lighter blue */
-  --brand-600:#1f57c7;
-  --brand-100:#e8f0ff;
-  --accent: #ffd43b;           /* lightning bolt yellow */
-  --success:#22c55e;
-  --warning:#f59e0b;
-  --danger:#ef4444;
+  /* Safe-area env with fallbacks */
+  --sa-top:  env(safe-area-inset-top, 0px);
+  --sa-right:env(safe-area-inset-right,0px);
+  --sa-bottom:env(safe-area-inset-bottom,12px);
+  --sa-left: env(safe-area-inset-left, 0px);
 
-  --border: #e5e9f0;
-  --shadow: 0 8px 24px rgba(13, 31, 54, .12);
+  /* Brighter brand palette */
+  --brand:        #2a6bf2;           /* lighter, friendlier blue */
+  --brand-100:    #e9f1ff;
+  --brand-600:    #1f57c7;
+  --bolt:         #ffd000;           /* yellow lightning bolt */
+  --bolt-500:     #ffca0a;
+
+  /* Surfaces / borders tuned for light mode */
+  --bg:           #f7f9fc;
+  --surface:      #ffffff;
+  --surface-2:    #f2f5fa;
+  --text:         #0a1528;
+  --muted:        #64748b;
+  --border:       #e5eaf1;
+  --shadow:       0 10px 30px rgba(13,31,54,.08);
 
   --radius-xl: 24px;
   --radius-lg: 16px;
   --radius-md: 12px;
 
   /* Layout metrics */
-  --header-h: calc(56px + env(safe-area-inset-top, 0px));
-  --nav-h:    calc(72px + env(safe-area-inset-bottom, 0px));
+  --header-h: calc(56px + var(--sa-top));
+  --nav-h:    calc(72px + var(--sa-bottom));
   --page-pad: 16px;
 }
 
-/* Typography */
-body{ color:var(--text); background:var(--bg); -webkit-font-smoothing:antialiased; }
+/* Prefer light overall */
+@media (prefers-color-scheme: dark){
+  :root{ color-scheme: light; }
+}
+
+/* Headline stripe bolt */
+.header-bolt {
+  color: var(--bolt);
+}
+
+/* ===== App frame ===== */
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Map should sit behind sheet but be fully visible */
+#map {
+  position: fixed;
+  inset: var(--sa-top) 0 calc(64px + var(--sa-bottom)) 0; /* leave room for bottom nav */
+  z-index: 0;
+}
+
+/* Main sheet over map */
+#sheet, .sheet {
+  position: relative;
+  z-index: 1;
+  background: var(--surface);
+  border-radius: 22px 22px 0 0;
+  box-shadow: var(--shadow);
+  margin: calc(8px + var(--sa-top)) 16px 0 16px;
+  padding: 16px;
+}
+
+/* Page content padding so it never collides with bottom nav */
+.page {
+  padding-bottom: calc(96px + var(--sa-bottom));
+}
 
 /* Bright header */
 .app-header{
@@ -53,22 +94,35 @@ body{ color:var(--text); background:var(--bg); -webkit-font-smoothing:antialiase
   z-index:100; /* behind sheets/nav */
 }
 
-/* Bottom navigation (brighter) */
-#bottom-nav{
-  position:fixed; left:0; right:0; bottom:0; z-index:1000;
-  height:var(--nav-h);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  background: var(--surface);
+/* ===== Bottom nav: brighter icons/text ===== */
+#bottom-nav {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  padding: 8px 12px calc(8px + var(--sa-bottom)) 12px;
+  background: rgba(255,255,255,.94);
+  backdrop-filter: blur(8px);
   border-top: 1px solid var(--border);
-  display:flex; align-items:center; justify-content:space-around;
+  z-index: 2;
 }
-#bottom-nav .tab{
-  color: var(--text-subtle);
-  font-weight:700;
+
+.tab {
+  color: #37507a;                     /* brighter default */
+  filter: none;
 }
-#bottom-nav .tab.active{ color: var(--brand); }
-#bottom-nav .tab .icon{
-  filter: brightness(1.2) saturate(1.2); opacity: 0.95; /* brighter icons */
+
+.tab.active {
+  color: var(--brand-600);
+  font-weight: 700;
+  text-shadow: 0 0 0 transparent;
+}
+
+/* If the icons are inline SVGs, tint them */
+.tab svg, .tab img {
+  opacity: .95;
+}
+.tab.active svg, .tab.active img{
+  filter: none;
+  opacity: 1;
 }
 
 /* Sheet over map */
@@ -103,11 +157,24 @@ body{ color:var(--text); background:var(--bg); -webkit-font-smoothing:antialiase
 }
 .badge{ background:var(--brand-100); color:var(--brand); border-radius:999px; padding:6px 10px; font-weight:700; }
 
-/* Buttons */
-.btn{ border-radius:999px; padding:12px 16px; font-weight:800; }
-.btn-primary{ background:var(--brand); color:#fff; border-radius: 20px; }
-.btn-primary:active{ background:var(--brand-600); }
-.btn-ghost{ background:#fff; border:1px solid var(--border); color:var(--text); }
+/* Buttons: full width on small screens, good touch targets */
+.btn, .btn-primary {
+  min-height: 48px;
+  border-radius: 18px;
+}
+
+.btn-primary {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+.btn-primary:hover { background: var(--brand-600); }
+
+/* Pills (ports/rate) higher contrast */
+.pill { 
+  background: var(--brand-100);
+  color: var(--brand-600);
+  font-weight: 700;
+}
 
 /* Hide old banner container unless Explore is active (kept for compat) */
 #dealBanner, #incentive-banner{ z-index: 1200; }
@@ -157,4 +224,14 @@ body{ color:var(--text); background:var(--bg); -webkit-font-smoothing:antialiase
   display:inline-flex; align-items:center; gap:6px;
   background: var(--brand-100); color: var(--brand);
   padding:4px 8px; border-radius:999px; font-weight:700; font-size:12px;
+}
+
+/* Nearby Places tiles — ensure visible height */
+.place-img { height: 128px; }
+.place-tile { min-height: 210px; }
+
+/* Small handle aesthetic */
+.sheet-handle {
+  width: 56px; height: 6px; border-radius: 999px;
+  background: #e7edf6; margin: 6px auto 14px auto;
 }
