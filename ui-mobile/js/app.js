@@ -630,19 +630,38 @@
 
   // Nearby places demo tiles (do not block layout)
   function renderNearby(){
-    const list = $('nearbyList'); if(!list) return;
+    const list = document.getElementById('nearbyList'); if(!list) return;
+
     const items = [
-      {name:'Target', rating:'93%', photo:''},
-      {name:'Arepitas', rating:'96%', photo:''},
-      {name:'Starbucks', rating:'88%', photo:''},
-      {name:'Trader Joe\'s', rating:'92%', photo:''}
+      { name:'Starbucks',       rating:'88%', img:'/app/img/coffee.svg' },
+      { name:'Target',          rating:'93%', img:'/app/img/retail.svg' },
+      { name:"Trader Joe's",    rating:'92%', img:'/app/img/groceries.svg' },
+      { name:'Arepitas',        rating:'96%', img:'/app/img/tacos.svg' },
+      { name:'Public Parking',  rating:'—',   img:'/app/img/parking.svg' },
+      { name:'Any Restaurant',  rating:'—',   img:'/app/img/restaurant.svg' },
     ];
-    list.innerHTML = items.map(x=>`
-      <div class="card" style="padding:10px;">
-        <div style="height:90px;background:#eef2f7;border-radius:12px;margin-bottom:8px;"></div>
-        <div style="font-weight:800">${x.name}</div>
-        <div style="color:var(--text-subtle)">${x.rating}</div>
-      </div>`).join('');
+
+    list.innerHTML = items.map((x, i)=>`
+      <div class="place-tile" data-idx="${i}">
+        <div class="place-img">
+          <img src="${x.img}" alt="${x.name}" loading="lazy" />
+        </div>
+        <div class="place-meta">
+          <div class="place-name">${x.name}</div>
+          <div class="place-rating">
+            <span>★</span><span>${x.rating}</span>
+          </div>
+        </div>
+      </div>
+    `).join('');
+
+    // Apply shimmer removal on image load or error (fallback keeps SVG)
+    list.querySelectorAll('.place-tile img').forEach(img=>{
+      const parent = img.parentElement;
+      const markLoaded = ()=> parent && parent.classList.add('loaded');
+      img.addEventListener('load', markLoaded, {once:true});
+      img.addEventListener('error', markLoaded, {once:true});
+    });
   }
 
   // Wire tabs
