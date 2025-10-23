@@ -8,6 +8,8 @@ import httpx
 from app.services.energyhub_sim import sim
 from app.services.cache import cache
 from app.services.async_wallet import async_wallet
+from app.services.idempotency import idempotency_service
+from app.services.circuit_breaker import wallet_circuit_breaker
 from app.config import settings
 
 router = APIRouter(prefix="/v1/energyhub", tags=["energyhub"])
@@ -71,6 +73,16 @@ async def charge_start(payload: ChargeStartReq, at: Optional[str] = Query(None))
 
 @router.post("/events/charge-stop", response_model=ChargeStopResp)
 async def charge_stop(payload: ChargeStopReq, at: Optional[str] = Query(None)):
+    # Check for idempotency
+    idempotency_key = f"charge-stop:{payload.session_id}:{payload.kwh_consumed}"
+    cached_result = await idempotency_service.get_result("charge-stop", {
+        "session_id": payload.session_id,
+        "kwh_consumed": payload.kwh_consumed
+    })
+    
+    if cached_result:
+        return cached_result
+    
     override_dt = parse_at(at)
     try:
         result = sim.stop_session(payload.session_id, payload.kwh_consumed, override_dt)
@@ -80,17 +92,16 @@ async def charge_stop(payload: ChargeStopReq, at: Optional[str] = Query(None)):
     cents = int(round(result["total_reward_usd"] * 100))
     
     if settings.enable_sync_credit:
-        # Synchronous credit (for demo)
+        # Synchronous credit (for demo) with circuit breaker
         new_balance: Optional[int] = None
         try:
-            async with httpx.AsyncClient(timeout=5.0) as c:
-                r = await c.post(
-                    "http://127.0.0.1:8000/v1/wallet/credit_qs",
-                    params={"user_id": result["user_id"], "cents": cents}
-                )
-                if r.status_code == 200:
-                    jd = r.json()
-                    new_balance = jd.get("new_balance_cents") or jd.get("balance_cents")
+            response = await wallet_circuit_breaker.post(
+                "/v1/wallet/credit_qs",
+                params={"user_id": result["user_id"], "cents": cents}
+            )
+            if response.status_code == 200:
+                jd = response.json()
+                new_balance = jd.get("new_balance_cents") or jd.get("balance_cents")
         except Exception:
             pass
         result["wallet_balance_cents"] = new_balance
@@ -103,6 +114,12 @@ async def charge_stop(payload: ChargeStopReq, at: Optional[str] = Query(None)):
         )
         # Return 202 with estimated reward
         result["wallet_balance_cents"] = None  # Will be updated async
+    
+    # Store result for idempotency
+    await idempotency_service.store_result("charge-stop", {
+        "session_id": payload.session_id,
+        "kwh_consumed": payload.kwh_consumed
+    }, result)
     
     return result
 

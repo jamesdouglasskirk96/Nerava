@@ -5,6 +5,7 @@ from .db import Base, engine
 from .config import settings
 from .middleware.logging import LoggingMiddleware
 from .middleware.metrics import MetricsMiddleware
+from .middleware.ratelimit import RateLimitMiddleware
 from .services.async_wallet import async_wallet
 
 from fastapi.staticfiles import StaticFiles
@@ -45,6 +46,7 @@ Base.metadata.create_all(bind=engine)
 # Add middleware
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(MetricsMiddleware)
+app.add_middleware(RateLimitMiddleware, requests_per_minute=settings.rate_limit_per_minute)
 
 # CORS (tighten in prod)
 app.add_middleware(
