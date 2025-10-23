@@ -7,6 +7,7 @@ import httpx
 
 from app.services.energyhub_sim import sim
 from app.services.cache import cache
+from app.cache.layers import layered_cache, cached
 from app.services.async_wallet import async_wallet
 from app.services.idempotency import idempotency_service
 from app.services.circuit_breaker import wallet_circuit_breaker
@@ -58,17 +59,14 @@ class ChargeStopResp(BaseModel):
 
 @router.get("/windows")
 async def list_windows(at: Optional[str] = Query(None, description="ISO datetime override")):
-    # Check cache first
+    # Use layered cache with single-flight protection
     cache_key = f"energyhub:windows:{at or 'current'}"
-    cached = await cache.get(cache_key)
-    if cached:
-        return cached
     
-    override_dt = parse_at(at)
-    result = sim.list_windows(override_dt)
+    async def fetch_windows():
+        override_dt = parse_at(at)
+        return sim.list_windows(override_dt)
     
-    # Cache result
-    await cache.setex(cache_key, settings.cache_ttl_windows, result)
+    result = await layered_cache.get_or_set(cache_key, fetch_windows, ttl=settings.cache_ttl_windows)
     return result
 
 @router.post("/events/charge-start", response_model=ChargeStartResp)
