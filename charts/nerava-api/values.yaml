@@ -35,7 +35,16 @@ service:
 ingress:
   enabled: false
   className: ""
-  annotations: {}
+  annotations:
+    # WAF and security annotations
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # CloudFront/WAF annotations (if using AWS)
+    # alb.ingress.kubernetes.io/scheme: internet-facing
+    # alb.ingress.kubernetes.io/target-type: ip
+    # alb.ingress.kubernetes.io/load-balancer-attributes: routing.http2.enabled=true
   hosts:
     - host: nerava-api.local
       paths:

@@ -7,6 +7,8 @@ from .middleware.logging import LoggingMiddleware
 from .middleware.metrics import MetricsMiddleware
 from .middleware.ratelimit import RateLimitMiddleware
 from .middleware.region import RegionMiddleware, ReadWriteRoutingMiddleware, CanaryRoutingMiddleware
+from .middleware.auth import AuthMiddleware
+from .middleware.audit import AuditMiddleware
 from .services.async_wallet import async_wallet
 from .lifespan import lifespan
 
@@ -54,6 +56,8 @@ app.add_middleware(RateLimitMiddleware, requests_per_minute=settings.rate_limit_
 app.add_middleware(RegionMiddleware)
 app.add_middleware(ReadWriteRoutingMiddleware)
 app.add_middleware(CanaryRoutingMiddleware, canary_percentage=0.0)  # Disabled by default
+app.add_middleware(AuthMiddleware)
+app.add_middleware(AuditMiddleware)
 
 # CORS (tighten in prod)
 app.add_middleware(
