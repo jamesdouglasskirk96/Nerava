@@ -6,6 +6,7 @@ from .config import settings
 from .middleware.logging import LoggingMiddleware
 from .middleware.metrics import MetricsMiddleware
 from .middleware.ratelimit import RateLimitMiddleware
+from .middleware.region import RegionMiddleware, ReadWriteRoutingMiddleware, CanaryRoutingMiddleware
 from .services.async_wallet import async_wallet
 from .lifespan import lifespan
 
@@ -28,6 +29,7 @@ from .routers import (
     incentives,
     energyhub,
     ops,
+    flags,
 )
 
 # Auth + JWT preferences
@@ -48,6 +50,9 @@ Base.metadata.create_all(bind=engine)
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(MetricsMiddleware)
 app.add_middleware(RateLimitMiddleware, requests_per_minute=settings.rate_limit_per_minute)
+app.add_middleware(RegionMiddleware)
+app.add_middleware(ReadWriteRoutingMiddleware)
+app.add_middleware(CanaryRoutingMiddleware, canary_percentage=0.0)  # Disabled by default
 
 # CORS (tighten in prod)
 app.add_middleware(
@@ -60,6 +65,7 @@ app.add_middleware(
 
 # Operations routes
 app.include_router(ops.router)
+app.include_router(flags.router)
 
 # Health first
 app.include_router(health.router, prefix="/v1", tags=["health"])
