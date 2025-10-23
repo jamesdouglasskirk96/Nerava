@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  />
+
+  <title>Nerava</title>
+
+  <!-- Leaflet CSS (must be before app.css and app.js) -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+
+  <style>
+    :root{
+      --bg:#0e1a25;         /* navy */
+      --bg-2:#0b1520;       /* deeper navy */
+      --card:#121f2c;       /* panel */
+      --text:#e7eef6;
+      --muted:#9fb4c7;
+      --accent:#6bdd8a;     /* green button */
+      --accent-2:#7bd68a;   /* banner green */
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;background:var(--bg-2);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif}
+    #app{height:100%;display:flex;flex-direction:column}
+
+    /* Header */
+    header{background:#0c1a27;color:#fff;position:relative}
+    .topbar{display:flex;align-items:center;justify-content:center;gap:.75rem;height:56px}
+    .wordmark img{height:20px;display:block;filter:brightness(0) invert(1)}
+    .wordmark--text{font-weight:800;letter-spacing:.18em}
+    .bolt{width:18px;height:18px;display:inline-block}
+    .bolt svg{display:block;width:18px;height:18px;fill:#fff}
+
+    /* Incentive banner (only on Explore) */
+    #banner{display:none;background:var(--accent-2);color:#0b2a18;font-weight:800;font-size:20px;padding:.65rem 1rem;justify-content:center;align-items:center;gap:.5rem}
+    #banner .bolt{width:18px;height:18px}
+    #banner.show{display:flex}
+
+    /* Main area with map */
+    main{flex:1;position:relative;overflow:hidden;background:var(--bg-2)}
+    #map{position:absolute;inset:0}
+    /* Card sits above map */
+    #hub-card{
+      position:absolute;left:16px;right:16px;bottom:88px;
+      background:var(--card);border-radius:24px;padding:18px 18px 20px;
+      box-shadow:0 12px 40px rgba(0,0,0,.45);
+    }
+    .hub-title{display:flex;align-items:flex-end;justify-content:space-between;gap:.75rem}
+    .hub-name{font-size:28px;line-height:1.1;font-weight:900}
+    .hub-sub{color:var(--muted);font-weight:800;margin-top:6px}
+    .chips{display:flex;gap:.5rem;align-items:center}
+    .chip{background:#162636;color:#cfe3f7;border-radius:14px;padding:6px 10px;font-size:13px;font-weight:700}
+    .logos{display:flex;gap:14px;margin:14px 0 8px}
+    .logos img{width:40px;height:40px;border-radius:50%;object-fit:cover;background:#0b1520;border:2px solid #0b1520}
+    .meta{color:#cfe3f7;display:flex;gap:.5rem;align-items:center}
+    .meta .dot{opacity:.5}
+    .nav-btn{
+      margin-top:14px;width:100%;border:0;border-radius:16px;
+      font-size:18px;font-weight:900;padding:14px 16px;background:var(--accent);color:#0c1a27
+    }
+
+    /* Tabs */
+    nav.tabbar{
+      height:72px;background:#0c1a27;color:#cfe3f7;border-top:1px solid rgba(255,255,255,.06);
+      display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:6px 6px env(safe-area-inset-bottom,0)
+    }
+    .tab{display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:16px;gap:6px}
+    .tab.active{background:#0f2030}
+    .tab img{width:26px;height:26px;display:block}
+    .tab span{font-size:14px;font-weight:700}
+
+    /* Hidden views for other tabs (simple, keep map hidden there) */
+    .view{position:absolute;inset:0;padding:16px;overflow:auto;background:var(--bg-2);display:none}
+    .view.active{display:block}
+    /* Only Explore shows map + card */
+    #explore.view{background:transparent}
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <div class="topbar">
+        <div class="wordmark">
+          <!-- Prefer SVG wordmark if present; otherwise show text -->
+          <img src="./assets/wordmark-fallback.svg" alt="NERAVA" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'wordmark--text',textContent:'NERAVA'}))">
+        </div>
+        <span class="bolt" aria-hidden="true">
+          <!-- white bolt -->
+          <svg viewBox="0 0 24 24"><path d="M13.5 2 4 13h6l-1.5 9L20 10h-6l2-8z"/></svg>
+        </span>
+      </div>
+      <div id="banner">
+        <span class="bolt" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13.5 2 4 13h6l-1.5 9L20 10h-6l2-8z"/></svg></span>
+        <span>Cheaper charging now</span>
+      </div>
+    </header>
+
+    <main>
+      <!-- EXPLORE (map + card) -->
+      <section id="explore" class="view active" aria-label="Explore">
+        <div id="map" role="img" aria-label="Map"></div>
+
+        <article id="hub-card" aria-live="polite">
+          <div class="hub-title">
+            <div>
+              <div class="hub-name">Nerava Hub</div>
+              <div class="hub-sub">Recommended</div>
+            </div>
+            <div class="chips">
+              <div class="chip" id="chip-free">3 free</div>
+              <div class="chip" id="chip-cheap">10% cheaper</div>
+            </div>
+          </div>
+
+          <div class="logos">
+            <img src="./assets/starbucks.png" alt="Starbucks">
+            <img src="./assets/cfa.jpeg" alt="Chick-fil-A">
+            <img src="./assets/mcds.png" alt="McDonald’s">
+          </div>
+
+          <div class="meta"><span id="meta-free">3 free</span> <span class="dot">•</span> <span id="meta-name">Domain, Austin</span></div>
+
+          <button id="btn-nav" class="nav-btn">Navigate</button>
+        </article>
+      </section>
+
+      <!-- CHARGE -->
+      <section id="charge" class="view" aria-label="Charge">
+        <div class="card" style="background:var(--card);border-radius:22px;padding:18px">
+          <h2 style="margin:0 0 8px 0">Charge</h2>
+          <p style="color:var(--muted);margin:0">Scan a QR on-site or view your current session details (coming soon).</p>
+        </div>
+      </section>
+
+      <!-- WALLET -->
+      <section id="wallet" class="view" aria-label="Wallet">
+        <div class="card" style="background:var(--card);border-radius:22px;padding:18px">
+          <h2 style="margin:0 0 8px 0">Wallet</h2>
+          <div id="wallet-summary" style="font-size:40px;font-weight:900;margin:8px 0">+$0.00</div>
+          <h3 style="margin:10px 0 8px 0">Ways you earned</h3>
+          <div id="wallet-ways" style="color:var(--text)">
+            <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1a2c3c"><span>Off-peak award</span><strong>+$0.50</strong></div>
+            <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1a2c3c"><span>Perk reward</span><strong>+$0.75</strong></div>
+            <div style="display:flex;justify-content:space-between;padding:10px 0"><span>Utility bonus</span><strong>+$1.00</strong></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PROFILE -->
+      <section id="profile" class="view" aria-label="Profile">
+        <div class="card" style="background:var(--card);border-radius:22px;padding:18px">
+          <h2 style="margin:0 0 8px 0">Profile</h2>
+          <p style="color:var(--muted);margin-top:0">Signed in as <strong>demo@nerava.app</strong></p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;color:var(--text);font-weight:700">
+            <label><input type="checkbox"> Coffee &amp; Bakery</label>
+            <label><input type="checkbox"> Quick Bites</label>
+            <label><input type="checkbox"> Dog Friendly</label>
+            <label><input type="checkbox"> Kid Friendly</label>
+            <label><input type="checkbox"> Shopping</label>
+            <label><input type="checkbox"> Exercise</label>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Bottom Tab Bar -->
+    <nav class="tabbar" role="tablist" aria-label="Primary">
+      <button class="tab active" role="tab" aria-selected="true" data-tab="explore">
+        <img src="./assets/nav-explore.svg" alt="" /><span>Explore</span>
+      </button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="charge">
+        <img src="./assets/nav-charge.svg" alt="" /><span>Charge</span>
+      </button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="wallet">
+        <img src="./assets/nav-wallet.svg" alt="" /><span>Wallet</span>
+      </button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="profile">
+        <img src="./assets/nav-profile.svg" alt="" /><span>Profile</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- Leaflet JS BEFORE app.js -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
+  <!-- Your app code -->
+  <script src="./app.js?v=7"></script>
+</body>
+</html>

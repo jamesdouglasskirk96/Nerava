@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="32" viewBox="0 0 220 32">
+  <rect width="220" height="32" fill="none"/>
+  <g fill="#ffffff" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial" font-weight="800" font-size="20">
+    <text x="2" y="23">NERAVA</text>
+  </g>
+  <g transform="translate(165,6) scale(0.8)"><path fill="#ffffff" d="M13 2L3 14h6v8l12-14h-7l-1-6z"/></g>
+</svg>

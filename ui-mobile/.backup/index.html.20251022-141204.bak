@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+    <title>Nerava</title>
+    <link rel="manifest" href="manifest.json"/>
+    <link rel="stylesheet" href="css/style.css"/>
+    <script>
+      window.NERAVA_BASE  = window.NERAVA_BASE  || (location.origin.includes('127.0.0.1') ? 'http://127.0.0.1:8000' : location.origin);
+      window.NERAVA_USER  = window.NERAVA_USER  || 'demo@nerava.app';
+      window.NERAVA_PREFS = window.NERAVA_PREFS || (localStorage.getItem('NERAVA_PREFS') || 'coffee_bakery,quick_bite');
+    </script>
+    <link rel="icon" href="assets/icon-192.png"/>
+  </head>
+  <body>
+    <div class="topbar">
+      <div class="brand">Nerava</div>
+      <div class="spacer"></div>
+    </div>
+
+    <!-- Incentive banner (logo + text; hidden until active) -->
+    <div id="incentive-banner" class="banner hidden"></div>
+
+    <!-- EXPLORE (map + hub + trip) -->
+    <section id="view-explore" class="view">
+      <div id="map"></div>
+
+      <!-- Trip planner (inline, lightweight) -->
+      <div id="trip-card" class="card">
+        <div class="card-title">Plan a Trip</div>
+        <div class="card-sub">Enter a destination, we’ll suggest a hub along the way.</div>
+        <div class="trip-row">
+          <input id="trip-input" class="trip-input" placeholder="e.g., 123 Elm St, Austin"/>
+          <button id="trip-btn" class="btn btn-ghost">Plan</button>
+        </div>
+        <div id="trip-status" class="muted mt"></div>
+      </div>
+
+      <!-- Recommended hub card -->
+      <div id="recommend-card" class="card">
+        <div class="card-row">
+          <div class="card-title" id="rec-name">Recommended hub</div>
+          <div class="pill" id="rec-status">open</div>
+        </div>
+        <div class="card-sub" id="rec-sub">2 free • PREMIUM • ~0.6 mi • Best at 5:20PM</div>
+        <div class="card-row logos" id="merchant-strip"></div>
+        <div class="card-row">
+          <button id="btn-reserve" class="btn btn-primary">Reserve</button>
+          <button id="btn-directions" class="btn btn-ghost">Directions</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- CHARGE -->
+    <section id="view-charge" class="view hidden">
+      <div class="card tall">
+        <div class="card-title">Charge</div>
+        <div class="card-sub">Scan station QR or view your current session.</div>
+        <div class="card-row">
+          <button id="btn-scan" class="btn btn-primary">Scan QR</button>
+          <button id="btn-session" class="btn btn-ghost">View Session</button>
+        </div>
+        <div id="session-info" class="mt"></div>
+        <video id="qr-video" class="hidden" playsinline></video>
+        <canvas id="qr-canvas" class="hidden"></canvas>
+      </div>
+    </section>
+
+    <!-- WALLET -->
+    <section id="view-wallet" class="view hidden">
+      <div class="viewport-card">
+        <div class="card-header-row">
+          <div class="card-title">Wallet</div>
+          <div class="pill" id="wallet-balance">—</div>
+        </div>
+        <div id="wallet-history" class="list scroll"></div>
+      </div>
+    </section>
+
+    <!-- PROFILE -->
+    <section id="view-profile" class="view hidden">
+      <div class="card tall">
+        <div class="card-title">Profile</div>
+        <div class="card-sub">Signed in as <span id="profile-email"></span></div>
+        <div class="grid prefs">
+          <label><input type="checkbox" id="pref_coffee"> Coffee & Bakery</label>
+          <label><input type="checkbox" id="pref_food"> Quick Bites</label>
+          <label><input type="checkbox" id="pref_dog"> Dog Friendly</label>
+          <label><input type="checkbox" id="pref_kid"> Kid Friendly</label>
+          <label><input type="checkbox" id="pref_shopping"> Shopping</label>
+          <label><input type="checkbox" id="pref_exercise"> Exercise</label>
+        </div>
+        <div class="card-row">
+          <button id="btn-save-prefs" class="btn btn-primary">Save Preferences</button>
+          <button id="btn-recommend-refresh" class="btn btn-ghost">See New Recommendation</button>
+        </div>
+        <div id="prefs-impact" class="mt muted"></div>
+      </div>
+    </section>
+
+    <!-- Bottom nav (4 tabs) -->
+    <nav class="bottombar">
+      <button class="navbtn active" data-view="explore">
+        <img src="assets/nav-explore.svg" alt="Explore"/><span>Explore</span>
+      </button>
+      <button class="navbtn" data-view="charge">
+        <img src="assets/nav-charge.svg" alt="Charge"/><span>Charge</span>
+      </button>
+      <button class="navbtn" data-view="wallet">
+        <img src="assets/nav-wallet.svg" alt="Wallet"/><span>Wallet</span>
+      </button>
+      <button class="navbtn" data-view="profile">
+        <img src="assets/nav-profile.svg" alt="Profile"/><span>Profile</span>
+      </button>
+    </nav>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>

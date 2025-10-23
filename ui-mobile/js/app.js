@@ -1,193 +1,88 @@
-const BASE  = window.NERAVA_BASE;
-const USER  = window.NERAVA_USER;
-let PREFS_CSV = window.NERAVA_PREFS;
-let map, userMarker, hubMarker, lastRecBeforePrefs = null;
+(() => {
+  const HUB = { name:'Nerava Hub', lat:30.4022, lng:-97.7249, city:'Domain, Austin' };
 
-function $(s){ return document.querySelector(s); }
-function el(t, a={}){ const n=document.createElement(t); Object.assign(n,a); return n; }
+  const $  = (id)=>document.getElementById(id);
+  const on = (el, ev, fn)=>el && el.addEventListener(ev, fn, {passive:true});
 
-async function getJSON(path, params={}){
-  const url = new URL(path, BASE);
-  Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
-  const r = await fetch(url.toString());
-  if(!r.ok) throw new Error('HTTP '+r.status);
-  return r.json();
-}
-async function postJSON(path, body={}, params={}){
-  const url = new URL(path, BASE);
-  Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
-  const r = await fetch(url.toString(), { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-  if(!r.ok) throw new Error('HTTP '+r.status);
-  return r.json();
-}
-
-/* ---------------- MAP + HOME ---------------- */
-function initMap(lat,lng){
-  if(map) return;
-  map = L.map('map', {zoomControl:false}).setView([lat,lng], 15);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom: 20}).addTo(map);
-  userMarker = L.circleMarker([lat,lng],{radius:6,color:'#9fc1ff'}).addTo(map);
-}
-function setHubMarker(lat,lng,status){
-  if(hubMarker) map.removeLayer(hubMarker);
-  const color = status==='open' ? '#2ecc71' : (status==='busy' ? '#ff6b6b' : '#f1c40f');
-  hubMarker = L.circleMarker([lat,lng],{radius:10,color}).addTo(map);
-}
-function formatSub(h){ const n=h.free_ports??0; const tier=(h.tier||'').toUpperCase(); return `${n} free • ${tier}`; }
-
-function merchantLogo(src){ const img=el('img'); img.src = src || 'assets/icon-192.png'; img.alt='m'; return img; }
-
-async function loadHome(){
-  let lat=30.4021, lng=-97.7265;
-  try{
-    await new Promise(res => navigator.geolocation.getCurrentPosition(
-      p=>{lat=p.coords.latitude; lng=p.coords.longitude; res();},
-      _=>res(), {timeout:1500}
-    ));
-  }catch(_){}
-  initMap(lat,lng);
-
-  // Baseline recommendation (for delta after saving prefs)
-  const rec = await getJSON('/v1/hubs/recommend', {lat,lng,radius_km:2,user_id:USER});
-  lastRecBeforePrefs = rec;
-  if(rec && rec.lat && rec.lng){
-    setHubMarker(rec.lat, rec.lng, rec.status||'open');
-    $('#rec-name').textContent = rec.name || 'Recommended hub';
-    $('#rec-status').textContent = rec.status || 'open';
-    $('#rec-sub').textContent = formatSub(rec);
-    $('#recommend-card').classList.remove('hidden');
-
-    // Merchants (unified: local perks first + Google)
-    const m = await getJSON('/v1/merchants/nearby', {lat:rec.lat, lng:rec.lng, radius_m:600, max_results:20, prefs:PREFS_CSV, hub_id: rec.id||'hub_unknown'});
-    const strip = $('#merchant-strip'); strip.innerHTML='';
-    m.slice(0,12).forEach(x => strip.appendChild(merchantLogo(x.logo)));
-
-    // Reserve
-    $('#btn-reserve').onclick = async ()=>{
-      try{
-        // Fixed payload: valid start_iso key/value
-        const body = {
-          hub_id: rec.id || 'hub',
-          user_id: USER,
-          start_iso: new Date(Date.now()+10*60*1000).toISOString(),
-          minutes: 30
-        };
-        const out = await postJSON('/v1/reservations/soft', body);
-        alert('Held: ' + (out.human || `${out.window_start_iso}–${out.window_end_iso}`));
-      }catch(e){ alert('Reserve failed'); }
-    };
-    // Directions
-    $('#btn-directions').onclick = ()=>{
-      location.href = `https://www.google.com/maps/dir/?api=1&destination=${rec.lat},${rec.lng}`;
-    };
-  }
-
-  // Incentive banner probe: if award_off_peak returns >0, show "Cheaper charging now"
-  try{
-    const probe = await postJSON('/v1/incentives/award_off_peak', {}, {user_id: USER});
-    const banner = $('#incentive-banner');
-    if (probe && (probe.awarded_cents || 0) > 0) {
-      banner.textContent = 'Cheaper charging now';
-      banner.classList.remove('hidden'); banner.classList.remove('warn');
-    } else {
-      banner.classList.add('hidden');
-    }
-  }catch(_){}
-}
-
-/* ---------------- WALLET ---------------- */
-async function loadWallet(){
-  const bal = await getJSON('/v1/wallet', {user_id: USER});
-  $('#wallet-balance').textContent = `${(bal.balance_cents||0)/100} USD`;
-
-  try{
-    const hist = await getJSON('/v1/wallet/history', {user_id: USER});
-    const list = $('#wallet-history'); list.innerHTML='';
-    (hist||[]).slice(0,20).forEach(row=>{
-      const item = el('div', {className:'list-item'});
-      const cents = row.amount_cents ?? row.cents ?? 0;
-      const sign = cents >= 0 ? '+' : '−';
-      const abs = Math.abs(cents);
-      item.textContent = `${row.reason || 'Transaction'} • ${sign}$${(abs/100).toFixed(2)} • ${row.at || row.timestamp || ''}`;
-      list.appendChild(item);
+  function setActive(tabName){
+    // tabs
+    ['Explore','Charge','Wallet','Profile'].forEach(n=>{
+      const btn = $('tab'+n);
+      if(btn) btn.classList.toggle('active', n===tabName);
     });
-  }catch(_){
-    $('#wallet-history').innerHTML = '<div class="muted">History not available</div>';
+    // pages
+    ['Explore','Charge','Wallet','Profile'].forEach(n=>{
+      const pg = $('page'+n);
+      if(pg) pg.classList.toggle('active', n===tabName);
+    });
+    // banner only on Explore
+    const banner = $('dealBanner');
+    if(banner) banner.style.display = (tabName==='Explore') ? '' : 'none';
   }
-}
 
-/* ---------------- PROFILE (prefs) ---------------- */
-function prefsCSVFromForm(){
-  const ids = ['pref_coffee','pref_food','pref_dog','pref_kid','pref_shopping','pref_exercise'];
-  const map = {}; ids.forEach(id=> map[id] = $('#'+id).checked);
-  const pos = [];
-  if(map.pref_coffee) pos.push('coffee_bakery');
-  if(map.pref_food) pos.push('quick_bite');
-  return { json: map, csv: pos.join(',') };
-}
-async function loadProfile(){
-  $('#profile-email').textContent = USER;
-  try{
-    const current = await getJSON(`/v1/users/${encodeURIComponent(USER)}/prefs`);
-    ['pref_coffee','pref_food','pref_dog','pref_kid','pref_shopping','pref_exercise']
-      .forEach(k => { if (k in current) $('#'+k).checked = !!current[k]; });
-  }catch(_){}
+  // Map & route
+  let map, routingCtl;
+  function ensureMap(){
+    if(typeof L==='undefined'){ setTimeout(ensureMap,120); return; }
+    if(map) return;
+    map = L.map('map',{ zoomControl:false });
+    map.setView([HUB.lat, HUB.lng], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      {maxZoom:19, attribution:'&copy; OpenStreetMap'}).addTo(map);
 
-  $('#btn-save-prefs').onclick = async ()=>{
-    const { json, csv } = prefsCSVFromForm();
-    await postJSON(`/v1/users/${encodeURIComponent(USER)}/prefs`, json);
-    PREFS_CSV = csv || PREFS_CSV;
-    window.NERAVA_PREFS = PREFS_CSV;
-    localStorage.setItem('NERAVA_PREFS', PREFS_CSV);
-    alert('Preferences saved');
-  };
-
-  $('#btn-recommend-refresh').onclick = async ()=>{
-    try{
-      const after = await getJSON('/v1/hubs/recommend', {lat:30.4021,lng:-97.7265,radius_km:2,user_id:USER});
-      const before = lastRecBeforePrefs || {};
-      const added = (after.reason_tags||[]).filter(x => !(before.reason_tags||[]).includes(x));
-      const scoreBefore = before.score ?? 0, scoreAfter = after.score ?? 0;
-      $('#prefs-impact').innerHTML = `
-        <div>Score: ${scoreBefore.toFixed(1)} → ${scoreAfter.toFixed(1)} (${(scoreAfter-scoreBefore).toFixed(1)})</div>
-        <div>Reasons added: ${added.join(', ') || '—'}</div>`;
-      await loadHome(); // refresh merchants strip with new prefs
-    }catch(e){ $('#prefs-impact').textContent = 'Could not refresh recommendation.'; }
-  };
-}
-
-/* ---------------- PLAN CHARGE (QR placeholder) ---------------- */
-async function loadPlanCharge(){
-  $('#session-info').innerHTML = '<div class="muted">No active session. Scan a station QR to begin.</div>';
-  $('#btn-session').onclick = async ()=>{
-    alert('Session details demo coming soon');
-  };
-  $('#btn-scan').onclick = ()=>{
-    alert('QR scanner demo coming soon — will use jsQR/WebRTC.');
-  };
-}
-
-/* ---------------- SIMPLE ROUTER ---------------- */
-function showView(key){
-  const views = {
-    home:     ()=>{ $('#recommend-card').classList.remove('hidden'); $('#view-plan-charge').classList.add('hidden'); $('#view-plan-trip').classList.add('hidden'); $('#view-wallet').classList.add('hidden'); $('#view-profile').classList.add('hidden'); },
-    'plan-charge': ()=>{ $('#recommend-card').classList.add('hidden'); $('#view-plan-charge').classList.remove('hidden'); $('#view-plan-trip').classList.add('hidden'); $('#view-wallet').classList.add('hidden'); $('#view-profile').classList.add('hidden'); loadPlanCharge(); },
-    'plan-trip':   ()=>{ $('#recommend-card').classList.add('hidden'); $('#view-plan-charge').classList.add('hidden'); $('#view-plan-trip').classList.remove('hidden'); $('#view-wallet').classList.add('hidden'); $('#view-profile').classList.add('hidden'); },
-    wallet:  ()=>{ $('#recommend-card').classList.add('hidden'); $('#view-plan-charge').classList.add('hidden'); $('#view-plan-trip').classList.add('hidden'); $('#view-wallet').classList.remove('hidden'); $('#view-profile').classList.add('hidden'); loadWallet(); },
-    profile: ()=>{ $('#recommend-card').classList.add('hidden'); $('#view-plan-charge').classList.add('hidden'); $('#view-plan-trip').classList.add('hidden'); $('#view-wallet').classList.add('hidden'); $('#view-profile').classList.remove('hidden'); loadProfile(); },
-  };
-  (views[key]||views.home)();
-  document.querySelectorAll('.navbtn').forEach(b => b.classList.toggle('active', b.dataset.view===key));
-}
-
-/* ---------------- BOOT ---------------- */
-document.addEventListener('DOMContentLoaded', async ()=>{
-  try{
-    const h = await getJSON('/v1/health');
-    if(!h.ok) throw new Error('backend not ok');
-  }catch(e){
-    alert('Backend unavailable at '+BASE);
+    // Hub marker
+    L.circleMarker([HUB.lat, HUB.lng], {radius:8, color:'#55ffc7', weight:4, fill:true, fillOpacity:.5})
+      .addTo(map).bindPopup(HUB.name);
   }
-  await loadHome();
-  document.querySelectorAll('.navbtn').forEach(btn => btn.addEventListener('click', ()=> showView(btn.dataset.view)));
-});
+
+  function drawRouteToHub(){
+    if(typeof L==='undefined' || !map || !L.Routing){ return; }
+
+    // Remove prior route
+    if(routingCtl){ map.removeControl(routingCtl); routingCtl = null; }
+
+    const fallbackStart = [30.3982,-97.7239]; // a nearby point if geolocation denied
+
+    const makeControl = (start) => {
+      routingCtl = L.Routing.control({
+        waypoints: [ L.latLng(start[0],start[1]), L.latLng(HUB.lat,HUB.lng) ],
+        routeWhileDragging:false,
+        addWaypoints:false,
+        draggableWaypoints:false,
+        fitSelectedRoutes:true,
+        show:false
+      }).addTo(map);
+    };
+
+    if(navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(
+        pos => makeControl([pos.coords.latitude, pos.coords.longitude]),
+        _err => makeControl(fallbackStart),
+        {enableHighAccuracy:true, maximumAge:60000, timeout:4000}
+      );
+    } else {
+      makeControl(fallbackStart);
+    }
+  }
+
+  function wireUI(){
+    // Tabs
+    on($('tabExplore'),'click', ()=>setActive('Explore'));
+    on($('tabCharge'), 'click', ()=>setActive('Charge'));
+    on($('tabWallet'), 'click', ()=>setActive('Wallet'));
+    on($('tabProfile'),'click', ()=>setActive('Profile'));
+
+    // Charge here -> go to Charge page
+    on($('chargeHereBtn'),'click', ()=>{
+      setActive('Charge');
+    });
+  }
+
+  // boot
+  document.addEventListener('DOMContentLoaded', ()=>{
+    wireUI();
+    ensureMap();
+    // draw a route after map is ready
+    setTimeout(()=>{ ensureMap(); drawRouteToHub(); }, 500);
+  });
+})();

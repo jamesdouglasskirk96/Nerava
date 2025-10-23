@@ -1,0 +1,63 @@
+/* Base */
+:root{
+  --bg:#0b0f14;
+  --fg:#ffffff;
+  --muted:#9fb1c6;
+  --card:#121821;
+  --accent:#17e6a1;
+}
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; background:var(--bg); color:var(--fg);
+  font-family:-apple-system,BlinkMacSystemFont,'Inter','SF Pro Text',Roboto,'Segoe UI',Arial,sans-serif; }
+a{ color:var(--fg); text-decoration:none; }
+
+.topbar{ position:fixed; top:0; left:0; right:0; height:56px; display:flex; align-items:center;
+  padding:0 14px; background:rgba(10,14,18,0.8); backdrop-filter: blur(6px);
+  border-bottom:1px solid rgba(255,255,255,.06); z-index:10; }
+.brand{ font-weight:800; letter-spacing:.3px; }
+.spacer{ flex:1; }
+
+#map{ position:fixed; top:56px; bottom:64px; left:0; right:0; }
+
+.card{ position:fixed; left:12px; right:12px; bottom:84px; padding:12px; background:var(--card);
+  border:1px solid rgba(255,255,255,.08); border-radius:14px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+.card-title{ font-weight:800; }
+.card-sub{ color:var(--muted); margin-top:4px; }
+.card-row{ display:flex; align-items:center; justify-content:space-between; margin-top:10px; gap:10px; }
+.card-row.logos{ flex-wrap:wrap; }
+.card-row.logos img{ width:36px; height:36px; border-radius:18px; object-fit:cover; }
+.btn{ padding:10px 14px; border-radius:10px; font-weight:600; cursor:pointer; }
+.btn-primary{ background:#17e6a1; color:#053; }
+.btn-ghost{ background:transparent; border:1px solid rgba(255,255,255,.12); color:#fff; }
+.pill{ background:rgba(255,255,255,.08); padding:6px 10px; border-radius:999px; }
+
+/* Bottom nav */
+.bottombar{ position:fixed; left:0; right:0; bottom:0; height:64px; display:flex; align-items:center;
+  justify-content:space-around; background:rgba(10,14,18,0.9); border-top:1px solid rgba(255,255,255,.06); z-index:10; }
+.navbtn{ appearance:none; border:none; background:transparent; color:#9fb1c6; font-weight:600; border-radius:12px; padding:8px 12px; }
+.navbtn.active{ color:#fff; background:rgba(255,255,255,.06); }
+
+/* Views */
+.view.hidden{ display:none }
+.list{ margin-top:10px; }
+.list-item{ padding:10px 0; border-top:1px solid rgba(255,255,255,.06); }
+.muted{ color: var(--muted); }
+.mt{ margin-top:10px; }
+.grid.prefs{ display:grid; grid-template-columns:1fr 1fr; gap:8px 14px; margin-top:10px; }
+
+/* Banner polish */
+.banner{ position:fixed; top:56px; left:0; right:0; padding:8px 12px; text-align:center;
+  background:#00e676; color:#063; font-weight:800; z-index:9; }
+.banner.warn{ background:#ffde59; color:#1a1a00; }
+.banner-inner{ display:flex; align-items:center; justify-content:center; gap:10px; font-size:20px; line-height:24px; }
+.brandmark{ width:22px; height:22px; border-radius:6px; object-fit:contain;
+  filter: drop-shadow(0 1px 0 rgba(0,0,0,.15)); }
+
+/* Merchant logos + perk ribbon */
+.logo-wrap{ position:relative; display:inline-block; margin-right:8px; }
+.logo-wrap img{ width:36px; height:36px; border-radius:18px; object-fit:cover; }
+.logo-wrap .perk-badge{
+  position:absolute; right:-4px; top:-4px; font-size:10px; line-height:14px;
+  padding:0 4px; border-radius:6px; background:#17e6a1; color:#063; font-weight:800;
+  border:1px solid rgba(0,0,0,.15);
+}

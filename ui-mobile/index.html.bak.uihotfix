@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+  <title>Nerava</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="./styles.css?v=1761168695"/>
+</head>
+<body>
+  <!-- App Header -->
+  <header id="appHeader" class="app-header">
+    <div class="wordmark">NERAVA</div>
+    <img class="bolt" src="./assets/bolt-white.svg" alt="bolt" />
+  </header>
+
+  <!-- Explore-only banner -->
+  <div id="incentiveBanner" class="incentive-banner hidden">
+    <span class="banner-icon">⚡</span>
+    <span id="bannerText">Cheaper charging now</span>
+  </div>
+
+  <!-- Map (Explore only) -->
+  <div id="mapWrap" class="map-wrap">
+    <div id="map" class="map"></div>
+
+    <!-- Bottom hub card -->
+    <div id="hubCard" class="sheet">
+      <div class="sheet-inner">
+        <div class="sheet-title">
+          <h2>Recommended hub</h2>
+          <div class="chips">
+            <span class="chip" id="chipStatus">busy</span>
+            <span class="chip" id="chipTier">premium</span>
+          </div>
+        </div>
+
+        <div class="merchant-logos">
+          <img src="./assets/starbucks.png" alt="Starbucks" />
+          <img src="./assets/cfa.jpeg" alt="Chick-fil-A" />
+          <img src="./assets/mcds.png" alt="McDonald's" />
+        </div>
+
+        <div class="hub-meta">
+          <span id="freeSpots">0 free</span>
+          <span>•</span>
+          <span id="hubName">Nerava Hub • 1</span>
+        </div>
+
+        <div class="sheet-actions">
+          <button id="btnReserve" class="btn primary">Reserve</button>
+          <button id="btnDirections" class="btn">Directions</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Floating Plan a Trip button -->
+    <button id="fabPlan" class="fab">Plan a Trip</button>
+
+    <!-- Plan a Trip panel -->
+    <div id="tripPanel" class="panel hidden">
+      <div class="panel-title">Plan a Trip</div>
+      <p>Enter a destination, we’ll suggest a hub along the way.</p>
+      <div class="trip-row">
+        <input id="tripInput" class="input" placeholder="e.g., 4100 Five St, Austin"/>
+        <button id="tripGo" class="btn">Plan</button>
+      </div>
+      <a id="tripBack" href="#" class="link">Back to recommendation</a>
+    </div>
+  </div>
+
+  <!-- Pages -->
+  <main id="pages">
+    <section id="page-explore" class="page visible" aria-label="Explore"></section>
+
+    <section id="page-charge" class="page" aria-label="Charge">
+      <div class="card lg">
+        <h2>Charge</h2>
+        <p>Scan a QR on-site or view your current session details (coming soon).</p>
+      </div>
+    </section>
+
+    <section id="page-wallet" class="page" aria-label="Wallet">
+      <div class="card lg">
+        <h2>Wallet</h2>
+        <div id="walletTotal" class="wallet-total">+$0.00</div>
+        <div class="divider"></div>
+        <div class="subhead">Ways you earned</div>
+        <ul id="walletWays" class="ways"></ul>
+      </div>
+    </section>
+
+    <section id="page-profile" class="page" aria-label="Profile">
+      <div class="card lg">
+        <h2>Profile</h2>
+        <div id="userEmail" class="muted">Signed in as demo@nerava.app</div>
+        <div class="prefs">
+          <label><input type="checkbox" data-pref="pref_coffee"/> Coffee & Bakery</label>
+          <label><input type="checkbox" data-pref="pref_food"/> Quick Bites</label>
+          <label><input type="checkbox" data-pref="pref_dog"/> Dog Friendly</label>
+          <label><input type="checkbox" data-pref="pref_kid"/> Kid Friendly</label>
+          <label><input type="checkbox" data-pref="pref_shopping"/> Shopping</label>
+          <label><input type="checkbox" data-pref="pref_exercise"/> Exercise</label>
+        </div>
+        <div class="sheet-actions">
+          <button id="btnSavePrefs" class="btn primary">Save Preferences</button>
+          <button id="btnNewRec" class="btn">See New Recommendation</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Bottom Nav -->
+  <nav class="tabbar">
+    <button class="tab active" data-target="explore">
+      <img src="./assets/nav-explore.svg" alt="Explore"/><span>Explore</span>
+    </button>
+    <button class="tab" data-target="charge">
+      <img src="./assets/nav-charge.svg" alt="Charge"/><span>Charge</span>
+    </button>
+    <button class="tab" data-target="wallet">
+      <img src="./assets/nav-wallet.svg" alt="Wallet"/><span>Wallet</span>
+    </button>
+    <button class="tab" data-target="profile">
+      <img src="./assets/nav-profile.svg" alt="Profile"/><span>Profile</span>
+    </button>
+  </nav>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="./app.js?v=1761168695"></script>
+</body>
+</html>

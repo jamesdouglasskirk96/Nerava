@@ -1,42 +1,69 @@
-/* Base */
 :root{
-  --bg:#0b0f14;
-  --fg:#ffffff;
-  --muted:#9fb1c6;
-  --card:#121821;
-  --accent:#17e6a1;
+  --navy:#0c1c2a;
+  --panel:#0f2335;
+  --text:#e7eef6;
+  --muted:#b8c6d4;
+  --green:#79d98c;
+  --pill:#173247;
+  --shadow: 0 10px 30px rgba(0,0,0,.35);
 }
-*{ box-sizing:border-box; }
-html,body{ margin:0; padding:0; background:var(--bg); color:var(--fg); font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Text', Roboto, Segoe UI, Arial, sans-serif; }
-a{ color:var(--fg); text-decoration:none; }
 
-.topbar{ position:fixed; top:0; left:0; right:0; height:56px; display:flex; align-items:center; padding:0 14px; background:rgba(10,14,18,0.8); backdrop-filter: blur(6px); border-bottom:1px solid rgba(255,255,255,.06); z-index:10; }
-.brand{ font-weight:800; letter-spacing:.3px; }
-.spacer{ flex:1; }
+*{box-sizing:border-box}
+html,body,#app{height:100%;margin:0}
+body{background:var(--navy);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Helvetica,Arial,sans-serif}
 
-#map{ position:fixed; top:56px; bottom:64px; left:0; right:0; }
+#map{position:absolute; inset:0; z-index:1; min-height:100%}
+.ui-layer{position:relative; z-index:2}
 
-.card{ position:fixed; left:12px; right:12px; bottom:84px; padding:12px; background:var(--card); border:1px solid rgba(255,255,255,.08); border-radius:14px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
-.card-title{ font-weight:800; }
-.card-sub{ color:var(--muted); margin-top:4px; }
-.card-row{ display:flex; align-items:center; justify-content:space-between; margin-top:10px; gap:10px; }
-.card-row.logos img{ width:36px; height:36px; border-radius:18px; margin-right:8px; object-fit:cover; }
-.btn{ padding:10px 14px; border-radius:10px; font-weight:600; cursor:pointer; }
-.btn-primary{ background:#17e6a1; color:#053; }
-.btn-ghost{ background:transparent; border:1px solid rgba(255,255,255,.12); color:#fff; }
-.pill{ background:rgba(255,255,255,.08); padding:6px 10px; border-radius:999px; }
+/* Top */
+.app-top{position:fixed; top:0; left:0; right:0; z-index:3}
+.brandbar{display:flex; align-items:center; justify-content:center; gap:.75rem; height:56px; background:var(--navy); border-bottom:1px solid rgba(255,255,255,.06)}
+.brand-word{letter-spacing:.35rem;font-weight:800}
+.brand-bolt{width:20px;height:20px;filter:invert(1)}
+.deal-banner{background:var(--green); color:#0b1a26; font-weight:800; text-align:center; padding:.6rem 1rem}
 
-/* Bottom nav */
-.bottombar{ position:fixed; left:0; right:0; bottom:0; height:64px; display:flex; align-items:center; justify-content:space-around; background:rgba(10,14,18,0.9); border-top:1px solid rgba(255,255,255,.06); z-index:10; }
-.navbtn{ appearance:none; border:none; background:transparent; color:#9fb1c6; font-weight:600; border-radius:12px; padding:8px 12px; }
-.navbtn.active{ color:#fff; background:rgba(255,255,255,.06); }
+.main-layer{padding-top:108px; padding-bottom:100px}
 
-/* New helpers */
-.view.hidden{ display:none }
-.list{ margin-top:10px; }
-.list-item{ padding:10px 0; border-top:1px solid rgba(255,255,255,.06); }
-.muted{ color: var(--muted); }
-.mt{ margin-top:10px; }
-.grid.prefs{ display:grid; grid-template-columns:1fr 1fr; gap:8px 14px; margin-top:10px; }
-.banner{ position:fixed; top:56px; left:0; right:0; padding:8px 12px; text-align:center; background:#00e676; color:#063; font-weight:700; z-index:9; }
-.banner.warn{ background:#ffde59; color:#1a1a00; }
+/* Pages */
+.page{display:none}
+.page.active{display:block}
+
+/* Cards */
+.card{background:var(--panel); border-radius:28px; box-shadow:var(--shadow); padding:22px}
+.hub-card{width:92%; margin:0 auto; position:fixed; left:50%; transform:translateX(-50%); bottom:88px}
+.content-card{width:92%; margin:100px auto 0}
+
+/* Hub */
+.hub-name{font-size:32px; line-height:1.1; margin:0 0 .25rem}
+.hub-subtitle{color:var(--muted); font-weight:800; margin-bottom:.75rem}
+
+.pill-row{display:flex; gap:.6rem; margin-bottom:.8rem}
+.pill{background:var(--pill); color:var(--text); padding:.4rem .7rem; border-radius:18px; font-weight:700; font-size:.9rem}
+
+.logo-row{display:flex; gap:.7rem; margin:.4rem 0 1rem}
+.merchant-logo{width:48px;height:48px;border-radius:50%;object-fit:cover;display:block;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+
+.meta-line{display:flex; gap:.5rem; align-items:center; color:var(--muted); margin-bottom:1rem}
+.dot{opacity:.6}
+
+/* Buttons */
+.btn{border:0; cursor:pointer; font-weight:800; border-radius:18px}
+.btn-primary{background:var(--green); color:#0a1a26; padding:1rem 1.2rem}
+.btn-wide{width:100%}
+.pill-btn{background:#102e41; color:var(--text); padding:.7rem 1rem}
+
+/* Charge/Wallet/Profile */
+.section-title{margin:0 0 .5rem; font-size:28px}
+.balance{font-size:36px; font-weight:900; margin:.25rem 0 .75rem}
+.list{list-style:none; padding:0; margin:.75rem 0 0}
+.list li{display:flex; justify-content:space-between; padding:.6rem 0; border-bottom:1px solid rgba(255,255,255,.06)}
+.row{display:flex}
+.gap{gap:.75rem}
+.muted{color:var(--muted)}
+.prefs{display:grid; grid-template-columns:1fr 1fr; gap:.5rem 1rem; margin:.5rem 0 1rem}
+
+/* Bottom Nav */
+.bottom-nav{position:fixed; left:0; right:0; bottom:0; height:72px; display:flex; justify-content:space-around; align-items:center; background:var(--navy); z-index:3; border-top:1px solid rgba(255,255,255,.06)}
+.bottom-nav .tab{background:transparent; border:0; color:var(--muted); display:flex; flex-direction:column; gap:.25rem; align-items:center; font-weight:700}
+.bottom-nav .tab.active{color:var(--text)}
+.bottom-nav img{width:22px;height:22px;filter:invert(1)}

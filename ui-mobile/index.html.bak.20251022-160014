@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+  <title>Nerava</title>
+  <link rel="icon" href="assets/icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Header -->
+  <header id="app-header" class="nv-header">
+    <div class="nv-wordmark">NERAVA</div>
+    <img class="nv-bolt" src="assets/bolt-white.svg" alt="bolt" />
+  </header>
+
+  <!-- Explore-only banner -->
+  <div id="incentive-banner" class="nv-banner hidden">
+    <span class="nv-banner-icon">⚡</span>
+    <span id="banner-text">Cheaper charging now</span>
+  </div>
+
+  <!-- Map stays mounted behind all screens -->
+  <div id="map" class="map"></div>
+
+  <!-- Screens -->
+  <main id="screens">
+    <!-- EXPLORE -->
+    <section id="screen-explore" class="screen active" role="region" aria-label="Explore">
+      <div id="hub-card" class="sheet">
+        <div class="sheet-title">
+          <h2>Recommended hub</h2>
+          <div class="pills">
+            <span class="pill" id="hub-status">busy</span>
+            <span class="pill" id="hub-tier">premium</span>
+          </div>
+        </div>
+
+        <!-- seeded merchant logos -->
+        <div class="merchant-logos">
+          <img src="assets/starbucks.png" alt="Starbucks" />
+          <img src="assets/cfa.jpeg" alt="Chick-fil-A" />
+          <img src="assets/mcds.png" alt="McDonald's" />
+        </div>
+
+        <div class="row meta">
+          <span id="hub-free">0 free</span>
+          <span>•</span>
+          <span id="hub-name">Nerava Hub • 1</span>
+        </div>
+
+        <div class="row ctas">
+          <button class="btn primary">Reserve</button>
+          <button class="btn ghost">Directions</button>
+        </div>
+
+        <!-- Floating Plan a Trip button (toggles Trip panel) -->
+        <button id="trip-fab" class="fab">Plan a Trip</button>
+      </div>
+
+      <!-- Trip panel (hidden until FAB) -->
+      <div id="trip-panel" class="sheet sheet-alt hidden">
+        <h2>Plan a Trip</h2>
+        <p>Enter a destination, we’ll suggest a hub along the way.</p>
+        <div class="trip-row">
+          <input id="trip-dst" type="text" placeholder="e.g., 4100 Five St, Austin" />
+          <button id="trip-go" class="btn ghost">Plan</button>
+        </div>
+        <button id="trip-close" class="btn text">Back to recommendation</button>
+      </div>
+    </section>
+
+    <!-- CHARGE -->
+    <section id="screen-charge" class="screen" role="region" aria-label="Charge">
+      <div class="sheet">
+        <h2>Charge</h2>
+        <p>Scan a QR on-site or view your current session details (coming soon).</p>
+      </div>
+    </section>
+
+    <!-- WALLET -->
+    <section id="screen-wallet" class="screen" role="region" aria-label="Wallet">
+      <div class="sheet">
+        <h2>Wallet</h2>
+        <div class="wallet-balance" id="wallet-balance">+$0.00</div>
+        <h3 class="wallet-sub">Ways you earned</h3>
+        <ul id="wallet-ways" class="wallet-list"></ul>
+      </div>
+    </section>
+
+    <!-- PROFILE -->
+    <section id="screen-profile" class="screen" role="region" aria-label="Profile">
+      <div class="sheet">
+        <h2>Profile</h2>
+        <p>Signed in as <strong id="user-email">demo@nerava.app</strong></p>
+        <div class="prefs-grid">
+          <label><input type="checkbox" id="p_coffee" /> Coffee & Bakery</label>
+          <label><input type="checkbox" id="p_quick" /> Quick Bites</label>
+          <label><input type="checkbox" id="p_dog" /> Dog Friendly</label>
+          <label><input type="checkbox" id="p_kid" /> Kid Friendly</label>
+          <label><input type="checkbox" id="p_shop" /> Shopping</label>
+          <label><input type="checkbox" id="p_ex" /> Exercise</label>
+        </div>
+        <div class="row ctas">
+          <button id="save-prefs" class="btn primary">Save Preferences</button>
+          <button id="refresh-reco" class="btn ghost">See New Recommendation</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Bottom Nav (colored icons restored) -->
+  <nav id="tabbar" class="tabbar">
+    <button class="tab active" data-tab="explore">
+      <img src="assets/nav-explore.svg" alt="" /><span>Explore</span>
+    </button>
+    <button class="tab" data-tab="charge">
+      <img src="assets/nav-charge.svg" alt="" /><span>Charge</span>
+    </button>
+    <button class="tab" data-tab="wallet">
+      <img src="assets/nav-wallet.svg" alt="" /><span>Wallet</span>
+    </button>
+    <button class="tab" data-tab="profile">
+      <img src="assets/nav-profile.svg" alt="" /><span>Profile</span>
+    </button>
+  </nav>
+
+  <script src="app.js"></script>
+</body>
+</html>

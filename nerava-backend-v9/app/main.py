@@ -3,6 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .db import Base, engine
 
+from fastapi.staticfiles import StaticFiles
+import os
+UI_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "ui-mobile"))
+if os.path.isdir(UI_DIR):
+    app.mount("/app", StaticFiles(directory=UI_DIR, html=True), name="ui")
+
 # Domain routers
 from .routers import (
     users,
@@ -16,6 +22,7 @@ from .routers import (
     users_register,
     merchants_local,
     webhooks,
+    incentives,
 )
 
 # Auth + JWT preferences
@@ -54,3 +61,4 @@ app.include_router(chargers.router, prefix="/v1/chargers", tags=["chargers"])
 app.include_router(webhooks.router)
 app.include_router(users_register.router)
 app.include_router(merchants_local.router, prefix="/v1/local", tags=["local_merchants"])
+app.include_router(incentives.router)

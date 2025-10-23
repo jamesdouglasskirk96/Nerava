@@ -1,0 +1,78 @@
+:root{
+  --navy:#0B1B2B;
+  --navy-2:#0F2236;
+  --ink:#EAF2FF;
+  --ink-dim:#BFD0E6;
+  --card:#0f1a27;
+  --card-2:#0f1c2b;
+  --pill:#13283F;
+  --green:#46D07D;
+  --green-ink:#0c291a;
+  --banner:#5ED17E;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:#0a1320;color:#e6eefc;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial}
+#app-header.nv-header{
+  position:fixed;top:0;left:0;right:0;height:56px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--navy);z-index:20;border-bottom:1px solid rgba(255,255,255,.06)
+}
+.nv-wordmark{color:var(--ink);font-weight:900;font-size:22px;letter-spacing:.12em;margin-right:10px}
+.nv-bolt{width:18px;height:auto;filter:none}
+
+.nv-banner{
+  position:fixed;top:56px;left:0;right:0;height:44px;display:flex;
+  align-items:center;justify-content:center;gap:10px;background:var(--banner);
+  color:#0e1f15;font-weight:800;z-index:19
+}
+.nv-banner.hidden{display:none}
+.nv-banner-icon{filter:saturate(.9) brightness(.9)}
+
+.map{
+  position:fixed;inset:100px 0 84px 0;   /* header+banner top, tabbar bottom */
+  z-index:1;
+}
+#screens{position:relative;z-index:10;height:100%}
+.screen{display:none;position:relative;min-height:calc(100vh - 56px - 44px - 84px);padding:16px 16px 120px}
+.screen.active{display:block}
+.sheet{
+  background:linear-gradient(180deg,var(--card),var(--card-2));
+  color:var(--ink);border-radius:22px;padding:20px;box-shadow:0 12px 40px rgba(0,0,0,.35)
+}
+.sheet-alt{margin-top:12px}
+.sheet-title{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.sheet h2{margin:0 0 12px 0;font-size:28px}
+.pills{display:flex;gap:8px}
+.pill{background:var(--pill);color:var(--ink);border-radius:16px;padding:6px 12px;font-size:14px;opacity:.9}
+.row{display:flex;gap:10px;align-items:center;margin-top:12px}
+.btn{border:0;border-radius:16px;padding:12px 18px;font-weight:700;font-size:16px;cursor:pointer}
+.btn.primary{background:var(--green);color:#072114}
+.btn.ghost{background:#0e2238;color:var(--ink)}
+.btn.text{background:transparent;color:var(--ink-dim);text-decoration:underline}
+.ctas{gap:12px}
+.merchant-logos{display:flex;gap:14px;margin-top:6px}
+.merchant-logos img{width:44px;height:44px;border-radius:50%;object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+
+.fab{
+  position:absolute;right:16px;bottom:16px;
+  background:#10263d;color:var(--ink);border:1px solid rgba(255,255,255,.12);
+  border-radius:26px;padding:12px 18px;font-weight:800
+}
+
+.tabbar{
+  position:fixed;left:0;right:0;bottom:0;height:84px;
+  background:var(--navy-2);display:flex;justify-content:space-around;
+  align-items:center;padding:10px 8px;z-index:21;border-top:1px solid rgba(255,255,255,.08)
+}
+.tab{display:flex;flex-direction:column;align-items:center;gap:6px;
+  color:var(--ink-dim);background:transparent;border:0;cursor:pointer}
+.tab img{width:28px;height:28px}
+.tab.active{color:var(--ink)}
+.wallet-balance{font-size:44px;font-weight:900;margin:4px 0 12px}
+.wallet-sub{margin:0 0 8px;color:var(--ink-dim)}
+.wallet-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.wallet-list li{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.trip-row{display:flex;gap:8px;margin-top:10px}
+.trip-row input{flex:1;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:#0c1a2a;color:var(--ink);padding:12px}
+.trip-row .btn{min-width:84px}
+@media (max-width:480px){ .sheet h2{font-size:24px} }

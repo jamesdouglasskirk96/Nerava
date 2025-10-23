@@ -1,0 +1,93 @@
+:root{
+  --navy:#0c1c2a;           /* deep header/footer */
+  --panel:#0f2335;          /* card bg */
+  --text:#e7eef6;           /* primary text */
+  --muted:#b8c6d4;
+  --green:#79d98c;
+  --pill:#173247;
+  --shadow: 0 10px 30px rgba(0,0,0,.35);
+}
+
+*{box-sizing:border-box}
+html,body,#app{height:100%;margin:0}
+body{background:var(--navy);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Helvetica,Arial,sans-serif}
+
+#map{
+  position:absolute; inset:0;
+  z-index:1; min-height:100%;
+}
+
+/* layers above the map */
+.ui-layer{position:relative; z-index:2}
+
+/* top bar + banner */
+.app-top{position:fixed; top:0; left:0; right:0; z-index:3}
+.brandbar{
+  display:flex; align-items:center; justify-content:center;
+  gap:.75rem; height:56px; background:var(--navy);
+  border-bottom:1px solid rgba(255,255,255,.06);
+}
+.brand-word{letter-spacing:.35rem;font-weight:800}
+.brand-bolt{width:20px;height:20px;filter:invert(1)}
+.deal-banner{
+  background:#79d98c; color:#0b1a26; font-weight:800;
+  text-align:center; padding:.6rem 1rem;
+}
+
+/* main content spacing (push down from top, above bottom nav) */
+.main-layer{padding-top:108px; padding-bottom:100px}
+
+/* hub card */
+.card{
+  background:var(--panel);
+  border-radius:28px;
+  box-shadow:var(--shadow);
+  padding:22px;
+}
+.hub-card{
+  width:92%;
+  margin:0 auto;
+  position:fixed; left:50%; transform:translateX(-50%);
+  bottom:88px; /* sits above bottom nav */
+}
+.hub-name{font-size:32px; line-height:1.1; margin:0 0 .25rem 0}
+.hub-subtitle{color:var(--muted); font-weight:800; margin-bottom:.75rem}
+
+.pill-row{display:flex; gap:.6rem; margin-bottom:.8rem}
+.pill{
+  background:var(--pill); color:var(--text);
+  padding:.4rem .7rem; border-radius:18px; font-weight:700; font-size:.9rem;
+}
+
+.logo-row{display:flex; gap:.7rem; margin:.4rem 0 1rem}
+.merchant-logo{
+  width:48px; height:48px; border-radius:50%;
+  object-fit:cover; display:block; box-shadow:0 2px 8px rgba(0,0,0,.35)
+}
+
+.meta-line{display:flex; gap:.5rem; align-items:center; color:var(--muted); margin-bottom:1rem}
+.dot{opacity:.6}
+
+/* buttons */
+.btn{border:0; cursor:pointer; font-weight:800; border-radius:18px}
+.btn-primary{
+  background:var(--green); color:#0a1a26; padding:1rem 1.2rem;
+}
+.btn-wide{width:100%; border-radius:18px}
+
+/* bottom nav */
+.bottom-nav{
+  position:fixed; left:0; right:0; bottom:0; height:72px;
+  display:flex; justify-content:space-around; align-items:center;
+  background:var(--navy); z-index:3; border-top:1px solid rgba(255,255,255,.06);
+}
+.bottom-nav .tab{
+  background:transparent; border:0; color:var(--muted);
+  display:flex; flex-direction:column; gap:.25rem; align-items:center;
+  font-weight:700;
+}
+.bottom-nav .tab.active{color:var(--text)}
+.bottom-nav img{width:22px;height:22px; filter:invert(1)}
+
+/* utility */
+.brand-word, .hub-name, .btn, .pill, .meta-line, .deal-banner{letter-spacing:.2px}
