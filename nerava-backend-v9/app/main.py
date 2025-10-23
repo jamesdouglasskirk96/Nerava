@@ -5,9 +5,6 @@ from .db import Base, engine
 
 from fastapi.staticfiles import StaticFiles
 import os
-UI_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "ui-mobile"))
-if os.path.isdir(UI_DIR):
-    app.mount("/app", StaticFiles(directory=UI_DIR, html=True), name="ui")
 
 # Domain routers
 from .routers import (
@@ -23,6 +20,7 @@ from .routers import (
     merchants_local,
     webhooks,
     incentives,
+    energyhub,
 )
 
 # Auth + JWT preferences
@@ -30,6 +28,11 @@ from .routers.auth import router as auth_router
 from .routers.user_prefs import router as prefs_router
 
 app = FastAPI(title="Nerava Backend v9", version="0.9.0")
+
+# Mount UI after app is defined
+UI_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "ui-mobile"))
+if os.path.isdir(UI_DIR):
+    app.mount("/app", StaticFiles(directory=UI_DIR, html=True), name="ui")
 
 # Create tables on startup (SQLite dev)
 Base.metadata.create_all(bind=engine)
@@ -62,3 +65,4 @@ app.include_router(webhooks.router)
 app.include_router(users_register.router)
 app.include_router(merchants_local.router, prefix="/v1/local", tags=["local_merchants"])
 app.include_router(incentives.router)
+app.include_router(energyhub.router)
