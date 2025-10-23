@@ -30,6 +30,7 @@ from .routers import (
     energyhub,
     ops,
     flags,
+    analytics,
 )
 
 # Auth + JWT preferences
@@ -66,6 +67,7 @@ app.add_middleware(
 # Operations routes
 app.include_router(ops.router)
 app.include_router(flags.router)
+app.include_router(analytics.router)
 
 # Health first
 app.include_router(health.router, prefix="/v1", tags=["health"])

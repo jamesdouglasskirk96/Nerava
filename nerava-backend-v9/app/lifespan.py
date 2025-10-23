@@ -9,6 +9,7 @@ from app.services.async_wallet import async_wallet
 from app.services.cache import cache
 from app.workers.outbox_relay import outbox_relay
 from app.workers.prewarm import cache_prewarmer
+from app.analytics.batch_writer import analytics_batch_writer
 from app.subscribers.wallet_credit import *  # Import to register subscribers
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,10 @@ async def lifespan(app):
         await cache_prewarmer.start()
         logger.info("Cache prewarmer started")
         
+        # Start analytics batch writer
+        await analytics_batch_writer.start()
+        logger.info("Analytics batch writer started")
+        
         # Test cache connection
         await cache.get("health_check")
         logger.info("Cache connection verified")
@@ -54,6 +59,10 @@ async def lifespan(app):
     logger.info("Shutting down Nerava Backend v9...")
     
     try:
+        # Stop analytics batch writer
+        await analytics_batch_writer.stop()
+        logger.info("Analytics batch writer stopped")
+        
         # Stop cache prewarmer
         await cache_prewarmer.stop()
         logger.info("Cache prewarmer stopped")
