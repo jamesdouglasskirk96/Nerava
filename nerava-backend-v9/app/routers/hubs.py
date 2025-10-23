@@ -1,6 +1,7 @@
 # app/routers/hubs.py
 from fastapi import APIRouter, Query
 from typing import List, Optional, Dict, Any
+from pydantic import BaseModel
 from ..services import hubs_dynamic
 
 router = APIRouter()  # main.py already mounts with prefix="/v1/hubs"
@@ -45,3 +46,30 @@ async def hubs_hydrated(
     hubs = await hubs_dynamic.build_dynamic_hubs(lat=lat, lng=lng, radius_km=radius_km, max_results=max_results)
     hydrated = [hubs_dynamic.hydrate_hub(h, lat, lng, pref_list) for h in hubs]
     return hydrated
+
+# Apple Maps-style summary endpoint
+class ModelInfo(BaseModel):
+    vendor: str
+    speed_kw: int
+    count: int
+
+class HubSummary(BaseModel):
+    hub_id: str
+    name: str
+    chargers: int
+    pricing: str
+    distance_mi: float
+    phone: Optional[str] = "+1 (877) 798-3752"
+    website: Optional[str] = "https://tesla.com/supercharger"
+    maps_url: Optional[str] = "https://maps.apple.com/?q=Tesla+Supercharger"
+    models: List[ModelInfo] = [ModelInfo(vendor="Tesla", speed_kw=250, count=12)]
+
+@router.get("/summary", response_model=HubSummary)
+async def summary(lat: float = Query(...), lng: float = Query(...)):
+    return HubSummary(
+        hub_id="hub_domain_A",
+        name="Tesla Supercharger",
+        chargers=12,
+        pricing="Paid",
+        distance_mi=3.4,
+    )

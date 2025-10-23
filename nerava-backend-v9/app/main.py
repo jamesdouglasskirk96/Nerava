@@ -19,6 +19,7 @@ import os
 from .routers import (
     users,
     hubs,
+    places,
     recommend,
     reservations,
     health,
@@ -33,6 +34,7 @@ from .routers import (
     ops,
     flags,
     analytics,
+    social,
 )
 
 # Auth + JWT preferences
@@ -84,6 +86,7 @@ app.include_router(prefs_router)
 app.include_router(users.router)
 app.include_router(merchants_router.router)
 app.include_router(hubs.router, prefix="/v1/hubs", tags=["hubs"])
+app.include_router(places.router)
 app.include_router(recommend.router, prefix="/v1", tags=["recommend"])
 app.include_router(reservations.router, prefix="/v1/reservations", tags=["reservations"])
 app.include_router(wallet.router)
@@ -93,5 +96,6 @@ app.include_router(users_register.router)
 app.include_router(merchants_local.router, prefix="/v1/local", tags=["local_merchants"])
 app.include_router(incentives.router)
 app.include_router(energyhub.router)
+app.include_router(social.router)
 
 # Lifespan events are now handled in lifespan.py

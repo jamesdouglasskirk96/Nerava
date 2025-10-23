@@ -167,6 +167,94 @@
   outline-offset: 2px;
 }
 
+/* Community Activity Feed Styles */
+.feed-list{ 
+  list-style:none; 
+  padding:0; 
+  margin:0; 
+}
+
+.feed-item{ 
+  display:flex; 
+  gap:12px; 
+  padding:10px 0; 
+  border-bottom:1px solid rgba(255,255,255,.06); 
+}
+
+.feed-item:last-child{ 
+  border-bottom:0; 
+}
+
+.feed-item .avatar{ 
+  width:36px; 
+  height:36px; 
+  border-radius:999px; 
+  background:#1f2937; 
+  overflow:hidden; 
+  flex:0 0 36px; 
+}
+
+.feed-item .meta{ 
+  flex:1; 
+}
+
+.feed-item .meta .line1{ 
+  font-weight:600; 
+}
+
+.feed-item .meta .line2{ 
+  font-size:12px; 
+  opacity:.8; 
+  margin-top:2px; 
+}
+
+.feed-item .cta{ 
+  align-self:center; 
+}
+
+.follow-btn{ 
+  border-radius:999px; 
+  padding:6px 10px; 
+  background:#0B2A4A; 
+  color:#fff; 
+  border:1px solid rgba(255,255,255,.1); 
+  font-size:12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.follow-btn:hover {
+  background:#1f2937;
+}
+
+.follow-btn.following{ 
+  background:#0e7490; 
+}
+
+.seg{ 
+  display:flex; 
+  gap:6px; 
+}
+
+.seg-btn{ 
+  border-radius:999px; 
+  padding:6px 10px; 
+  background:#0B2A4A; 
+  color:#fff; 
+  border:1px solid rgba(255,255,255,.08); 
+  font-size:12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.seg-btn:hover {
+  background:#1f2937;
+}
+
+.seg-btn.active{ 
+  background:#1f2937; 
+}
+
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
   *,

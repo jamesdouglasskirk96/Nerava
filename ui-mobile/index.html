@@ -6,8 +6,9 @@
   <title>Nerava</title>
 
   <link rel="stylesheet" href="css/style.css" />
-  <link rel="stylesheet" href="css/tokens.css" />
-  <link rel="stylesheet" href="css/animations.css" />
+    <link rel="stylesheet" href="css/tokens.css" />
+    <link rel="stylesheet" href="css/animations.css" />
+    <link rel="stylesheet" href="css/appleish.css" />
   <link rel="icon" href="assets/favicon.ico" />
 
   <!-- Leaflet core -->
@@ -31,46 +32,82 @@
     <header class="ui-layer app-top">
       <div class="brandbar">
         <span class="brand-word">NERAVA</span>
-        <img class="brand-bolt" src="assets/bolt-white.svg" alt="">
+        <svg class="brand-bolt" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" style="margin-left:6px; fill: var(--brand-yellow-500);">
+          <path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"></path>
+        </svg>
       </div>
     </header>
 
     <!-- PAGES -->
     <main class="ui-layer main-layer">
-      <!-- Explore -->
+      <!-- EXPLORE: Map-first + Bottom Sheet -->
       <section id="pageExplore" class="page active">
-        <!-- Incentive banner (Explore only) -->
-        <div id="incentive-banner" style="display:none; position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:1000; background:#0B2A4A; color:#fff; padding:8px 12px; border-radius:999px; font-weight:600; font-size:14px; box-shadow:0 6px 16px rgba(0,0,0,0.2);">
-          Cheaper charging now
+        <div id="map" class="map"></div>
+
+        <!-- Incentive banner -->
+        <div id="incentive-banner" class="banner" style="display:none"></div>
+
+        <!-- Bottom Sheet (Place Panel) -->
+        <div id="place-sheet" class="sheet" aria-modal="true" aria-labelledby="place-title" role="dialog">
+          <div class="sheet__grabber" aria-hidden="true"></div>
+
+          <!-- Large Title & Meta -->
+          <div class="sheet__header">
+            <h2 id="place-title" class="ios-title">Tesla Supercharger</h2>
+            <div class="meta-row">
+              <span class="chip"><span class="icon">🚗</span><span id="chip_chargers">12 Chargers</span></span>
+              <span class="chip"><span class="icon">💲</span><span id="chip_pricing">Paid</span></span>
+              <span class="chip"><span class="icon">📏</span><span id="chip_distance">3.4 mi</span></span>
+            </div>
+            <div class="actions">
+              <button class="act" id="act_nav"    aria-label="Navigate">🧭<span>7 min</span></button>
+              <button class="act" id="act_call"   aria-label="Call">📞<span>Call</span></button>
+              <button class="act" id="act_web"    aria-label="Website">🧷<span>Website</span></button>
+              <button class="act" id="act_more"   aria-label="More">⋯<span>More</span></button>
+            </div>
+          </div>
+
+          <!-- Sections -->
+          <div class="section">
+            <h3 class="section__title">Chargers</h3>
+            <ul id="charger-list" class="list list--chargers"></ul>
+          </div>
+
+          <div class="section">
+            <h3 class="section__title">Nearby Places</h3>
+            <div id="nearby-places" class="cards cards--nearby"></div>
+          </div>
+
+          <div class="section section--rate">
+            <h3 class="section__title">Rate This Place</h3>
+            <div class="rate-row">
+              <button class="rate-btn" id="rate_up"  aria-label="Thumbs up">👍</button>
+              <button class="rate-btn" id="rate_down" aria-label="Thumbs down">👎</button>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section__title-row">
+              <h3 class="section__title">Activity</h3>
+              <a class="view-all" id="activity_view_all">View all</a>
+            </div>
+            <ul id="place-activity" class="feed feed--compact"></ul>
+          </div>
+
+          <div style="height: 24px"></div>
         </div>
-        <section id="hub-card" class="card hub-card">
-          <h2 class="hub-name">Nerava Hub</h2>
-          <div class="hub-subtitle">Recommended</div>
-
-          <div class="pill-row">
-            <span class="pill" id="hub-availability"><strong>3</strong>&nbsp;of <strong>4</strong> ports free</span>
-            <span class="pill" id="hub-pricing">10% cheaper</span>
-          </div>
-
-          <div class="logo-row">
-            <img src="assets/starbucks.png" alt="Starbucks" class="merchant-logo" />
-            <img src="assets/cfa.jpeg" alt="Chick-fil-A" class="merchant-logo" />
-            <img src="assets/mcds.png" alt="McDonald's" class="merchant-logo" />
-          </div>
-
-          <div class="meta-line">
-            <span id="hub-meta-availability">3 free</span><span class="dot">•</span><span>Domain, Austin</span>
-          </div>
-
-          <button id="chargeHereBtn" class="btn btn-primary btn-wide">Start Charging</button>
-        </section>
       </section>
 
       <!-- Charge -->
       <section id="pageCharge" class="page">
         <div id="chargePane" class="pane">
           <div class="card" id="chargeStatusCard" style="margin:12px;">
-            <h3>Charge</h3>
+            <h3>Charging activity</h3>
+
+            <!-- Cumulative kWh total -->
+            <div id="cumulativeKwh" style="margin:8px 0; padding:10px; border:1px solid #e5e7eb; border-radius:12px; background:#f9fafb;">
+              <div><strong>Total charged:</strong> <span id="totalKwh">0.0</span> kWh</div>
+            </div>
 
             <!-- Live window / reward preview -->
             <div id="rewardPreview" style="display:none; margin:8px 0; padding:10px; border-radius:12px; background:#0B2A4A; color:#fff;">
@@ -92,23 +129,32 @@
             </div>
 
             <!-- kWh prompt (shown on stop) -->
-            <dialog id="kwhDialog">
+            <dialog id="kwhDialog" style="z-index:3000;">
               <form method="dialog" style="min-width:260px;">
                 <h4>How many kWh did you add?</h4>
                 <input id="kwhInput" type="number" min="0.1" step="0.1" placeholder="e.g. 18.6" required style="width:100%; padding:8px; margin:8px 0;">
                 <menu style="display:flex; gap:8px; justify-content:flex-end;">
-                  <button value="cancel">Cancel</button>
-                  <button id="kwhConfirm" value="confirm">Confirm</button>
+                  <button data-return="cancel">Cancel</button>
+                  <button data-return="confirm">Confirm</button>
                 </menu>
               </form>
             </dialog>
           </div>
 
-          <!-- Recent Activity (client-side for now) -->
-          <div class="card" style="margin:12px;">
-            <h3>Recent Activity</h3>
-            <ul id="recentActivity" style="list-style:none; padding-left:0; margin:0;"></ul>
-          </div>
+
+          <!-- Community Activity (Venmo-style) -->
+          <section id="communityActivity" class="card" style="margin:12px;">
+            <div class="card-header">
+              <h3>Community Activity</h3>
+              <div class="seg">
+                <button id="feedAllBtn" class="seg-btn active">All</button>
+                <button id="feedFollowingBtn" class="seg-btn">Following</button>
+              </div>
+            </div>
+            <ul id="activityFeed" class="feed-list">
+              <!-- items injected -->
+            </ul>
+          </section>
         </div>
       </section>
 
@@ -120,11 +166,8 @@
           <div class="muted">Ways you earned</div>
           
           <!-- Progress bar toward next tier -->
-          <div class="progress-container" style="margin: 8px 0;">
-            <div class="progress-bar" style="background: #e5e7eb; height: 8px; border-radius: 4px; overflow: hidden;">
-              <div class="progress-fill" style="background: var(--color-green); height: 100%; width: 76%; transition: width 0.3s ease;"></div>
-            </div>
-            <div class="progress-text caption" style="text-align: center; margin-top: 4px;">$19 of $25 to next tier</div>
+          <div class="wallet-progress" style="margin:8px 0 12px;">
+            <div class="bar" style="width:0"></div>
           </div>
           
           <!-- Streak indicator -->

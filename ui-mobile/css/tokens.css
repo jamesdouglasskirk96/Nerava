@@ -1,8 +1,48 @@
 :root{
+  /* Brand palette (lightened) */
+  --brand-blue-50:  #e8f1ff;
+  --brand-blue-100: #d9e9ff;
+  --brand-blue-200: #b8d7ff;
+  --brand-blue-300: #8fbfff;
+  --brand-blue-400: #69a8ff;
+  --brand-blue-500: #3b82f6;   /* primary (lighter than before) */
+  --brand-blue-600: #2f6bd6;
+  --brand-blue-700: #244fb0;
+
+  --brand-yellow-400: #facc15; /* lightning bolt accent */
+  --brand-yellow-500: #eab308;
+
+  /* App surfaces */
+  --bg:            #f7fafc;   /* light app background */
+  --surface:       #ffffff;   /* cards */
+  --surface-2:     #f1f5f9;   /* secondary surfaces */
+  --text:          #0b1220;   /* dark text */
+  --text-dim:      #475569;
+
+  /* Nav */
+  --nav-bg:        #fffffff2; /* translucent white */
+  --nav-icon:      #1f2937;   /* darker / higher contrast */
+  --nav-icon-active: var(--brand-blue-600);
+  --nav-label:     #111827;
+  --nav-label-active: var(--brand-blue-700);
+
+  /* Buttons */
+  --btn-primary-bg:   #22c55e;
+  --btn-primary-text: #0a1a12;
+  --btn-secondary-bg: #e2e8f0;
+  --btn-secondary-text:#0b1220;
+
+  /* Banner */
+  --banner-bg:     var(--brand-blue-600);
+  --banner-text:   #ffffff;
+
+  /* Legacy colors for compatibility */
   --color-green:#32C671;
   --color-blue:#0B2A4A;
   --color-orange:#FFA031;
   --color-purple:#8A4FFF;
+  
+  /* Design tokens */
   --radius:12px;
   --tap:44px;
   --h1:22px; 
@@ -54,4 +94,27 @@
   0% { transform: scale(1); }
   50% { transform: scale(1.05); color: var(--color-green); }
   100% { transform: scale(1); }
+}
+
+/* Light card treatment */
+.card{
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 10px 30px rgba(2, 8, 20, .06);
+}
+
+/* Banner pill */
+#incentive-banner{
+  background: var(--banner-bg);
+  color: var(--banner-text);
+}
+
+/* Charge card z-index */
+#chargeStatusCard{ 
+  position: relative; 
+  z-index: 500; 
+}
+#btnStartCharge, #btnStopCharge{ 
+  position: relative; 
+  z-index: 1000; 
 }
