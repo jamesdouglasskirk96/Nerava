@@ -10,7 +10,12 @@ from app.services.cache import cache
 from app.services.async_wallet import async_wallet
 from app.services.idempotency import idempotency_service
 from app.services.circuit_breaker import wallet_circuit_breaker
+from app.events.domain import ChargeStartedEvent, ChargeStoppedEvent
+from app.events.bus import event_bus
 from app.config import settings
+from app.db import get_db
+from sqlalchemy import text
+import json
 
 router = APIRouter(prefix="/v1/energyhub", tags=["energyhub"])
 
@@ -69,7 +74,21 @@ async def list_windows(at: Optional[str] = Query(None, description="ISO datetime
 @router.post("/events/charge-start", response_model=ChargeStartResp)
 async def charge_start(payload: ChargeStartReq, at: Optional[str] = Query(None)):
     override_dt = parse_at(at)
-    return sim.start_session(payload.user_id, payload.hub_id, override_dt)
+    result = sim.start_session(payload.user_id, payload.hub_id, override_dt)
+    
+    # Create and publish charge started event
+    charge_event = ChargeStartedEvent(
+        session_id=result["session_id"],
+        user_id=payload.user_id,
+        hub_id=payload.hub_id,
+        started_at=datetime.utcnow(),
+        window_id=result["active_window"]["id"] if result["active_window"] else None
+    )
+    
+    # Store in outbox for reliable delivery
+    await _store_outbox_event(charge_event)
+    
+    return result
 
 @router.post("/events/charge-stop", response_model=ChargeStopResp)
 async def charge_stop(payload: ChargeStopReq, at: Optional[str] = Query(None)):
@@ -115,6 +134,22 @@ async def charge_stop(payload: ChargeStopReq, at: Optional[str] = Query(None)):
         # Return 202 with estimated reward
         result["wallet_balance_cents"] = None  # Will be updated async
     
+    # Create and publish charge stopped event
+    charge_stopped_event = ChargeStoppedEvent(
+        session_id=result["session_id"],
+        user_id=result["user_id"],
+        hub_id=result["hub_id"],
+        stopped_at=datetime.utcnow(),
+        kwh_consumed=result["kwh"],
+        window_id=result["window_applied"],
+        grid_reward_usd=result["grid_reward_usd"],
+        merchant_reward_usd=result["merchant_reward_usd"],
+        total_reward_usd=result["total_reward_usd"]
+    )
+    
+    # Store in outbox for reliable delivery
+    await _store_outbox_event(charge_stopped_event)
+    
     # Store result for idempotency
     await idempotency_service.store_result("charge-stop", {
         "session_id": payload.session_id,
@@ -122,6 +157,25 @@ async def charge_stop(payload: ChargeStopReq, at: Optional[str] = Query(None)):
     }, result)
     
     return result
+
+async def _store_outbox_event(event: DomainEvent):
+    """Store an event in the outbox for reliable delivery"""
+    try:
+        db = next(get_db())
+        db.execute(text("""
+            INSERT INTO outbox_events (event_type, payload_json, created_at)
+            VALUES (:event_type, :payload_json, :created_at)
+        """), {
+            "event_type": event.event_type,
+            "payload_json": json.dumps(event.__dict__, default=str),
+            "created_at": event.timestamp
+        })
+        db.commit()
+    except Exception as e:
+        # Log error but don't fail the request
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error storing outbox event: {e}")
 
 @router.delete("/dev/reset")
 async def dev_reset():

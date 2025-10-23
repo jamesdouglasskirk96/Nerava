@@ -7,6 +7,8 @@ from contextlib import asynccontextmanager
 from app.config import settings
 from app.services.async_wallet import async_wallet
 from app.services.cache import cache
+from app.workers.outbox_relay import outbox_relay
+from app.subscribers.wallet_credit import *  # Import to register subscribers
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +22,10 @@ async def lifespan(app):
         # Initialize async wallet processor
         await async_wallet.start_worker()
         logger.info("Async wallet processor started")
+        
+        # Start outbox relay
+        await outbox_relay.start()
+        logger.info("Outbox relay started")
         
         # Test cache connection
         await cache.get("health_check")
@@ -43,6 +49,10 @@ async def lifespan(app):
     logger.info("Shutting down Nerava Backend v9...")
     
     try:
+        # Stop outbox relay
+        await outbox_relay.stop()
+        logger.info("Outbox relay stopped")
+        
         # Stop async wallet processor
         await async_wallet.stop_worker()
         logger.info("Async wallet processor stopped")
