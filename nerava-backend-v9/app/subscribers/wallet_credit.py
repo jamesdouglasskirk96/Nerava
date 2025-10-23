@@ -3,7 +3,7 @@ Wallet credit event subscriber
 """
 import logging
 from typing import Dict, Any
-from app.events.domain import ChargeStoppedEvent
+from app.events.domain import ChargeStoppedEvent, WalletCreditedEvent
 from app.services.wallet_service import wallet_service
 from app.services.circuit_breaker import wallet_circuit_breaker
 

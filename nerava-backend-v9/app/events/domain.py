@@ -9,10 +9,10 @@ import uuid
 @dataclass
 class DomainEvent:
     """Base class for domain events"""
-    event_id: str
-    event_type: str
-    timestamp: datetime
-    aggregate_id: str
+    event_id: str = ""
+    event_type: str = ""
+    timestamp: datetime = None
+    aggregate_id: str = ""
     version: int = 1
     
     def __post_init__(self):
@@ -24,10 +24,10 @@ class DomainEvent:
 @dataclass
 class ChargeStartedEvent(DomainEvent):
     """Event raised when a charging session starts"""
-    session_id: str
-    user_id: str
-    hub_id: str
-    started_at: datetime
+    session_id: str = ""
+    user_id: str = ""
+    hub_id: str = ""
+    started_at: datetime = None
     window_id: Optional[str] = None
     
     def __post_init__(self):
@@ -38,11 +38,11 @@ class ChargeStartedEvent(DomainEvent):
 @dataclass
 class ChargeStoppedEvent(DomainEvent):
     """Event raised when a charging session stops"""
-    session_id: str
-    user_id: str
-    hub_id: str
-    stopped_at: datetime
-    kwh_consumed: float
+    session_id: str = ""
+    user_id: str = ""
+    hub_id: str = ""
+    stopped_at: datetime = None
+    kwh_consumed: float = 0.0
     window_id: Optional[str] = None
     grid_reward_usd: float = 0.0
     merchant_reward_usd: float = 0.0
@@ -56,11 +56,11 @@ class ChargeStoppedEvent(DomainEvent):
 @dataclass
 class WalletCreditedEvent(DomainEvent):
     """Event raised when a wallet is credited"""
-    user_id: str
-    amount_cents: int
-    session_id: str
-    new_balance_cents: int
-    credited_at: datetime
+    user_id: str = ""
+    amount_cents: int = 0
+    session_id: str = ""
+    new_balance_cents: int = 0
+    credited_at: datetime = None
     
     def __post_init__(self):
         super().__post_init__()
@@ -70,11 +70,11 @@ class WalletCreditedEvent(DomainEvent):
 @dataclass
 class IncentiveWindowActivatedEvent(DomainEvent):
     """Event raised when an incentive window becomes active"""
-    window_id: str
-    window_label: str
-    price_per_kwh: float
-    multiplier: float
-    activated_at: datetime
+    window_id: str = ""
+    window_label: str = ""
+    price_per_kwh: float = 0.0
+    multiplier: float = 1.0
+    activated_at: datetime = None
     
     def __post_init__(self):
         super().__post_init__()
@@ -84,9 +84,9 @@ class IncentiveWindowActivatedEvent(DomainEvent):
 @dataclass
 class IncentiveWindowDeactivatedEvent(DomainEvent):
     """Event raised when an incentive window becomes inactive"""
-    window_id: str
-    window_label: str
-    deactivated_at: datetime
+    window_id: str = ""
+    window_label: str = ""
+    deactivated_at: datetime = None
     
     def __post_init__(self):
         super().__post_init__()

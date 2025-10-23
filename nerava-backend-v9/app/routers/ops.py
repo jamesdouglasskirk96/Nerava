@@ -17,7 +17,7 @@ async def readiness_check(db = Depends(get_db)):
     """Readiness check - verifies dependencies"""
     try:
         # Check database
-        await db.execute(text("SELECT 1"))
+        db.execute(text("SELECT 1"))
         
         # Check Redis
         redis_client = redis.from_url(settings.redis_url)
