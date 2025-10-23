@@ -230,8 +230,113 @@ body {
 .place-img { height: 128px; }
 .place-tile { min-height: 210px; }
 
-/* Small handle aesthetic */
-.sheet-handle {
-  width: 56px; height: 6px; border-radius: 999px;
-  background: #e7edf6; margin: 6px auto 14px auto;
+/* ===== Safe area & viewport units ===== */
+:root{
+  --sa-top: env(safe-area-inset-top, 0px);
+  --sa-right: env(safe-area-inset-right, 0px);
+  --sa-bottom: env(safe-area-inset-bottom, 12px);
+  --sa-left: env(safe-area-inset-left, 0px);
+
+  /* JS fallback set in app.js (pixels of 1vh) */
+  --vh: 1vh;
+
+  /* Bright palette already added; ensure these exist: */
+  --brand: #2a6bf2;
+  --brand-600:#1f57c7;
+  --bolt:  #ffd000;
+  --bg:    #f7f9fc;
+  --surface:#fff;
+  --border:#e5eaf1;
+  --text:  #0a1528;
+  --muted: #5b6b80;
+  --shadow: 0 20px 50px rgba(10,21,40,.08);
 }
+
+/* ===== Map fills viewport behind sheet & nav ===== */
+#map{
+  position: fixed;
+  z-index: 0;
+  /* Use small viewport units to ignore iOS URL bar expansion */
+  top: var(--sa-top);
+  left: 0; right: 0;
+  height: calc(100svh - (64px + var(--sa-bottom)));
+}
+@supports not (height: 100svh){
+  #map{ height: calc(100dvh - (64px + var(--sa-bottom))); }
+}
+@supports not (height: 100dvh){
+  /* Legacy fallback using JS-set --vh (1vh in px) */
+  #map{ height: calc((var(--vh) * 100) - (64px + var(--sa-bottom))); }
+}
+
+/* ===== Bottom sheet structure ===== */
+.sheet {
+  position: fixed;
+  z-index: 1;
+  left: 12px; right: 12px;
+  bottom: calc(64px + var(--sa-bottom));
+  background: var(--surface);
+  border-radius: 22px;
+  box-shadow: var(--shadow);
+}
+
+/* Header sticks, body scrolls */
+.sheet__header{
+  position: sticky; top: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.97), rgba(255,255,255,0.9));
+  padding: 16px 16px 8px 16px;
+  border-bottom: 1px solid var(--border);
+  border-top-left-radius: 22px;
+  border-top-right-radius: 22px;
+  backdrop-filter: blur(6px);
+  z-index: 2;
+}
+.sheet-handle{
+  width: 56px; height: 6px; border-radius: 999px;
+  background: #e7edf6; margin: 6px auto 8px;
+}
+
+/* Scroll area: clamp height to viewport */
+.sheet__body{
+  padding: 12px 16px 16px 16px;
+  max-height: clamp(55svh, calc(100svh - 180px), 78svh);
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  border-bottom-left-radius: 22px;
+  border-bottom-right-radius: 22px;
+}
+@supports not (max-height: 100svh){
+  .sheet__body{ max-height: clamp(55dvh, calc(100dvh - 180px), 78dvh); }
+}
+@supports not (max-height: 100dvh){
+  .sheet__body{ max-height: calc((var(--vh) * 100) - 180px); }
+}
+
+/* Nearby Places tiles: ensure visible size */
+.place-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.place-tile  { min-height: 224px; border:1px solid var(--border); border-radius:16px; background:#fff; }
+.place-img   { height: 140px; border-radius:14px; background: #f2f6ff; object-fit: cover; width: 100%; }
+
+/* Pills/buttons contrast */
+.pill{ background:#eaf2ff; color:#1f57c7; font-weight:700; }
+.btn-primary{ background: var(--brand); border-color: var(--brand); color:#fff; min-height:48px; border-radius:18px; }
+
+/* ===== Bottom nav: brighter & safe-area padded ===== */
+#bottom-nav{
+  position: fixed; left: 0; right: 0; bottom: 0;
+  z-index: 3;
+  display: grid; grid-template-columns: repeat(4,1fr);
+  gap: 6px;
+  padding: 8px 12px calc(8px + var(--sa-bottom)) 12px;
+  background: rgba(255,255,255,.96);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid var(--border);
+}
+.tab { color:#37507a; font-weight:600; }
+.tab.active { color: var(--brand-600); }
+.tab svg, .tab img{ opacity:.95; }
+.tab.active svg, .tab.active img{ opacity:1; }
+
+/* Utility: page bottoms never collide even if not in sheet */
+.page{ padding-bottom: calc(96px + var(--sa-bottom)); }

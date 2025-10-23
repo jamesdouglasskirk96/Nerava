@@ -664,16 +664,20 @@
     });
   }
 
-  // Recompute map inset on rotate/resize and when bottom safe area changes
-  function resizeMapArea(){
-    const map = document.getElementById('map');
-    if(!map) return;
-    // We rely on CSS fixed + safe-area; force a reflow on iOS after rotate:
-    map.style.transform = 'translateZ(0)'; // hint GPU + trigger repaint
-    requestAnimationFrame(()=>{ map.style.transform = ''; });
+  // ===== Mobile viewport fix: sets --vh to 1vh in px =====
+  function setVhUnit(){
+    const vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
   }
-  window.addEventListener('resize', resizeMapArea);
-  window.addEventListener('orientationchange', resizeMapArea);
+  window.addEventListener('resize', setVhUnit);
+  window.addEventListener('orientationchange', setVhUnit);
+  document.addEventListener('visibilitychange', () => { if(!document.hidden) setVhUnit(); });
+  setVhUnit();
+
+  // Nudge map to repaint on rotate (prevents occasional gaps on iOS)
+  function repaintMap(){ const m = document.getElementById('map'); if(!m) return; m.style.transform='translateZ(0)'; requestAnimationFrame(()=>m.style.transform=''); }
+  window.addEventListener('resize', repaintMap);
+  window.addEventListener('orientationchange', repaintMap);
 
   // Wire tabs
   document.addEventListener('DOMContentLoaded', ()=>{
@@ -688,7 +692,7 @@
     // Guarantee the Explore sheet has enough bottom padding (if not using .page wrapper)
     const pages = document.querySelectorAll('.page, #pageExplore, #pageCharge, #pageWallet, #pageProfile');
     pages.forEach(p => { p.style.paddingBottom = `calc(96px + env(safe-area-inset-bottom, 12px))`; });
-    resizeMapArea();
+    repaintMap();
   });
 })();
 
