@@ -6,6 +6,7 @@
   <title>Nerava</title>
 
   <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/tokens.css" />
   <link rel="icon" href="assets/favicon.ico" />
 
   <!-- Leaflet core -->
@@ -25,13 +26,12 @@
     <!-- MAP lives behind everything -->
     <div id="map"></div>
 
-    <!-- Top bar + banner -->
+    <!-- Top bar -->
     <header class="ui-layer app-top">
       <div class="brandbar">
         <span class="brand-word">NERAVA</span>
         <img class="brand-bolt" src="assets/bolt-white.svg" alt="">
       </div>
-      <div id="dealBanner" class="deal-banner">⚡ Cheaper charging now</div>
     </header>
 
     <!-- PAGES -->
@@ -47,8 +47,8 @@
           <div class="hub-subtitle">Recommended</div>
 
           <div class="pill-row">
-            <span class="pill"><strong>3</strong>&nbsp;free</span>
-            <span class="pill">10% cheaper</span>
+            <span class="pill" id="hub-availability"><strong>3</strong>&nbsp;of <strong>4</strong> ports free</span>
+            <span class="pill" id="hub-pricing">10% cheaper</span>
           </div>
 
           <div class="logo-row">
@@ -58,10 +58,10 @@
           </div>
 
           <div class="meta-line">
-            <span>3 free</span><span class="dot">•</span><span>Domain, Austin</span>
+            <span id="hub-meta-availability">3 free</span><span class="dot">•</span><span>Domain, Austin</span>
           </div>
 
-          <button id="chargeHereBtn" class="btn btn-primary btn-wide">Charge here</button>
+          <button id="chargeHereBtn" class="btn btn-primary btn-wide">Start Charging</button>
         </section>
       </section>
 
@@ -115,12 +115,26 @@
       <section id="pageWallet" class="page">
         <section class="card content-card">
           <h2 class="section-title">Wallet</h2>
-          <div class="balance">$19.00</div>
+          <div class="balance" id="wallet-balance">$19.00</div>
           <div class="muted">Ways you earned</div>
-          <ul class="list">
+          
+          <!-- Progress bar toward next tier -->
+          <div class="progress-container" style="margin: 8px 0;">
+            <div class="progress-bar" style="background: #e5e7eb; height: 8px; border-radius: 4px; overflow: hidden;">
+              <div class="progress-fill" style="background: var(--color-green); height: 100%; width: 76%; transition: width 0.3s ease;"></div>
+            </div>
+            <div class="progress-text caption" style="text-align: center; margin-top: 4px;">$19 of $25 to next tier</div>
+          </div>
+          
+          <!-- Streak indicator -->
+          <div class="streak-indicator" style="margin: 8px 0; padding: 8px; background: var(--color-orange); border-radius: var(--radius); text-align: center;">
+            <span class="streak-text">7-day charging streak 🔥</span>
+          </div>
+          
+          <ul class="list" id="wallet-activity">
+            <li><span>You saved $3.73 during Green Hour 🌞</span><strong>+$3.73</strong></li>
+            <li><span>Earned $0.75 from Starbucks co-fund ☕</span><strong>+$0.75</strong></li>
             <li><span>Off-peak award</span><strong>+$0.50</strong></li>
-            <li><span>Perk reward</span><strong>+$0.75</strong></li>
-            <li><span>Utility bonus</span><strong>+$1.00</strong></li>
           </ul>
         </section>
       </section>

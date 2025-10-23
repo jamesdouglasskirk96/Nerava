@@ -100,6 +100,50 @@
     else localStorage.removeItem(SESSION_KEY);
   }
 
+  // ==== Streak functionality ====
+  const STREAK_KEY = 'nerava_charging_streak';
+  const LAST_CHARGE_KEY = 'nerava_last_charge_date';
+  
+  function getStreak() {
+    try { return parseInt(localStorage.getItem(STREAK_KEY) || '0'); } catch { return 0; }
+  }
+  
+  function incStreak(reset = false) {
+    if (reset) {
+      localStorage.setItem(STREAK_KEY, '0');
+      localStorage.removeItem(LAST_CHARGE_KEY);
+      return 0;
+    }
+    
+    const today = new Date().toDateString();
+    const lastCharge = localStorage.getItem(LAST_CHARGE_KEY);
+    
+    if (lastCharge === today) {
+      return getStreak(); // Already charged today
+    }
+    
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toDateString();
+    
+    let newStreak = 1;
+    if (lastCharge === yesterdayStr) {
+      newStreak = getStreak() + 1;
+    }
+    
+    localStorage.setItem(STREAK_KEY, newStreak.toString());
+    localStorage.setItem(LAST_CHARGE_KEY, today);
+    return newStreak;
+  }
+  
+  function updateStreakDisplay() {
+    const streak = getStreak();
+    const streakEl = document.querySelector('.streak-text');
+    if (streakEl) {
+      streakEl.textContent = `${streak}-day charging streak 🔥`;
+    }
+  }
+
   // ==== Reward preview ====
   async function fetchWindows() {
     try {
@@ -234,16 +278,41 @@
       const earned = jd.total_reward_usd?.toFixed?.(2);
       showToast(jd.message || `Wallet credited $${earned}`);
 
+      // Handle streak logic
+      const windows = await fetchWindows();
+      const activeWindow = windows.find(w => w.active_now);
+      if (activeWindow) {
+        const newStreak = incStreak();
+        showToast(`Nice timing — streak +1! 🔥 (${newStreak} days)`);
+      } else {
+        incStreak(true); // Reset streak if not in active window
+      }
+      
+      updateStreakDisplay();
+
       // Add to client-side Recent Activity
       const li = document.createElement('li');
       li.textContent = `${new Date().toLocaleString()} — ${kwh} kWh • +$${earned}`;
       document.getElementById('recentActivity')?.prepend(li);
+
+      // Update wallet balance display
+      updateWalletBalance();
 
       // If you already surface wallet balance elsewhere, trigger a refresh there
       // (e.g., fetch('/v1/wallet?user_id=demo@nerava.app') and update UI)
     } catch (e) {
       showToast('Could not stop/credit session', false);
       console.error(e);
+    }
+  }
+  
+  function updateWalletBalance() {
+    // Animate balance increment
+    const balanceEl = document.getElementById('wallet-balance');
+    if (balanceEl) {
+      // Add animation class for visual feedback
+      balanceEl.classList.add('balance-updated');
+      setTimeout(() => balanceEl.classList.remove('balance-updated'), 1000);
     }
   }
 
@@ -287,6 +356,7 @@
     // Initialize charging flow
     refreshRewardPreview();
     refreshIncentiveBanner();
+    updateStreakDisplay();
     setInterval(refreshRewardPreview, 30000);
     setInterval(refreshIncentiveBanner, 30000);
 
@@ -298,6 +368,7 @@
     if (nav) nav.addEventListener('click', () => setTimeout(() => {
       refreshRewardPreview();
       refreshIncentiveBanner();
+      updateStreakDisplay();
     }, 80));
   });
 })();
