@@ -6,12 +6,17 @@ from datetime import datetime, timezone
 import httpx
 
 from app.services.energyhub_sim import sim
+from app.services.cache import cache
+from app.services.async_wallet import async_wallet
+from app.config import settings
 
 router = APIRouter(prefix="/v1/energyhub", tags=["energyhub"])
 
 def parse_at(at: Optional[str]) -> Optional[datetime]:
     if not at:
         return None
+    if not settings.energyhub_allow_demo_at:
+        raise HTTPException(status_code=403, detail="demo_at_disabled")
     try:
         dt = datetime.fromisoformat(at.replace("Z", "+00:00"))
         if not dt.tzinfo:
@@ -46,8 +51,18 @@ class ChargeStopResp(BaseModel):
 
 @router.get("/windows")
 async def list_windows(at: Optional[str] = Query(None, description="ISO datetime override")):
+    # Check cache first
+    cache_key = f"energyhub:windows:{at or 'current'}"
+    cached = await cache.get(cache_key)
+    if cached:
+        return cached
+    
     override_dt = parse_at(at)
-    return sim.list_windows(override_dt)
+    result = sim.list_windows(override_dt)
+    
+    # Cache result
+    await cache.setex(cache_key, settings.cache_ttl_windows, result)
+    return result
 
 @router.post("/events/charge-start", response_model=ChargeStartResp)
 async def charge_start(payload: ChargeStartReq, at: Optional[str] = Query(None)):
@@ -63,20 +78,32 @@ async def charge_stop(payload: ChargeStopReq, at: Optional[str] = Query(None)):
         raise HTTPException(status_code=404, detail="session_not_found")
 
     cents = int(round(result["total_reward_usd"] * 100))
-    new_balance: Optional[int] = None
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as c:
-            r = await c.post(
-                "http://127.0.0.1:8000/v1/wallet/credit_qs",
-                params={"user_id": result["user_id"], "cents": cents}
-            )
-            if r.status_code == 200:
-                jd = r.json()
-                new_balance = jd.get("new_balance_cents") or jd.get("balance_cents")
-    except Exception:
-        pass
-
-    result["wallet_balance_cents"] = new_balance
+    
+    if settings.enable_sync_credit:
+        # Synchronous credit (for demo)
+        new_balance: Optional[int] = None
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as c:
+                r = await c.post(
+                    "http://127.0.0.1:8000/v1/wallet/credit_qs",
+                    params={"user_id": result["user_id"], "cents": cents}
+                )
+                if r.status_code == 200:
+                    jd = r.json()
+                    new_balance = jd.get("new_balance_cents") or jd.get("balance_cents")
+        except Exception:
+            pass
+        result["wallet_balance_cents"] = new_balance
+    else:
+        # Asynchronous credit (production)
+        await async_wallet.queue_wallet_credit(
+            result["user_id"], 
+            cents, 
+            result["session_id"]
+        )
+        # Return 202 with estimated reward
+        result["wallet_balance_cents"] = None  # Will be updated async
+    
     return result
 
 @router.delete("/dev/reset")

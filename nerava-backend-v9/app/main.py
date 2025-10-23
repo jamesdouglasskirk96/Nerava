@@ -2,6 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .db import Base, engine
+from .config import settings
+from .middleware.logging import LoggingMiddleware
+from .middleware.metrics import MetricsMiddleware
+from .services.async_wallet import async_wallet
 
 from fastapi.staticfiles import StaticFiles
 import os
@@ -21,6 +25,7 @@ from .routers import (
     webhooks,
     incentives,
     energyhub,
+    ops,
 )
 
 # Auth + JWT preferences
@@ -37,14 +42,21 @@ if os.path.isdir(UI_DIR):
 # Create tables on startup (SQLite dev)
 Base.metadata.create_all(bind=engine)
 
+# Add middleware
+app.add_middleware(LoggingMiddleware)
+app.add_middleware(MetricsMiddleware)
+
 # CORS (tighten in prod)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_allow_origins.split(",") if settings.cors_allow_origins != "*" else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Operations routes
+app.include_router(ops.router)
 
 # Health first
 app.include_router(health.router, prefix="/v1", tags=["health"])
@@ -66,3 +78,14 @@ app.include_router(users_register.router)
 app.include_router(merchants_local.router, prefix="/v1/local", tags=["local_merchants"])
 app.include_router(incentives.router)
 app.include_router(energyhub.router)
+
+# Startup and shutdown events
+@app.on_event("startup")
+async def startup_event():
+    """Start background services"""
+    await async_wallet.start_worker()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Stop background services"""
+    await async_wallet.stop_worker()
