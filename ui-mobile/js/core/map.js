@@ -1,69 +1,47 @@
-// Singleton Leaflet helpers for the mobile UI
-/* globals L */
-let _map = null;
-let _routeLayer = null;
+export let mapRef = null;
+let tileLayerRef = null;
 
-export function ensureMap(containerId = 'map', {lat=30.4025, lng=-97.7258, zoom=15} = {}) {
-  const el = document.getElementById(containerId);
+export function ensureMap(elId = 'map', center = [30.4025, -97.7258], zoom = 15) {
+  // Idempotent map boot
+  const el = document.getElementById(elId);
   if (!el) return null;
 
-  if (_map) {
-    // if container element was re-created, move the map into it
-    if (_map._container !== el) {
-      el.innerHTML = '';
-      el.appendChild(_map._container);
-      setTimeout(()=>_map.invalidateSize(), 0);
-    } else {
-      _map.invalidateSize();
-    }
-    return _map;
+  // Leaflet throws if reusing the same element; clear previous instance safely
+  if (mapRef && mapRef._container === el) {
+    mapRef.invalidateSize();
+    return mapRef;
+  }
+  if (mapRef) {
+    try { mapRef.remove(); } catch (_) {}
+    mapRef = null;
+    tileLayerRef = null;
   }
 
-  _map = L.map(el, { zoomControl: false, attributionControl: false })
-          .setView([lat, lng], zoom);
-
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19
-  }).addTo(_map);
-
-  return _map;
+  mapRef = L.map(el, { zoomControl: false }).setView(center, clampZoom(zoom));
+  tileLayerRef = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '&copy; OpenStreetMap'
+  }).addTo(mapRef);
+  return mapRef;
 }
 
-export function clearRoute() {
-  if (_routeLayer) {
-    _routeLayer.remove();
-    _routeLayer = null;
-  }
+export function clampZoom(z) { return Math.max(13, Math.min(17, Number(z)||15)); }
+
+export function fitMapToRoute(a, b, padPx = 60) {
+  if (!mapRef) return;
+  if (!isFinite(a?.lat) || !isFinite(a?.lng) || !isFinite(b?.lat) || !isFinite(b?.lng)) return;
+  const bounds = L.latLngBounds([ [a.lat, a.lng], [b.lat, b.lng] ]);
+  mapRef.fitBounds(bounds, { padding: [padPx, padPx], maxZoom: 16 });
 }
 
-export function drawRoute(points = [], {dashed=true} = {}) {
-  if (!_map || points.length < 2) return;
-  clearRoute();
-  _routeLayer = L.polyline(points, {
-    color: '#3B82F6',
-    weight: 5,
-    opacity: 0.9,
-    dashArray: dashed ? '8,8' : null
-  }).addTo(_map);
-  fitBounds(points);
+export function drawDashedRoute(a, b) {
+  if (!mapRef) return null;
+  const latlngs = [[a.lat, a.lng], [b.lat, b.lng]];
+  return L.polyline(latlngs, { color:'#4178f7', weight:6, opacity:0.8, dashArray:'8,10' }).addTo(mapRef);
 }
 
-export function fitBounds(points, paddingPx = 48) {
-  if (!_map || !points?.length) return;
-  const b = L.latLngBounds(points);
-  _map.fitBounds(b, { padding: [paddingPx, paddingPx], maxZoom: 17 });
-}
-
-export function addMerchantDot([lat, lng]) {
-  if (!_map || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
-  L.circleMarker([lat, lng], {
-    radius: 7, color:'#3B82F6', weight: 2, fillColor:'#3B82F6', fillOpacity:1
-  }).addTo(_map);
-}
-
-export function addChargerDot([lat, lng]) {
-  if (!_map || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
-  L.circleMarker([lat, lng], {
-    radius: 7, color:'#0EA5E9', weight: 2, fillColor:'#0EA5E9', fillOpacity:1
-  }).addTo(_map);
+export function placeCircle(lat, lng, opts={}) {
+  if (!mapRef || !isFinite(lat) || !isFinite(lng)) return null;
+  return L.circleMarker([lat, lng], {
+    radius: 8, color:'#4178f7', fillColor:'#4178f7', fillOpacity:1, ...opts
+  }).addTo(mapRef);
 }

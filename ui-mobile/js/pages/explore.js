@@ -1,53 +1,38 @@
-import { ensureMap, drawRoute, fitBounds, addMerchantDot, addChargerDot, clearRoute } from '../core/map.js';
+import { ensureMap, fitMapToRoute, drawDashedRoute, placeCircle, mapRef } from '../core/map.js';
 import { apiGet } from '../core/api.js';
 
-export async function initExplore() {
-  const m = ensureMap('map');
-  if (m) {
-    const charger = [30.4025, -97.7258]; // fallback
-    const merch = [30.4033, -97.7240]; // fallback
+export async function initExplore(){
+  // Safe fallbacks if backend 404s
+  let hub = null, deal = null;
+  try { hub = await apiGet('/v1/hubs/recommend'); } catch(_) {}
+  try { deal = await apiGet('/v1/deals/nearby'); } catch(_) {}
 
-    try {
-      const rec = await apiGet('/v1/hubs/recommend'); // may 404
-      if (rec && Number.isFinite(rec.lat) && Number.isFinite(rec.lng)) {
-        charger[0] = rec.lat;
-        charger[1] = rec.lng;
-      }
-    } catch(_) {}
+  // Fallback coordinates (Domain, Austin) if APIs unavailable
+  const charger = {
+    lat: Number(hub?.lat ?? 30.4025),
+    lng: Number(hub?.lng ?? -97.7258)
+  };
+  const merchant = {
+    lat: Number(deal?.items?.[0]?.lat ?? 30.2729),
+    lng: Number(deal?.items?.[0]?.lng ?? -97.7413)
+  };
 
-    try {
-      const deals = await apiGet('/v1/deals/nearby'); // may 404
-      const d0 = Array.isArray(deals) ? deals[0] : null;
-      if (d0 && Number.isFinite(d0.lat) && Number.isFinite(d0.lng)) {
-        merch[0] = d0.lat;
-        merch[1] = d0.lng;
-      }
-    } catch(_) {}
+  ensureMap('map', [charger.lat, charger.lng], 15);
 
-    addChargerDot(charger);
-    addMerchantDot(merch);
-    drawRoute([charger, merch], { dashed:true });
-  }
+  // Clear & draw simple route/markers
+  placeCircle(charger.lat, charger.lng, { radius:9 });
+  placeCircle(merchant.lat, merchant.lng, { radius:9 });
+  drawDashedRoute(charger, merchant);
+  fitMapToRoute(charger, merchant, 60);
+}
 
-  // Perk card
+  // Simple perk card with fallback data
   const card = document.getElementById('perk-card');
   if (card) {
-    // Get merchant data for display
-    let merchantName = 'Nearby perk';
-    let merchantReward = 'Cheaper during Green Hour';
-    let merchantWindow = '2–4pm';
-    let merchantDistance = '0.3 mi from charger';
-
-    try {
-      const deals = await apiGet('/v1/deals/nearby');
-      const d0 = Array.isArray(deals) ? deals[0] : null;
-      if (d0) {
-        merchantName = d0.name || merchantName;
-        merchantReward = d0.reward_text || merchantReward;
-        merchantWindow = d0.window || merchantWindow;
-        merchantDistance = d0.distance_text || merchantDistance;
-      }
-    } catch(_) {}
+    const merchantName = deal?.items?.[0]?.name || 'Nearby perk';
+    const merchantReward = deal?.items?.[0]?.reward_text || 'Cheaper during Green Hour';
+    const merchantWindow = deal?.items?.[0]?.window || '2–4pm';
+    const merchantDistance = deal?.items?.[0]?.distance_text || '0.3 mi from charger';
 
     card.innerHTML = `
       <div class="perk-card">
@@ -64,7 +49,7 @@ export async function initExplore() {
       </div>
     `;
     document.getElementById('btn-charge-here')?.addEventListener('click', () => {
-      // Switch to charge tab (no import from app.js needed)
+      // Switch to charge tab
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
       document.querySelector('[data-tab="charge"]')?.classList.add('active');
       document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));

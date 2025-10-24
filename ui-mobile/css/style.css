@@ -240,16 +240,13 @@ background:var(--bg);color:var(--text);
 }
 
 .map-card{
-  margin: 16px 16px 8px;
-  border-radius: 20px;
-  box-shadow: 0 12px 28px rgba(0,0,0,.12);
-  overflow: hidden;
+  margin:16px;
+  border-radius:18px;
+  overflow:hidden;
+  box-shadow: 0 10px 30px rgba(0,0,0,.08);
   background:#fff;
 }
-.map-card__map{
-  width: 100%;
-  height: 280px;
-}
+.map{ height: 46vh; width: 100%; }
 
 /* Always hide Leaflet attribution for demo */
 .leaflet-control-attribution,
@@ -271,6 +268,11 @@ background:var(--bg);color:var(--text);
 /* Give breathing room to tabs adjacent to FAB */
 .tabbar .tab[data-tab="charge"] { margin-right: 28px; }
 .tabbar .tab[data-tab="wallet"] { margin-left: 28px; }
+
+/* Spacing tweaks for Earn pill */
+.tabbar{ padding: 8px 18px calc(env(safe-area-inset-bottom,0) + 8px); }
+.tabbar .main{ transform: translateY(-10px); } /* reduce float height */
+.tabbar .tab{ margin: 0 18px; }               /* a bit more gap */
 
 /* Keep Earn pill clear of the map */
 .tabbar--pill {

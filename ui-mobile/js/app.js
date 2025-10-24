@@ -2,7 +2,7 @@
 import { loadDemoState } from './core/demo.js';
 import { ensureDemoBanner } from './components/demoBanner.js';
 import { apiGet, apiPost } from './core/api.js';
-import { ensureMap, drawRoute, fitBounds, addMerchantDot, addChargerDot, clearRoute } from './js/core/map.js';
+import { ensureMap, fitMapToRoute, drawDashedRoute, placeCircle, mapRef } from './js/core/map.js';
 window.Nerava = window.Nerava || {};
 
 // === SSO → prefs → wallet pre-balance → push banner flow ===
@@ -58,28 +58,15 @@ function loadRecommendation(){
 }
 
 // Alias for setActive (legacy compatibility)
-function setTab(tab) { setActive(tab); }
-
-// Map initialization function - idempotent and non-recursive
-let __mapInstance = null;
-function ensureMap(lat=30.4021,lng=-97.7265){
-  const afterLayout = () => { try{ __mapInstance && __mapInstance.invalidateSize(false); }catch(_){} };
-  if (__mapInstance) {
-    try { __mapInstance.setView([lat,lng], Math.max(__mapInstance.getZoom()||14, 14)); } catch(_){}
-    requestAnimationFrame(()=>setTimeout(afterLayout, 50));
-    return __mapInstance;
+function setTab(tab) { 
+  setActive(tab); 
+  // Invalidate map when switching back to explore
+  if (tab === 'explore' && mapRef) {
+    mapRef.invalidateSize(true);
   }
-  if (!window.L) return null; // Leaflet not loaded yet
-  __mapInstance = L.map('map',{ zoomControl:false });
-  __mapInstance.setView([lat,lng], 14);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-    maxZoom: 19, attribution: '&copy; OpenStreetMap'
-  }).addTo(__mapInstance);
-  requestAnimationFrame(()=>setTimeout(afterLayout, 50));
-  return __mapInstance;
 }
-// Back-compat alias
-function initMap(lat, lng){ return ensureMap(lat, lng); }
+
+// Map initialization now handled by js/core/map.js module
 
 // ---- legacy global exports for non-module callers ----
 // Removed exports to avoid "does not provide an export named" errors
@@ -386,7 +373,7 @@ function triggerWalletToast(msg){
 
 window.addEventListener('load', async ()=>{
   setTab('explore');
-  ensureMap('map'); // Initialize map once
+  ensureMap('map', [30.4025, -97.7258], 15); // Initialize map once
   await loadBanner();
   await loadWallet();
   await loadPrefs();
