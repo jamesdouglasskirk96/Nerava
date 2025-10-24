@@ -5,10 +5,12 @@ function toUrl(path){
   return baseUrl()+'/'+path.replace(/^\/+/, '');
 }
 async function _req(path,{method='GET',body,headers={}}={}){
-  const r=await fetch(toUrl(path),{method,headers:{'Accept':'application/json',...(body?{'Content-Type':'application/json'}:{}),...headers},body:body?JSON.stringify(body):undefined});
-  // Treat 404 as "no data" so UI can fall back without throwing - no console errors
-  if (r.status === 404) return null;
-  if (!r.ok) throw new Error(`HTTP ${r.status} ${path}`);
+  const r=await fetch(toUrl(path),{method,headers:{'Accept':'application/json',...(body?{'Content-Type':'application/json'}:{}),...headers},body:body?JSON.stringify(body):undefined}).catch(() => null);
+  if (!r || !r.ok) {
+    // Soft 404/Network: return null; caller will use fallbacks.
+    if (r && r.status && r.status !== 404) console.debug('apiGet non-OK', r.status, path);
+    return null;
+  }
   // Some 204/empty responses: return null
   if (r.status === 204) return null;
   const ct=r.headers.get('content-type')||''; return ct.includes('application/json')?r.json():r.text();

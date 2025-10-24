@@ -1,31 +1,18 @@
 import { ensureMap, drawWalkingRoute } from '../core/map.js';
 import { apiGet } from '../core/api.js';
 
-const W_LAT = 30.4025, W_LNG = -97.7258;
-const FALLBACK_REC = { lat: W_LAT, lng: W_LNG, name: 'Nerava Hub' };
-const FALLBACK_DEAL = { lat: 30.404, lng: -97.7241, name: 'Coffee & Pastry', reward_text: 'Free coffee with charging', window: '2–4pm', distance_text: '0.3 mi' };
-
 export async function initExplore() {
-  // Ensure map exists
-  const map = ensureMap('map');
+  const map = ensureMap();
+  if (!map) return; // DOM not ready
   
-  // Fetch recommendations and deals with fallbacks
-  const rec = await apiGet('/v1/hubs/recommend') || FALLBACK_REC;
-  const deal = await apiGet('/v1/deals/nearby') || FALLBACK_DEAL;
+  // fetch recommend & deals (soft-null allowed)
+  const rec = await apiGet('/v1/hubs/recommend', { lat: 30.4025, lng: -97.7258, radius_km: 2 }) || {};
+  const deals = await apiGet('/v1/deals/nearby', { lat: 30.4025, lng: -97.7258 }) || { items: [] };
   
-  // Guard all undefined fields
-  const recLat = rec?.lat || W_LAT;
-  const recLng = rec?.lng || W_LNG;
-  const dealLat = deal?.lat || 30.404;
-  const dealLng = deal?.lng || -97.7241;
-  
-  // Draw walking route if we have valid coordinates
-  if (window.L && map && isFinite(recLat) && isFinite(recLng) && isFinite(dealLat) && isFinite(dealLng)) {
-    drawWalkingRoute(
-      { lat: recLat, lng: recLng },
-      { lat: dealLat, lng: dealLng }
-    );
-  }
+  // fallback demo points:
+  const charger = rec.lat ? { lat: rec.lat, lng: rec.lng } : { lat: 30.4029, lng: -97.7255 };
+  const merchant = deals.items?.[0]?.pos || { lat: 30.4039, lng: -97.7242 };
+  drawWalkingRoute(charger, merchant); // function already handles OSRM fallback
 
   // Perk card
   const card = document.getElementById('perk-card');

@@ -69,7 +69,9 @@
 
         <!-- Explore page -->
         <section id="page-explore" class="page active" aria-label="Explore">
-          <div class="map-card"><div id="map"></div></div>
+          <section id="map-card" class="card card--map">
+            <div id="map"></div>
+          </section>
           <h2 class="section-title">Nearby perk</h2>
           <div id="perk-card"></div>
           <div class="actions">
@@ -355,7 +357,7 @@
     </div>
   </nav>
 
-  <button class="earn-pill fab-earn" data-tab="earn" aria-label="Earn">
+  <button class="earn-pill fab" data-tab="earn" aria-label="Earn">
     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
       <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
     </svg>
