@@ -53,6 +53,7 @@ function loadRecommendation(){
   const badge = `<span class="ai-badge">${bolt}<span>Recommended by Nerava AI • ${tierText}</span></span>`;
   const hubTier = document.getElementById('hub-tier');
   if (hubTier) hubTier.innerHTML = badge;
+  if (typeof capHero === 'function') capHero();
 }
 
 // Alias for setActive (legacy compatibility)
@@ -61,10 +62,10 @@ function setTab(tab) { setActive(tab); }
 // Map initialization function - idempotent and non-recursive
 let __mapInstance = null;
 function ensureMap(lat=30.4021,lng=-97.7265){
+  const afterLayout = () => { try{ __mapInstance && __mapInstance.invalidateSize(false); }catch(_){} };
   if (__mapInstance) {
-    try { __mapInstance.setView([lat,lng], Math.max(__mapInstance.getZoom()||14, 14)); } catch(_) {}
-    // fix tiles if container size changed
-    setTimeout(()=>{ try{ __mapInstance.invalidateSize(false); }catch(_){ } }, 60);
+    try { __mapInstance.setView([lat,lng], Math.max(__mapInstance.getZoom()||14, 14)); } catch(_){}
+    requestAnimationFrame(()=>setTimeout(afterLayout, 50));
     return __mapInstance;
   }
   if (!window.L) return null; // Leaflet not loaded yet
@@ -73,8 +74,7 @@ function ensureMap(lat=30.4021,lng=-97.7265){
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
     maxZoom: 19, attribution: '&copy; OpenStreetMap'
   }).addTo(__mapInstance);
-  // small delay to let CSS layout
-  setTimeout(()=>{ try{ __mapInstance.invalidateSize(false); }catch(_){ } }, 60);
+  requestAnimationFrame(()=>setTimeout(afterLayout, 50));
   return __mapInstance;
 }
 // Back-compat alias
@@ -240,5 +240,14 @@ window.addEventListener('keydown', (e)=>{
 
 // Resize handler for map invalidation (debounced)
 (function(){
-  let t; window.addEventListener('resize', ()=>{ clearTimeout(t); t = setTimeout(()=>{ try{ ensureMap(); }catch(_){ } }, 120); }, { passive:true });
+  let t;
+  const kick = () => { clearTimeout(t); t=setTimeout(()=>{ try{ ensureMap(); }catch(_){ } }, 120); };
+  window.addEventListener('resize', kick, { passive:true });
+  window.addEventListener('orientationchange', kick, { passive:true });
 })();
+
+// Cap hero images to prevent layout issues
+function capHero(){
+  const hero = document.querySelector('.perk-hero img, .perk-hero svg');
+  if (hero) { hero.removeAttribute('width'); hero.removeAttribute('height'); }
+}

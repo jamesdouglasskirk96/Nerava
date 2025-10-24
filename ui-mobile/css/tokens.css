@@ -1,5 +1,10 @@
 :root{
-  --brand: #22c55e;    /* fallback; can be overridden at runtime from logo color */
+  --brand: #22c55e;     /* fallback; runtime may override from logo */
   --brand-ink: #063d1f;
+
+  --tabbar-height: 64px;
+  --banner-height: 56px;
+  --content-pad: 12px;
+
   --safe-bottom: env(safe-area-inset-bottom, 16px);
 }

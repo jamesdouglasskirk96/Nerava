@@ -12,20 +12,38 @@
     <link rel="stylesheet" href="css/demo.css" />
     <link rel="stylesheet" href="css/modal.css" />
     <style>
-      /* Map container sizing + rounding */
-      .map-wrap{ position:relative; height: calc(100vh - 260px); margin: 12px 16px 0; border-radius: 16px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,.10); }
+      /* Pages sit above fixed tabbar and can scroll */
+      .page{
+        height: calc(100vh - var(--tabbar-height));
+        overflow-y: auto; -webkit-overflow-scrolling: touch;
+        padding: var(--content-pad);
+      }
+      /* Map box: reasonable height across phones */
+      .map-wrap{
+        position: relative;
+        height: clamp(260px, 45vh, 420px);
+        margin: 8px 8px 16px;
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 8px 24px rgba(0,0,0,.10);
+        background: #f6f7f9;
+      }
       #map{ height:100%; width:100%; }
-      /* Keep attribution readable but away from tab bar */
-      .leaflet-control-attribution{ margin-bottom: calc(env(safe-area-inset-bottom, 16px) + 56px) !important; }
+      .leaflet-control-attribution{ margin-bottom: calc(var(--safe-bottom) + 8px) !important; }
 
-      /* AI badge brand styling */
+      /* AI badge (kept from earlier) */
       .ai-badge{
         display:inline-flex;align-items:center;gap:4px;
-        background: var(--brand); color: #fff;
+        background: var(--brand); color:#fff;
         padding:6px 10px;border-radius:999px;font-weight:700;font-size:12px;
         box-shadow:0 6px 18px color-mix(in srgb, var(--brand) 25%, transparent);
-        white-space:nowrap
+        white-space:nowrap;
       }
+
+      /* Recommendation/hero visual constraints */
+      .recommend-card{ border-radius:16px; background:#fff; padding:12px; box-shadow:0 6px 22px rgba(0,0,0,.06); margin: 8px; }
+      .perk-hero{ max-height:160px; overflow:hidden; border-radius:16px; margin: 8px auto 0; }
+      .perk-hero img, .perk-hero svg{ max-height:160px; width:auto; max-width:100%; display:block; margin:0 auto; }
     </style>
   <link rel="icon" href="assets/favicon.ico" />
 
