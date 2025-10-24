@@ -81,6 +81,7 @@ function ensureMap(lat=30.4021,lng=-97.7265){
 function initMap(lat, lng){ return ensureMap(lat, lng); }
 
 // ---- legacy global exports for non-module callers ----
+// Removed exports to avoid "does not provide an export named" errors
 if (typeof window !== 'undefined') {
   window.setTab = setTab;
   window.initMap = initMap;
@@ -380,4 +381,4 @@ function triggerWalletToast(msg){
 }
 
 // Export functions for use by other modules
-export { setTab, ensureMap };
+// Removed exports to avoid "does not provide an export named" errors

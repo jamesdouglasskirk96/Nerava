@@ -1,76 +1,59 @@
-import { setTab } from '../app.js';
-import { ensureMap, invalidateMap, fitBoundsSafe, getMap } from '../core/map.js';
+import { ensureMap, drawWalkingRoute } from '../core/map.js';
 import { apiGet } from '../core/api.js';
 
 const W_LAT = 30.4025, W_LNG = -97.7258;
+const FALLBACK_REC = { lat: W_LAT, lng: W_LNG, name: 'Nerava Hub' };
+const FALLBACK_DEAL = { lat: 30.404, lng: -97.7241, name: 'Coffee & Pastry', reward_text: 'Free coffee with charging', window: '2–4pm', distance_text: '0.3 mi' };
 
-export async function initExplore(){
-  // Load recommended hub + best merchant
-  let hub, merchant;
-  try{
-    hub = await apiGet('/v1/hubs/recommend', { lat: W_LAT, lng: W_LNG, radius_km: 2 });
-  }catch{ hub = null; }
-  if(!hub) hub = { lat: W_LAT, lng: W_LNG, name:'Nerava Hub'};
-
-  try{
-    const deals = await apiGet('/v1/deals/nearby', { lat: hub.lat, lng: hub.lng, limit: 1 });
-    merchant = deals?.items?.[0] || null;
-  }catch{ merchant = null; }
-  if(!merchant) merchant = { name:'Coffee & Pastry', lat: 30.404, lng:-97.7241, reward_text:'Free coffee with charging', window:'2–4pm', distance_text:'0.3 mi' };
-
-  // Map & route
-  if (window.L && document.getElementById('map') && isFinite(hub.lat) && isFinite(merchant.lat)) {
-    // ensure map exists (idempotent)
-    const map = ensureMap('map');
-    
-    if (map) {
-      // Remove old route layer if it exists
-      if (window.__routeLayer) {
-        try { map.removeLayer(window.__routeLayer); } catch {}
-      }
-      
-      // Draw new route
-      const from = L.latLng(hub.lat, hub.lng);
-      const to = L.latLng(merchant.lat, merchant.lng);
-      const route = L.polyline([from, to], { 
-        color: '#3b82f6', 
-        weight: 4, 
-        opacity: 0.9, 
-        dashArray: '6,6' 
-      }).addTo(map);
-      
-      // Store route layer reference
-      window.__routeLayer = route;
-      
-      // Fit bounds safely
-      fitBoundsSafe(L.latLngBounds([from, to]), { padding: [24, 24], maxZoom: 16 });
-      
-      // Invalidate map size after route/card render
-      queueMicrotask(() => invalidateMap());
-    }
+export async function initExplore() {
+  // Ensure map exists
+  const map = ensureMap('map');
+  
+  // Fetch recommendations and deals with fallbacks
+  const rec = await apiGet('/v1/hubs/recommend') || FALLBACK_REC;
+  const deal = await apiGet('/v1/deals/nearby') || FALLBACK_DEAL;
+  
+  // Guard all undefined fields
+  const recLat = rec?.lat || W_LAT;
+  const recLng = rec?.lng || W_LNG;
+  const dealLat = deal?.lat || 30.404;
+  const dealLng = deal?.lng || -97.7241;
+  
+  // Draw walking route if we have valid coordinates
+  if (window.L && map && isFinite(recLat) && isFinite(recLng) && isFinite(dealLat) && isFinite(dealLng)) {
+    drawWalkingRoute(
+      { lat: recLat, lng: recLng },
+      { lat: dealLat, lng: dealLng }
+    );
   }
 
   // Perk card
   const card = document.getElementById('perk-card');
-  if(card){
+  if (card) {
     card.innerHTML = `
       <div class="perk-card">
         <div class="ai-chip">⚡ Recommended by Nerava AI</div>
         <div class="perk-body">
           <div class="logo">☕</div>
           <div class="info">
-            <h3>${merchant?.name || 'Nearby perk'}</h3>
-            <p>${merchant?.reward_text || 'Cheaper during Green Hour'} • ${merchant?.window || '2–4pm'}<br/>
-            ${merchant?.distance_text || '0.3 mi from charger'}</p>
+            <h3>${deal?.name || 'Nearby perk'}</h3>
+            <p>${deal?.reward_text || 'Cheaper during Green Hour'} • ${deal?.window || '2–4pm'}<br/>
+            ${deal?.distance_text || '0.3 mi from charger'}</p>
           </div>
           <button id="btn-charge-here" class="btn btn-primary">Charge here</button>
         </div>
       </div>
     `;
-    document.getElementById('btn-charge-here')?.addEventListener('click',()=> setTab('charge'));
+    document.getElementById('btn-charge-here')?.addEventListener('click', () => {
+      // Switch to charge tab (no import from app.js needed)
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelector('[data-tab="charge"]')?.classList.add('active');
+      document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+      document.getElementById('page-charge')?.classList.remove('hidden');
+    });
   }
 
-  document.getElementById('btn-view-more')?.addEventListener('click', ()=> alert('List of perks based on your preferences (coming soon)'));
+  document.getElementById('btn-view-more')?.addEventListener('click', () => alert('List of perks based on your preferences (coming soon)'));
 }
 
 // boot when page shown

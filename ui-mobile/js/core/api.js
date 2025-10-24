@@ -6,7 +6,7 @@ function toUrl(path){
 }
 async function _req(path,{method='GET',body,headers={}}={}){
   const r=await fetch(toUrl(path),{method,headers:{'Accept':'application/json',...(body?{'Content-Type':'application/json'}:{}),...headers},body:body?JSON.stringify(body):undefined});
-  // Treat 404 as "no data" so UI can fall back without throwing
+  // Treat 404 as "no data" so UI can fall back without throwing - no console errors
   if (r.status === 404) return null;
   if (!r.ok) throw new Error(`HTTP ${r.status} ${path}`);
   // Some 204/empty responses: return null

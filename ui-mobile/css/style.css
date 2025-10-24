@@ -232,11 +232,35 @@ background:var(--bg);color:var(--text);
   box-shadow: 0 10px 28px rgba(0,0,0,0.18);
 }
 
+/* CSS Variables for consistent styling */
+:root {
+  --icon-stroke: #9aa3af;
+  --brand: #2563eb;
+}
+
+/* Map card styles */
+#map-card{ 
+  border-radius: 20px; 
+  overflow: hidden; 
+  box-shadow: 0 10px 30px rgba(0,0,0,.08); 
+  background: #fff; 
+  margin: 16px;
+}
+#map{ 
+  height: 300px; 
+}
+
+/* Earn FAB outline color matches tab icon stroke */
+.fab-earn{ 
+  background: var(--brand); 
+  border: 2px solid var(--icon-stroke); 
+}
+
 /* Hide Leaflet attribution permanently */
 .leaflet-control-attribution,
-.leaflet-bottom.leaflet-right,
-.leaflet-control-attribution.leaflet-control {
-  display: none !important;
+.leaflet-bottom.leaflet-right {
+  display: none !important; 
+  visibility: hidden !important; 
 }
 
 /* Ensure tab items distribute evenly with space-around */
