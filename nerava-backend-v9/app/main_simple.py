@@ -33,6 +33,7 @@ from .routers import (
     social,
     admin,
     ml,
+    ledger,
 )
 
 # Auth + JWT preferences
@@ -95,3 +96,4 @@ app.include_router(energyhub.router)
 app.include_router(social.router)
 app.include_router(admin.router)
 app.include_router(ml.router)
+app.include_router(ledger.router)

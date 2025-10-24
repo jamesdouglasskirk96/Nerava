@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 from ..models_extra import RewardEvent, Follow, FollowerShare, CommunityPeriod
+from ..services.ledger import record_reward_proof
 
 COMMUNITY_PCT = 0.10
 
@@ -49,4 +50,12 @@ def record_reward_event(db: Session, *, user_id: str, source: str, gross_cents: 
 
     db.commit()
     db.refresh(ev)
+    
+    # Record proof in ledger (if enabled)
+    try:
+        record_reward_proof(ev)
+    except Exception as e:
+        # Don't fail the reward if ledger fails
+        print(f"Warning: Failed to record proof: {e}")
+    
     return ev
