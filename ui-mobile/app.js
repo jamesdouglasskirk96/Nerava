@@ -11,35 +11,30 @@ const hide = el => el.classList.add('hidden');
 const fmtMoney = cents => `+$${(Number(cents||0)/100).toFixed(2)}`;
 const stripHubIds = s => (s||'').replace(/\bhub_[a-z0-9]+_[a-z0-9]+\b/gi,'').replace(/\s{2,}/g,' ').trim();
 
-const pages = {
-  explore: document.getElementById('page-explore'),
-  charge:  document.getElementById('page-charge'),
-  wallet:  document.getElementById('page-wallet'),
-  profile: document.getElementById('page-profile'),
-  claim:   document.getElementById('page-claim') || document.createElement('div'),
+const pages = { 
+  explore: $('#page-explore'), 
+  charge: $('#page-charge'), 
+  wallet: $('#page-wallet'), 
+  profile: $('#page-profile'), 
+  claim: $('#page-claim') 
 };
 const banner = $('#incentive-banner');
 
 export function setTab(tab){
   Object.entries(pages).forEach(([k,el])=>{
-    if(!el) return;
-    el.classList.toggle('active', k===tab);
+    el?.classList.toggle('active', k===tab);
   });
   document.querySelectorAll('.tabbar .tab').forEach(b=>{
     b.classList.toggle('active', b.dataset.tab===tab);
   });
-  if (tab === 'explore') ensureMap();
-  if (tab === 'charge') initChargePage();
+  if (tab==='explore' && window.ensureMap) { try{ const m=window.ensureMap(); setTimeout(()=>m.invalidateSize(), 100);}catch{} }
 }
 
 // Make setTab available globally
 window.setTab = setTab;
 
-document.querySelectorAll('.tabbar .tab').forEach(b=> b.onclick = (e) => {
-  e.preventDefault();
-  const tab = b.dataset.tab;
-  if (tab) setTab(tab);
-});
+document.querySelectorAll('.tabbar .tab').forEach(b=> b.addEventListener('click',()=> setTab(b.dataset.tab)));
+document.querySelector('.claim-pill')?.addEventListener('click', ()=> setTab('claim'));
 
 let map;
 export function ensureMap(lat = 30.4021, lng = -97.7265) {

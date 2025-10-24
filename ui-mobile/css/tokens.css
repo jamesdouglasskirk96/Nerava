@@ -1,11 +1,7 @@
 :root{
-  --brand: #1f57ff;          /* iOS-style blue (from user's reference) */
-  --brand-ink: #0f2a88;
-  --brand-ink-contrast: #ffffff;
-  --nav-ink: #1f2937;        /* not used on icons; labels fallback */
-  --nav-ink-muted: #9aa3af;  /* light gray outline for inactive icons */
-
-  /* Layout */
+  --brand-blue: #2F6FE0;   /* iOS-like blue pulled from provided home screen */
+  --brand-blue-ink: #0E2E75;
+  --icon-muted: #8B93A1;   /* outline gray for inactive icons */
   --tabbar-height: 72px;
   --radius-lg: 18px;
   --radius-xl: 24px;

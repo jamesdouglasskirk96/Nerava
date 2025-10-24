@@ -181,55 +181,56 @@ background:var(--bg);color:var(--text);
   overflow: hidden; 
 }
 
-/* ---------- Header (centered, blue) ---------- */
-.header {
-  position: sticky; top: 0; z-index: 20;
-  height: 64px; background:#fff;
-  display:flex; align-items:center; justify-content:center;
-  box-shadow: 0 2px 8px rgba(0,0,0,.05);
+/* Header */
+.topbar{
+  height:64px; display:flex; align-items:center; justify-content:center;
+  background:#fff; position:sticky; top:0; z-index:20;
+  box-shadow:0 2px 8px rgba(0,0,0,.05);
 }
-.header .brand-logo{
-  display:flex; align-items:center; gap:10px;
+.brand-logo{
   font-weight:700; letter-spacing:.04em; font-size:20px;
-  color: var(--brand);        /* blue title */
+  color: var(--brand-blue);
 }
-.header .brand-logo .bolt{
-  color: #f5b301; font-size:18px;
-}
+.brand-logo .bolt{ color:#F5B400 }
 
-/* Navigation Bar Restoration */
+/* Tabbar */
 .tabbar{
-  position: sticky; bottom:0; z-index:30; height: var(--tabbar-height);
-  display:flex; justify-content:space-around; align-items:center;
-  backdrop-filter: blur(16px);
-  background: linear-gradient(180deg, rgba(255,255,255,.7) 0%, rgba(255,255,255,.9) 60%, #fff 100%);
-  box-shadow: 0 -10px 30px rgba(0,0,0,.08);
+  position:fixed; left:0; right:0; bottom:0; height:var(--tabbar-height);
+  display:flex; align-items:center; justify-content:space-around;
+  padding: 8px 12px calc(env(safe-area-inset-bottom,0px) + 8px);
+  background:rgba(255,255,255,.85); backdrop-filter: blur(10px);
+  box-shadow:0 -8px 20px rgba(0,0,0,.12); z-index:30;
 }
+.tab{
+  flex:1; display:flex; flex-direction:column; align-items:center; gap:6px;
+  min-width:64px; color: var(--icon-muted); text-decoration:none;
+}
+.tab .icon{
+  width:28px; height:28px; stroke: currentColor; fill:none; stroke-width:2.2;
+}
+.tab .label{ font-size:14px; color:#647085; }
+.tab.active{ color: var(--brand-blue); }
+.tab.active .label{ color: var(--brand-blue); }
 
-.tabbar .tab{
-  appearance:none; background:none; border:0; outline:0;
-  display:flex; flex-direction:column; align-items:center; gap:6px;
-  color:#4b5563; min-width:64px;
+/* Centered Claim pill (does not change nav height) */
+.claim-pill{
+  position:absolute; bottom: calc(env(safe-area-inset-bottom,0px) + var(--tabbar-height) - 36px);
+  left:50%; transform: translateX(-50%);
+  background:#0B0B0C; color:#fff; width:118px; height:72px;
+  border-radius:36px; display:flex; align-items:center; justify-content:center; flex-direction:column;
+  box-shadow:0 10px 26px rgba(0,0,0,.22);
+  z-index:31; pointer-events:auto;
 }
-.tabbar .tab .icon{ width:28px; height:28px; display:grid; place-items:center;}
-.tabbar .tab .icon svg{
-  width:26px; height:26px;
-  fill:none; stroke: var(--nav-ink-muted); stroke-width:2.3; stroke-linecap:round; stroke-linejoin:round;
-}
-.tabbar .tab .label{ font-size:14px; color:#6b7280; }
+.claim-pill .icon{ width:24px; height:24px; color:#fff; stroke-width:2.4; }
+.claim-pill .label{ color:#fff; font-weight:600; margin-top:4px; }
 
-/* active state */
-.tabbar .tab.active .icon svg{ stroke: var(--brand); }
-.tabbar .tab.active .label{ color: var(--brand); font-weight:600; }
-
-/* center "Claim" as primary, but same bar height */
-.tabbar .tab--primary{
-  background:#000; color:#fff; border-radius:22px; padding:10px 14px; margin-top:-26px;
-  box-shadow:0 10px 24px rgba(0,0,0,.25);
+/* Ensure tab items distribute evenly; fix far-right drift */
+.tabbar-inner{
+  position:relative; width:100%; height:100%;
+  display:grid; grid-template-columns:1fr 1fr 1fr 1fr; align-items:center;
+  gap:0;
 }
-.tabbar .tab--primary .icon svg{ stroke:#fff; }
-.tabbar .tab--primary .label{ color:#fff; }
-}
+.tabbar .tab{ justify-self:center; }
 
 
 /* Enhanced Explore page styling */
@@ -340,15 +341,15 @@ background:var(--bg);color:var(--text);
 /* Ensure #map stays clipped nicely */
 #map{ border-radius:20px; overflow:hidden; }
 
-/* ---------- Map Card ---------- */
+/* Map card */
 .map-card{
-  margin:16px; border-radius:20px; overflow:hidden;
+  margin:16px; border-radius:18px; overflow:hidden;
   box-shadow:0 10px 30px rgba(0,0,0,.08);
   background:#fff;
 }
-.map{ height: 360px; }
+#map{ width:100%; height:340px; }
 .leaflet-control-attribution{
-  margin-bottom: calc(env(safe-area-inset-bottom, 0) + var(--tabbar-height) + 8px) !important;
+  margin-bottom: calc( env(safe-area-inset-bottom, 0px) + var(--tabbar-height) + 8px ) !important;
 }
 .map{width:100%;height:320px}
 .route-badge{position:absolute;left:12px;top:12px;display:flex;align-items:center;gap:6px;background:rgba(0,0,0,.64);color:#fff;padding:8px 12px;border-radius:999px;font-weight:600}
