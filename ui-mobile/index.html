@@ -72,34 +72,18 @@
 
         <!-- EXPLORE: Walking route + AI-recommended perk -->
         <section id="pageExplore" class="page active" aria-labelledby="exploreTitle">
-          <div id="route-badge" class="route-badge">Walking route • Beta</div>
-          <div class="map-wrap"><div id="map" class="map"></div></div>
+          <!-- Explore: map -->
+          <div id="map" class="map"></div>
 
-          <!-- AI-recommended perk card -->
-          <div id="perkSheet" class="mini-sheet">
-            <div class="mini-sheet__header">
-              <span>Recommended by Nerava AI</span>
-              <div class="ai-badge">AI</div>
-            </div>
-            <div class="perk-card">
-              <div class="perk-card__left">
-                <img src="/app/img/coffee.svg" alt="" class="perk-icon" id="perkIcon">
-                <div class="perk-meta">
-                  <div class="perk-title" id="perkTitle">Starbucks</div>
-                  <div class="perk-sub" id="perkSub">Free tall coffee • 2–4pm</div>
-                  <div class="perk-reward" id="perkReward">Earn $2.50 + 50 points</div>
-                </div>
-              </div>
-              <button id="chargeHereBtn" class="btn btn-primary">Charge here</button>
-            </div>
-            <div class="perk-stats">
-              <span id="perkEta">~5 min walk</span>
-              <span>•</span>
-              <span id="perkMiles">0.2 mi</span>
-            </div>
-            <div class="perk-actions">
-              <button id="perkMoreBtn" class="btn btn-secondary">View more perks</button>
-            </div>
+          <!-- Explore: route badge (ETA text injected) -->
+          <div id="route-badge" class="route-badge hidden"></div>
+
+          <!-- Explore: nearby perk card -->
+          <section id="nearby-perk" class="perk-card hidden" aria-live="polite"></section>
+
+          <!-- Explore: view more -->
+          <div class="view-more">
+            <button id="btn-view-more" class="btn-secondary">View more</button>
           </div>
         </section>
 

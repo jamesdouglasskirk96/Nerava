@@ -1,270 +1,111 @@
 // Explore page logic
-import { dealChip } from '../components/dealChip.js';
-import { apiGet } from '../core/api.js';
-import { toast } from '../components/toast.js';
+import { apiGet, apiPost } from '../core/api.js';
+
+const USER = (localStorage.NERAVA_USER || 'demo@nerava.app');
+
+function htm(str){ const d=document.createElement('div'); d.innerHTML=str.trim(); return d.firstElementChild; }
+function money(c){ return `+$${(Number(c||0)/100).toFixed(2)}`; }
+
+export async function initExplore(){
+  const root = document.getElementById('page-explore');
+  if(!root) return;
+
+  // 1) Fetch recommendation (hub) and best merchant
+  let hub=null, merch=null;
+  try{
+    const lat=30.4025,lng=-97.7258;
+    const rec = await apiGet('/v1/hubs/recommend', { lat, lng, radius_km: 2, user_id: USER });
+    hub = { lat: rec?.lat ?? lat, lng: rec?.lng ?? lng, name: rec?.name || 'Nerava Hub' };
+
+    // simple merchant pick: first from /v1/deals/nearby or fallback
+    const deals = await apiGet('/v1/deals/nearby', { lat, lng, radius_km:2 }).catch(()=>({ items:[] }));
+    const d = deals?.items?.[0] || {};
+    merch = {
+      id: d.id || 'm_local',
+      name: d.name || 'Coffee & Pastry',
+      logo: d.logo || '/app/img/coffee.png',
+      reward_cents: d.reward_cents ?? 300,
+      window_text: d.window_text || '2–4pm',
+      lat: d.lat ?? (hub.lat + 0.0012),
+      lng: d.lng ?? (hub.lng + 0.0010)
+    };
+  }catch(_){
+    // fallback entirely
+    hub = hub || { lat:30.4025, lng:-97.7258, name:'Nerava Hub' };
+    merch = merch || { id:'m_fallback', name:'Coffee & Pastry', logo:'/app/img/coffee.png', reward_cents:300, window_text:'2–4pm', lat:30.4037, lng:-97.7248 };
+  }
+
+  // 2) Draw walking route + ETA badge
+  if(window.drawWalkingRoute) window.drawWalkingRoute(hub, merch);
+
+  // 3) Render Nearby Perk card
+  const card = document.getElementById('nearby-perk');
+  if(card){
+    const badge = `<span class="ai-badge"><span aria-hidden="true">⚡</span>Recommended by Nerava AI</span>`;
+    card.innerHTML = `
+      <div class="row brand">
+        <div style="display:flex;align-items:center;gap:10px">
+          <img src="${merch.logo}" alt="${merch.name} logo" />
+          <div>
+            <div style="font-weight:800">${merch.name}</div>
+            <div class="meta">${merch.window_text}</div>
+          </div>
+        </div>
+        ${badge}
+      </div>
+      <div class="meta" style="margin-top:10px;">Reward: <strong>${money(merch.reward_cents)}</strong></div>
+      <div class="row" style="margin-top:12px;">
+        <button id="btn-charge-here" class="btn-primary">Charge here</button>
+        <button id="btn-details" class="btn-secondary">Details</button>
+      </div>
+    `;
+    card.classList.remove('hidden');
+
+    // "Charge here" → start verification flow (if API exists) or switch to Charge tab
+    document.getElementById('btn-charge-here')?.addEventListener('click', async ()=>{
+      try{
+        // optional: start dual session if available
+        await apiPost('/v1/dual/start', {
+          user_id: USER,
+          charger_pos: hub, merchant_pos: merch,
+          charger_id: 'hub_best', merchant_id: merch.id,
+          charger_radius_m: 40, merchant_radius_m: 100, dwell_threshold_s: 60,
+        }).catch(()=>{});
+      }catch(_){}
+      // Switch to Charge tab
+      const btn = document.querySelector('.tabbar .tab[data-tab="charge"]');
+      btn?.click();
+    });
+  }
+
+  // 4) View more → simple list (preferences-aware if backend provides; fallback)
+  document.getElementById('btn-view-more')?.addEventListener('click', async ()=>{
+    const lat=hub.lat, lng=hub.lng;
+    const list = await apiGet('/v1/deals/nearby', { lat, lng, radius_km:5 }).catch(()=>({items:[]}));
+    const items = list?.items?.length ? list.items : [merch];
+    const modal = htm(`<dialog class="sheet" style="padding:0;max-height:78vh;"></dialog>`);
+    const inner = document.createElement('div');
+    inner.style.padding = '14px';
+    inner.innerHTML = items.map(x => `
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid #eee">
+        <img src="${x.logo || merch.logo}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover"/>
+        <div style="flex:1">
+          <div style="font-weight:700">${x.name || merch.name}</div>
+          <div class="meta">Reward ${money(x.reward_cents ?? merch.reward_cents)} · ${x.window_text || merch.window_text}</div>
+        </div>
+        <button class="btn-secondary" data-mid="${x.id || 'm'}">Select</button>
+      </div>
+    `).join('');
+    modal.appendChild(inner);
+    document.body.appendChild(modal);
+    modal.showModal?.();
+
+    modal.addEventListener('click', (e)=>{ if(e.target===modal) modal.close(); });
+    modal.addEventListener('close', ()=> modal.remove());
+  });
+}
+
+// Export for app.js to call
 window.Nerava = window.Nerava || {};
 window.Nerava.pages = window.Nerava.pages || {};
-
-// Guard: wait for Leaflet presence + DOM ready
-(function ensureLeafletReady(){
-  if (document.readyState !== 'complete' && document.readyState !== 'interactive') {
-    document.addEventListener('DOMContentLoaded', ensureLeafletReady, { once: true });
-    return;
-  }
-  if (!window.L) {
-    // Try again shortly; don't crash
-    setTimeout(ensureLeafletReady, 50);
-    return;
-  }
-  // Proceed to init (wrap existing init Explore here)
-  window.initExplore && window.initExplore();
-})();
-
-const FALLBACK_HUB = { id: 'demo-hub', lat: 37.7749, lng: -122.4194, name: 'Demo Hub' };
-const FALLBACK_PERK = { id: 'demo-perk', title: 'Free Coffee', description: 'Get a free coffee with any charge', value: '$3.50' };
-
-// Guard routing usage in Explore (no plugin, no crash)
-async function drawRoute(fromLatLng, toLatLng) {
-  if (!window.L) return; // Leaflet missing, bail gracefully
-
-  // Clear any prior layer
-  if (window._neravaRoute) {
-    window._neravaRoute.remove();
-    window._neravaRoute = null;
-  }
-
-  // Prefer routing plugin when present
-  if (L.Routing && L.Routing.control) {
-    try {
-      window._neravaRoute = L.Routing.control({
-        waypoints: [ L.latLng(fromLatLng[0], fromLatLng[1]), L.latLng(toLatLng[0], toLatLng[1]) ],
-        addWaypoints: false, draggableWaypoints: false, fitSelectedRoutes: true, routeWhileDragging: false
-      }).addTo(map);
-      return;
-    } catch (e) {
-      console.warn('Routing plugin failed; using polyline fallback.', e);
-    }
-  }
-
-  // Fallback: straight polyline + fit bounds
-  const line = L.polyline([fromLatLng, toLatLng], { weight: 4, opacity: 0.9 });
-  line.addTo(map);
-  map.fitBounds(line.getBounds(), { padding: [24, 24] });
-  window._neravaRoute = line;
-}
-
-async function loadRecommendedHub(){
-  const host = document.getElementById('page-explore');
-  const nameEl = document.getElementById('hub-name');
-  if(!host || !nameEl) return;
-  
-  const live = await apiGet('/v1/hubs/recommended');
-  if (live && live.lat && live.lng) {
-    // Get nearby merchants for dual-zone verification
-    const nearby = await apiGet('/v1/merchants/nearby?lat='+live.lat+'&lng='+live.lng+'&radius_km=0.3').catch(()=>({items:[]}));
-    const merchant = (nearby?.items?.[0]) || { id:'m_demo', name:'Nearby Perk', lat: live.lat+0.001, lng: live.lng+0.001 };
-
-    // Draw walking route if function exists and coordinates are valid
-    if (typeof window.drawWalkingRoute === 'function' && isFinite(live.lat) && isFinite(live.lng) && isFinite(merchant.lat) && isFinite(merchant.lng)) {
-      window.drawWalkingRoute(
-        { id: live.id, name: live.name, lat: live.lat, lng: live.lng },
-        { id: merchant.id, name: merchant.name, lat: merchant.lat, lng: merchant.lng },
-      );
-    }
-    
-    return live;
-  }
-
-  // fallback data near Austin (adjust as needed)
-  const fallback = { id: 'fallback_hub', name: 'Nerava Hub', lat: 30.2672, lng: -97.7431 };
-  
-  // Draw walking route with fallback merchant
-  const merchant = { id:'m_demo', name:'Nearby Perk', lat: fallback.lat+0.001, lng: fallback.lng+0.001 };
-  if (typeof window.drawWalkingRoute === 'function' && isFinite(fallback.lat) && isFinite(fallback.lng) && isFinite(merchant.lat) && isFinite(merchant.lng)) {
-    window.drawWalkingRoute(
-      { id: fallback.id, name: fallback.name, lat: fallback.lat, lng: fallback.lng },
-      { id: merchant.id, name: merchant.name, lat: merchant.lat, lng: merchant.lng },
-    );
-  }
-  
-  return fallback;
-}
-
-async function getRecommendedHub() {
-  if (!window.Nerava.core.api.canCallApi()) return FALLBACK_HUB;
-  try {
-    const r = await apiGet('/v1/hubs/recommended');
-    if (!r.ok) throw 0;
-    const [first] = await r.json();
-    return first || FALLBACK_HUB;
-  } catch { return FALLBACK_HUB; }
-}
-
-async function getPreferredPerk(hubId) {
-  if (!window.Nerava.core.api.canCallApi()) return FALLBACK_PERK;
-  try {
-    // Try ML recommendations first
-    const mlRecs = await apiGet(`/v1/ml/recommend/perks?hub_id=${encodeURIComponent(hubId)}&user_id=current_user`);
-    if (mlRecs.recommendations && mlRecs.recommendations.length > 0) {
-      const topPerk = mlRecs.recommendations[0].perk;
-      return {
-        id: topPerk.id || 'perk_demo',
-        title: topPerk.name || 'Special Offer',
-        description: topPerk.description || 'Get a free perk with any charge',
-        value: `$${((topPerk.value_cents || 0) / 100).toFixed(2)}`
-      };
-    }
-    
-    // Fallback to regular perks
-    const r = await apiGet(`/v1/places/perks?hub_id=${encodeURIComponent(hubId)}`);
-    if (!r.ok) throw 0;
-    const list = await r.json();
-    return list?.[0] || FALLBACK_PERK;
-  } catch { return FALLBACK_PERK; }
-}
-
-async function drawRouteOrFallback(map, from, to) {
-  // Ensure Leaflet loaded
-  if (!window.L || !map) return;
-
-  // If routing plugin missing, draw fallback polyline
-  const drawFallback = () => {
-    const line = L.polyline([from, to], { color: '#2a6bf2', weight: 5, opacity: 0.9 }).addTo(map);
-    map.fitBounds(line.getBounds(), { padding: [50, 50] });
-    return { fallback: true };
-  };
-
-  try {
-    if (!L.Routing || !L.Routing.control) {
-      console.warn('Routing plugin missing, using fallback line.');
-      return drawFallback();
-    }
-
-    // Clean up old control if we re-initialize
-    if (window.__routeCtl) {
-      map.removeControl(window.__routeCtl);
-      window.__routeCtl = null;
-    }
-
-    const ctl = L.Routing.control({
-      waypoints: [ L.latLng(from.lat, from.lng), L.latLng(to.lat, to.lng) ],
-      addWaypoints: false,
-      draggableWaypoints: false,
-      routeWhileDragging: false,
-      show: false,
-      fitSelectedRoutes: true,
-      lineOptions: { styles: [{ color: '#2a6bf2', weight: 6, opacity: 0.95 }] }
-    });
-
-    ctl.addTo(map);
-    window.__routeCtl = ctl;
-
-    ctl.on('routesfound', (e) => {
-      const sum = e.routes?.[0]?.summary;
-      if (sum) {
-        const mins = Math.round(sum.totalTime / 60);
-        const miles = (sum.totalDistance / 1609.34).toFixed(1);
-        const etaEl = document.querySelector('#perkEta');
-        const milesEl = document.querySelector('#perkMiles');
-        if (etaEl) etaEl.textContent = `~${mins} min`;
-        if (milesEl) milesEl.textContent = `${miles} mi`;
-      }
-    });
-
-    return { fallback: false };
-  } catch (err) {
-    console.error('Routing failed, using fallback', err);
-    return drawFallback();
-  }
-}
-
-// when routing plugin is missing, show a small inline note once
-function noteRoutingFallback(){
-  const el = document.getElementById('perkMiles');
-  if (!el) return;
-  if (window._notedRouting) return; window._notedRouting = true;
-  el.textContent = '— mi (routing add-on not loaded)';
-}
-
-async function initExploreMinimal() {
-  const root = document.getElementById('page-explore');
-  if (!root) return;
-  
-  const map = window.Nerava.core.map.ensureMap();
-  if (!map) return;
-
-  const hub = await loadRecommendedHub();
-  const perk = await getPreferredPerk(hub.id || 'hub_demo');
-
-  // Update UI
-  document.getElementById('perkTitle').textContent = perk.title || 'Special Offer';
-  document.getElementById('perkSub').textContent = perk.description || 'Free coffee with any charge';
-  
-  // Update reward information
-  const rewardEl = document.getElementById('perkReward');
-  if (rewardEl) {
-    rewardEl.textContent = `Earn ${perk.value || '$2.50'} + 50 points`;
-  }
-
-  // Load and render deal chips
-  await loadDealChips();
-
-  // Get user location and draw route
-  const user = await getUserLocationFallback();
-  const result = await drawRouteOrFallback(map, user, hub);
-  
-  // Show fallback note if routing failed
-  if (result && result.fallback) {
-    noteRoutingFallback();
-  }
-  
-  // Wire up "Charge here" button
-  document.getElementById('chargeHereBtn')?.addEventListener('click', () => {
-    // Switch to Charge tab
-    const chargeTab = document.querySelector('[data-tab="charge"]');
-    if (chargeTab) chargeTab.click();
-  });
-
-  // Wire up "View more perks" button
-  document.getElementById('perkMoreBtn')?.addEventListener('click', () => {
-    // Switch to Claim tab to show more perks
-    const claimTab = document.querySelector('[data-tab="claim"]');
-    if (claimTab) claimTab.click();
-  });
-}
-
-async function loadDealChips() {
-  const dealsRoot = document.getElementById('deals-root');
-  if(!dealsRoot) return;
-  dealsRoot.innerHTML = `<div class="skeleton" style="height:38px;width:220px"></div>`;
-  try{
-    const data = await apiGet(`/v1/deals/green_hours?lat=30.2672&lng=-97.7431`);
-    dealsRoot.innerHTML='';
-    (data?.deals||[]).slice(0,3).forEach(d=>dealsRoot.appendChild(dealChip(d)));
-  }catch(e){
-    dealsRoot.innerHTML=''; toast('Could not load deals. Pull to refresh.');
-  }
-}
-
-async function getUserLocationFallback() {
-  return new Promise((resolve) => {
-    if (!navigator.geolocation) {
-      resolve({ lat: 37.7849, lng: -122.4094 }); // Default SF location
-      return;
-    }
-    
-    navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => resolve({ lat: 37.7849, lng: -122.4094 }), // Fallback
-      { enableHighAccuracy: true, maximumAge: 60000, timeout: 4000 }
-    );
-  });
-}
-
-// Export init function
-window.Nerava.pages.explore = {
-  init: initExploreMinimal
-};
-
-// Attach to window for the guard
-window.initExplore = initExploreMinimal;
+window.Nerava.pages.explore = { init: initExplore };

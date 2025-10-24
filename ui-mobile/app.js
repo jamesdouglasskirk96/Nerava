@@ -15,6 +15,7 @@ const pages = {
   charge:  $('#page-charge'),
   wallet:  $('#page-wallet'),
   profile: $('#page-profile'),
+  claim:   $('#page-claim')
 };
 const banner = $('#incentive-banner');
 
@@ -196,7 +197,72 @@ async function savePrefs(){
 }
 
 $('#btn-save-prefs').addEventListener('click', savePrefs);
-$('#btn-see-new').addEventListener('click', ()=>{ setTab('explore'); loadRecommendation(); });
+$('#btn-see-new').addEventListener('click', async ()=>{ 
+  setTab('explore'); 
+  if(window.Nerava?.pages?.explore?.init) {
+    await window.Nerava.pages.explore.init();
+  }
+});
+
+// ---------- walking route function ----------
+window.drawWalkingRoute = async function drawWalkingRoute(hub, merchant){
+  // hub: {lat,lng}, merchant: {lat,lng, logo?, name?}
+  if(!window._leafletMap) return;
+
+  const map = window._leafletMap;
+  // Clear old layers (route + markers) if exist
+  if(window._routeLayer){ map.removeLayer(window._routeLayer); window._routeLayer=null; }
+  if(window._hubMarker){ map.removeLayer(window._hubMarker); window._hubMarker=null; }
+  if(window._merchMarker){ map.removeLayer(window._merchMarker); window._merchMarker=null; }
+
+  const hubLatLng = L.latLng(hub.lat, hub.lng);
+  const merLatLng = L.latLng(merchant.lat, merchant.lng);
+
+  // Markers
+  window._hubMarker = L.circleMarker(hubLatLng, { radius:7, color:'#2563eb', weight:3, fillColor:'#93c5fd', fillOpacity:.9 }).addTo(map);
+  const merchIcon = L.divIcon({
+    className:'leaflet-div-icon merchant-logo',
+    html: merchant.logo ? `<img src="${merchant.logo}" alt="${merchant.name||'Logo'}"/>` : '🏪'
+  });
+  window._merchMarker = L.marker(merLatLng, { icon: merchIcon }).addTo(map);
+
+  // Route: try OSRM foot, else straight line
+  const url = `https://router.project-osrm.org/route/v1/foot/${hub.lng},${hub.lat};${merchant.lng},${merchant.lat}?overview=full&geometries=geojson`;
+  let line = null, meters = 0;
+  try{
+    const r = await fetch(url, { method:'GET' });
+    if(r.ok){
+      const j = await r.json();
+      if(j?.routes?.[0]){
+        const coords = j.routes[0].geometry.coordinates.map(([x,y])=>[y,x]);
+        line = L.polyline(coords, { color:'#111827', weight:4, opacity:.85 }).addTo(map);
+        meters = j.routes[0].distance || 0;
+      }
+    }
+  }catch(_){}
+
+  if(!line){
+    // fallback
+    line = L.polyline([hubLatLng, merLatLng], { color:'#111827', weight:4, dashArray:'6 6', opacity:.7 }).addTo(map);
+    meters = hubLatLng.distanceTo(merLatLng);
+  }
+  window._routeLayer = line;
+
+  // Fit bounds nicely
+  const b = L.latLngBounds(hubLatLng, merLatLng);
+  map.fitBounds(b, { padding:[60,60], maxZoom:16 });
+  window.lastBounds = b;
+
+  // ETA: assume 1.4 m/s (~4.5 km/h)
+  const secs = Math.max(60, Math.round(meters / 1.4));
+  const mins = Math.ceil(secs/60);
+  const badge = document.getElementById('route-badge');
+  if(badge){
+    const bolt = `<svg class="bolt" viewBox="0 0 24 24"><path fill="currentColor" d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>`;
+    badge.innerHTML = `${bolt} ${mins} min walk`;
+    badge.classList.remove('hidden');
+  }
+};
 
 // ---------- boot ----------
 window.addEventListener('load', async ()=>{
@@ -206,10 +272,18 @@ window.addEventListener('load', async ()=>{
     brandLogo.style.color = 'var(--brand, #22c55e)';
   }
   
+  // Cleanup scan modal if it somehow exists
+  try{ const m=document.getElementById('scanModal'); if(m) m.remove(); }catch(_){}
+  
   setTab('explore');
   initMap();
+  // Set global map reference for drawWalkingRoute
+  window._leafletMap = map;
   await loadBanner();
-  await loadRecommendation();
+  // Initialize explore page with new logic
+  if(window.Nerava?.pages?.explore?.init) {
+    await window.Nerava.pages.explore.init();
+  }
   await loadWallet();
   await loadPrefs();
   // keep Leaflet healthy on resize/orientation
