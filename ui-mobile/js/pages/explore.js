@@ -1,34 +1,30 @@
-import { ensureMap, addOverlay, clearOverlays, fitBounds, getMap } from '../core/map.js';
+import { ensureMap, drawWalkingRoute } from '../app.js';
 import { apiGet } from '../core/api.js';
 
 export async function initExplore() {
-  const map = ensureMap('map', { zoom: 16 });
+  const map = ensureMap(); // creates or reuses
+  // Defaults if APIs 404
+  let hub = { lat: 30.4029, lng: -97.7247 };
+  let merchant = { lat: 30.4046, lng: -97.7241 };
 
-  // Fetch with safe fallbacks
-  let rec = null, deals = [];
-  try { rec = await apiGet('/v1/hubs/recommend'); } catch {}
-  try { deals = await apiGet('/v1/deals/nearby'); } catch {}
+  try {
+    const rec = await apiGet('/v1/hubs/recommend'); // may 404
+    if (rec && Number.isFinite(rec.lat) && Number.isFinite(rec.lng)) {
+      hub = { lat: rec.lat, lng: rec.lng };
+    }
+  } catch(_) {}
 
-  // Fallback data if 404 or null
-  rec = rec || { lat: 30.4028, lng: -97.7240, name: 'Nerava Hub' };
-  const perk = (deals && deals[0]) || {
-    lat: 30.4036, lng: -97.7249, name: 'Neiman Marcus Café', reward_cents: 300
-  };
+  try {
+    const deals = await apiGet('/v1/deals/nearby'); // may 404
+    const d0 = Array.isArray(deals) ? deals[0] : null;
+    if (d0 && Number.isFinite(d0.lat) && Number.isFinite(d0.lng)) {
+      merchant = { lat: d0.lat, lng: d0.lng };
+    }
+  } catch(_) {}
 
-  // Draw markers/route safely
-  clearOverlays();
-  if (window.L && map) {
-    const start = window.L.circleMarker([rec.lat, rec.lng], { radius: 7, color: '#2b6cb0' });
-    const end   = window.L.circleMarker([perk.lat, perk.lng], { radius: 7, color: '#2b6cb0', fillOpacity: 1 });
-
-    addOverlay(start);
-    addOverlay(end);
-
-    const line = window.L.polyline([[rec.lat, rec.lng],[perk.lat, perk.lng]], { dashArray: '6,6', color:'#2b6cb0', weight:4 });
-    addOverlay(line);
-
-    fitBounds(window.L.latLngBounds([ [rec.lat,rec.lng], [perk.lat,perk.lng] ]));
-  }
+  // Only draw when both are valid
+  const ok = p => p && Number.isFinite(p.lat) && Number.isFinite(p.lng);
+  if (ok(hub) && ok(merchant)) drawWalkingRoute(hub, merchant);
 
   // Perk card
   const card = document.getElementById('perk-card');
@@ -39,9 +35,9 @@ export async function initExplore() {
         <div class="perk-body">
           <div class="logo">☕</div>
           <div class="info">
-            <h3>${perk.name || 'Nearby perk'}</h3>
-            <p>${perk.reward_text || 'Cheaper during Green Hour'} • ${perk.window || '2–4pm'}<br/>
-            ${perk.distance_text || '0.3 mi from charger'}</p>
+            <h3>${merchant.name || 'Nearby perk'}</h3>
+            <p>${merchant.reward_text || 'Cheaper during Green Hour'} • ${merchant.window || '2–4pm'}<br/>
+            ${merchant.distance_text || '0.3 mi from charger'}</p>
           </div>
           <button id="btn-charge-here" class="btn btn-primary">Charge here</button>
         </div>

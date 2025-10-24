@@ -2,8 +2,70 @@
 import { loadDemoState } from './core/demo.js';
 import { ensureDemoBanner } from './components/demoBanner.js';
 import { apiGet, apiPost } from './core/api.js';
-import { ensureMap, addOverlay, clearOverlays, fitBounds, getMap } from './js/core/map.js';
 window.Nerava = window.Nerava || {};
+
+// MAP SINGLETON (exported)
+let __map = null, __routeLayer = null;
+
+export function ensureMap() {
+  const el = document.getElementById('map');
+  if (!el) return null;
+
+  // If Leaflet already attached to this element, reuse reference
+  if (__map && __map._container === el) {
+    __map.invalidateSize();
+    return __map;
+  }
+  // If Leaflet created a map directly on the element, reuse it
+  if (el._leaflet_id && __map && __map._leaflet_id === el._leaflet_id) {
+    __map.invalidateSize();
+    return __map;
+  }
+  // If element was previously inited by Leaflet but our local ref is null, rebind
+  if (el._leaflet_id && !__map) {
+    __map = el._leaflet_map || null;
+    if (__map) { __map.invalidateSize(); return __map; }
+  }
+
+  // Fresh init
+  try {
+    __map = L.map(el, { zoomControl: false });
+    __map.setView([30.4029, -97.7247], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: ''
+    }).addTo(__map);
+    // keep back-reference so subsequent calls can pick it up
+    el._leaflet_map = __map;
+    return __map;
+  } catch (e) {
+    console.warn('ensureMap init skipped:', e.message);
+    return __map;
+  }
+}
+
+export function clearRoute() {
+  if (__routeLayer) { try { __routeLayer.remove(); } catch(_){}; __routeLayer = null; }
+}
+
+export function drawWalkingRoute(start, end) {
+  const m = ensureMap(); if (!m) return;
+  clearRoute();
+
+  const ok = (p)=> p && Number.isFinite(p.lat) && Number.isFinite(p.lng);
+  if (!ok(start) || !ok(end)) return;
+
+  // simple fallback dashed line (keeps UI alive even without OSRM)
+  const line = L.polyline([[start.lat, start.lng],[end.lat, end.lng]], {
+    weight: 4, opacity: 0.8, dashArray: '6,6', color: '#3B82F6'
+  });
+
+  const a = L.circleMarker([start.lat, start.lng], {radius:6, color:'#3B82F6', fill:true, fillOpacity:1});
+  const b = L.circleMarker([end.lat, end.lng],   {radius:6, color:'#0EA5E9', fill:true, fillOpacity:1});
+
+  __routeLayer = L.layerGroup([a, line, b]).addTo(m);
+  try { m.fitBounds(L.latLngBounds([start, end]), {padding:[40,40], maxZoom:17}); } catch(_) {}
+}
 
 // === SSO → prefs → wallet pre-balance → push banner flow ===
 function getUser(){ return localStorage.NERAVA_USER || null; }
@@ -386,10 +448,7 @@ function triggerWalletToast(msg){
 
 window.addEventListener('load', async ()=>{
   setTab('explore');
-  // Initialize map once with guard
-  if (!window._neravaMap) {
-    window._neravaMap = ensureMap('map');
-  }
+  ensureMap(); // Initialize map once
   await loadBanner();
   await loadWallet();
   await loadPrefs();

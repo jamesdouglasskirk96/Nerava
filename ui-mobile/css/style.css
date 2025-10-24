@@ -235,7 +235,8 @@ background:var(--bg);color:var(--text);
 /* CSS Variables for consistent styling */
 :root {
   --icon-stroke: #9aa3af;        /* navbar outline gray */
-  --brand-blue: #3B6EF5;         /* Nerava text blue */
+  --brand: #3B82F6;              /* Nerava text blue */
+  --tabbar-height: 76px;
 }
 
 /* Rounded card container for the map */
@@ -250,11 +251,22 @@ background:var(--bg);color:var(--text);
 .leaflet-control-attribution,
 .leaflet-bottom.leaflet-right { display: none !important; }
 
-.fab {
-  background: var(--brand-blue);
-  border: 2px solid var(--icon-stroke);   /* match navbar outline */
-  color: #fff;
+/* Center Earn FAB vertically relative to tabbar, and give side spacing */
+.tabbar { position: fixed; left: 0; right: 0; bottom: 0; height: var(--tabbar-height, 76px); }
+.tabbar .fab {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--tabbar-height, 76px) - 48px);
+  width: 88px; height: 56px; border-radius: 16px;
+  background: var(--brand, #3B82F6); color: #fff;
+  border: 2px solid var(--icon-stroke, #98A2B3);
+  box-shadow: 0 12px 30px rgba(0,0,0,.18);
 }
+
+/* Give breathing room to tabs adjacent to FAB */
+.tabbar .tab[data-tab="charge"] { margin-right: 28px; }
+.tabbar .tab[data-tab="wallet"] { margin-left: 28px; }
 
 /* Ensure tab items distribute evenly with space-around */
 .tabbar-inner{
