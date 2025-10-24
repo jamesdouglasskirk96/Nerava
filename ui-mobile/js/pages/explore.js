@@ -1,4 +1,5 @@
-import { setTab, ensureMap } from '../app.js';
+import { setTab } from '../app.js';
+import { ensureMap, fitAndDrawStraight } from '../core/map.js';
 import { apiGet } from '../core/api.js';
 
 const W_LAT = 30.4025, W_LNG = -97.7258;
@@ -19,16 +20,15 @@ export async function initExplore(){
 
   // Map & route
   if (window.L && document.getElementById('map') && isFinite(hub.lat) && isFinite(merchant.lat)) {
-    const m = ensureMap(hub.lat, hub.lng);
-    if (m && typeof m.addLayer === 'function') {
-      const start = L.latLng(hub.lat, hub.lng);
-      const end   = L.latLng(merchant.lat, merchant.lng);
-      const line  = L.polyline([start,end], { color: '#3a7bff', weight:4, opacity:.85, dashArray:'6,8' });
-      line.addTo(m);
-      m.fitBounds(line.getBounds(), { padding: [26,26], maxZoom: 16 });
-      L.circleMarker(end,{ radius:7, color:'#3a7bff', weight:3, fill:true, fillColor:'#3a7bff' }).addTo(m);
-      window._routeLayer = { line };
-    }
+    // ensure map exists
+    const map = ensureMap({ containerId: 'map' });
+    
+    // when you have positions, draw fallback straight route and fit:
+    fitAndDrawStraight({
+      from: L.latLng(hub.lat, hub.lng),
+      to:   L.latLng(merchant.lat, merchant.lng),
+      options: { color: '#3b82f6' }
+    });
   }
 
   // Perk card

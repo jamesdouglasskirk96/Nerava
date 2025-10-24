@@ -228,8 +228,14 @@ background:var(--bg);color:var(--text);
 
 /* Earn button outline matches nav icon color */
 .tabbar .tab--primary {
-  border: 2px solid var(--nav-icon, #9AA3AF); /* same as inactive icon color */
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  border: 2px solid var(--nav-icon) !important; /* same as inactive icon color */
+  box-shadow: 0 10px 28px rgba(0,0,0,0.18);
+}
+
+/* Hide Leaflet attribution permanently */
+.leaflet-control-attribution,
+.leaflet-bottom.leaflet-right {
+  display: none !important;
 }
 
 /* Ensure tab items distribute evenly with space-around */

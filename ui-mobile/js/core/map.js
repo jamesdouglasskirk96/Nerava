@@ -1,97 +1,62 @@
-// Map utilities and routing helpers
-window.Nerava = window.Nerava || {};
-window.Nerava.core = window.Nerava.core || {};
+// ui-mobile/js/core/map.js
+/* globals L */
 
-let exploreMap = null;
-let exploreRouteCtl = null;
+// singletons so we reuse the same map/layers
+let _map = null;
 
-// Initialize map
-function ensureMap() {
-  if (!exploreMap && window.L) {
-    exploreMap = L.map('mapContainer').setView([37.7749, -122.4194], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors'
-    }).addTo(exploreMap);
-  }
-  return exploreMap;
+function hideAttribution() {
+  const ctrl = document.querySelector('.leaflet-control-attribution');
+  const wrap = document.querySelector('.leaflet-bottom.leaflet-right');
+  if (ctrl) ctrl.style.display = 'none';
+  if (wrap) wrap.style.display = 'none';
 }
 
-// Check if Leaflet Routing Machine is available
-function hasLRM() {
-  return !!(window.L && L.Routing && L.Routing.control);
-}
+/**
+ * Ensure a Leaflet map exists in the given container.
+ * Returns the map instance.
+ */
+export function ensureMap({ containerId = 'map', lat = 30.4021, lng = -97.7265, zoom = 15 } = {}) {
+  const el = document.getElementById(containerId);
+  if (!el) return null;
 
-// Draw route with fallback
-async function drawMinimalRouteTo(hub) {
-  if (!L || !exploreMap) return;
-
-  // fallback start ~near hub
-  const startFallback = [hub.lat + 0.01, hub.lng + 0.01];
-  const getStart = () => new Promise(resolve => {
-    if (!navigator.geolocation) return resolve(startFallback);
-    navigator.geolocation.getCurrentPosition(
-      p => resolve([p.coords.latitude, p.coords.longitude]),
-      () => resolve(startFallback),
-      { enableHighAccuracy: true, maximumAge: 60000, timeout: 4000 }
-    );
-  });
-
-  const start = await getStart();
-
-  // Clear previous graphics
-  if (exploreRouteCtl?.getPlan) { try { exploreMap.removeControl(exploreRouteCtl); } catch {} }
-  if (window.__exploreFallbackLayer) { try { exploreMap.removeLayer(window.__exploreFallbackLayer); } catch {} }
-  if (window.__exploreMarkers) { window.__exploreMarkers.forEach(m => exploreMap.removeLayer(m)); }
-  window.__exploreMarkers = [];
-
-  // Prefer routing plugin if available
-  if (hasLRM()) {
-    exploreRouteCtl = L.Routing.control({
-      waypoints: [ L.latLng(start[0], start[1]), L.latLng(hub.lat, hub.lng) ],
-      addWaypoints: false, draggableWaypoints: false, fitSelectedRoutes: true, show: false
-    }).addTo(exploreMap);
-
-    exploreRouteCtl.on('routesfound', e => {
-      const r = e.routes?.[0];
-      const etaMin = Math.round((r?.summary?.totalTime || 0) / 60);
-      const miles = ( (r?.summary?.totalDistance || 0) / 1609.34 );
-      document.getElementById('routeEta').textContent = etaMin ? `~${etaMin} min` : '—';
-      document.getElementById('routeMiles').textContent = isFinite(miles) ? `${miles.toFixed(1)} mi` : '—';
-    });
-
-    return; // we're done
+  if (_map) {
+    try { _map.invalidateSize(); } catch {}
+    return _map;
   }
 
-  // --- Fallback (no routing plugin) ---
-  const line = L.polyline([ start, [hub.lat, hub.lng] ], { color: '#2a6bf2', weight: 4, opacity: 0.8 });
-  window.__exploreFallbackLayer = line.addTo(exploreMap);
-  const startMarker = L.marker(start).addTo(exploreMap);
-  const hubMarker = L.marker([hub.lat, hub.lng]).addTo(exploreMap);
-  window.__exploreMarkers.push(startMarker, hubMarker);
-  exploreMap.fitBounds(line.getBounds(), { padding: [40, 40] });
+  _map = L.map(el, { zoomControl: false }).setView([lat, lng], zoom);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap'
+  }).addTo(_map);
 
-  // Compute simple crow-flies stats
-  const miles = haversineMiles(start, [hub.lat, hub.lng]);
-  document.getElementById('routeMiles').textContent = `${miles.toFixed(1)} mi`;
-  document.getElementById('routeEta').textContent = '—';
+  // hide attribution now and on subsequent loads/resizes
+  setTimeout(hideAttribution, 150);
+  _map.on('load', hideAttribution);
+  _map.whenReady(hideAttribution);
+
+  return _map;
 }
 
-// Haversine distance calculation
-function haversineMiles(coord1, coord2) {
-  const R = 3959; // Earth's radius in miles
-  const dLat = (coord2[0] - coord1[0]) * Math.PI / 180;
-  const dLon = (coord2[1] - coord1[1]) * Math.PI / 180;
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(coord1[0] * Math.PI / 180) * Math.cos(coord2[0] * Math.PI / 180) *
-    Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c;
+/**
+ * Fit the map to two points and optionally draw a straight line route.
+ */
+export function fitAndDrawStraight({ from, to, options = {} } = {}) {
+  const m = _map;
+  if (!m || !from || !to) return;
+
+  const { padding = [40, 80], maxZoom = 16, color = '#3b82f6' } = options;
+
+  // remove any previous temp route layer
+  if (m._neravaStraightRoute) {
+    try { m.removeLayer(m._neravaStraightRoute); } catch {}
+  }
+
+  const latlngs = [from, to];
+  const poly = L.polyline(latlngs, { color, weight: 4, opacity: 0.9, dashArray: '6,6' }).addTo(m);
+  m._neravaStraightRoute = poly;
+
+  try { m.fitBounds(L.latLngBounds(latlngs), { padding, maxZoom }); } catch {}
 }
 
-// Export to global namespace
-window.Nerava.core.map = {
-  ensureMap,
-  hasLRM,
-  drawMinimalRouteTo,
-  haversineMiles
-};
+export function getMap() { return _map; }
