@@ -20,6 +20,22 @@ function setMapInsets({ hasSheet = false, sheetPx = 0 } = {}) {
 const tabs = ['Explore','Charge','Claim','Wallet','Me'];
 const inited = {};
 
+// Handle hash routing
+function handleHashRoute() {
+  const hash = location.hash;
+  if (hash === '#/dev') {
+    // Show dev page
+    document.getElementById('pageDev')?.classList.remove('hidden');
+    document.getElementById('dev-content').innerHTML = '';
+    import('./pages/dev.js').then(module => {
+      module.mountDev(document.getElementById('dev-content'));
+    });
+  } else {
+    // Hide dev page
+    document.getElementById('pageDev')?.classList.add('hidden');
+  }
+}
+
 function setActive(tab){
   tabs.forEach(n => {
     const on = (n === tab);
@@ -81,6 +97,17 @@ async function initApp() {
   // Load demo state and show banner if enabled
   await loadDemoState();
   ensureDemoBanner();
+  
+  // Add keyboard shortcut for dev tab
+  document.addEventListener('keydown', (e)=>{ 
+    if(e.key==='d' || e.key==='D'){ 
+      location.hash='#/dev'; 
+    } 
+  });
+  
+  // Handle hash routing
+  window.addEventListener('hashchange', handleHashRoute);
+  handleHashRoute();
   
   // Set initial tab
   setActive('Explore');
