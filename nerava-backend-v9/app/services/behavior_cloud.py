@@ -1,6 +1,9 @@
 from typing import Dict, Any, List
 from datetime import datetime
 import math
+from sqlalchemy.orm import Session
+from ..models_extra import UtilityBehaviorSnapshot
+from ..obs.obs import log_info, log_warn
 
 def segment_users(window: str) -> List[Dict[str, Any]]:
     """
@@ -114,27 +117,33 @@ def elasticity_estimate() -> Dict[str, Any]:
         "confidence": 0.82
     }
 
-def get_cloud(utility_id: str, window: str) -> Dict[str, Any]:
+def get_cloud(utility_id: str, window: str, db: Session = None) -> Dict[str, Any]:
     """
-    Get utility behavior cloud with segments, participation, and elasticity data.
+    Get utility behavior cloud with v1 logic implementation.
     
     Args:
         utility_id: Utility identifier
         window: Time window for analysis
+        db: Database session for persistence
     
     Returns:
         Dict with behavior cloud data
     """
-    # Generate segments
+    start_time = datetime.utcnow()
+    log_info(f"Computing behavior cloud for {utility_id} window {window}")
+    
+    # Generate segments using v1 logic
     segments = segment_users(window)
+    log_info(f"Generated {len(segments)} user segments")
     
-    # Calculate participation
+    # Calculate participation using v1 logic
     participation_data = participation(window)
+    log_info(f"Participation rate: {participation_data['participation_rate']:.2%}")
     
-    # Estimate elasticity
+    # Estimate elasticity using v1 logic
     elasticity_data = elasticity_estimate()
     
-    return {
+    result = {
         "utility_id": utility_id,
         "window": window,
         "segments": segments,
@@ -152,3 +161,27 @@ def get_cloud(utility_id: str, window: str) -> Dict[str, Any]:
         },
         "generated_at": datetime.utcnow().isoformat()
     }
+    
+    # Persist snapshot if database available
+    if db:
+        try:
+            snapshot = UtilityBehaviorSnapshot(
+                utility_id=utility_id,
+                version="v1",
+                inputs={"window": window},
+                segments=segments,
+                participation=participation_data,
+                elasticity=elasticity_data
+            )
+            db.add(snapshot)
+            db.commit()
+            log_info(f"Persisted behavior cloud snapshot for {utility_id}")
+        except Exception as e:
+            log_warn(f"Failed to persist snapshot: {e}")
+            db.rollback()
+    
+    # Log metrics
+    compute_time = (datetime.utcnow() - start_time).total_seconds() * 1000
+    log_info(f"Behavior cloud compute time: {compute_time:.2f}ms")
+    
+    return result

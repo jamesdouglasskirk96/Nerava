@@ -1,6 +1,9 @@
 from typing import Dict, Any, List
 import uuid
 from datetime import datetime, timedelta
+from sqlalchemy.orm import Session
+from ..models_extra import MerchantIntelForecast
+from ..obs.obs import log_info, log_warn
 
 def cohort_buckets(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
@@ -105,28 +108,64 @@ def dynamic_promos(merchant_id: str, grid_load_pct: float) -> List[Dict[str, Any
     
     return promos
 
-def get_overview(merchant_id: str, grid_load_pct: float = 75.0) -> Dict[str, Any]:
+def _load_events(merchant_id: str, lookback_days: int = 60) -> List[Dict[str, Any]]:
+    """Load events for merchant analysis."""
+    # TODO: Replace with actual database query
+    # For now, return mock events with deterministic patterns
+    events = []
+    base_count = hash(merchant_id) % 50 + 20  # 20-69 events
+    
+    for i in range(base_count):
+        hour = (i * 7 + hash(merchant_id)) % 24
+        day_of_week = (i * 3 + hash(merchant_id)) % 7
+        amount = 30 + (i % 20) * 2.5
+        
+        events.append({
+            "hour": hour,
+            "day_of_week": day_of_week,
+            "amount": amount,
+            "timestamp": datetime.utcnow() - timedelta(days=i % lookback_days)
+        })
+    
+    return events
+
+def _hourly_bucket(events: List[Dict[str, Any]]) -> Dict[int, int]:
+    """Bucket events by hour of day."""
+    buckets = {h: 0 for h in range(24)}
+    for event in events:
+        hour = event.get("hour", 12)
+        buckets[hour] += 1
+    return buckets
+
+def _dow_bucket(events: List[Dict[str, Any]]) -> Dict[int, int]:
+    """Bucket events by day of week."""
+    buckets = {d: 0 for d in range(7)}
+    for event in events:
+        dow = event.get("day_of_week", 1)
+        buckets[dow] += 1
+    return buckets
+
+def get_overview(merchant_id: str, grid_load_pct: float = 75.0, db: Session = None) -> Dict[str, Any]:
     """
-    Get merchant intelligence overview with cohorts, forecasts, and promos.
+    Get merchant intelligence overview with v1 logic implementation.
     
     Args:
         merchant_id: Merchant identifier
         grid_load_pct: Optional grid load percentage for dynamic promos
+        db: Database session for persistence
     
     Returns:
         Dict with merchant intelligence data
     """
-    # Mock events for cohort analysis
-    mock_events = [
-        {"hour": 22, "day_of_week": 1, "amount": 45.20},
-        {"hour": 8, "day_of_week": 2, "amount": 67.80},
-        {"hour": 14, "day_of_week": 6, "amount": 89.50},
-        {"hour": 19, "day_of_week": 3, "amount": 34.20},
-        {"hour": 23, "day_of_week": 5, "amount": 56.70}
-    ]
+    start_time = datetime.utcnow()
+    log_info(f"Computing merchant intel for {merchant_id}")
     
-    # Generate cohorts
-    cohorts_data = cohort_buckets(mock_events)
+    # Load events for analysis
+    events = _load_events(merchant_id, lookback_days=60)
+    log_info(f"Loaded {len(events)} events for analysis")
+    
+    # Generate cohorts using v1 logic
+    cohorts_data = cohort_buckets(events)
     cohorts = [
         {
             "name": "Night Owls",
@@ -148,7 +187,7 @@ def get_overview(merchant_id: str, grid_load_pct: float = 75.0) -> Dict[str, Any
         }
     ]
     
-    # Generate forecasts
+    # Generate forecasts using v1 logic
     forecast_24h = forecast_footfall(merchant_id, 24)
     forecast_7d = forecast_footfall(merchant_id, 168)
     
@@ -165,7 +204,7 @@ def get_overview(merchant_id: str, grid_load_pct: float = 75.0) -> Dict[str, Any
         }
     }
     
-    # Generate dynamic promotions
+    # Generate dynamic promotions using v1 logic
     dynamic_promos_list = dynamic_promos(merchant_id, grid_load_pct)
     
     promos = {
@@ -181,10 +220,34 @@ def get_overview(merchant_id: str, grid_load_pct: float = 75.0) -> Dict[str, Any
         "recommended": dynamic_promos_list
     }
     
-    return {
+    result = {
         "merchant_id": merchant_id,
         "cohorts": cohorts,
         "forecasts": forecasts,
         "promos": promos,
         "last_updated": datetime.utcnow().isoformat()
     }
+    
+    # Persist forecast if database available
+    if db:
+        try:
+            forecast = MerchantIntelForecast(
+                merchant_id=merchant_id,
+                version="v1",
+                inputs={"lookback_days": 60, "grid_load_pct": grid_load_pct},
+                cohorts=cohorts,
+                forecasts=forecasts,
+                promos=promos
+            )
+            db.add(forecast)
+            db.commit()
+            log_info(f"Persisted merchant intel forecast for {merchant_id}")
+        except Exception as e:
+            log_warn(f"Failed to persist forecast: {e}")
+            db.rollback()
+    
+    # Log metrics
+    compute_time = (datetime.utcnow() - start_time).total_seconds() * 1000
+    log_info(f"Merchant intel compute time: {compute_time:.2f}ms")
+    
+    return result
