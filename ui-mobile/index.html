@@ -70,20 +70,37 @@
     <!-- Map is global and behind -->
     <div id="mapContainer" role="img" aria-label="Map"></div>
 
-        <!-- EXPLORE: Walking route + AI-recommended perk -->
-        <section id="pageExplore" class="page active" aria-labelledby="exploreTitle">
-          <!-- Explore: map -->
-          <div id="map" class="map"></div>
+        <!-- Explore page -->
+        <section id="page-explore" class="page active" aria-label="Explore">
+          <div class="map-card">
+            <div id="map" class="map"></div>
+            <div id="routeBadge" class="route-badge hidden">
+              <span class="bolt" aria-hidden="true">⚡</span>
+              <span id="etaText">8 min walk</span>
+            </div>
+          </div>
 
-          <!-- Explore: route badge (ETA text injected) -->
-          <div id="route-badge" class="route-badge hidden"></div>
+          <h3 class="section-title">Nearby perk</h3>
+          <article id="perkCard" class="perk-card">
+            <div class="perk-left">
+              <div id="perkLogo" class="perk-logo" aria-hidden="true">☕️</div>
+            </div>
+            <div class="perk-mid">
+              <div class="ai-chip">
+                <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>
+                Recommended by Nerava AI
+              </div>
+              <h4 id="perkName">Coffee & Pastry</h4>
+              <p id="perkMeta" class="perk-meta">Free coffee w/ charging • 2–4pm</p>
+              <p id="perkDist" class="perk-dist">0.3 mi from charger</p>
+            </div>
+            <div class="perk-right">
+              <button id="btnChargeHere" class="btn-primary">Charge here</button>
+            </div>
+          </article>
 
-          <!-- Explore: nearby perk card -->
-          <section id="nearby-perk" class="perk-card hidden" aria-live="polite"></section>
-
-          <!-- Explore: view more -->
           <div class="view-more">
-            <button id="btn-view-more" class="btn-secondary">View more</button>
+            <button id="btnViewMore" class="btn-secondary">View more perks</button>
           </div>
         </section>
 
@@ -332,27 +349,19 @@
     </div>
   </dialog>
 
-  <!-- 5-Tab Navigation -->
-  <nav class="tabbar">
-    <button data-tab="explore" class="tab" aria-label="Explore">
-      <img src="/app/img/nav-explore.svg" class="icon" alt="" />
-      <span>Explore</span>
+  <nav class="tabbar" role="tablist" aria-label="Main">
+    <button class="tab" data-tab="explore" aria-selected="true">
+      <span class="i">📍</span><span class="t">Explore</span>
     </button>
-    <button data-tab="charge" class="tab" aria-label="Charge">
-      <img src="/app/img/nav-charge.svg" class="icon" alt="" />
-      <span>Charge</span>
+    <button class="tab" data-tab="charge">
+      <span class="i">⚡️</span><span class="t">Charge</span>
     </button>
-    <button data-tab="claim" class="tab main" aria-label="Claim">
-      <img src="/app/img/nav-claim.svg" class="icon" alt=""/>
-      <span>Claim</span>
+    <button class="tab tab-primary" data-tab="claim" aria-label="Claim"><span class="t">Claim</span></button>
+    <button class="tab" data-tab="wallet">
+      <span class="i">🧾</span><span class="t">Wallet</span>
     </button>
-    <button data-tab="wallet" class="tab" aria-label="Wallet">
-      <img src="/app/img/nav-wallet.svg" class="icon" alt="" />
-      <span>Wallet</span>
-    </button>
-    <button data-tab="profile" class="tab" aria-label="Me">
-      <img src="/app/img/nav-me.svg" class="icon" alt="" />
-      <span>Me</span>
+    <button class="tab" data-tab="profile">
+      <span class="i">👤</span><span class="t">Me</span>
     </button>
   </nav>
 

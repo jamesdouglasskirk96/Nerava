@@ -1,10 +1,10 @@
 :root{
-  --brand: #22c55e;     /* fallback; runtime may override from logo */
-  --brand-ink: #063d1f;
-
-  --tabbar-height: 72px;
-  --banner-height: 56px;
-  --content-pad: 12px;
-
-  --safe-bottom: env(safe-area-inset-bottom, 16px);
+  --brand:#0b57d0;            /* logo bolt color; runtime override ok */
+  --ink:#1a1a1a;
+  --muted:#667085;
+  --card:#ffffff;
+  --bg:#f7f8fb;
+  --radius:18px;
+  --tabbar-height:72px;
+  --shadow-lg:0 16px 40px rgba(16,24,40,.16);
 }
