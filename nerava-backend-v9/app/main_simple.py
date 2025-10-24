@@ -31,6 +31,7 @@ from .routers import (
     flags,
     analytics,
     social,
+    admin,
 )
 
 # Auth + JWT preferences
@@ -91,3 +92,4 @@ app.include_router(merchants_local.router, prefix="/v1/local", tags=["local_merc
 app.include_router(incentives.router)
 app.include_router(energyhub.router)
 app.include_router(social.router)
+app.include_router(admin.router)

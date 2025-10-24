@@ -70,21 +70,31 @@ body {
   padding-bottom: calc(96px + var(--sa-bottom));
 }
 
-/* Bright header */
-.app-header{
-  position:fixed; top:0; left:0; right:0; z-index:1000;
-  height:var(--header-h);
-  padding: calc(env(safe-area-inset-top,0px) + 8px) 20px 8px 20px;
-  display:flex; align-items:flex-end; gap:8px;
-  background:var(--surface); border-bottom:1px solid var(--border);
+/* Centered header */
+.app-header {
+  position: sticky; top: var(--sa-top, 0); z-index: 30;
+  height: 56px; display:flex; align-items:center; justify-content:center;
+  background: linear-gradient(180deg, rgba(255,255,255,.92), rgba(255,255,255,.75));
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 12px;
 }
-.app-title{ font-size:20px; letter-spacing:0.22em; font-weight:800; }
-.app-bolt{
-  width:16px; height:16px; margin-left:6px; display:inline-block;
-  background: conic-gradient(from 180deg, var(--accent), #ffe781);
-  -webkit-mask: url('/icons/bolt.svg') no-repeat center / contain;
-          mask: url('/icons/bolt.svg') no-repeat center / contain;
+.app-header .header-center { display:flex; align-items:center; gap: 10px; }
+.app-header .brand { font-weight: 800; letter-spacing: .24em; color: var(--text); }
+.app-header .bolt { color: var(--bolt, #ffd000); font-size: 18px; line-height: 1; transform: translateY(1px); }
+
+.app-header.app-header--centered {
+  position: sticky; top: var(--sa-top); z-index: 20;
+  display:flex; align-items:center; justify-content:center;
+  height: 56px; padding: 6px 12px;
+  background: rgba(255,255,255,.9); backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
 }
+.app-header--centered .brand-lockup { 
+  display:flex; align-items:center; gap:8px; 
+  font-weight: 800; letter-spacing: .18em;
+}
+.app-header--centered .bolt { color: var(--bolt); filter: drop-shadow(0 1px 0 rgba(0,0,0,.04)); }
 
 /* Map fills viewport behind everything */
 #map{
@@ -94,36 +104,35 @@ body {
   z-index:100; /* behind sheets/nav */
 }
 
-/* ===== Bottom nav: brighter icons/text ===== */
-#bottom-nav {
-  position: fixed;
-  left: 0; right: 0; bottom: 0;
+/* ===== Venmo-style 5-tab navigation ===== */
+.bottom-nav{
+  position: fixed; left:0; right:0; bottom:0; z-index:25;
+  height: calc(64px + var(--sa-bottom));
   padding: 8px 12px calc(8px + var(--sa-bottom)) 12px;
-  background: rgba(255,255,255,.94);
-  backdrop-filter: blur(8px);
+  background: rgba(255,255,255,.96);
+  backdrop-filter: blur(10px);
   border-top: 1px solid var(--border);
-  z-index: 2;
+  display: grid; grid-template-columns: 1fr 1fr auto 1fr 1fr; align-items: end; gap: 8px;
 }
-
-.tab {
-  color: #37507a;                     /* brighter default */
-  filter: none;
+.bottom-nav .tab{
+  display:flex; flex-direction:column; align-items:center; gap:4px;
+  min-height:48px; padding:6px 8px; border-radius:10px; border:none; background:transparent;
+  color: var(--muted); font-size:12px; font-weight:600;
 }
-
-.tab.active {
-  color: var(--brand-600);
-  font-weight: 700;
-  text-shadow: 0 0 0 transparent;
+.bottom-nav .tab.active{ color: var(--brand-600); }
+.bottom-nav .tab .icon{ width:22px; height:22px; display:inline-block; background-size:contain; background-repeat:no-repeat; }
+/* Center Claim button */
+.bottom-nav .tab-center{
+  width:56px; height:56px; border-radius:28px; align-self:center; justify-self:center;
+  background: var(--brand); color:#fff; box-shadow:0 8px 18px rgba(42,107,242,.35);
+  display:flex; align-items:center; justify-content:center; padding:0;
 }
-
-/* If the icons are inline SVGs, tint them */
-.tab svg, .tab img {
-  opacity: .95;
-}
-.tab.active svg, .tab.active img{
-  filter: none;
-  opacity: 1;
-}
+.bottom-nav .tab-center .icon{ width:24px; height:24px; filter: invert(1); }
+/* Icon sprites */
+.i-explore{ background-image:url('/app/assets/nav-explore.svg'); }
+.i-charge { background-image:url('/app/assets/nav-charge.svg'); }
+.i-claim  { background-image:url('/app/assets/nav-scan.svg'); }
+.i-wallet { background-image:url('/app/assets/nav-wallet.svg'); }
 
 /* Sheet over map */
 .sheet{
@@ -419,3 +428,148 @@ body {
 /* Pulse helper for CTA hint */
 @keyframes pulseOnce{ 0%{transform:scale(1)} 40%{transform:scale(1.04)} 100%{transform:scale(1)} }
 .pulse{ animation: pulseOnce 600ms ease; }
+
+/* —— Bottom Nav & Scan —— */
+:root {
+  --nav-height: 64px;
+  --nav-bg: rgba(255,255,255,.96);
+  --nav-border: var(--border);
+  --nav-text: var(--muted);
+  --nav-text-active: var(--brand-600);
+  --scan-size: 56px; /* center FAB */
+  --scan-shadow: 0 10px 24px rgba(42,107,242,.35);
+}
+
+/* Bottom nav container */
+.bottom-nav {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  height: calc(var(--nav-height) + var(--sa-bottom));
+  padding: 8px 8px calc(8px + var(--sa-bottom)) 8px;
+  display: grid; grid-template-columns: 1fr 1fr auto 1fr 1fr; align-items: end;
+  background: var(--nav-bg);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--nav-border);
+  z-index: 25;
+}
+
+/* Tabs */
+.nav-tab {
+  display: inline-flex; flex-direction: column; align-items: center; gap: 4px;
+  justify-self: center; min-width: 64px; min-height: 48px;
+  padding: 6px 8px; border-radius: 10px;
+  color: var(--nav-text); background: transparent; border: 0;
+  font-size: 12px; font-weight: 600;
+}
+.nav-tab svg, .nav-tab img.icon { width: 22px; height: 22px; }
+.nav-tab.active { color: var(--nav-text-active); }
+
+/* Center FAB (Scan) */
+.nav-scan {
+  justify-self: center; align-self: start;
+  width: var(--scan-size); height: var(--scan-size);
+  border-radius: 999px; border: 0;
+  background: var(--brand); color: #fff;
+  display: grid; place-items: center;
+  box-shadow: var(--scan-shadow);
+  transform: translateY(-18px);
+}
+.nav-scan:active { transform: translateY(-16px) scale(.98); }
+
+/* Focus ring */
+.nav-tab:focus-visible, .nav-scan:focus-visible {
+  outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 12px;
+}
+
+/* Pages need extra bottom padding so content never hides behind nav */
+.page {
+  padding-bottom: calc(var(--nav-height) + 16px + var(--sa-bottom));
+}
+
+/* Scan modal styles */
+.scan-viewport { width: 100%; aspect-ratio: 3/4; background: #000; border-radius: 16px; overflow: hidden; }
+.sep.or { text-align: center; color: var(--muted); }
+
+/* Claim page styles */
+.claim-status { 
+  padding: 12px; margin: 8px 0; border-radius: 8px; 
+  background: var(--brand-100); color: var(--brand-600); 
+  text-align: center; font-weight: 600; 
+}
+.incentives-list { margin-top: 16px; }
+.incentive-card { 
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px; margin: 8px 0; border: 1px solid var(--border); 
+  border-radius: 12px; background: var(--surface);
+}
+.incentive-card.claimable { border-color: var(--brand); background: var(--brand-100); }
+.incentive-card .claim-btn { 
+  padding: 8px 16px; background: var(--brand); color: white; 
+  border: none; border-radius: 8px; font-weight: 600;
+}
+.incentive-card .claim-btn:disabled { 
+  background: var(--muted); color: white; opacity: 0.5; 
+}
+
+/* Leaderboard styles */
+.leaderboard-list { margin-top: 12px; }
+.leaderboard-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px; margin: 8px 0; border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--border);
+}
+.leaderboard-item.rank-1 { background: linear-gradient(135deg, #ffd700, #ffed4e); }
+.leaderboard-item.rank-2 { background: linear-gradient(135deg, #c0c0c0, #e8e8e8); }
+.leaderboard-item.rank-3 { background: linear-gradient(135deg, #cd7f32, #daa520); }
+.leaderboard-rank {
+  font-weight: 800; font-size: 18px; min-width: 24px;
+  color: var(--text);
+}
+.leaderboard-avatar {
+  width: 40px; height: 40px; border-radius: 20px;
+  background: var(--brand); display: flex; align-items: center; justify-content: center;
+  color: white; font-weight: 600; font-size: 16px;
+}
+.leaderboard-info { flex: 1; }
+.leaderboard-name { font-weight: 600; margin-bottom: 2px; }
+.leaderboard-stats { font-size: 14px; color: var(--muted); }
+.leaderboard-score {
+  font-weight: 700; font-size: 16px; color: var(--brand);
+}
+
+/* Explore minimal sheet */
+.perk-sheet {
+  position: fixed;
+  left: 12px; right: 12px;
+  bottom: calc(12px + var(--sa-bottom) + var(--nav-height, 72px));
+  background: var(--surface);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  z-index: 14;
+  padding: 10px 12px 12px;
+}
+
+.perk-sheet__handle {
+  width: 44px; height: 5px; border-radius: 999px;
+  background: rgba(0,0,0,.1); margin: 6px auto 10px;
+}
+
+.perk-sheet__title { font-size: 16px; margin: 0 0 8px; color: var(--text); }
+
+.perk-card {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 10px; border: 1px solid var(--border);
+  border-radius: 14px; background: var(--surface-2);
+}
+
+.perk-card__left { display: flex; align-items: center; gap: 10px; }
+.perk-card__icon { width: 40px; height: 40px; border-radius: 10px; }
+
+.perk-card__merchant { font-weight: 700; color: var(--text); }
+.perk-card__subtitle { font-size: 13px; color: var(--muted); }
+.perk-card__distance { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+.route-meta {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--muted); margin-top: 10px;
+}
+.route-meta .dot { opacity: .5; }

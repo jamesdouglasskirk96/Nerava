@@ -74,5 +74,15 @@
     if (navigator.vibrate) navigator.vibrate([10,30,10]);
   };
 
+  // Perk card nudge animation
+  Animations.perkNudge = (el) => {
+    if (!el) return;
+    el.animate([
+      { transform:'scale(1)', boxShadow:'none' },
+      { transform:'scale(1.02)', boxShadow:'0 10px 24px rgba(42,107,242,.12)' },
+      { transform:'scale(1)', boxShadow:'none' },
+    ], { duration: 700, easing:'ease-out' });
+  };
+
   window.Animations = Animations;
 })();
