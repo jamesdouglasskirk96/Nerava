@@ -171,3 +171,14 @@ background:var(--bg);color:var(--text);
   display:inline-block; background:var(--brand); color:#fff;
   border:0; border-radius:10px; padding:10px 14px; font-weight:700;
 }
+
+/* Safe-area spacing for tab bar & Leaflet attribution */
+.leaflet-control-attribution, .leaflet-bottom { 
+  margin-bottom: calc(var(--tabbar-height, 64px) + env(safe-area-inset-bottom, 0px)); 
+}
+
+/* Map container styling */
+#map, .map-shell { 
+  border-radius: 18px; 
+  overflow: hidden; 
+}

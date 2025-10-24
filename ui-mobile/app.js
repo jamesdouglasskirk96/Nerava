@@ -54,7 +54,12 @@ function fitMapToRoute(bounds){
   if(!map || !bounds) return;
   try{
     map.fitBounds(bounds, { padding:[60,60], maxZoom:16, animate:true });
-    requestAnimationFrame(()=>setTimeout(()=>{ try{ map.invalidateSize(false); }catch(_){ } }, 60));
+    let z = map.getZoom();
+    if (z < 13) map.setZoom(13);
+    if (z > 17) map.setZoom(17);
+    window.lastBounds = bounds;
+    const kick = ()=>{ try{ map.invalidateSize(false); window.lastBounds && map.fitBounds(window.lastBounds, { padding:[60,60], maxZoom:16, animate:false }); }catch(_){} };
+    requestAnimationFrame(()=>setTimeout(kick, 120));
   }catch(_){}
 }
 

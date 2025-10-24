@@ -64,8 +64,8 @@ async function loadRecommendedHub(){
     const nearby = await apiGet('/v1/merchants/nearby?lat='+live.lat+'&lng='+live.lng+'&radius_km=0.3').catch(()=>({items:[]}));
     const merchant = (nearby?.items?.[0]) || { id:'m_demo', name:'Nearby Perk', lat: live.lat+0.001, lng: live.lng+0.001 };
 
-    // Draw walking route if function exists
-    if(typeof window.drawWalkingRoute === 'function'){
+    // Draw walking route if function exists and coordinates are valid
+    if (typeof window.drawWalkingRoute === 'function' && isFinite(live.lat) && isFinite(live.lng) && isFinite(merchant.lat) && isFinite(merchant.lng)) {
       window.drawWalkingRoute(
         { id: live.id, name: live.name, lat: live.lat, lng: live.lng },
         { id: merchant.id, name: merchant.name, lat: merchant.lat, lng: merchant.lng },
@@ -80,7 +80,7 @@ async function loadRecommendedHub(){
   
   // Draw walking route with fallback merchant
   const merchant = { id:'m_demo', name:'Nearby Perk', lat: fallback.lat+0.001, lng: fallback.lng+0.001 };
-  if(typeof window.drawWalkingRoute === 'function'){
+  if (typeof window.drawWalkingRoute === 'function' && isFinite(fallback.lat) && isFinite(fallback.lng) && isFinite(merchant.lat) && isFinite(merchant.lng)) {
     window.drawWalkingRoute(
       { id: fallback.id, name: fallback.name, lat: fallback.lat, lng: fallback.lng },
       { id: merchant.id, name: merchant.name, lat: merchant.lat, lng: merchant.lng },
