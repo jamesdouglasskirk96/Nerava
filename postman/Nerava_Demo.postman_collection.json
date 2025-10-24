@@ -1,0 +1,352 @@
+{
+  "info": {
+    "name": "Nerava Demo",
+    "description": "Complete demo flow for investor presentation",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Enable Demo Mode",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer demo_admin_key"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "http://127.0.0.1:8001/v1/demo/enable_all",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["v1", "demo", "enable_all"]
+        }
+      }
+    },
+    {
+      "name": "Seed Demo Data",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer demo_admin_key"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"force\": false\n}"
+        },
+        "url": {
+          "raw": "http://127.0.0.1:8001/v1/demo/seed",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["v1", "demo", "seed"]
+        }
+      }
+    },
+    {
+      "name": "Get Demo State",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer demo_admin_key"
+          }
+        ],
+        "url": {
+          "raw": "http://127.0.0.1:8001/v1/demo/state",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["v1", "demo", "state"]
+        }
+      }
+    },
+    {
+      "name": "Get Deals",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://127.0.0.1:8001/v1/deals/green_hours?lat=30.2672&lng=-97.7431",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["v1", "deals", "green_hours"],
+          "query": [
+            {
+              "key": "lat",
+              "value": "30.2672"
+            },
+            {
+              "key": "lng",
+              "value": "-97.7431"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Verify Charge (Good)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"user_id\": \"current_user\",\n  \"station_id\": \"station_123\",\n  \"kwh\": 18.5,\n  \"timestamp\": \"2024-01-01T14:30:00Z\"\n}"
+        },
+        "url": {
+          "raw": "http://127.0.0.1:8001/v1/verify/charge",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["v1", "verify", "charge"]
+        }
+      }
+    },
+    {
+      "name": "Verify Charge (Bad)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"user_id\": \"current_user\",\n  \"station_id\": \"station_456\",\n  \"kwh\": 5.2,\n  \"timestamp\": \"2024-01-01T18:30:00Z\"\n}"
+        },
+        "url": {
+          "raw": "http://127.0.0.1:8001/v1/verify/charge",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["v1", "verify", "charge"]
+        }
+      }
+    },
+    {
+      "name": "Get Wallet",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://127.0.0.1:8001/v1/wallet/balance?user_id=current_user",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["v1", "wallet", "balance"],
+          "query": [
+            {
+              "key": "user_id",
+              "value": "current_user"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Get EnergyRep (High)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://127.0.0.1:8001/v1/profile/energy_rep?user_id=current_user",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["v1", "profile", "energy_rep"],
+          "query": [
+            {
+              "key": "user_id",
+              "value": "current_user"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Get EnergyRep (Low)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://127.0.0.1:8001/v1/profile/energy_rep?user_id=low_rep_user",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["v1", "profile", "energy_rep"],
+          "query": [
+            {
+              "key": "user_id",
+              "value": "low_rep_user"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Get Behavior Cloud (Off-peak)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://127.0.0.1:8001/v1/utility/behavior/cloud?utility_id=UT_TX&window=24h",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["v1", "utility", "behavior", "cloud"],
+          "query": [
+            {
+              "key": "utility_id",
+              "value": "UT_TX"
+            },
+            {
+              "key": "window",
+              "value": "24h"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Get Behavior Cloud (Peak)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://127.0.0.1:8001/v1/utility/behavior/cloud?utility_id=UT_TX&window=24h",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["v1", "utility", "behavior", "cloud"],
+          "query": [
+            {
+              "key": "utility_id",
+              "value": "UT_TX"
+            },
+            {
+              "key": "window",
+              "value": "24h"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Get Merchant Intel",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://127.0.0.1:8001/v1/merchant/intel/overview?merchant_id=M_A&grid_load_pct=65",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["v1", "merchant", "intel", "overview"],
+          "query": [
+            {
+              "key": "merchant_id",
+              "value": "M_A"
+            },
+            {
+              "key": "grid_load_pct",
+              "value": "65"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Rebalance Pool",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer demo_admin_key"
+          }
+        ],
+        "url": {
+          "raw": "http://127.0.0.1:8001/v1/admin/settle",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["v1", "admin", "settle"]
+        }
+      }
+    },
+    {
+      "name": "Get City Impact",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://127.0.0.1:8001/v1/city/impact?city=austin",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["v1", "city", "impact"],
+          "query": [
+            {
+              "key": "city",
+              "value": "austin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Get SDK Status",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://127.0.0.1:8001/v1/sdk/status",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["v1", "sdk", "status"]
+        }
+      }
+    },
+    {
+      "name": "Export Demo Data",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer demo_admin_key"
+          }
+        ],
+        "url": {
+          "raw": "http://127.0.0.1:8001/v1/demo/export",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["v1", "demo", "export"]
+        }
+      }
+    }
+  ]
+}

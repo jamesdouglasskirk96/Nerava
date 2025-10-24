@@ -13,12 +13,13 @@ export default defineConfig({
   use: {
     baseURL: 'http://127.0.0.1:8001/app',
     headless: false,
-    video: 'on',
-    trace: 'on',
+    video: 'retain-on-failure',
+    trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     actionTimeout: 0,
     navigationTimeout: 0,
   },
+  outputDir: 'test-artifacts/',
   projects: [
     {
       name: 'chromium',
