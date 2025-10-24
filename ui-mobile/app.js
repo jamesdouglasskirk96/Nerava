@@ -1,4 +1,6 @@
 /* globals L */
+import { initChargePage } from './js/pages/charge.js'; // fixed: file now exports it
+
 const BASE = localStorage.NERAVA_URL || location.origin;
 const USER = localStorage.NERAVA_USER || "demo@nerava.app";
 
@@ -13,15 +15,17 @@ const stripHubIds = s => (s||'').replace(/\bhub_[a-z0-9]+_[a-z0-9]+\b/gi,'').rep
 const pages = {
   explore: document.getElementById('page-explore'),
   charge:  document.getElementById('page-charge'),
-  claim:   document.getElementById('page-claim'),
   wallet:  document.getElementById('page-wallet'),
   profile: document.getElementById('page-profile'),
+  claim:   document.getElementById('page-claim')
 };
 const banner = $('#incentive-banner');
 
 function setTab(tab){
   for (const [k,el] of Object.entries(pages)) if (el) el.classList.toggle('active', k===tab);
   document.querySelectorAll('.tabbar .tab').forEach(b=> b.classList.toggle('active', b.dataset.tab===tab));
+  if (tab==='charge') initChargePage();
+  if (tab==='explore' && typeof window.initExplorePage==='function') window.initExplorePage();
   if (tab === 'explore' && window._map) {
     setTimeout(()=> window._map.invalidateSize(), 60);
     if (window._routeBounds) window._map.fitBounds(window._routeBounds, {maxZoom:16, padding:[20,20]});
@@ -139,11 +143,16 @@ $('#btn-see-new').addEventListener('click', ()=>{ setTab('explore'); });
 
 // ---------- boot ----------
 window.addEventListener('load', async ()=>{
-  // Initialize brand color for logo
-  const brandLogo = document.querySelector('.brand-logo .bolt');
-  if (brandLogo) {
-    brandLogo.style.color = 'var(--brand, #22c55e)';
-  }
+  // Sync --brand from logo color if present (no-op if unchanged)
+  try {
+    const logo = document.querySelector('.brand-logo .brand-text');
+    const root = document.documentElement;
+    if (logo && root) {
+      const cs = getComputedStyle(logo);
+      const color = cs.color;
+      if (color) root.style.setProperty('--brand', color);
+    }
+  } catch {}
   
   // Cleanup scan modal if it somehow exists
   try{ const m=document.getElementById('scanModal'); if(m) m.remove(); }catch(_){}

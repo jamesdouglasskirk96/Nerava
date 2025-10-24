@@ -61,9 +61,10 @@
 <body>
   <div id="app" class="app-root">
     <!-- Header -->
-    <header>
-      <div class="brand-logo">
-        NERAVA <span class="bolt">⚡</span>
+    <header class="topbar">
+      <div class="brand-logo center">
+        <span class="brand-text">NERAVA</span>
+        <span class="bolt" aria-hidden="true">⚡</span>
       </div>
     </header>
 
@@ -351,17 +352,17 @@
 
   <nav class="tabbar" role="tablist" aria-label="Main">
     <button class="tab" data-tab="explore" aria-selected="true">
-      <span class="i">📍</span><span class="t">Explore</span>
+      <span class="icon">📍</span><span class="label">Explore</span>
     </button>
     <button class="tab" data-tab="charge">
-      <span class="i">⚡️</span><span class="t">Charge</span>
+      <span class="icon">⚡️</span><span class="label">Charge</span>
     </button>
-    <button class="tab tab-primary" data-tab="claim" aria-label="Claim"><span class="t">Claim</span></button>
+    <button class="tab tab-primary" data-tab="claim" aria-label="Claim"><span class="label">Claim</span></button>
     <button class="tab" data-tab="wallet">
-      <span class="i">🧾</span><span class="t">Wallet</span>
+      <span class="icon">🧾</span><span class="label">Wallet</span>
     </button>
     <button class="tab" data-tab="profile">
-      <span class="i">👤</span><span class="t">Me</span>
+      <span class="icon">👤</span><span class="label">Me</span>
     </button>
   </nav>
 

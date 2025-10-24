@@ -1,10 +1,17 @@
 :root{
-  --brand:#0b57d0;            /* logo bolt color; runtime override ok */
+  /* Brand: iOS home-screen style blue */
+  --brand: #0A84FF;            /* primary brand blue */
+  --brand-ink: #073B86;        /* dark ink on blue if needed */
+  --brand-ink-contrast: #ffffff;
+
+  /* Layout tokens */
+  --tabbar-height: 72px;       /* keep bar height the same */
+  --icon-scale: 1.15;          /* ~15% bigger icons */
+
   --ink:#1a1a1a;
   --muted:#667085;
   --card:#ffffff;
   --bg:#f7f8fb;
   --radius:18px;
-  --tabbar-height:72px;
   --shadow-lg:0 16px 40px rgba(16,24,40,.16);
 }
