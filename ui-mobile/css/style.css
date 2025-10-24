@@ -174,11 +174,129 @@ background:var(--bg);color:var(--text);
 
 /* Safe-area spacing for tab bar & Leaflet attribution */
 .leaflet-control-attribution, .leaflet-bottom { 
-  margin-bottom: calc(var(--tabbar-height, 64px) + env(safe-area-inset-bottom, 0px)); 
+  margin-bottom: calc(var(--tabbar-height, 72px) + env(safe-area-inset-bottom, 0px)); 
 }
 
 /* Map container styling */
 #map, .map-shell { 
   border-radius: 18px; 
   overflow: hidden; 
+}
+
+/* Header and Logo Styling */
+header {
+  height: 64px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  padding-top: env(safe-area-inset-top, 0px);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+.brand-logo {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #1a1a1a;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.brand-logo .bolt {
+  color: var(--brand, #22c55e);
+}
+
+/* Navigation Bar Restoration */
+.tabbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--tabbar-height, 72px);
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 8px 0;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  z-index: 1000;
+  box-shadow: 0 -2px 20px rgba(0, 0, 0, 0.1);
+}
+
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  min-width: 60px;
+  position: relative;
+}
+
+.tab:active {
+  transform: scale(0.95);
+}
+
+.tab .icon {
+  width: 24px;
+  height: 24px;
+  margin-bottom: 4px;
+  transition: all 0.2s ease;
+}
+
+.tab span {
+  font-size: 12px;
+  font-weight: 400;
+  color: #666;
+  transition: all 0.2s ease;
+}
+
+.tab.active {
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.tab.active .icon {
+  color: var(--brand, #22c55e);
+}
+
+.tab.active span {
+  color: var(--brand, #22c55e);
+  font-weight: 600;
+}
+
+/* Claim tab special styling (primary button) */
+.tab.main {
+  background: var(--brand, #22c55e);
+  color: white;
+  border-radius: 20px;
+  padding: 12px 16px;
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+  transform: translateY(-2px);
+}
+
+.tab.main .icon {
+  color: white;
+}
+
+.tab.main span {
+  color: white;
+  font-weight: 600;
+}
+
+.tab.main:active {
+  transform: translateY(-1px) scale(0.95);
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.4);
 }

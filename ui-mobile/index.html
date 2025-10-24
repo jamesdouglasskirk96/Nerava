@@ -61,10 +61,9 @@
 <body>
   <div id="app" class="app-root">
     <!-- Header -->
-    <header id="appHeader" class="app-header" role="banner" aria-label="Nerava">
-      <div class="app-header__inner">
-        <span class="brand">NERAVA</span>
-        <span class="bolt" aria-hidden="true">⚡</span>
+    <header>
+      <div class="brand-logo">
+        NERAVA <span class="bolt">⚡</span>
       </div>
     </header>
 
@@ -343,26 +342,24 @@
   </dialog>
 
   <!-- 5-Tab Navigation -->
-  <nav id="bottom-nav" class="bottom-nav" role="tablist" aria-label="Primary">
-    <button id="tabExplore" class="tab" aria-label="Explore">
+  <nav class="tabbar">
+    <button data-tab="explore" class="tab" aria-label="Explore">
       <img src="/app/img/nav-explore.svg" class="icon" alt="" />
       <span>Explore</span>
     </button>
-    <button id="tabCharge" class="tab" aria-label="Charge">
+    <button data-tab="charge" class="tab" aria-label="Charge">
       <img src="/app/img/nav-charge.svg" class="icon" alt="" />
       <span>Charge</span>
     </button>
-
-    <button id="tabScan" class="scan-fab" aria-label="Claim">
+    <button data-tab="claim" class="tab main" aria-label="Claim">
       <img src="/app/img/nav-claim.svg" class="icon" alt=""/>
       <span>Claim</span>
     </button>
-
-    <button id="tabWallet" class="tab" aria-label="Wallet">
+    <button data-tab="wallet" class="tab" aria-label="Wallet">
       <img src="/app/img/nav-wallet.svg" class="icon" alt="" />
       <span>Wallet</span>
     </button>
-    <button id="tabMe" class="tab" aria-label="Me">
+    <button data-tab="profile" class="tab" aria-label="Me">
       <img src="/app/img/nav-me.svg" class="icon" alt="" />
       <span>Me</span>
     </button>

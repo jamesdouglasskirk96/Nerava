@@ -2,7 +2,7 @@
   --brand: #22c55e;     /* fallback; runtime may override from logo */
   --brand-ink: #063d1f;
 
-  --tabbar-height: 64px;
+  --tabbar-height: 72px;
   --banner-height: 56px;
   --content-pad: 12px;
 

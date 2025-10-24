@@ -200,6 +200,12 @@ $('#btn-see-new').addEventListener('click', ()=>{ setTab('explore'); loadRecomme
 
 // ---------- boot ----------
 window.addEventListener('load', async ()=>{
+  // Initialize brand color for logo
+  const brandLogo = document.querySelector('.brand-logo .bolt');
+  if (brandLogo) {
+    brandLogo.style.color = 'var(--brand, #22c55e)';
+  }
+  
   setTab('explore');
   initMap();
   await loadBanner();
