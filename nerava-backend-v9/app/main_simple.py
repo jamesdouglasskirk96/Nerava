@@ -34,6 +34,7 @@ from .routers import (
     admin,
     ml,
     ledger,
+    merchant_analytics,
 )
 
 # Auth + JWT preferences
@@ -97,3 +98,4 @@ app.include_router(social.router)
 app.include_router(admin.router)
 app.include_router(ml.router)
 app.include_router(ledger.router)
+app.include_router(merchant_analytics.router)
