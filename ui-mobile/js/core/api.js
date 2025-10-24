@@ -6,7 +6,11 @@ function toUrl(path){
 }
 async function _req(path,{method='GET',body,headers={}}={}){
   const r=await fetch(toUrl(path),{method,headers:{'Accept':'application/json',...(body?{'Content-Type':'application/json'}:{}),...headers},body:body?JSON.stringify(body):undefined});
-  if(!r.ok) throw new Error(`HTTP ${r.status} ${path}`);
+  // Treat 404 as "no data" so UI can fall back without throwing
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error(`HTTP ${r.status} ${path}`);
+  // Some 204/empty responses: return null
+  if (r.status === 204) return null;
   const ct=r.headers.get('content-type')||''; return ct.includes('application/json')?r.json():r.text();
 }
 export async function apiGet(p,h={}){ return _req(p,{method:'GET',headers:h}); }

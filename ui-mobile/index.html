@@ -60,12 +60,8 @@
 </head>
 <body>
   <div id="app" class="app-root">
-    <!-- Header -->
-    <header class="topbar">
-      <div class="brand-logo center">
-        <span class="brand-text">NERAVA</span>
-        <span class="bolt" aria-hidden="true">⚡</span>
-      </div>
+    <header class="header">
+      <div class="brand-logo">NERAVA <span class="bolt">⚡</span></div>
     </header>
 
     <!-- Map is global and behind -->
@@ -73,35 +69,11 @@
 
         <!-- Explore page -->
         <section id="page-explore" class="page active" aria-label="Explore">
-          <div class="map-card">
-            <div id="map" class="map"></div>
-            <div id="routeBadge" class="route-badge hidden">
-              <span class="bolt" aria-hidden="true">⚡</span>
-              <span id="etaText">8 min walk</span>
-            </div>
-          </div>
-
-          <h3 class="section-title">Nearby perk</h3>
-          <article id="perkCard" class="perk-card">
-            <div class="perk-left">
-              <div id="perkLogo" class="perk-logo" aria-hidden="true">☕️</div>
-            </div>
-            <div class="perk-mid">
-              <div class="ai-chip">
-                <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>
-                Recommended by Nerava AI
-              </div>
-              <h4 id="perkName">Coffee & Pastry</h4>
-              <p id="perkMeta" class="perk-meta">Free coffee w/ charging • 2–4pm</p>
-              <p id="perkDist" class="perk-dist">0.3 mi from charger</p>
-            </div>
-            <div class="perk-right">
-              <button id="btnChargeHere" class="btn-primary">Charge here</button>
-            </div>
-          </article>
-
-          <div class="view-more">
-            <button id="btnViewMore" class="btn-secondary">View more perks</button>
+          <div class="map-card"><div id="map"></div></div>
+          <h2 class="section-title">Nearby perk</h2>
+          <div id="perk-card"></div>
+          <div class="actions">
+            <button id="btn-view-more" class="btn">View more perks</button>
           </div>
         </section>
 
@@ -350,19 +322,45 @@
     </div>
   </dialog>
 
-  <nav class="tabbar" role="tablist" aria-label="Main">
-    <button class="tab" data-tab="explore" aria-selected="true">
-      <span class="icon">📍</span><span class="label">Explore</span>
+  <nav class="tabbar" aria-label="Primary">
+    <button class="tab" data-tab="explore" aria-label="Explore">
+      <span class="icon" aria-hidden="true">
+        <!-- map pin -->
+        <svg viewBox="0 0 24 24"><path d="M12 22s7-6.2 7-12A7 7 0 0 0 5 10c0 5.8 7 12 7 12Z"/><circle cx="12" cy="10" r="3.2"/></svg>
+      </span>
+      <span class="label">Explore</span>
     </button>
-    <button class="tab" data-tab="charge">
-      <span class="icon">⚡️</span><span class="label">Charge</span>
+
+    <button class="tab" data-tab="charge" aria-label="Charge">
+      <span class="icon" aria-hidden="true">
+        <!-- lightning -->
+        <svg viewBox="0 0 24 24"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>
+      </span>
+      <span class="label">Charge</span>
     </button>
-    <button class="tab tab-primary" data-tab="claim" aria-label="Claim"><span class="label">Claim</span></button>
-    <button class="tab" data-tab="wallet">
-      <span class="icon">🧾</span><span class="label">Wallet</span>
+
+    <button class="tab tab--primary" data-tab="claim" aria-label="Claim">
+      <span class="icon" aria-hidden="true">
+        <!-- ticket/claim -->
+        <svg viewBox="0 0 24 24"><rect x="5" y="6" width="14" height="12" rx="2"/><path d="M8 10h8M8 14h5"/></svg>
+      </span>
+      <span class="label">Claim</span>
     </button>
-    <button class="tab" data-tab="profile">
-      <span class="icon">👤</span><span class="label">Me</span>
+
+    <button class="tab" data-tab="wallet" aria-label="Wallet">
+      <span class="icon" aria-hidden="true">
+        <!-- wallet -->
+        <svg viewBox="0 0 24 24"><path d="M3 7h18v10H3z"/><path d="M16 12h5v4h-5z"/></svg>
+      </span>
+      <span class="label">Wallet</span>
+    </button>
+
+    <button class="tab" data-tab="profile" aria-label="Me">
+      <span class="icon" aria-hidden="true">
+        <!-- user -->
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c2.5-3 13.5-3 16 0"/></svg>
+      </span>
+      <span class="label">Me</span>
     </button>
   </nav>
 

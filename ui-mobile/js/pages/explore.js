@@ -1,43 +1,58 @@
+import { setTab, ensureMap } from '../app.js';
 import { apiGet } from '../core/api.js';
 
-const $ = (s)=>document.querySelector(s);
-const fallbackHub = { id:'hub_demo', name:'Nerava Hub', lat:30.4025, lng:-97.7258 };
-const fallbackMerchant = { id:'m_starbucks', name:'Starbucks', reward:'Free tall coffee', window:'2–4pm', dist_mi:0.3, lat:30.4032, lng:-97.7241, logo:'☕️' };
+const W_LAT = 30.4025, W_LNG = -97.7258;
 
 export async function initExplore(){
-  const root = document.getElementById('page-explore'); if(!root) return;
-  // 1) Recommendation (hub) near user
-  let hub = null;
+  // Load recommended hub + best merchant
+  let hub, merchant;
   try{
-    const r = await apiGet('/v1/hubs/recommend', { lat:30.4025, lng:-97.7258, radius_km:2, user_id:localStorage.NERAVA_USER||'demo@nerava.app' });
-    hub = r && r.lat && r.lng ? r : null;
-  }catch(_){}; if (!hub) hub = fallbackHub;
+    hub = await apiGet('/v1/hubs/recommend', { lat: W_LAT, lng: W_LNG, radius_km: 2 });
+  }catch{ hub = null; }
+  if(!hub) hub = { lat: W_LAT, lng: W_LNG, name:'Nerava Hub'};
 
-  // 2) Nearest merchant perk near that hub (simple heuristic / fallback)
-  let perk = null;
   try{
-    const d = await apiGet('/v1/deals/nearest', { lat:hub.lat, lng:hub.lng, limit:1 });
-    const m = (d?.items||[])[0];
-    if (m) perk = { id:m.id, name:m.name, reward:m.reward, window:m.window, dist_mi: m.dist_mi ?? 0.2, lat:m.lat, lng:m.lng, logo: m.logo || '☕️' };
-  }catch(_){}
-  if (!perk) perk = fallbackMerchant;
+    const deals = await apiGet('/v1/deals/nearby', { lat: hub.lat, lng: hub.lng, limit: 1 });
+    merchant = deals?.items?.[0] || null;
+  }catch{ merchant = null; }
+  if(!merchant) merchant = { name:'Coffee & Pastry', lat: 30.404, lng:-97.7241, reward_text:'Free coffee with charging', window:'2–4pm', distance_text:'0.3 mi' };
 
-  // 3) Draw route + ETA
-  if (window.drawWalkingRoute) window.drawWalkingRoute({lat:hub.lat,lng:hub.lng},{lat:perk.lat,lng:perk.lng}, perk.logo);
+  // Map & route
+  if (window.L && document.getElementById('map') && isFinite(hub.lat) && isFinite(merchant.lat)) {
+    const m = ensureMap(hub.lat, hub.lng);
+    if (m && typeof m.addLayer === 'function') {
+      const start = L.latLng(hub.lat, hub.lng);
+      const end   = L.latLng(merchant.lat, merchant.lng);
+      const line  = L.polyline([start,end], { color: '#3a7bff', weight:4, opacity:.85, dashArray:'6,8' });
+      line.addTo(m);
+      m.fitBounds(line.getBounds(), { padding: [26,26], maxZoom: 16 });
+      L.circleMarker(end,{ radius:7, color:'#3a7bff', weight:3, fill:true, fillColor:'#3a7bff' }).addTo(m);
+      window._routeLayer = { line };
+    }
+  }
 
-  // 4) Fill perk card
-  $('#perkName').textContent = perk.name;
-  $('#perkMeta').textContent = `${perk.reward} • ${perk.window}`;
-  $('#perkDist').textContent = `${perk.dist_mi} mi from charger`;
-  $('#perkLogo').textContent = perk.logo || '🏪';
+  // Perk card
+  const card = document.getElementById('perk-card');
+  if(card){
+    card.innerHTML = `
+      <div class="perk-card">
+        <div class="ai-chip">⚡ Recommended by Nerava AI</div>
+        <div class="perk-body">
+          <div class="logo">☕</div>
+          <div class="info">
+            <h3>${merchant?.name || 'Nearby perk'}</h3>
+            <p>${merchant?.reward_text || 'Cheaper during Green Hour'} • ${merchant?.window || '2–4pm'}<br/>
+            ${merchant?.distance_text || '0.3 mi from charger'}</p>
+          </div>
+          <button id="btn-charge-here" class="btn btn-primary">Charge here</button>
+        </div>
+      </div>
+    `;
+    document.getElementById('btn-charge-here')?.addEventListener('click',()=> setTab('charge'));
+  }
 
-  // 5) Buttons
-  $('#btnChargeHere').onclick = ()=> {
-    // optional: start dual-radius session (if flag on)
-    if (window.startDualSession) window.startDualSession({hub, merchant:perk});
-    const tabBtn = document.querySelector('.tabbar .tab[data-tab="charge"]'); if (tabBtn) tabBtn.click();
-  };
-  $('#btnViewMore').onclick = ()=> {
-    alert('Showing all perks nearby based on your preferences. (List UI can be filled as a follow-up)');
-  };
+  document.getElementById('btn-view-more')?.addEventListener('click', ()=> alert('List of perks based on your preferences (coming soon)'));
 }
+
+// boot when page shown
+document.addEventListener('DOMContentLoaded', ()=> initExplore());

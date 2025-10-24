@@ -181,101 +181,56 @@ background:var(--bg);color:var(--text);
   overflow: hidden; 
 }
 
-/* --- Header --- */
-.topbar { position: sticky; top: 0; background:#fff; height:64px; display:flex; align-items:center; justify-content:center; padding:0 16px; box-shadow:0 2px 8px rgba(0,0,0,.05); z-index:10; }
-.brand-logo.center{ display:flex; align-items:center; gap:8px; }
-.brand-logo .brand-text { font-weight:700; letter-spacing:.04em; color: var(--brand); }
-.brand-logo .bolt { color: var(--brand); transform: translateY(-1px); }
+/* ---------- Header (centered, blue) ---------- */
+.header {
+  position: sticky; top: 0; z-index: 20;
+  height: 64px; background:#fff;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow: 0 2px 8px rgba(0,0,0,.05);
+}
+.header .brand-logo{
+  display:flex; align-items:center; gap:10px;
+  font-weight:700; letter-spacing:.04em; font-size:20px;
+  color: var(--brand);        /* blue title */
+}
+.header .brand-logo .bolt{
+  color: #f5b301; font-size:18px;
+}
 
 /* Navigation Bar Restoration */
-.tabbar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: var(--tabbar-height, 72px);
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-top: 1px solid rgba(0, 0, 0, 0.1);
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  padding: 8px 0;
-  padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
-  z-index: 1000;
-  box-shadow: 0 -2px 20px rgba(0, 0, 0, 0.1);
+.tabbar{
+  position: sticky; bottom:0; z-index:30; height: var(--tabbar-height);
+  display:flex; justify-content:space-around; align-items:center;
+  backdrop-filter: blur(16px);
+  background: linear-gradient(180deg, rgba(255,255,255,.7) 0%, rgba(255,255,255,.9) 60%, #fff 100%);
+  box-shadow: 0 -10px 30px rgba(0,0,0,.08);
 }
 
-.tab {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  padding: 8px 12px;
-  border-radius: 12px;
-  transition: all 0.2s ease;
-  cursor: pointer;
-  min-width: 60px;
-  position: relative;
+.tabbar .tab{
+  appearance:none; background:none; border:0; outline:0;
+  display:flex; flex-direction:column; align-items:center; gap:6px;
+  color:#4b5563; min-width:64px;
+}
+.tabbar .tab .icon{ width:28px; height:28px; display:grid; place-items:center;}
+.tabbar .tab .icon svg{
+  width:26px; height:26px;
+  fill:none; stroke: var(--nav-ink-muted); stroke-width:2.3; stroke-linecap:round; stroke-linejoin:round;
+}
+.tabbar .tab .label{ font-size:14px; color:#6b7280; }
+
+/* active state */
+.tabbar .tab.active .icon svg{ stroke: var(--brand); }
+.tabbar .tab.active .label{ color: var(--brand); font-weight:600; }
+
+/* center "Claim" as primary, but same bar height */
+.tabbar .tab--primary{
+  background:#000; color:#fff; border-radius:22px; padding:10px 14px; margin-top:-26px;
+  box-shadow:0 10px 24px rgba(0,0,0,.25);
+}
+.tabbar .tab--primary .icon svg{ stroke:#fff; }
+.tabbar .tab--primary .label{ color:#fff; }
 }
 
-.tab:active {
-  transform: scale(0.95);
-}
-
-.tab .icon {
-  width: 24px;
-  height: 24px;
-  margin-bottom: 4px;
-  transition: all 0.2s ease;
-}
-
-.tab span {
-  font-size: 12px;
-  font-weight: 400;
-  color: #666;
-  transition: all 0.2s ease;
-}
-
-.tab.active {
-  background: rgba(34, 197, 94, 0.1);
-}
-
-.tab.active .icon {
-  color: var(--brand, #22c55e);
-}
-
-.tab.active span {
-  color: var(--brand, #22c55e);
-  font-weight: 600;
-}
-
-/* Claim tab special styling (primary button) */
-.tab.main {
-  background: var(--brand, #22c55e);
-  color: white;
-  border-radius: 20px;
-  padding: 12px 16px;
-  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
-  transform: translateY(-2px);
-}
-
-.tab.main .icon {
-  color: white;
-}
-
-.tab.main span {
-  color: white;
-  font-weight: 600;
-}
-
-.tab.main:active {
-  transform: translateY(-1px) scale(0.95);
-  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.4);
-}
 
 /* Enhanced Explore page styling */
 .mini-sheet__header {
@@ -385,32 +340,60 @@ background:var(--bg);color:var(--text);
 /* Ensure #map stays clipped nicely */
 #map{ border-radius:20px; overflow:hidden; }
 
-/* Map card */
-.map-card{ border-radius:20px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,.08); background:#fff; }
-.map-card #map{ height: 300px; width:100%; }
+/* ---------- Map Card ---------- */
+.map-card{
+  margin:16px; border-radius:20px; overflow:hidden;
+  box-shadow:0 10px 30px rgba(0,0,0,.08);
+  background:#fff;
+}
+.map{ height: 360px; }
+.leaflet-control-attribution{
+  margin-bottom: calc(env(safe-area-inset-bottom, 0) + var(--tabbar-height) + 8px) !important;
+}
 .map{width:100%;height:320px}
 .route-badge{position:absolute;left:12px;top:12px;display:flex;align-items:center;gap:6px;background:rgba(0,0,0,.64);color:#fff;padding:8px 12px;border-radius:999px;font-weight:600}
 .route-badge .bolt{color:#ffd54a}
 .hidden{display:none!important}
 
-/* Perk card */
-.section-title{margin:8px 4px 10px;color:var(--muted);font-weight:700;letter-spacing:.02em}
+/* Section title */
+.section-title { margin: 20px 0 10px; color: var(--ink-700); font-weight:700; opacity:.5; }
 .perk-card{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;background:var(--card);border-radius:16px;padding:12px 14px;box-shadow:0 8px 24px rgba(16,24,40,.12)}
 .perk-logo{width:48px;height:48px;border-radius:12px;background:#eef3ff;display:grid;place-items:center;font-size:24px}
 .ai-chip{display:inline-flex;align-items:center;gap:6px;background:var(--brand);color:white;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:700;margin-bottom:6px}
 .perk-meta,.perk-dist{color:var(--muted);font-size:13px;margin:2px 0}
-.btn{ background:var(--brand); color:var(--brand-ink-contrast); border-radius:14px; padding:12px 16px; font-weight:700; }
-.btn.primary{ background:var(--brand); color:var(--brand-ink-contrast); }
-.btn.outline{ background:#fff; color:var(--brand); border:2px solid var(--brand); }
+/* ---------- Primary Buttons (incl. Claim) ---------- */
+.btn, .btn-primary{
+  background: var(--brand); color: var(--brand-ink-contrast);
+  border: none; border-radius: 999px; padding: 12px 18px; font-weight:700;
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--brand) 25%, transparent);
+}
+.btn:active{ transform: scale(.98) }
 .btn-primary{background:var(--brand);color:var(--brand-ink-contrast);border:0;border-radius:12px;padding:10px 12px;font-weight:800}
 .btn-secondary{background:#eef2f7;color:#0b1220;border:0;border-radius:12px;padding:10px 12px;font-weight:700}
 .view-more{display:flex;justify-content:center;margin:16px 0 4px}
 
-/* Tabbar */
-.tabbar{ height: var(--tabbar-height); backdrop-filter: blur(8px); background:rgba(255,255,255,.9); display:flex; align-items:center; justify-content:space-around; }
-.tabbar .tab{ display:flex; flex-direction:column; align-items:center; gap:6px; color:#6b7280; transform-origin:center; }
-.tabbar .tab .icon{ font-size: calc(22px * var(--icon-scale)); line-height:1; }
-.tabbar .tab .label{ font-size:12px; }
-.tabbar .tab.active{ color: var(--brand); }
-.tabbar .tab:active{ transform: scale(.96); }
+/* ---------- Tabbar (same height, bigger icons) ---------- */
+.tabbar{
+  position: sticky; bottom:0; z-index: 30;
+  height: var(--tabbar-height); display:flex; align-items:center; justify-content:space-around;
+  backdrop-filter: blur(10px);
+  background: rgba(255,255,255,.85); border-top: 1px solid rgba(0,0,0,.06);
+}
+.tab{
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:6px; width:20%; height:100%;
+}
+.tab .icon{ font-size: 28px; line-height: 1; color:#a0a6b2 }       /* light grey */
+.tab .label{ font-size:14px; color:#6c7280 }
+.tab.active .icon, .tab.active .label{ color: var(--brand) }
+
+/* Raised Claim button stays same size; color now brand */
+.tab.claim .pill{
+  height:54px; width:96px; border-radius: 28px; background:#000; /* keep black pill per your look */
+  display:flex; align-items:center; justify-content:center;
+}
+.tab.claim .icon{ color:#fff } /* claim icon white on black pill */
 .tab-primary{align-self:center;justify-self:center;background:var(--brand);color:var(--brand-ink-contrast);border-radius:22px;padding:10px 18px;font-weight:800;transform:translateY(-10px)}
+
+/* Leaflet attribution safe area */
+.leaflet-control-attribution{ margin-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); }
