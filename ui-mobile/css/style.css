@@ -203,17 +203,17 @@ background:var(--bg);color:var(--text);
 }
 .tab{
   flex:1; display:flex; flex-direction:column; align-items:center; gap:6px;
-  min-width:64px; color: var(--icon-muted); text-decoration:none;
+  min-width:64px; color: #A0A3B1; text-decoration:none;
 }
 .tab .icon{
-  width:28px; height:28px; stroke: currentColor; fill:none; stroke-width:2.2;
+  width:28px; height:28px; stroke: currentColor; fill:none; stroke-width:1.5;
 }
-.tab .label{ font-size:14px; color:#647085; }
+.tab .label{ font-size:14px; color:#A0A3B1; }
 .tab.active{ color: var(--brand-blue); }
 .tab.active .label{ color: var(--brand-blue); }
 
-/* Centered Claim pill (does not change nav height) */
-.claim-pill{
+/* Centered Earn pill (does not change nav height) */
+.earn-pill{
   position:absolute; bottom: calc(env(safe-area-inset-bottom,0px) + var(--tabbar-height) - 36px);
   left:50%; transform: translateX(-50%);
   background:#0B0B0C; color:#fff; width:118px; height:72px;
@@ -221,8 +221,8 @@ background:var(--bg);color:var(--text);
   box-shadow:0 10px 26px rgba(0,0,0,.22);
   z-index:31; pointer-events:auto;
 }
-.claim-pill .icon{ width:24px; height:24px; color:#fff; stroke-width:2.4; }
-.claim-pill .label{ color:#fff; font-weight:600; margin-top:4px; }
+.earn-pill .icon{ width:24px; height:24px; color:#fff; stroke-width:1.5; }
+.earn-pill .label{ color:#fff; font-weight:600; margin-top:4px; }
 
 /* Ensure tab items distribute evenly; fix far-right drift */
 .tabbar-inner{

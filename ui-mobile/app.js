@@ -16,7 +16,7 @@ const pages = {
   charge: $('#page-charge'), 
   wallet: $('#page-wallet'), 
   profile: $('#page-profile'), 
-  claim: $('#page-claim') 
+  earn: $('#page-claim') 
 };
 const banner = $('#incentive-banner');
 
@@ -34,7 +34,7 @@ export function setTab(tab){
 window.setTab = setTab;
 
 document.querySelectorAll('.tabbar .tab').forEach(b=> b.addEventListener('click',()=> setTab(b.dataset.tab)));
-document.querySelector('.claim-pill')?.addEventListener('click', ()=> setTab('claim'));
+document.querySelector('.earn-pill')?.addEventListener('click', ()=> setTab('earn'));
 
 let map;
 export function ensureMap(lat = 30.4021, lng = -97.7265) {
