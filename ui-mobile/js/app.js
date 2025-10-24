@@ -121,3 +121,10 @@ async function initApp() {
 
 // Start when DOM is ready
 document.addEventListener('DOMContentLoaded', initApp);
+
+// Demo autorun keyboard shortcut (Shift+R)
+window.addEventListener('keydown', (e)=>{
+  if((e.key==='R' || e.key==='r') && e.shiftKey && window.NeravaDemoRunner){
+    window.NeravaDemoRunner.runInvestorScript();
+  }
+});

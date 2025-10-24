@@ -209,6 +209,17 @@ class EnergyRepSnapshot(Base):
     tier = Column(String, nullable=False)
     calculated_at = Column(DateTime, default=datetime.utcnow, index=True)
 
+class EnergyRepBackfill(Base):
+    __tablename__ = "energy_rep_backfills"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(String, index=True, nullable=False)
+    period_start = Column(DateTime, nullable=False)
+    period_end = Column(DateTime, nullable=False)
+    score = Column(Integer, nullable=False)
+    components = Column(JSON, default=dict)
+    tier = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 # 12 Carbon Offsets
 class OffsetBatch(Base):
     __tablename__ = "offset_batches"

@@ -6,6 +6,7 @@ from typing import Dict, Any, List
 import uuid
 import os
 import json
+from datetime import datetime, timezone, timedelta
 from app.core.config import is_demo, flag_enabled
 from app.security.scopes import require_scopes
 from app.security.ratelimit import rate_limit
@@ -572,3 +573,266 @@ async def export_demo_data(
             "error": str(e)
         })
         raise HTTPException(status_code=500, detail="Failed to export demo data")
+
+# Autorun endpoints for UI walkthrough
+from datetime import timedelta, timezone
+
+def _utcnow(): 
+    return datetime.now(timezone.utc)
+
+@router.post("/start")
+async def demo_start(
+    request: Request,
+    body: dict = {},
+    db: Session = Depends(get_db),
+    _auth=Depends(require_scopes(["admin:demo"])),
+    _rl = Depends(rate_limit("demo_start", "20/min")),
+):
+    """Start autorun UI walkthrough."""
+    if not is_demo():
+        raise HTTPException(status_code=403, detail="Demo mode disabled")
+    
+    script = (body or {}).get("script", "investor_run_v1")
+    run_id = f"dr_{_utcnow().isoformat()}"
+    expires = _utcnow() + timedelta(seconds=60)
+    
+    # Get or create demo state
+    state = db.query(DemoState).filter(DemoState.key == "autorun").first()
+    if not state:
+        state = DemoState(key="autorun", value="false")
+        db.add(state)
+    
+    # Set autorun fields
+    state.autorun = True
+    state.autorun_script = script
+    state.autorun_run_id = run_id
+    state.autorun_expires_at = expires
+    db.commit()
+    
+    log_info("demo_autorun_set", {
+        "run_id": run_id, 
+        "script": script, 
+        "expires_at": expires.isoformat()
+    })
+    
+    return {"ok": True, "run_id": run_id, "expires_in_s": 60}
+
+@router.get("/autorun")
+async def demo_autorun(
+    request: Request,
+    db: Session = Depends(get_db), 
+    _auth=Depends(require_scopes(["admin:demo"]))
+):
+    """Get autorun status."""
+    if not is_demo():
+        raise HTTPException(status_code=403, detail="Demo mode disabled")
+    
+    state = db.query(DemoState).filter(DemoState.key == "autorun").first()
+    if not state or not state.autorun:
+        return {"autorun": False}
+    
+    # Check if expired
+    if state.autorun_expires_at and _utcnow() > state.autorun_expires_at:
+        # Auto-expire
+        state.autorun = False
+        state.autorun_script = None
+        state.autorun_run_id = None
+        state.autorun_expires_at = None
+        db.commit()
+        return {"autorun": False}
+    
+    return {
+        "autorun": True, 
+        "script": state.autorun_script, 
+        "run_id": state.autorun_run_id
+    }
+
+@router.post("/ack")
+async def demo_ack(
+    request: Request,
+    body: dict,
+    db: Session = Depends(get_db),
+    _auth=Depends(require_scopes(["admin:demo"]))
+):
+    """Acknowledge autorun completion."""
+    if not is_demo():
+        raise HTTPException(status_code=403, detail="Demo mode disabled")
+    
+    want_id = (body or {}).get("run_id")
+    state = db.query(DemoState).filter(DemoState.key == "autorun").first()
+    
+    if not state or not state.autorun or state.autorun_run_id != want_id:
+        raise HTTPException(status_code=409, detail="No matching autorun")
+    
+    # Clear autorun state
+    state.autorun = False
+    state.autorun_script = None
+    state.autorun_run_id = None
+    state.autorun_expires_at = None
+    db.commit()
+    
+    log_info("demo_autorun_ack", {"run_id": want_id})
+    return {"ok": True}
+
+# Autorun-specific endpoints for frontend integration
+@router.post("/autorun/start")
+async def autorun_start(
+    request: Request,
+    body: dict = {},
+    db: Session = Depends(get_db),
+    _auth=Depends(require_scopes(["admin:demo"]))
+):
+    """Start autorun session."""
+    if not is_demo():
+        raise HTTPException(status_code=403, detail="Demo mode disabled")
+    
+    script = (body or {}).get("script", "investor_tour")
+    run_id = f"ar_{_utcnow().isoformat()}"
+    expires = _utcnow() + timedelta(seconds=300)  # 5 minutes
+    
+    # Get or create demo state
+    state = db.query(DemoState).filter(DemoState.key == "autorun").first()
+    if not state:
+        state = DemoState(key="autorun", value="false")
+        db.add(state)
+    
+    # Set autorun fields
+    state.autorun = True
+    state.autorun_script = script
+    state.autorun_run_id = run_id
+    state.autorun_expires_at = expires
+    db.commit()
+    
+    return {
+        "running": True,
+        "session_id": run_id,
+        "script": script,
+        "expires_at": expires.isoformat()
+    }
+
+@router.get("/autorun/status")
+async def autorun_status(
+    request: Request,
+    db: Session = Depends(get_db),
+    _auth=Depends(require_scopes(["admin:demo"]))
+):
+    """Get autorun status."""
+    if not is_demo():
+        raise HTTPException(status_code=403, detail="Demo mode disabled")
+    
+    state = db.query(DemoState).filter(DemoState.key == "autorun").first()
+    if not state or not state.autorun:
+        return {"running": False}
+    
+    # Check if expired
+    if state.autorun_expires_at:
+        # Ensure both datetimes are timezone-aware for comparison
+        expires_at = state.autorun_expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if _utcnow() > expires_at:
+            state.autorun = False
+            state.autorun_script = None
+            state.autorun_run_id = None
+            state.autorun_expires_at = None
+            db.commit()
+            return {"running": False}
+    
+    # Get current scenario
+    scenario_state = db.query(DemoState).filter(DemoState.key == "scenario").first()
+    scenario = scenario_state.value if scenario_state else "default"
+    
+    return {
+        "running": True,
+        "session_id": state.autorun_run_id,
+        "script": state.autorun_script,
+        "scenario": scenario
+    }
+
+@router.post("/autorun/stop")
+async def autorun_stop(
+    request: Request,
+    db: Session = Depends(get_db),
+    _auth=Depends(require_scopes(["admin:demo"]))
+):
+    """Stop autorun session."""
+    if not is_demo():
+        raise HTTPException(status_code=403, detail="Demo mode disabled")
+    
+    state = db.query(DemoState).filter(DemoState.key == "autorun").first()
+    if state and state.autorun:
+        state.autorun = False
+        state.autorun_script = None
+        state.autorun_run_id = None
+        state.autorun_expires_at = None
+        db.commit()
+    
+    return {"running": False}
+
+@router.post("/autorun/scenario")
+async def autorun_scenario(
+    request: Request,
+    body: dict,
+    db: Session = Depends(get_db),
+    _auth=Depends(require_scopes(["admin:demo"]))
+):
+    """Set autorun scenario."""
+    if not is_demo():
+        raise HTTPException(status_code=403, detail="Demo mode disabled")
+    
+    scenario = (body or {}).get("scenario", "default")
+    
+    # Update scenario in demo state
+    state = db.query(DemoState).filter(DemoState.key == "scenario").first()
+    if not state:
+        state = DemoState(key="scenario", value=scenario)
+        db.add(state)
+    else:
+        state.value = scenario
+    db.commit()
+    
+    return {"scenario": scenario}
+
+@router.post("/autorun/execute")
+async def autorun_execute(
+    request: Request,
+    body: dict,
+    db: Session = Depends(get_db),
+    _auth=Depends(require_scopes(["admin:demo"]))
+):
+    """Execute autorun script."""
+    if not is_demo():
+        raise HTTPException(status_code=403, detail="Demo mode disabled")
+    
+    script = (body or {}).get("script", "investor_tour")
+    
+    # Simulate script execution
+    import time
+    start_time = time.time()
+    time.sleep(0.1)  # Simulate processing
+    duration_ms = int((time.time() - start_time) * 1000)
+    
+    return {
+        "executed": True,
+        "script": script,
+        "duration_ms": duration_ms
+    }
+
+@router.get("/autorun/poll")
+async def autorun_poll(
+    request: Request,
+    db: Session = Depends(get_db),
+    _auth=Depends(require_scopes(["admin:demo"]))
+):
+    """Poll autorun status."""
+    if not is_demo():
+        raise HTTPException(status_code=403, detail="Demo mode disabled")
+    
+    state = db.query(DemoState).filter(DemoState.key == "autorun").first()
+    scenario_state = db.query(DemoState).filter(DemoState.key == "scenario").first()
+    
+    return {
+        "running": state.autorun if state else False,
+        "scenario": scenario_state.value if scenario_state else "default",
+        "last_activity": _utcnow().isoformat()
+    }
