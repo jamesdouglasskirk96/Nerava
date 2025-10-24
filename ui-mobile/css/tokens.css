@@ -1,12 +1,12 @@
 :root{
-  /* Brand: iOS home-screen style blue */
-  --brand: #0A84FF;            /* primary brand blue */
-  --brand-ink: #073B86;        /* dark ink on blue if needed */
-  --brand-ink-contrast: #ffffff;
-
-  /* Layout tokens */
-  --tabbar-height: 72px;       /* keep bar height the same */
-  --icon-scale: 1.15;          /* ~15% bigger icons */
+  --brand-blue: #2F6FE0;   /* iOS-like blue pulled from provided home screen */
+  --brand-blue-ink: #0E2E75;
+  --icon-muted: #8B93A1;   /* outline gray for inactive icons */
+  --nav-icon: #9AA3AF;    /* light gray outline tone for consistency */
+  --tabbar-height: 72px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --shadow-card: 0 12px 30px rgba(0,0,0,.08);
 
   --ink:#1a1a1a;
   --muted:#667085;
