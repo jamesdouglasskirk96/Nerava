@@ -31,3 +31,28 @@ dist/
 .vscode/
 nerava-backend-v9/.venv
 nerava-backend-v9/nerava.db*
+
+# Backup / temp / editor junk
+*.bak*
+*-e
+*.orig
+*.rej
+*~
+*.swp
+*.swo
+# Timestamped backup copies (e.g., index.html.bak.20251022-160014)
+*.[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]*
+
+# Backups/edits
+*.bak
+*.bak.*
+*-e
+*.uipatch
+*.uihotfix
+*.inline
+.DS_Store
+/ui-mobile/.playwright/
+/ui-mobile/test-results/
+/ui-mobile/playwright-report/
+/ui-mobile/videos/
+/ui-mobile/traces/

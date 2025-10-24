@@ -1,0 +1,65 @@
+# Default values for nerava-ui
+replicaCount: 2
+
+image:
+  repository: nginx
+  pullPolicy: IfNotPresent
+  tag: "alpine"
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: nerava.app
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: nerava-tls
+      hosts:
+        - nerava.app
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# CDN configuration
+cdn:
+  enabled: false
+  cloudflare:
+    enabled: false
+    zoneId: ""
+    apiToken: ""
+  aws:
+    enabled: false
+    distributionId: ""
+    region: "us-east-1"
+
+# Static files configuration
+staticFiles:
+  enabled: true
+  path: /usr/share/nginx/html
+  index: index.html

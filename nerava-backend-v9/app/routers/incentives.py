@@ -1,8 +1,11 @@
 # app/routers/incentives.py
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Depends
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional
+from sqlalchemy.orm import Session
 from app.services.wallet import credit_wallet  # existing wallet service
+from app.services.rewards_engine import record_reward_event
+from app.db import get_db
 
 router = APIRouter(prefix="/v1/incentives", tags=["incentives"])
 
@@ -56,4 +59,31 @@ def award(user_id: str = Query(...), cents: int = 100):
         "awarded_cents": awarded,
         "balance_cents": balance,
         "window": w,
+    }
+
+@router.post("/award")
+def award_with_community(
+    user_id: str = Query(...), 
+    cents: int = Query(...),
+    source: str = Query("CHARGE"),
+    db: Session = Depends(get_db)
+):
+    """
+    Award credits with community pool distribution to followers.
+    Returns gross, net, and community amounts.
+    """
+    meta = {}
+    
+    # Record reward event with community distribution
+    ev = record_reward_event(db, user_id=user_id, source=source, gross_cents=cents, meta=meta)
+    
+    # Credit the net amount to user's wallet
+    credit_wallet(user_id, ev.net_cents, "USD")
+    
+    return {
+        "gross_cents": ev.gross_cents,
+        "net_cents": ev.net_cents, 
+        "community_cents": ev.community_cents,
+        "user_id": user_id,
+        "source": source
     }

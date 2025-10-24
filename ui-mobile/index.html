@@ -6,6 +6,9 @@
   <title>Nerava</title>
 
   <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="css/tokens.css" />
+    <link rel="stylesheet" href="css/animations.css" />
+    <link rel="stylesheet" href="css/appleish.css" />
   <link rel="icon" href="assets/favicon.ico" />
 
   <!-- Leaflet core -->
@@ -13,63 +16,83 @@
         href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
-
-  <!-- Routing (for turn-by-turn path on map) -->
-  <link rel="stylesheet"
-        href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css">
-  <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js" defer></script>
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  
+  <!-- Routing plugin (after Leaflet) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css">
+  <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 </head>
 <body>
-  <div id="app">
-    <!-- MAP lives behind everything -->
-    <div id="map"></div>
-
-    <!-- Top bar + banner -->
-    <header class="ui-layer app-top">
-      <div class="brandbar">
-        <span class="brand-word">NERAVA</span>
-        <img class="brand-bolt" src="assets/bolt-white.svg" alt="">
+  <div id="app" class="app-root">
+    <!-- Header -->
+    <header id="appHeader" class="app-header" role="banner" aria-label="Nerava">
+      <div class="app-header__inner">
+        <span class="brand">NERAVA</span>
+        <span class="bolt" aria-hidden="true">⚡</span>
       </div>
-      <div id="dealBanner" class="deal-banner">⚡ Cheaper charging now</div>
     </header>
 
-    <!-- PAGES -->
-    <main class="ui-layer main-layer">
-      <!-- Explore -->
-      <section id="pageExplore" class="page active">
-        <!-- Incentive banner (Explore only) -->
-        <div id="incentive-banner" style="display:none; position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:1000; background:#0B2A4A; color:#fff; padding:8px 12px; border-radius:999px; font-weight:600; font-size:14px; box-shadow:0 6px 16px rgba(0,0,0,0.2);">
-          Cheaper charging now
-        </div>
-        <section id="hub-card" class="card hub-card">
-          <h2 class="hub-name">Nerava Hub</h2>
-          <div class="hub-subtitle">Recommended</div>
+    <!-- Map is global and behind -->
+    <div id="mapContainer" role="img" aria-label="Map"></div>
 
-          <div class="pill-row">
-            <span class="pill"><strong>3</strong>&nbsp;free</span>
-            <span class="pill">10% cheaper</span>
+        <!-- EXPLORE: Minimal route + single perk -->
+        <section id="pageExplore" class="page active" aria-labelledby="exploreTitle">
+          <div id="map" class="map"></div>
+
+          <!-- Minimal sheet for single perk -->
+          <div id="perkSheet" class="mini-sheet">
+            <div class="mini-sheet__header">Nearby perk</div>
+            <div class="perk-card">
+              <div class="perk-card__left">
+                <img src="/app/img/coffee.svg" alt="" class="perk-icon">
+                <div class="perk-meta">
+                  <div class="perk-title" id="perkTitle">Starbucks</div>
+                  <div class="perk-sub" id="perkSub">Free tall coffee • 2–4pm</div>
+                </div>
+              </div>
+              <button id="perkMoreBtn" class="btn btn-primary">View more</button>
+            </div>
+            <div class="perk-stats">
+              <span id="perkEta">—</span>
+              <span>•</span>
+              <span id="perkMiles">— mi</span>
+            </div>
           </div>
-
-          <div class="logo-row">
-            <img src="assets/starbucks.png" alt="Starbucks" class="merchant-logo" />
-            <img src="assets/cfa.jpeg" alt="Chick-fil-A" class="merchant-logo" />
-            <img src="assets/mcds.png" alt="McDonald's" class="merchant-logo" />
-          </div>
-
-          <div class="meta-line">
-            <span>3 free</span><span class="dot">•</span><span>Domain, Austin</span>
-          </div>
-
-          <button id="chargeHereBtn" class="btn btn-primary btn-wide">Charge here</button>
         </section>
-      </section>
 
-      <!-- Charge -->
+      <!-- Charge / Wallet / Profile now padded pages (not overlay sheets) -->
       <section id="pageCharge" class="page">
-        <div id="chargePane" class="pane">
+        <!-- Map for route to charger -->
+        <div id="chargeMap" class="map app-map" role="application" aria-label="Map"></div>
+        
+        
+        <!-- Floating perk recommendation over map -->
+        <div class="floating-perk-card">
+          <div class="perk-card">
+            <div class="perk-card__left">
+              <img src="/app/img/coffee.svg" alt="" class="perk-icon">
+              <div class="perk-meta">
+                <div class="perk-title">Coffee & Pastry</div>
+                <div class="perk-sub">Free coffee and pastry with charging.</div>
+              </div>
+            </div>
+            <button class="btn btn-primary">View more</button>
+          </div>
+          <div class="perk-stats">
+            <span>~83 min</span>
+            <span>•</span>
+            <span>70.6 mi</span>
+          </div>
+        </div>
+        
+        <div id="chargePane" class="pane" style="display:none;">
           <div class="card" id="chargeStatusCard" style="margin:12px;">
-            <h3>Charge</h3>
+            <h3>Charging activity</h3>
+
+            <!-- Cumulative kWh total -->
+            <div id="cumulativeKwh" style="margin:8px 0; padding:10px; border:1px solid #e5e7eb; border-radius:12px; background:#f9fafb;">
+              <div><strong>Total charged:</strong> <span id="totalKwh">0.0</span> kWh</div>
+            </div>
 
             <!-- Live window / reward preview -->
             <div id="rewardPreview" style="display:none; margin:8px 0; padding:10px; border-radius:12px; background:#0B2A4A; color:#fff;">
@@ -91,77 +114,248 @@
             </div>
 
             <!-- kWh prompt (shown on stop) -->
-            <dialog id="kwhDialog">
+            <dialog id="kwhDialog" style="z-index:3000;">
               <form method="dialog" style="min-width:260px;">
                 <h4>How many kWh did you add?</h4>
                 <input id="kwhInput" type="number" min="0.1" step="0.1" placeholder="e.g. 18.6" required style="width:100%; padding:8px; margin:8px 0;">
                 <menu style="display:flex; gap:8px; justify-content:flex-end;">
-                  <button value="cancel">Cancel</button>
-                  <button id="kwhConfirm" value="confirm">Confirm</button>
+                  <button data-return="cancel">Cancel</button>
+                  <button data-return="confirm">Confirm</button>
                 </menu>
               </form>
             </dialog>
           </div>
 
-          <!-- Recent Activity (client-side for now) -->
-          <div class="card" style="margin:12px;">
-            <h3>Recent Activity</h3>
-            <ul id="recentActivity" style="list-style:none; padding-left:0; margin:0;"></ul>
-          </div>
+
+          <!-- Community Activity (Venmo-style) -->
+          <section id="communityActivity" class="card" style="margin:12px;">
+            <div class="card-header">
+              <h3>Community Activity</h3>
+              <div class="seg">
+                <button id="feedAllBtn" class="seg-btn active">All</button>
+                <button id="feedFollowingBtn" class="seg-btn">Following</button>
+              </div>
+            </div>
+            <ul id="activityFeed" class="feed-list">
+              <!-- items injected -->
+            </ul>
+          </section>
+
+          <!-- Leaderboard -->
+          <section id="leaderboard" class="card" style="margin:12px;">
+            <h3>Weekly Leaders</h3>
+            <div id="leaderboardList" class="leaderboard-list">
+              <!-- items injected -->
+            </div>
+          </section>
         </div>
       </section>
 
-      <!-- Wallet -->
-      <section id="pageWallet" class="page">
+      <section id="pageWallet" class="page page-padded">
         <section class="card content-card">
           <h2 class="section-title">Wallet</h2>
-          <div class="balance">$19.00</div>
+          <div class="balance" id="wallet-balance">$19.00</div>
           <div class="muted">Ways you earned</div>
-          <ul class="list">
+          
+          <!-- Progress bar toward next tier -->
+          <div class="wallet-progress" style="margin:8px 0 12px;">
+            <div class="bar" style="width:0"></div>
+            <div class="progress-text">$6 more to reach Gold tier</div>
+          </div>
+          
+          <!-- Streak indicator -->
+          <div class="streak-indicator" style="margin: 8px 0; padding: 8px; background: var(--color-orange); border-radius: var(--radius); text-align: center;">
+            <span class="streak-text">7-day charging streak 🔥</span>
+          </div>
+
+          <!-- Quick Actions -->
+          <div class="wallet-actions" style="margin: 16px 0; display: flex; gap: 8px;">
+            <button class="btn btn-secondary" style="flex: 1;">Add Funds</button>
+            <button id="withdrawBtn" class="btn btn-secondary" style="flex: 1;">Withdraw</button>
+          </div>
+          
+          <!-- Payout History -->
+          <div class="payout-history" style="margin: 16px 0;">
+            <h3 style="margin: 0 0 8px 0; font-size: 16px;">Recent Withdrawals</h3>
+            <div id="payoutHistory" class="payout-list">
+              <!-- Payout history will be loaded here -->
+            </div>
+          </div>
+          
+          <ul class="list" id="wallet-activity">
+            <li><span>You saved $3.73 during Green Hour 🌞</span><strong>+$3.73</strong></li>
+            <li><span>Earned $0.75 from Starbucks co-fund ☕</span><strong>+$0.75</strong></li>
             <li><span>Off-peak award</span><strong>+$0.50</strong></li>
-            <li><span>Perk reward</span><strong>+$0.75</strong></li>
-            <li><span>Utility bonus</span><strong>+$1.00</strong></li>
           </ul>
         </section>
       </section>
 
-      <!-- Profile -->
-      <section id="pageProfile" class="page">
-        <section class="card content-card">
-          <h2 class="section-title">Profile</h2>
-          <p class="muted">Signed in as demo@nerava.app</p>
-          <div class="prefs">
-            <label><input type="checkbox" checked> Coffee & Bakery</label>
-            <label><input type="checkbox" checked> Quick Bites</label>
-            <label><input type="checkbox"> Dog Friendly</label>
-            <label><input type="checkbox"> Kid Friendly</label>
-            <label><input type="checkbox"> Shopping</label>
+      <section id="pageClaim" class="page page-padded">
+        <div class="card">
+          <h3>Claim Rewards</h3>
+          <div id="claimMap" style="height: 200px; background: #f0f0f0; border-radius: 12px; margin: 12px 0;"></div>
+          <div id="claimStatus" class="claim-status">Move closer to the charger to claim rewards</div>
+          <div id="incentivesList" class="incentives-list">
+            <!-- Dynamic incentives will be populated here -->
           </div>
-          <div class="row gap">
-            <button class="btn pill-btn">Save Preferences</button>
-            <button class="btn pill-btn">See New Recommendation</button>
-          </div>
-        </section>
+        </div>
       </section>
-    </main>
 
-    <!-- Bottom nav -->
-    <nav class="ui-layer bottom-nav">
-      <button id="tabExplore" class="tab active">
-        <img src="assets/nav-explore.svg" alt=""><span>Explore</span>
-      </button>
-      <button id="tabCharge" class="tab">
-        <img src="assets/nav-charge.svg" alt=""><span>Charge</span>
-      </button>
-      <button id="tabWallet" class="tab">
-        <img src="assets/nav-wallet.svg" alt=""><span>Wallet</span>
-      </button>
-      <button id="tabProfile" class="tab">
-        <img src="assets/nav-profile.svg" alt=""><span>Profile</span>
-      </button>
-    </nav>
+      <section id="pageMe" class="page hidden" aria-labelledby="meHeading">
+        <div class="sheet">
+          <header class="sheet__header">
+            <h2 id="meHeading">Your profile</h2>
+          </header>
+          <div class="sheet__body">
+            <div class="card profile-card">
+              <img class="avatar" src="/app/img/avatar-demo.svg" alt="Profile photo"/>
+              <div class="profile-meta">
+                <div class="name">@you</div>
+                <div class="rep">Green Reputation: <strong id="repScore">—</strong></div>
+                <div class="follows">
+                  <span id="followersCount">0</span> followers ·
+                  <span id="followingCount">0</span> following
+                </div>
+              </div>
+              <button id="editPrefsBtn" class="btn-secondary">Preferences</button>
+            </div>
+
+            <div class="card">
+              <h3>Vehicle</h3>
+              <div id="vehicleInfo">Add your EV for smarter suggestions</div>
+              <button id="editCarBtn" class="btn">Add vehicle</button>
+            </div>
+
+            <div class="card">
+              <h3>Notifications</h3>
+              <label class="switch">
+                <input id="greenHourNotif" type="checkbox" />
+                <span>Green Hour alerts</span>
+              </label>
+              <label class="switch">
+                <input id="perkNotif" type="checkbox" />
+                <span>Nearby perk alerts</span>
+              </label>
+            </div>
+
+            <div class="card">
+              <h3>Account</h3>
+              <button id="logoutBtn" class="btn-danger">Sign out</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
   </div>
 
-  <script src="js/app.js?v=10" defer></script>
+  <!-- Account Sheet (Venmo-style): full-screen modal with wallet & activity -->
+  <dialog id="accountSheet" class="account-sheet" aria-label="Account">
+    <div class="sheet">
+      <div class="grip" role="presentation"></div>
+      <section class="acct-hero">
+        <img class="avatar" src="/app/img/avatar-demo.svg" alt="User avatar"/>
+        <div class="who">
+          <h2>James Kirk</h2>
+          <p class="sub">demo@nerava.app</p>
+        </div>
+        <button class="pill small" id="btnManage">Manage</button>
+      </section>
+
+      <section class="wallet-card">
+        <div class="left">
+          <div class="label">Wallet balance</div>
+          <div class="amount" id="acctBalance">$0.00</div>
+          <div class="tier"><span id="acctTierProgress" style="width:0%"></span></div>
+          <div class="streak" id="acctStreak">0-day charging streak 🔥</div>
+        </div>
+        <div class="right">
+          <button id="btnAddFunds" class="btn solid">Add / withdraw</button>
+        </div>
+      </section>
+
+      <section class="activity">
+        <h3>Recent Activity</h3>
+        <ul id="acctActivity" class="feed"></ul>
+      </section>
+
+      <section class="social">
+        <h3>Following</h3>
+        <div id="acctFollowing" class="following"></div>
+      </section>
+
+      <section class="settings">
+        <h3>Settings</h3>
+        <ul class="list">
+          <li><button class="row">Notifications</button></li>
+          <li><button class="row">Privacy</button></li>
+          <li><button class="row">Sign out</button></li>
+        </ul>
+      </section>
+    </div>
+  </dialog>
+
+  <!-- 5-Tab Navigation -->
+  <nav id="bottom-nav" class="bottom-nav" role="tablist" aria-label="Primary">
+    <button id="tabExplore" class="tab" aria-label="Explore">
+      <img src="/app/img/nav-explore.svg" class="icon" alt="" />
+      <span>Explore</span>
+    </button>
+    <button id="tabCharge" class="tab" aria-label="Charge">
+      <img src="/app/img/nav-charge.svg" class="icon" alt="" />
+      <span>Charge</span>
+    </button>
+
+    <button id="tabScan" class="scan-fab" aria-label="Claim">
+      <img src="/app/img/nav-claim.svg" class="icon" alt=""/>
+      <span>Claim</span>
+    </button>
+
+    <button id="tabWallet" class="tab" aria-label="Wallet">
+      <img src="/app/img/nav-wallet.svg" class="icon" alt="" />
+      <span>Wallet</span>
+    </button>
+    <button id="tabMe" class="tab" aria-label="Me">
+      <img src="/app/img/nav-me.svg" class="icon" alt="" />
+      <span>Me</span>
+    </button>
+  </nav>
+
+  <!-- Scan modal -->
+  <dialog id="scanModal" class="sheet sheet--modal" aria-label="Scan a charger">
+    <div class="sheet__header">
+      <div class="sheet__handle"></div>
+      <h3>Scan charger</h3>
+    </div>
+    <div class="sheet__body">
+      <div id="scanViewport" class="scan-viewport"></div>
+      <div class="stack v16">
+        <button id="scanStart" class="btn btn-primary">Start camera</button>
+        <button id="scanStop" class="btn">Stop camera</button>
+        <div class="sep or">or</div>
+        <label class="field">
+          <span>Enter code</span>
+          <input id="scanManual" inputmode="numeric" placeholder="ABC-123" />
+        </label>
+        <button id="scanSubmit" class="btn btn-primary">Continue</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Core modules -->
+  <script src="js/core/api.js" defer></script>
+  <script src="js/core/map.js" defer></script>
+  <script src="js/core/utils.js" defer></script>
+  
+  <!-- Page modules -->
+  <script src="js/pages/explore.js" defer></script>
+  <script src="js/pages/charge.js" defer></script>
+  <script src="js/pages/claim.js" defer></script>
+  <script src="js/pages/wallet.js" defer></script>
+  <script src="js/pages/me.js" defer></script>
+  
+  <!-- Animations and main app -->
+  <script src="js/animations.js" defer></script>
+  <script src="js/app.js" defer></script>
 </body>
 </html>
+

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -e
+# block accidental backups in commit
+if git diff --cached --name-only | grep -E '(\.bak|\.bak\.|(^|/).*-e$|\.orig$|\.rej$|~$|\.swp$|\.swo$)' >/dev/null; then
+  echo "❌ Refusing commit: backup/temp files staged."
+  git diff --cached --name-only | grep -E '(\.bak|\.bak\.|(^|/).*-e$|\.orig$|\.rej$|~$|\.swp$|\.swo$)'
+  echo "→ Unstage or delete them, then commit again."
+  exit 1
+fi
+exit 0
