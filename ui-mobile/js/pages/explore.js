@@ -1,43 +1,66 @@
+import { ensureMap, drawStraightRoute } from '../core/map.js';
 import { apiGet } from '../core/api.js';
 
-const $ = (s)=>document.querySelector(s);
-const fallbackHub = { id:'hub_demo', name:'Nerava Hub', lat:30.4025, lng:-97.7258 };
-const fallbackMerchant = { id:'m_starbucks', name:'Starbucks', reward:'Free tall coffee', window:'2–4pm', dist_mi:0.3, lat:30.4032, lng:-97.7241, logo:'☕️' };
+export async function initExplore() {
+  // Always ensure map is initialized
+  ensureMap();
 
-export async function initExplore(){
-  const root = document.getElementById('page-explore'); if(!root) return;
-  // 1) Recommendation (hub) near user
-  let hub = null;
-  try{
-    const r = await apiGet('/v1/hubs/recommend', { lat:30.4025, lng:-97.7258, radius_km:2, user_id:localStorage.NERAVA_USER||'demo@nerava.app' });
-    hub = r && r.lat && r.lng ? r : null;
-  }catch(_){}; if (!hub) hub = fallbackHub;
+  // Try API, but fall back to demo coordinates on 404/Network
+  let hub, deal;
+  try {
+    hub = await apiGet('/v1/hubs/recommend');
+  } catch (_) {}
+  try {
+    const deals = await apiGet('/v1/deals/nearby');
+    deal = deals?.[0];
+  } catch (_) {}
 
-  // 2) Nearest merchant perk near that hub (simple heuristic / fallback)
-  let perk = null;
-  try{
-    const d = await apiGet('/v1/deals/nearest', { lat:hub.lat, lng:hub.lng, limit:1 });
-    const m = (d?.items||[])[0];
-    if (m) perk = { id:m.id, name:m.name, reward:m.reward, window:m.window, dist_mi: m.dist_mi ?? 0.2, lat:m.lat, lng:m.lng, logo: m.logo || '☕️' };
-  }catch(_){}
-  if (!perk) perk = fallbackMerchant;
+  // Use API data if available, otherwise fallback coordinates
+  const charger = [
+    (hub?.lat && Number.isFinite(hub.lat)) ? hub.lat : 30.4062,
+    (hub?.lng && Number.isFinite(hub.lng)) ? hub.lng : -97.7260,
+  ];
+  const merchant = [
+    (deal?.lat && Number.isFinite(deal.lat)) ? deal.lat : 30.3990,
+    (deal?.lng && Number.isFinite(deal.lng)) ? deal.lng : -97.7230,
+  ];
 
-  // 3) Draw route + ETA
-  if (window.drawWalkingRoute) window.drawWalkingRoute({lat:hub.lat,lng:hub.lng},{lat:perk.lat,lng:perk.lng}, perk.logo);
+  // Draw straight route
+  drawStraightRoute(charger, merchant);
 
-  // 4) Fill perk card
-  $('#perkName').textContent = perk.name;
-  $('#perkMeta').textContent = `${perk.reward} • ${perk.window}`;
-  $('#perkDist').textContent = `${perk.dist_mi} mi from charger`;
-  $('#perkLogo').textContent = perk.logo || '🏪';
+  // Simple perk card with fallback data
+  const card = document.getElementById('perk-card');
+  if (card) {
+    const merchantName = deal?.name || 'Nearby perk';
+    const merchantReward = deal?.reward_text || 'Cheaper during Green Hour';
+    const merchantWindow = deal?.window || '2–4pm';
+    const merchantDistance = deal?.distance_text || '0.3 mi from charger';
 
-  // 5) Buttons
-  $('#btnChargeHere').onclick = ()=> {
-    // optional: start dual-radius session (if flag on)
-    if (window.startDualSession) window.startDualSession({hub, merchant:perk});
-    const tabBtn = document.querySelector('.tabbar .tab[data-tab="charge"]'); if (tabBtn) tabBtn.click();
-  };
-  $('#btnViewMore').onclick = ()=> {
-    alert('Showing all perks nearby based on your preferences. (List UI can be filled as a follow-up)');
-  };
+    card.innerHTML = `
+      <div class="perk-card">
+        <div class="ai-chip">⚡ Recommended by Nerava AI</div>
+        <div class="perk-body">
+          <div class="logo">☕</div>
+          <div class="info">
+            <h3>${merchantName}</h3>
+            <p>${merchantReward} • ${merchantWindow}<br/>
+            ${merchantDistance}</p>
+          </div>
+          <button id="btn-charge-here" class="btn btn-primary">Charge here</button>
+        </div>
+      </div>
+    `;
+    document.getElementById('btn-charge-here')?.addEventListener('click', () => {
+      // Switch to charge tab
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelector('[data-tab="charge"]')?.classList.add('active');
+      document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+      document.getElementById('page-charge')?.classList.remove('hidden');
+    });
+  }
+
+  document.getElementById('btn-view-more')?.addEventListener('click', () => alert('List of perks based on your preferences (coming soon)'));
 }
+
+// boot when page shown
+document.addEventListener('DOMContentLoaded', ()=> initExplore());

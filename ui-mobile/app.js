@@ -11,43 +11,62 @@ const hide = el => el.classList.add('hidden');
 const fmtMoney = cents => `+$${(Number(cents||0)/100).toFixed(2)}`;
 const stripHubIds = s => (s||'').replace(/\bhub_[a-z0-9]+_[a-z0-9]+\b/gi,'').replace(/\s{2,}/g,' ').trim();
 
-// ---------- tabs ----------
-const pages = {
-  explore: document.getElementById('page-explore'),
-  charge:  document.getElementById('page-charge'),
-  wallet:  document.getElementById('page-wallet'),
-  profile: document.getElementById('page-profile'),
-  claim:   document.getElementById('page-claim')
+const pages = { 
+  explore: $('#page-explore'), 
+  charge: $('#page-charge'), 
+  wallet: $('#page-wallet'), 
+  profile: $('#page-profile'), 
+  earn: $('#page-claim') 
 };
 const banner = $('#incentive-banner');
 
-function setTab(tab){
-  for (const [k,el] of Object.entries(pages)) if (el) el.classList.toggle('active', k===tab);
-  document.querySelectorAll('.tabbar .tab').forEach(b=> b.classList.toggle('active', b.dataset.tab===tab));
-  if (tab==='charge') initChargePage();
-  if (tab==='explore' && typeof window.initExplorePage==='function') window.initExplorePage();
-  if (tab === 'explore' && window._map) {
-    setTimeout(()=> window._map.invalidateSize(), 60);
-    if (window._routeBounds) window._map.fitBounds(window._routeBounds, {maxZoom:16, padding:[20,20]});
-  }
+export function setTab(tab){
+  Object.entries(pages).forEach(([k,el])=>{
+    el?.classList.toggle('active', k===tab);
+  });
+  document.querySelectorAll('.tabbar .tab').forEach(b=>{
+    b.classList.toggle('active', b.dataset.tab===tab);
+  });
+  if (tab==='explore' && window.ensureMap) { try{ const m=window.ensureMap(); setTimeout(()=>m.invalidateSize(), 100);}catch{} }
 }
 
-document.querySelectorAll('.tabbar .tab').forEach(b=> b.onclick = (e) => {
-  e.preventDefault();
-  const tab = b.dataset.tab;
-  if (tab) setTab(tab);
-});
+// Make setTab available globally
+window.setTab = setTab;
 
-// ---------- map ----------
+document.querySelectorAll('.tabbar .tab').forEach(b=> b.addEventListener('click',()=> setTab(b.dataset.tab)));
+document.querySelector('.earn-pill')?.addEventListener('click', ()=> setTab('earn'));
+
 let map;
-function ensureMap({lat=30.4021,lng=-97.7265}={}){
-  if (map) return map;
-  map = L.map('map',{ zoomControl:false, attributionControl:true }).setView([lat,lng], 14);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-    maxZoom: 19, attribution: '&copy; OpenStreetMap'
-  }).addTo(map);
-  window._map = map;
-  return map;
+export function ensureMap(lat = 30.4021, lng = -97.7265, zoom = 15) {
+  // reuse existing map instance if present
+  if (window._neravaMap) {
+    try { window._neravaMap.invalidateSize(); } catch(_) {}
+    return window._neravaMap;
+  }
+
+  const el = document.getElementById('map');
+  if (!el || !window.L) return null;
+
+  const m = L.map(el, { zoomControl: false }).setView([lat, lng], zoom);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap'
+  }).addTo(m);
+
+  // 🔒 hide Leaflet attribution permanently
+  const hideAttribution = () => {
+    const ctrl = document.querySelector('.leaflet-control-attribution');
+    const wrapper = document.querySelector('.leaflet-bottom.leaflet-right');
+    if (ctrl) ctrl.style.display = 'none';
+    if (wrapper) wrapper.style.display = 'none';
+  };
+  setTimeout(hideAttribution, 250);
+  m.on('load', hideAttribution);
+
+  window._neravaMap = m;
+  // expose once for any legacy code
+  window.map = m;
+  return m;
 }
 
 // Draw route + markers + ETA (foot). Fallback to straight line if OSRM blocked.
@@ -141,30 +160,15 @@ async function savePrefs(){
 $('#btn-save-prefs').addEventListener('click', savePrefs);
 $('#btn-see-new').addEventListener('click', ()=>{ setTab('explore'); });
 
+// hard-kill any lingering scan modal nodes (legacy)
+document.querySelectorAll('#scanModal, dialog[aria-label="Scan a charger"]').forEach(n=>n.remove());
+
 // ---------- boot ----------
 window.addEventListener('load', async ()=>{
-  // Sync --brand from logo color if present (no-op if unchanged)
-  try {
-    const logo = document.querySelector('.brand-logo .brand-text');
-    const root = document.documentElement;
-    if (logo && root) {
-      const cs = getComputedStyle(logo);
-      const color = cs.color;
-      if (color) root.style.setProperty('--brand', color);
-    }
-  } catch {}
-  
-  // Cleanup scan modal if it somehow exists
-  try{ const m=document.getElementById('scanModal'); if(m) m.remove(); }catch(_){}
-  
+  setTab('explore');
+  ensureMap();
   await loadBanner();
-  if (window.location.hash === '#/wallet') setTab('wallet');
-  else setTab('explore');
-  try{ const mod = await import('./js/pages/explore.js'); await mod.initExplore(); }catch(_){}
+  // explore.js will draw perk and route on its own
   await loadWallet();
   await loadPrefs();
-  // keep Leaflet healthy on resize/orientation
-  let t; const kick = ()=>{ clearTimeout(t); t=setTimeout(()=>{ try{ map && map.invalidateSize(false); }catch(_){ } }, 120); };
-  window.addEventListener('resize', kick, {passive:true});
-  window.addEventListener('orientationchange', kick, {passive:true});
 });

@@ -2,6 +2,8 @@
 import { loadDemoState } from './core/demo.js';
 import { ensureDemoBanner } from './components/demoBanner.js';
 import { apiGet, apiPost } from './core/api.js';
+import { ensureMap } from './js/core/map.js';
+export { ensureMap }; // so other modules can import from '../app.js' if needed
 window.Nerava = window.Nerava || {};
 
 // === SSO → prefs → wallet pre-balance → push banner flow ===
@@ -57,30 +59,14 @@ function loadRecommendation(){
 }
 
 // Alias for setActive (legacy compatibility)
-function setTab(tab) { setActive(tab); }
-
-// Map initialization function - idempotent and non-recursive
-let __mapInstance = null;
-function ensureMap(lat=30.4021,lng=-97.7265){
-  const afterLayout = () => { try{ __mapInstance && __mapInstance.invalidateSize(false); }catch(_){} };
-  if (__mapInstance) {
-    try { __mapInstance.setView([lat,lng], Math.max(__mapInstance.getZoom()||14, 14)); } catch(_){}
-    requestAnimationFrame(()=>setTimeout(afterLayout, 50));
-    return __mapInstance;
-  }
-  if (!window.L) return null; // Leaflet not loaded yet
-  __mapInstance = L.map('map',{ zoomControl:false });
-  __mapInstance.setView([lat,lng], 14);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-    maxZoom: 19, attribution: '&copy; OpenStreetMap'
-  }).addTo(__mapInstance);
-  requestAnimationFrame(()=>setTimeout(afterLayout, 50));
-  return __mapInstance;
+function setTab(tab) { 
+  setActive(tab); 
 }
-// Back-compat alias
-function initMap(lat, lng){ return ensureMap(lat, lng); }
+
+// Map initialization now handled by js/core/map.js module
 
 // ---- legacy global exports for non-module callers ----
+// Removed exports to avoid "does not provide an export named" errors
 if (typeof window !== 'undefined') {
   window.setTab = setTab;
   window.initMap = initMap;
@@ -136,8 +122,21 @@ function setActive(tab){
     const perkSheet = document.getElementById('perkSheet') || document.querySelector('[data-role="perk-sheet"]');
     const h = perkSheet ? Math.min(320, perkSheet.offsetHeight || 320) : 320;
     setMapInsets({ hasSheet: true, sheetPx: h });
-    // Invalidate map when switching to Explore
-    try { ensureMap(); } catch(_) {}
+    
+    // Initialize explore only once, then just invalidate map
+    if (!window.__exploreBooted) {
+      import('./pages/explore.js').then(module => {
+        module.initExplore();
+        window.__exploreBooted = true;
+      }).catch(() => {});
+    } else {
+      // Just invalidate map size on tab show
+      requestAnimationFrame(() => {
+        import('./core/map.js').then(module => {
+          module.invalidateMap();
+        }).catch(() => {});
+      });
+    }
   } else if (tab === 'Claim') {
     const claimSheet = document.getElementById('claimSheet') || document.querySelector('[data-role="claim-sheet"]');
     const h = claimSheet ? Math.min(360, claimSheet.offsetHeight || 360) : 360;
@@ -238,13 +237,7 @@ window.addEventListener('keydown', (e)=>{
   }
 });
 
-// Resize handler for map invalidation (debounced)
-(function(){
-  let t;
-  const kick = () => { clearTimeout(t); t=setTimeout(()=>{ try{ ensureMap(); }catch(_){ } }, 120); };
-  window.addEventListener('resize', kick, { passive:true });
-  window.addEventListener('orientationchange', kick, { passive:true });
-})();
+// Map resize handling now managed by js/core/map.js module
 
 // Cap hero images to prevent layout issues
 function capHero(){
@@ -261,43 +254,7 @@ const meters = (lat1, lon1, lat2, lon2) => {
 };
 const walkETAmin = (m) => Math.max(1, Math.round(m/1.4/60)); // 1.4 m/s
 
-// Leaflet layers for route/markers
-let walkLayer, chargerMarker, merchantMarker;
-
-async function drawWalkingRoute(charger, merchant){
-  if(!__mapInstance) ensureMap(charger.lat, charger.lng);
-  if(walkLayer){ try{ walkLayer.remove(); }catch(e){} }
-  if(chargerMarker){ try{ chargerMarker.remove(); }catch(e){} }
-  if(merchantMarker){ try{ merchantMarker.remove(); }catch(e){} }
-
-  // markers
-  chargerMarker = L.circleMarker([charger.lat, charger.lng], {radius:6, color:'#0ea5e9'});
-  merchantMarker = L.circleMarker([merchant.lat, merchant.lng], {radius:6, color:'#f59e0b'});
-  chargerMarker.addTo(__mapInstance); merchantMarker.addTo(__mapInstance);
-
-  // try OSRM pedestrian (best effort; optional)
-  let line;
-  try{
-    const url = `https://router.project-osrm.org/route/v1/foot/${charger.lng},${charger.lat};${merchant.lng},${merchant.lat}?overview=full&geometries=geojson`;
-    const r = await fetch(url, { mode:'cors' });
-    const j = r.ok ? await r.json() : null;
-    const coords = j?.routes?.[0]?.geometry?.coordinates?.map(([x,y])=>[y,x]);
-    if(coords && coords.length){ line = L.polyline(coords, {weight:5, opacity:.9}); }
-  }catch(_){} // ignore
-
-  // fallback: straight line
-  if(!line){ line = L.polyline([[charger.lat,charger.lng],[merchant.lat,merchant.lng]], {dashArray:'6,8', weight:4}); }
-  walkLayer = line.addTo(__mapInstance);
-
-  // fit and badge
-  const distM = meters(charger.lat, charger.lng, merchant.lat, merchant.lng);
-  __mapInstance.fitBounds(L.latLngBounds([[charger.lat,charger.lng],[merchant.lat,merchant.lng]]), { padding:[40,40] });
-  showWalkCTA(charger.name||'Charger', merchant.name||'Merchant', distM);
-  
-  // Show route badge
-  const badge = document.getElementById('route-badge');
-  if (badge) badge.style.removeProperty('display');
-}
+// Map functionality now handled by js/core/map.js module
 
 function showWalkCTA(chargerName, merchantName, distM){
   let box = document.getElementById('walk-cta');
@@ -365,3 +322,17 @@ function triggerWalletToast(msg){
     t.textContent = msg; document.body.appendChild(t); setTimeout(()=>t.remove(), 3200);
   }catch(_){}
 }
+
+// IMPORTANT: do not call L.map() anywhere else in this file.
+// Boot should call initExplore(); do NOT call another initMap().
+
+window.addEventListener('load', async ()=>{
+  setTab('explore');
+  ensureMap('map'); // Initialize map once
+  await loadBanner();
+  await loadWallet();
+  await loadPrefs();
+});
+
+// Export functions for use by other modules
+// Removed exports to avoid "does not provide an export named" errors
