@@ -41,6 +41,12 @@ function updateClaimUI(coords) {
 
 function initClaim() {
   startClaimGeolocation();
+  
+  // Hide scan panel in demo mode
+  if (document.body.classList.contains('demo')) {
+    const scanPanel = document.querySelector('[data-role="scan-panel"]');
+    if (scanPanel) scanPanel.style.display = 'none';
+  }
 }
 
 // Export init function

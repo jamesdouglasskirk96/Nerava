@@ -87,10 +87,32 @@ async function initiateWithdrawal() {
   }
 }
 
+async function loadRecentActivity() {
+  if (!window.Nerava.core.api.canCallApi()) return;
+  
+  try {
+    const exportData = await window.Nerava.core.api.apiJson('/v1/demo/export');
+    const activityEl = document.getElementById('wallet-activity');
+    if (activityEl && exportData.events) {
+      const recentEvents = exportData.events.slice(0, 5);
+      activityEl.innerHTML = recentEvents.map(event => {
+        const amount = window.Nerava.core.utils.formatCurrency(event.amount_cents || 0);
+        const type = event.type === 'charge_verify' ? 'Verified charge' : 'Reward earned';
+        const location = event.meta?.location || 'Station ABC';
+        const kwh = event.meta?.kwh || '4.1';
+        return `<li><span>${type} • ${location} • ${kwh} kWh</span><strong>+${amount}</strong></li>`;
+      }).join('');
+    }
+  } catch (e) {
+    console.error('Failed to load recent activity:', e);
+  }
+}
+
 function initWallet() {
   updateWalletProgress();
   updateCommunityPool();
   loadPayoutHistory();
+  loadRecentActivity();
   
   // Wire up withdraw button
   const withdrawBtn = document.getElementById('withdrawBtn');

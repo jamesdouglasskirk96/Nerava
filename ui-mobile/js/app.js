@@ -1,4 +1,6 @@
 // Main app controller
+import { loadDemoState } from './core/demo.js';
+import { ensureDemoBanner } from './components/demoBanner.js';
 window.Nerava = window.Nerava || {};
 
 // === Layout helpers ===
@@ -73,8 +75,12 @@ function wireTabs() {
 }
 
 // Initialize app
-function initApp() {
+async function initApp() {
   wireTabs();
+  
+  // Load demo state and show banner if enabled
+  await loadDemoState();
+  ensureDemoBanner();
   
   // Set initial tab
   setActive('Explore');

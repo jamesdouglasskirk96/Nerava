@@ -15,6 +15,8 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 #map{position:absolute; inset:0; z-index:1; min-height:100%}
 .ui-layer{position:relative; z-index:2}
 
+.full-height{ height: calc(100vh - 56px - 36px); }
+
 /* Top */
 .app-top{position:fixed; top:0; left:0; right:0; z-index:3}
 .brandbar{display:flex; align-items:center; justify-content:center; gap:.75rem; height:56px; background:var(--surface); border-bottom:1px solid rgba(0,0,0,.06)}

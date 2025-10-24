@@ -81,6 +81,12 @@ async function initCharge() {
   
   // Load social feed
   loadChargeFeed();
+  
+  // Hide scan panel in demo mode
+  if (document.body.classList.contains('demo')) {
+    const scanPanel = document.querySelector('[data-role="scan-panel"]');
+    if (scanPanel) scanPanel.style.display = 'none';
+  }
 }
 
 async function initChargeMap() {

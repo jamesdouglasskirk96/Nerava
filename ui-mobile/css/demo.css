@@ -1,0 +1,20 @@
+.demo .scan-panel{ display:none !important; }
+#demo-banner{
+  position:sticky; top:0; z-index:9999; display:flex; gap:.5rem;
+  align-items:center; padding:.5rem .75rem; background:#0b1220; color:#fff;
+  border-bottom:1px solid rgba(255,255,255,.1); font-size:.9rem;
+}
+#demo-banner .badge{ background:#22c55e; color:#0b1220; border-radius:999px; padding:.1rem .5rem; font-weight:700 }
+.demo .leaflet-container{ height: calc(100vh - 56px - 36px); } /* banner + tab bar */
+
+.deal-chip{ 
+  display:inline-flex; 
+  gap:.5rem; 
+  border:1px solid #e2e8f0; 
+  padding:.25rem .5rem; 
+  border-radius:999px; 
+  background: #f8fafc;
+  font-size: 0.875rem;
+}
+.deal-chip span { font-weight: 600; color: #1e293b; }
+.deal-chip em { color: #64748b; font-style: normal; }

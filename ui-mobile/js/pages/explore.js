@@ -1,4 +1,5 @@
 // Explore page logic
+import { dealChip } from '../components/dealChip.js';
 window.Nerava = window.Nerava || {};
 window.Nerava.pages = window.Nerava.pages || {};
 
@@ -165,6 +166,9 @@ async function initExploreMinimal() {
   document.getElementById('perkTitle').textContent = perk.title || 'Special Offer';
   document.getElementById('perkSub').textContent = perk.description || 'Free coffee with any charge';
 
+  // Load and render deal chips
+  await loadDealChips();
+
   // Get user location and draw route
   const user = await getUserLocationFallback();
   const result = await drawRouteOrFallback(map, user, hub);
@@ -180,6 +184,30 @@ async function initExploreMinimal() {
     const claimTab = document.getElementById('tabScan');
     if (claimTab) claimTab.click();
   });
+}
+
+async function loadDealChips() {
+  try {
+    const deals = await window.Nerava.core.api.apiJson('/v1/deals/green_hours?lat=30.2672&lng=-97.7431');
+    if (deals && deals.length > 0) {
+      const container = document.createElement('div');
+      container.className = 'deal-chips';
+      container.style.cssText = 'display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0;';
+      
+      deals.slice(0, 3).forEach(deal => {
+        const chip = dealChip(deal);
+        container.appendChild(chip);
+      });
+      
+      // Insert after perk sheet
+      const perkSheet = document.getElementById('perkSheet');
+      if (perkSheet) {
+        perkSheet.parentNode.insertBefore(container, perkSheet.nextSibling);
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to load deals:', e);
+  }
 }
 
 async function getUserLocationFallback() {
