@@ -237,13 +237,7 @@ window.addEventListener('keydown', (e)=>{
   }
 });
 
-// Resize handler for map invalidation (debounced)
-(function(){
-  let t;
-  const kick = () => { clearTimeout(t); t=setTimeout(()=>{ try{ ensureMap(); }catch(_){ } }, 120); };
-  window.addEventListener('resize', kick, { passive:true });
-  window.addEventListener('orientationchange', kick, { passive:true });
-})();
+// Map resize handling now managed by js/core/map.js module
 
 // Cap hero images to prevent layout issues
 function capHero(){
@@ -260,43 +254,7 @@ const meters = (lat1, lon1, lat2, lon2) => {
 };
 const walkETAmin = (m) => Math.max(1, Math.round(m/1.4/60)); // 1.4 m/s
 
-// Leaflet layers for route/markers
-let walkLayer, chargerMarker, merchantMarker;
-
-async function drawWalkingRoute(charger, merchant){
-  if(!__mapInstance) ensureMap(charger.lat, charger.lng);
-  if(walkLayer){ try{ walkLayer.remove(); }catch(e){} }
-  if(chargerMarker){ try{ chargerMarker.remove(); }catch(e){} }
-  if(merchantMarker){ try{ merchantMarker.remove(); }catch(e){} }
-
-  // markers
-  chargerMarker = L.circleMarker([charger.lat, charger.lng], {radius:6, color:'#0ea5e9'});
-  merchantMarker = L.circleMarker([merchant.lat, merchant.lng], {radius:6, color:'#f59e0b'});
-  chargerMarker.addTo(__mapInstance); merchantMarker.addTo(__mapInstance);
-
-  // try OSRM pedestrian (best effort; optional)
-  let line;
-  try{
-    const url = `https://router.project-osrm.org/route/v1/foot/${charger.lng},${charger.lat};${merchant.lng},${merchant.lat}?overview=full&geometries=geojson`;
-    const r = await fetch(url, { mode:'cors' });
-    const j = r.ok ? await r.json() : null;
-    const coords = j?.routes?.[0]?.geometry?.coordinates?.map(([x,y])=>[y,x]);
-    if(coords && coords.length){ line = L.polyline(coords, {weight:5, opacity:.9}); }
-  }catch(_){} // ignore
-
-  // fallback: straight line
-  if(!line){ line = L.polyline([[charger.lat,charger.lng],[merchant.lat,merchant.lng]], {dashArray:'6,8', weight:4}); }
-  walkLayer = line.addTo(__mapInstance);
-
-  // fit and badge
-  const distM = meters(charger.lat, charger.lng, merchant.lat, merchant.lng);
-  __mapInstance.fitBounds(L.latLngBounds([[charger.lat,charger.lng],[merchant.lat,merchant.lng]]), { padding:[40,40] });
-  showWalkCTA(charger.name||'Charger', merchant.name||'Merchant', distM);
-  
-  // Show route badge
-  const badge = document.getElementById('route-badge');
-  if (badge) badge.style.removeProperty('display');
-}
+// Map functionality now handled by js/core/map.js module
 
 function showWalkCTA(chargerName, merchantName, distM){
   let box = document.getElementById('walk-cta');
