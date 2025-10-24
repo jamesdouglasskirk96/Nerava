@@ -32,6 +32,7 @@ from .routers import (
     analytics,
     social,
     admin,
+    ml,
 )
 
 # Auth + JWT preferences
@@ -93,3 +94,4 @@ app.include_router(incentives.router)
 app.include_router(energyhub.router)
 app.include_router(social.router)
 app.include_router(admin.router)
+app.include_router(ml.router)

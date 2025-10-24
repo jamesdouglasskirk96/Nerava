@@ -18,6 +18,19 @@ async function getRecommendedHub() {
 async function getPreferredPerk(hubId) {
   if (!window.Nerava.core.api.canCallApi()) return FALLBACK_PERK;
   try {
+    // Try ML recommendations first
+    const mlRecs = await window.Nerava.core.api.apiJson(`/v1/ml/recommend/perks?hub_id=${encodeURIComponent(hubId)}&user_id=current_user`);
+    if (mlRecs.recommendations && mlRecs.recommendations.length > 0) {
+      const topPerk = mlRecs.recommendations[0].perk;
+      return {
+        id: topPerk.id,
+        title: topPerk.name,
+        description: topPerk.description,
+        value: `$${(topPerk.value_cents / 100).toFixed(2)}`
+      };
+    }
+    
+    // Fallback to regular perks
     const r = await window.Nerava.core.api.apiJson(`/v1/places/perks?hub_id=${encodeURIComponent(hubId)}`);
     if (!r.ok) throw 0;
     const list = await r.json();
