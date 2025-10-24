@@ -386,7 +386,10 @@ function triggerWalletToast(msg){
 
 window.addEventListener('load', async ()=>{
   setTab('explore');
-  ensureMap('map'); // Initialize map once
+  // Initialize map once with guard
+  if (!window._neravaMap) {
+    window._neravaMap = ensureMap('map');
+  }
   await loadBanner();
   await loadWallet();
   await loadPrefs();

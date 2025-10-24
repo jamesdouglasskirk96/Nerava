@@ -6,6 +6,14 @@ export function ensureMap(containerId = 'map', { lat = 30.4025, lng = -97.7258, 
   const el = document.getElementById(containerId);
   if (!el) return null;
 
+  // Guard: if map already exists, return it
+  if (window._neravaMap) return window._neravaMap;
+
+  // Guard: if element already has Leaflet instance, clear it
+  if (el._leaflet_id) {
+    try { el._leaflet_id = null; el.innerHTML = ''; } catch {}
+  }
+
   // Reuse existing map if already bound to same container
   if (_map && _map._container === el) {
     _map.invalidateSize();
@@ -23,6 +31,9 @@ export function ensureMap(containerId = 'map', { lat = 30.4025, lng = -97.7258, 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19, attribution: '' // we'll hide attribution via CSS
   }).addTo(_map);
+  
+  // Store reference globally
+  window._neravaMap = _map;
   return _map;
 }
 
