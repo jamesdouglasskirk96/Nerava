@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from ..models_extra import RewardEvent, FollowerShare
-from ..models import Hub, Perk
 
 def aggregate_per_merchant(db: Session, period: str = 'month', merchant_id: Optional[str] = None) -> Dict[str, Any]:
     """

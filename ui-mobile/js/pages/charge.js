@@ -75,11 +75,130 @@ function wireFollowChips(scopeEl, items) {
   });
 }
 
-function initCharge() {
+async function initCharge() {
+  // Initialize map for route to charger
+  await initChargeMap();
+  
+  // Load social feed
   loadChargeFeed();
+}
+
+async function initChargeMap() {
+  // Wait for Leaflet to be available
+  if (!window.L) {
+    setTimeout(initChargeMap, 100);
+    return;
+  }
+  
+  const mapEl = document.getElementById('chargeMap');
+  if (!mapEl) return;
+  
+  // Initialize map
+  const map = L.map('chargeMap').setView([37.7749, -122.4194], 13);
+  
+  // Add tile layer
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors'
+  }).addTo(map);
+  
+  // Get user location and show route to nearest charger
+  try {
+    const userPos = await getUserLocation();
+    const chargerPos = await getNearestCharger();
+    
+    // Add markers
+    L.marker([userPos.lat, userPos.lng]).addTo(map)
+      .bindPopup('Your location');
+    
+    L.marker([chargerPos.lat, chargerPos.lng]).addTo(map)
+      .bindPopup('Charging station');
+    
+    // Draw route if routing is available
+    if (L.Routing && L.Routing.control) {
+      const routeControl = L.Routing.control({
+        waypoints: [
+          L.latLng(userPos.lat, userPos.lng),
+          L.latLng(chargerPos.lat, chargerPos.lng)
+        ],
+        addWaypoints: false,
+        draggableWaypoints: false,
+        routeWhileDragging: false,
+        show: false,
+        fitSelectedRoutes: true,
+        lineOptions: {
+          styles: [{ color: '#2a6bf2', weight: 6, opacity: 0.95 }]
+        }
+      });
+      
+      routeControl.addTo(map);
+      
+      routeControl.on('routesfound', (e) => {
+        const route = e.routes[0];
+        const summary = route.summary;
+        const distance = (summary.totalDistance / 1609.34).toFixed(1);
+        const time = Math.round(summary.totalTime / 60);
+        
+        // Update the perk stats with real route data
+        const statsEl = document.querySelector('.perk-stats');
+        if (statsEl) {
+          statsEl.innerHTML = `<span>~${time} min</span><span>•</span><span>${distance} mi</span>`;
+        }
+      });
+    } else {
+      // Fallback: draw straight line
+      L.polyline([
+        [userPos.lat, userPos.lng],
+        [chargerPos.lat, chargerPos.lng]
+      ], { color: '#2a6bf2', weight: 5, opacity: 0.9 }).addTo(map);
+      
+      // Fit bounds to show both points
+      map.fitBounds([
+        [userPos.lat, userPos.lng],
+        [chargerPos.lat, chargerPos.lng]
+      ], { padding: [20, 20] });
+    }
+    
+  } catch (error) {
+    console.error('Error initializing charge map:', error);
+    // Show default map centered on SF
+    map.setView([37.7749, -122.4194], 13);
+  }
+}
+
+async function getUserLocation() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      resolve({ lat: 37.7849, lng: -122.4094 }); // Default SF location
+      return;
+    }
+    
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => resolve({ lat: 37.7849, lng: -122.4094 }), // Fallback
+      { enableHighAccuracy: true, maximumAge: 60000, timeout: 4000 }
+    );
+  });
+}
+
+async function getNearestCharger() {
+  // Try to get from API, fallback to static location
+  try {
+    const hub = await window.Nerava.core.api.apiJson('/v1/hubs/recommended');
+    if (hub && hub.lat && hub.lng) {
+      return { lat: hub.lat, lng: hub.lng };
+    }
+  } catch (error) {
+    console.log('Using fallback charger location');
+  }
+  
+  // Fallback charger location
+  return { lat: 37.7849, lng: -122.4094 };
 }
 
 // Export init function
 window.Nerava.pages.charge = {
   init: initCharge
 };
+
+// Also make it globally available for app.js
+window.initCharge = initCharge;

@@ -1,0 +1,528 @@
+{
+  "info": {
+    "name": "Nerava Demo - Investor Tour",
+    "description": "Comprehensive demo collection for investor presentations",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8001",
+      "type": "string"
+    },
+    {
+      "key": "api_key",
+      "value": "demo-admin-key-2024",
+      "type": "string"
+    },
+    {
+      "key": "verify_key",
+      "value": "demo-verify-key-2024",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Demo Setup",
+      "item": [
+        {
+          "name": "Enable All Flags",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Nerava-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/demo/enable_all",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "demo", "enable_all"]
+            }
+          }
+        },
+        {
+          "name": "Seed Demo Data",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Nerava-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/demo/seed",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "demo", "seed"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Scenario Control",
+      "item": [
+        {
+          "name": "Set Off-Peak",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Nerava-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"key\": \"grid_state\",\n  \"value\": \"offpeak\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/demo/scenario",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "demo", "scenario"]
+            }
+          }
+        },
+        {
+          "name": "Set Peak",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Nerava-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"key\": \"grid_state\",\n  \"value\": \"peak\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/demo/scenario",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "demo", "scenario"]
+            }
+          }
+        },
+        {
+          "name": "Set Merchant A Dominance",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Nerava-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"key\": \"merchant_shift\",\n  \"value\": \"A_dominates\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/demo/scenario",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "demo", "scenario"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Core Features",
+      "item": [
+        {
+          "name": "Behavior Cloud (Off-Peak)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Nerava-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/utility/behavior/cloud?utility_id=UT_TX&window=24h",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "utility", "behavior", "cloud"],
+              "query": [
+                {
+                  "key": "utility_id",
+                  "value": "UT_TX"
+                },
+                {
+                  "key": "window",
+                  "value": "24h"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Autonomous Reward Routing (Peak)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Nerava-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/rewards/routing/rebalance",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "rewards", "routing", "rebalance"]
+            }
+          }
+        },
+        {
+          "name": "Merchant Intelligence",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Nerava-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/merchant/intel/overview?merchant_id=M_A",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "merchant", "intel", "overview"],
+              "query": [
+                {
+                  "key": "merchant_id",
+                  "value": "M_A"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "EnergyRep (High)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Nerava-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/profile/energy_rep?user_id=1",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "profile", "energy_rep"],
+              "query": [
+                {
+                  "key": "user_id",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "EnergyRep (Low)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Nerava-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/profile/energy_rep?user_id=2",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "profile", "energy_rep"],
+              "query": [
+                {
+                  "key": "user_id",
+                  "value": "2"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Verification & Security",
+      "item": [
+        {
+          "name": "Charge Verify (Good)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Nerava-Key",
+                "value": "{{verify_key}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"charge_session_id\": \"good_charge_123\",\n  \"kwh_charged\": 5.0,\n  \"location\": {\n    \"lat\": 30.2672,\n    \"lng\": -97.7431\n  },\n  \"station_location\": {\n    \"lat\": 30.2670,\n    \"lng\": -97.7430\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/verify/charge",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "verify", "charge"]
+            }
+          }
+        },
+        {
+          "name": "Charge Verify (Fraud - Below Min kWh)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Nerava-Key",
+                "value": "{{verify_key}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"charge_session_id\": \"fraud_charge_123\",\n  \"kwh_charged\": 0.5,\n  \"location\": {\n    \"lat\": 30.2672,\n    \"lng\": -97.7431\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/verify/charge",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "verify", "charge"]
+            }
+          }
+        },
+        {
+          "name": "Charge Verify (Fraud - Geo Mismatch)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Nerava-Key",
+                "value": "{{verify_key}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"charge_session_id\": \"fraud_geo_123\",\n  \"kwh_charged\": 5.0,\n  \"location\": {\n    \"lat\": 30.2672,\n    \"lng\": -97.7431\n  },\n  \"station_location\": {\n    \"lat\": 50.0,\n    \"lng\": -80.0\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/verify/charge",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "verify", "charge"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Finance & Marketplace",
+      "item": [
+        {
+          "name": "Finance Offers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Nerava-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/finance/offers?user_id=1",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "finance", "offers"],
+              "query": [
+                {
+                  "key": "user_id",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "City Impact",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Nerava-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/city/impact?city_slug=austin",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "city", "impact"],
+              "query": [
+                {
+                  "key": "city_slug",
+                  "value": "austin"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Green Hour Deals",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Nerava-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/deals/green_hours?lat=30.2672&lng=-97.7431",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "deals", "green_hours"],
+              "query": [
+                {
+                  "key": "lat",
+                  "value": "30.2672"
+                },
+                {
+                  "key": "lng",
+                  "value": "-97.7431"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Platform & SDK",
+      "item": [
+        {
+          "name": "SDK Config",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Nerava-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/sdk/config?tenant_id=demo_tenant",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "sdk", "config"],
+              "query": [
+                {
+                  "key": "tenant_id",
+                  "value": "demo_tenant"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Wallet Interop",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Nerava-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/wallet/interop/options",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "wallet", "interop", "options"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Demo Export",
+      "item": [
+        {
+          "name": "Export Demo Data",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Nerava-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/demo/export",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "demo", "export"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

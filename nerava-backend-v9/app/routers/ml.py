@@ -1,9 +1,7 @@
 from fastapi import APIRouter, Query, HTTPException
 from typing import List, Dict, Any
 from ..services.ml_ranker import rank_hubs_and_perks, score_hub, score_perk
-from ..db import get_db
-from sqlalchemy.orm import Session
-from ..models import Hub, Perk
+from ..services import hubs_dynamic
 
 router = APIRouter(prefix="/v1/ml", tags=["ml"])
 
@@ -12,29 +10,15 @@ async def recommend_hubs(
     user_id: str = Query(..., description="User ID"),
     lat: float = Query(..., description="User latitude"),
     lng: float = Query(..., description="User longitude"),
-    limit: int = Query(5, description="Number of recommendations"),
-    db: Session = get_db()
+    limit: int = Query(5, description="Number of recommendations")
 ):
     """Get personalized hub recommendations for a user."""
     try:
-        # Get all hubs (in a real app, you'd filter by proximity, availability, etc.)
-        hubs = db.query(Hub).limit(20).all()
-        
-        # Convert to dict format
-        hub_data = [
-            {
-                'id': hub.id,
-                'name': hub.name,
-                'lat': hub.lat,
-                'lng': hub.lng,
-                'city': hub.city,
-                'state': hub.state
-            }
-            for hub in hubs
-        ]
+        # Get dynamic hubs
+        hubs = await hubs_dynamic.build_dynamic_hubs(lat=lat, lng=lng, radius_km=5.0, max_results=20)
         
         # Get recommendations
-        result = rank_hubs_and_perks(user_id, lat, lng, hub_data, [])
+        result = rank_hubs_and_perks(user_id, lat, lng, hubs, [])
         
         return {
             'user_id': user_id,
@@ -49,33 +33,38 @@ async def recommend_hubs(
 async def recommend_perks(
     user_id: str = Query(..., description="User ID"),
     hub_id: str = Query(..., description="Hub ID"),
-    limit: int = Query(3, description="Number of recommendations"),
-    db: Session = get_db()
+    limit: int = Query(3, description="Number of recommendations")
 ):
     """Get personalized perk recommendations for a user at a specific hub."""
     try:
-        # Get perks for the hub
-        perks = db.query(Perk).filter(Perk.hub_id == hub_id).limit(10).all()
-        
-        # Convert to dict format
-        perk_data = [
+        # For now, return mock perks since we don't have a Perk model
+        # In a real implementation, you'd query the database for perks
+        mock_perks = [
             {
-                'id': perk.id,
-                'name': perk.name,
-                'description': perk.description,
-                'value_cents': perk.value_cents,
-                'hub_id': perk.hub_id
+                'id': 'perk_1',
+                'name': 'Coffee & Pastry',
+                'description': 'Free coffee and pastry with charging',
+                'value_cents': 500,
+                'hub_id': hub_id
+            },
+            {
+                'id': 'perk_2', 
+                'name': 'Parking Validation',
+                'description': '2 hours free parking',
+                'value_cents': 300,
+                'hub_id': hub_id
+            },
+            {
+                'id': 'perk_3',
+                'name': 'WiFi Access',
+                'description': 'Premium WiFi during charging',
+                'value_cents': 100,
+                'hub_id': hub_id
             }
-            for perk in perks
         ]
         
-        # Get hub location for context
-        hub = db.query(Hub).filter(Hub.id == hub_id).first()
-        if not hub:
-            raise HTTPException(status_code=404, detail="Hub not found")
-        
-        # Get recommendations (using hub location as user location for simplicity)
-        result = rank_hubs_and_perks(user_id, hub.lat, hub.lng, [], perk_data)
+        # Get recommendations
+        result = rank_hubs_and_perks(user_id, 0, 0, [], mock_perks)
         
         return {
             'user_id': user_id,
@@ -92,23 +81,16 @@ async def score_hub_endpoint(
     hub_id: str = Query(..., description="Hub ID"),
     user_id: str = Query(..., description="User ID"),
     lat: float = Query(..., description="User latitude"),
-    lng: float = Query(..., description="User longitude"),
-    db: Session = get_db()
+    lng: float = Query(..., description="User longitude")
 ):
     """Get a score for a specific hub."""
     try:
-        hub = db.query(Hub).filter(Hub.id == hub_id).first()
-        if not hub:
-            raise HTTPException(status_code=404, detail="Hub not found")
+        # Get hub data from dynamic hubs
+        hubs = await hubs_dynamic.build_dynamic_hubs(lat=lat, lng=lng, radius_km=5.0, max_results=20)
+        hub_data = next((h for h in hubs if h.get('id') == hub_id), None)
         
-        hub_data = {
-            'id': hub.id,
-            'name': hub.name,
-            'lat': hub.lat,
-            'lng': hub.lng,
-            'city': hub.city,
-            'state': hub.state
-        }
+        if not hub_data:
+            raise HTTPException(status_code=404, detail="Hub not found")
         
         context = {'user_lat': lat, 'user_lng': lng}
         score = score_hub(hub_data, user_id, context)

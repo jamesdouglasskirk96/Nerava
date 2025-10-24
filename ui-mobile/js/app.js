@@ -1,63 +1,74 @@
 // Main app controller
 window.Nerava = window.Nerava || {};
 
+// === Layout helpers ===
+const rootStyle = document.documentElement.style;
+
+function setMapInsets({ hasSheet = false, sheetPx = 0 } = {}) {
+  // Update CSS vars to push map correctly
+  rootStyle.setProperty('--sheet-h', `${sheetPx}px`);
+  const mapEl = document.getElementById('chargeMap');
+  if (!mapEl) return;
+  mapEl.classList.toggle('has-sheet', !!hasSheet);
+}
+
+// Scan panel has been permanently removed from HTML
+
 // Tab management
-const Tabs = (() => {
-  let active = 'Explore';
-  const listeners = [];
+const tabs = ['Explore','Charge','Claim','Wallet','Me'];
+const inited = {};
 
-  function setActive(tab) {
-    if (active === tab) return;
-    
-    // Hide all pages
-    document.querySelectorAll('.page').forEach(page => {
-      page.style.display = 'none';
-    });
-    
-    // Show active page
-    const activePage = document.getElementById(`page${tab}`);
-    if (activePage) {
-      activePage.style.display = 'block';
-    }
-    
-    // Update nav
-    document.querySelectorAll('.tab').forEach(btn => {
-      btn.classList.remove('active');
-    });
-    const activeBtn = document.getElementById(`tab${tab}`);
-    if (activeBtn) {
-      activeBtn.classList.add('active');
-    }
-    
-    active = tab;
-    
-    // Call page init
-    if (window.Nerava.pages && window.Nerava.pages[tab.toLowerCase()]) {
-      window.Nerava.pages[tab.toLowerCase()].init();
-    }
-    
-    // Notify listeners
-    listeners.forEach(fn => fn(active));
+function setActive(tab){
+  tabs.forEach(n => {
+    const on = (n === tab);
+    document.getElementById(`tab${n}`)?.classList.toggle('active', on);
+    document.getElementById(`page${n}`)?.classList.toggle('hidden', !on);
+  });
+
+  // Layout rules per tab
+  if (tab === 'Explore') {
+    // Only the compact perk sheet is shown; set its approximate height
+    const perkSheet = document.getElementById('perkSheet') || document.querySelector('[data-role="perk-sheet"]');
+    const h = perkSheet ? Math.min(320, perkSheet.offsetHeight || 320) : 320;
+    setMapInsets({ hasSheet: true, sheetPx: h });
+  } else if (tab === 'Claim') {
+    const claimSheet = document.getElementById('claimSheet') || document.querySelector('[data-role="claim-sheet"]');
+    const h = claimSheet ? Math.min(360, claimSheet.offsetHeight || 360) : 360;
+    setMapInsets({ hasSheet: true, sheetPx: h });
+  } else {
+    // Charge, Wallet, Me → no sheet for now; show full map behind header/nav
+    setMapInsets({ hasSheet: false, sheetPx: 0 });
   }
 
-  function getActive() {
-    return active;
+  // Hide Scan panel when on Charge (temporary)
+  if (tab === 'Charge' && SCAN_TEMP_DISABLED) {
+    const scan = document.querySelector('[data-role="scan-panel"]');
+    if (scan) scan.classList.add('hidden');
   }
 
-  function onChange(callback) {
-    listeners.push(callback);
+  // Lazy init per page
+  if (!inited[tab]) {
+    inited[tab] = true;
+    const initFn = window[`init${tab}`];
+    if (typeof initFn === 'function') initFn();
   }
 
-  return { setActive, getActive, onChange };
-})();
+  // Map repaint on Explore only
+  if (tab === 'Explore' && typeof window.repaintMap === 'function') {
+    requestAnimationFrame(window.repaintMap);
+  }
+}
 
 // Wire tab buttons
 function wireTabs() {
-  document.querySelectorAll('.tab').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const tab = btn.id.replace('tab', '');
-      Tabs.setActive(tab);
-    });
+  document.getElementById('tabExplore')?.addEventListener('click', ()=>setActive('Explore'));
+  document.getElementById('tabCharge')?.addEventListener('click',  ()=>setActive('Charge'));
+  document.getElementById('tabWallet')?.addEventListener('click',  ()=>setActive('Wallet'));
+  document.getElementById('tabMe')?.addEventListener('click',      ()=>setActive('Me'));
+
+  document.getElementById('tabScan')?.addEventListener('click',    ()=> {
+    // Open scan modal/sheet if you have it, or route to Claim
+    setActive('Claim');
   });
 }
 
@@ -66,12 +77,12 @@ function initApp() {
   wireTabs();
   
   // Set initial tab
-  Tabs.setActive('Explore');
+  setActive('Explore');
   
   // Add bottom padding to all pages
   const pages = document.querySelectorAll('.page, #pageExplore, #pageCharge, #pageWallet, #pageMe, #pageClaim');
   pages.forEach(p => { 
-    p.style.paddingBottom = `calc(96px + env(safe-area-inset-bottom, 12px))`; 
+    p.style.paddingBottom = `calc(84px + env(safe-area-inset-bottom, 12px))`; 
   });
 }
 

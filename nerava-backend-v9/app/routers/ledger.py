@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Query, HTTPException
-from typing import Optional
+from fastapi import APIRouter, Query, HTTPException, Depends
+from typing import Optional, Dict, Any
 from ..services.ledger import get_proof, verify_proof
 from ..db import get_db
 from sqlalchemy.orm import Session
@@ -10,8 +10,8 @@ router = APIRouter(prefix="/v1/ledger", tags=["ledger"])
 @router.get("/proofs")
 async def get_proof_by_event(
     event_id: int = Query(..., description="Event ID to look up"),
-    db: Session = get_db()
-):
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
     """Get a proof by event ID."""
     try:
         # First check if the event exists

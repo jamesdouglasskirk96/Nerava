@@ -1,17 +1,18 @@
+"""
+FastAPI middleware for metrics collection.
+"""
 import time
-from fastapi import Request
+from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
-from prometheus_client import Counter, Histogram, Gauge
-
-# Prometheus metrics
-requests_total = Counter('http_requests_total', 'Total HTTP requests', ['method', 'endpoint', 'status'])
-request_duration = Histogram('http_request_duration_seconds', 'HTTP request duration', ['method', 'endpoint'])
-active_requests = Gauge('http_active_requests', 'Currently active requests')
+from app.obs.obs import get_trace_id, record_request
 
 class MetricsMiddleware(BaseHTTPMiddleware):
+    """Middleware to collect request metrics and set trace IDs."""
+    
     async def dispatch(self, request: Request, call_next):
-        # Increment active requests
-        active_requests.inc()
+        # Set trace ID in request state
+        trace_id = get_trace_id(request)
+        request.state.trace_id = trace_id
         
         # Start timing
         start_time = time.time()
@@ -20,30 +21,15 @@ class MetricsMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         
         # Calculate duration
-        duration = time.time() - start_time
+        duration_ms = (time.time() - start_time) * 1000
         
-        # Extract endpoint (remove path parameters)
-        endpoint = request.url.path
-        if '/v1/energyhub/events/charge-start' in endpoint:
-            endpoint = '/v1/energyhub/events/charge-start'
-        elif '/v1/energyhub/events/charge-stop' in endpoint:
-            endpoint = '/v1/energyhub/events/charge-stop'
-        elif '/v1/energyhub/windows' in endpoint:
-            endpoint = '/v1/energyhub/windows'
+        # Extract route from request
+        route = f"{request.method} {request.url.path}"
         
         # Record metrics
-        requests_total.labels(
-            method=request.method,
-            endpoint=endpoint,
-            status=response.status_code
-        ).inc()
+        record_request(route, duration_ms)
         
-        request_duration.labels(
-            method=request.method,
-            endpoint=endpoint
-        ).observe(duration)
-        
-        # Decrement active requests
-        active_requests.dec()
+        # Add trace ID to response headers
+        response.headers["X-Trace-Id"] = trace_id
         
         return response

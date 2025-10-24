@@ -107,27 +107,35 @@ body {
 /* ===== Venmo-style 5-tab navigation ===== */
 .bottom-nav{
   position: fixed; left:0; right:0; bottom:0; z-index:25;
-  height: calc(64px + var(--sa-bottom));
-  padding: 8px 12px calc(8px + var(--sa-bottom)) 12px;
+  height: calc(72px + var(--sa-bottom));
+  padding: 8px 4px calc(8px + var(--sa-bottom)) 4px;
   background: rgba(255,255,255,.96);
   backdrop-filter: blur(10px);
   border-top: 1px solid var(--border);
-  display: grid; grid-template-columns: 1fr 1fr auto 1fr 1fr; align-items: end; gap: 8px;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  gap: 2px;
 }
 .bottom-nav .tab{
-  display:flex; flex-direction:column; align-items:center; gap:4px;
-  min-height:48px; padding:6px 8px; border-radius:10px; border:none; background:transparent;
-  color: var(--muted); font-size:12px; font-weight:600;
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  min-height:48px; padding:4px 2px; border-radius:8px; border:none; background:transparent;
+  color: var(--muted); font-size:11px; font-weight:600;
+  flex: 1;
+  max-width: 60px;
 }
 .bottom-nav .tab.active{ color: var(--brand-600); }
-.bottom-nav .tab .icon{ width:22px; height:22px; display:inline-block; background-size:contain; background-repeat:no-repeat; }
+.bottom-nav .tab .icon{ width:20px; height:20px; display:inline-block; background-size:contain; background-repeat:no-repeat; }
+.bottom-nav .tab span{ font-size:10px; line-height:1; text-align:center; }
 /* Center Claim button */
-.bottom-nav .tab-center{
-  width:56px; height:56px; border-radius:28px; align-self:center; justify-self:center;
-  background: var(--brand); color:#fff; box-shadow:0 8px 18px rgba(42,107,242,.35);
-  display:flex; align-items:center; justify-content:center; padding:0;
+.bottom-nav .scan-fab{
+  width:48px; height:48px; border-radius:24px; align-self:center;
+  background: var(--brand); color:#fff; box-shadow:0 4px 12px rgba(42,107,242,.35);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; padding:4px;
+  gap:2px;
 }
-.bottom-nav .tab-center .icon{ width:24px; height:24px; filter: invert(1); }
+.bottom-nav .scan-fab .icon{ width:20px; height:20px; filter: invert(1); }
+.bottom-nav .scan-fab span{ font-size:9px; line-height:1; }
 /* Icon sprites */
 .i-explore{ background-image:url('/app/assets/nav-explore.svg'); }
 .i-charge { background-image:url('/app/assets/nav-charge.svg'); }
@@ -190,7 +198,7 @@ body {
 
 /* Pages container (only Explore uses sheet layout; others stay content) */
 .page{ display:none; }
-.page.active{ display:block; }
+.page:not(.hidden){ display:block; }
 
 /* Charge/Wallet/Profile spacing so they sit above map safely */
 .page-padded{
@@ -338,38 +346,104 @@ body {
 .btn-primary{ background: var(--brand); border-color: var(--brand); color:#fff; min-height:48px; border-radius:18px; }
 
 /* ===== Bottom nav: brighter & safe-area padded ===== */
-#bottom-nav{
-  position: fixed; left: 0; right: 0; bottom: 0;
-  z-index: 3;
-  display: grid; grid-template-columns: repeat(4,1fr);
-  gap: 6px;
-  padding: 8px 12px calc(8px + var(--sa-bottom)) 12px;
-  background: rgba(255,255,255,.96);
-  backdrop-filter: blur(8px);
-  border-top: 1px solid var(--border);
-}
-.tab { color:#37507a; font-weight:600; }
-.tab.active { color: var(--brand-600); }
-.tab svg, .tab img{ opacity:.95; }
-.tab.active svg, .tab.active img{ opacity:1; }
+/* Removed duplicate bottom-nav definition */
 
-/* Utility: page bottoms never collide even if not in sheet */
-.page{ padding-bottom: calc(96px + var(--sa-bottom)); }
+/* Map positioning */
+#map, #chargeMap{
+  position: fixed; left: 0; right: 0;
+  top: calc(var(--sa-top) + var(--header-h));
+  bottom: calc(var(--nav-h) + var(--sa-bottom));
+  z-index: 0;
+  background: #f0f0f0; /* Fallback background */
+  min-height: 200px; /* Ensure minimum height */
+}
+
+/* === Map / Layout helpers === */
+:root{
+  /* dynamic insets; updated by JS per-tab */
+  --nav-h: 84px;                    /* nav + safe-area */
+  --header-h: 64px;                 /* header height */
+  --sheet-h: 0px;                   /* default: no sheet */
+}
+
+.app-map {
+  position: fixed;
+  inset: var(--header-h) 0 var(--nav-h) 0; /* header + nav only by default */
+  z-index: 0; /* map beneath sheets */
+}
+
+/* When a sheet is visible (Explore / Claim), JS sets --sheet-h; map bottom inset increases */
+.app-map.has-sheet {
+  inset: var(--header-h) 0 calc(var(--nav-h) + var(--sheet-h)) 0;
+}
+
+.hidden { display: none !important; }
+
+/* Scan panel has been permanently removed */
+
+/* Subtle fix: avoid double header overlap shadow when map behind */
+.app-header { position: sticky; top: 0; z-index: 20; }
+
+/* Bottom sheet base (already exists; ensure elevated above map) */
+.sheet { position: fixed; bottom: calc(var(--nav-h)); left: 0; right: 0; z-index: 15; }
+
+/* Floating perk card over map */
+.floating-perk-card {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(var(--nav-h) + var(--sa-bottom) + 16px);
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Sheet positioning */
+.sheet{
+  position: fixed; left: 16px; right: 16px;
+  bottom: calc(var(--nav-h) + var(--sa-bottom) + 8px);
+  max-height: calc(100dvh - var(--header-h) - var(--nav-h) - var(--sa-top) - var(--sa-bottom) - 32px);
+  overflow: hidden; z-index: 10;
+}
+.sheet__body{ overflow: auto; -webkit-overflow-scrolling: touch; }
+
+/* Page spacing */
+.page{
+  padding-top: calc(var(--header-h) + var(--sa-top) + 8px);
+  padding-bottom: calc(var(--nav-h) + var(--sa-bottom) + 8px);
+}
+
+/* Safe areas */
+:root{
+  --sa-top: env(safe-area-inset-top, 0px);
+  --sa-bottom: env(safe-area-inset-bottom, 12px);
+  --header-h: 64px;       /* visual height incl. blur */
+  --nav-h: 72px;          /* bottom nav incl. safe area */
+}
 
 /* ===== Header: centered with yellow bolt ===== */
 .app-header{
-  position: sticky; top:0; z-index:20;
-  padding: calc(10px + var(--sa-top)) 16px 10px;
-  background: linear-gradient(180deg, rgba(255,255,255,.92) 0%, rgba(255,255,255,.75) 100%);
+  position: fixed; inset: 0 0 auto 0;
+  height: calc(var(--header-h) + var(--sa-top));
+  padding-top: var(--sa-top);
+  background: rgba(255,255,255,.92);
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(10,21,40,.06);
+  border-bottom: 1px solid var(--border);
+  z-index: 30;
 }
-.app-header .header-center{
-  display:flex; align-items:center; justify-content:center; gap:10px;
-  font-weight:800; letter-spacing:.28em; color:var(--brand-text);
+.app-header__inner{
+  height: var(--header-h);
+  display: flex; align-items: center; justify-content: center;
+  gap: 10px;
+  font-weight: 800; letter-spacing: .18em;
 }
-.app-header .header-center .bolt{
-  color: var(--bolt-yellow); filter: drop-shadow(0 1px 0 rgba(0,0,0,.1));
+.app-header .bolt{ 
+  color: var(--bolt); 
+  filter: drop-shadow(0 1px 0 rgba(0,0,0,.1));
 }
 
 /* ===== Floating Action Buttons ===== */
@@ -441,16 +515,7 @@ body {
 }
 
 /* Bottom nav container */
-.bottom-nav {
-  position: fixed; left: 0; right: 0; bottom: 0;
-  height: calc(var(--nav-height) + var(--sa-bottom));
-  padding: 8px 8px calc(8px + var(--sa-bottom)) 8px;
-  display: grid; grid-template-columns: 1fr 1fr auto 1fr 1fr; align-items: end;
-  background: var(--nav-bg);
-  backdrop-filter: blur(10px);
-  border-top: 1px solid var(--nav-border);
-  z-index: 25;
-}
+/* Removed duplicate bottom-nav definition */
 
 /* Tabs */
 .nav-tab {
@@ -474,6 +539,22 @@ body {
   transform: translateY(-18px);
 }
 .nav-scan:active { transform: translateY(-16px) scale(.98); }
+
+/* New tab styles */
+.tab{ 
+  display:flex; flex-direction:column; align-items:center; gap:4px; 
+  color: var(--muted); border: none; background: none; cursor: pointer;
+  font-size: 11px; font-weight: 600; padding: 8px 4px;
+}
+.tab.active{ color: var(--brand-600); font-weight: 700; }
+.tab .icon{ width: 22px; height: 22px; }
+
+.scan-fab{
+  width: 64px; height: 64px; border-radius: 999px; display:grid; place-items:center;
+  background: var(--brand); color:#fff; box-shadow: 0 8px 24px rgba(42,107,242,.28);
+  transform: translateY(-18px); border: none; cursor: pointer;
+}
+.scan-fab .icon{ width: 24px; height: 24px; filter: invert(1); }
 
 /* Focus ring */
 .nav-tab:focus-visible, .nav-scan:focus-visible {
@@ -574,6 +655,22 @@ body {
 }
 .route-meta .dot { opacity: .5; }
 
+/* Mini sheet for minimal Explore */
+.mini-sheet{
+  position: fixed; left: 16px; right: 16px;
+  bottom: calc(var(--nav-h) + var(--sa-bottom) + 8px);
+  background: var(--surface);
+  border-radius: 20px; box-shadow: var(--shadow);
+  padding: 14px; z-index: 12;
+}
+.mini-sheet__header{ font-weight: 800; margin-bottom: 8px; }
+.perk-card{ display:flex; align-items:center; justify-content:space-between; gap:12px; background:var(--surface-2); padding:12px; border-radius:16px; }
+.perk-card__left{ display:flex; align-items:center; gap:12px; }
+.perk-icon{ width:28px; height:28px; }
+.perk-title{ font-weight:800; }
+.perk-sub{ color:var(--muted); font-size:13px; }
+.perk-stats{ margin-top:10px; color:var(--muted); display:flex; gap:8px; }
+
 /* Payout history styles */
 .payout-list {
   display: flex; flex-direction: column; gap: 8px;
@@ -606,4 +703,32 @@ body {
 }
 .payout-date {
   font-size: 12px; color: var(--muted); margin-top: 4px;
+}
+
+/* Profile card styles */
+.profile-card {
+  display: flex; align-items: center; gap: 12px; padding: 16px;
+}
+.profile-card .avatar {
+  width: 48px; height: 48px; border-radius: 24px;
+}
+.profile-meta {
+  flex: 1;
+}
+.profile-meta .name {
+  font-weight: 700; font-size: 16px; margin-bottom: 4px;
+}
+.profile-meta .rep {
+  font-size: 14px; color: var(--muted); margin-bottom: 4px;
+}
+.profile-meta .follows {
+  font-size: 12px; color: var(--muted);
+}
+
+/* Switch styles */
+.switch {
+  display: flex; align-items: center; gap: 8px; margin: 8px 0;
+}
+.switch input[type="checkbox"] {
+  width: 20px; height: 20px; accent-color: var(--brand);
 }

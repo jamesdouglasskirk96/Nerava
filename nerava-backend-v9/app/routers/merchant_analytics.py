@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Depends
 from typing import List, Dict, Any, Optional
 from ..services.merchant_analytics import aggregate_per_merchant, get_top_merchants
 from ..db import get_db
@@ -10,7 +10,7 @@ router = APIRouter(prefix="/v1/merchant", tags=["merchant"])
 async def get_merchant_insights(
     merchant_id: Optional[str] = Query(None, description="Merchant ID (optional)"),
     period: str = Query("month", description="Time period: month, week, or day"),
-    db: Session = get_db()
+    db: Session = Depends(get_db)
 ):
     """Get merchant analytics insights."""
     try:
@@ -24,7 +24,7 @@ async def get_merchant_insights(
 async def get_top_merchants_endpoint(
     limit: int = Query(10, description="Number of top merchants to return"),
     period: str = Query("month", description="Time period: month, week, or day"),
-    db: Session = get_db()
+    db: Session = Depends(get_db)
 ):
     """Get top performing merchants."""
     try:
@@ -41,7 +41,7 @@ async def get_top_merchants_endpoint(
 @router.get("/dashboard")
 async def get_merchant_dashboard(
     merchant_id: str = Query(..., description="Merchant ID"),
-    db: Session = get_db()
+    db: Session = Depends(get_db)
 ):
     """Get comprehensive dashboard data for a merchant."""
     try:

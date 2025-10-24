@@ -16,17 +16,17 @@
         href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   
   <!-- Routing plugin (after Leaflet) -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css">
-  <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css">
+  <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 </head>
 <body>
   <div id="app" class="app-root">
     <!-- Header -->
-    <header class="app-header" role="banner" aria-label="Nerava">
-      <div class="header-center">
+    <header id="appHeader" class="app-header" role="banner" aria-label="Nerava">
+      <div class="app-header__inner">
         <span class="brand">NERAVA</span>
         <span class="bolt" aria-hidden="true">⚡</span>
       </div>
@@ -37,45 +37,55 @@
 
         <!-- EXPLORE: Minimal route + single perk -->
         <section id="pageExplore" class="page active" aria-labelledby="exploreTitle">
-          <header class="app-header app-header--centered">
-            <div class="brand-lockup">
-              <span class="brand">NERAVA</span>
-              <span class="bolt" aria-hidden="true">⚡</span>
-            </div>
-          </header>
-
           <div id="map" class="map"></div>
 
-          <!-- Compact bottom sheet for the single preferred perk -->
-          <div id="explorePerkSheet" class="perk-sheet" role="dialog" aria-live="polite">
-            <div class="perk-sheet__handle" aria-hidden="true"></div>
-            <div class="perk-sheet__body">
-              <h2 id="exploreTitle" class="perk-sheet__title">Nearby perk</h2>
-
-              <div id="perkCard" class="perk-card">
-                <div class="perk-card__left">
-                  <img id="perkIcon" class="perk-card__icon" src="/app/img/coffee.svg" alt="" />
-                  <div>
-                    <div id="perkTitle" class="perk-card__merchant">Starbucks</div>
-                    <div id="perkSubtitle" class="perk-card__subtitle">Free tall coffee • 2–4pm</div>
-                    <div id="perkDistance" class="perk-card__distance">—</div>
-                  </div>
+          <!-- Minimal sheet for single perk -->
+          <div id="perkSheet" class="mini-sheet">
+            <div class="mini-sheet__header">Nearby perk</div>
+            <div class="perk-card">
+              <div class="perk-card__left">
+                <img src="/app/img/coffee.svg" alt="" class="perk-icon">
+                <div class="perk-meta">
+                  <div class="perk-title" id="perkTitle">Starbucks</div>
+                  <div class="perk-sub" id="perkSub">Free tall coffee • 2–4pm</div>
                 </div>
-                <button id="btnViewMorePerks" class="btn btn-primary">View more</button>
               </div>
-
-              <div id="routeMeta" class="route-meta">
-                <span id="routeEta">ETA —</span>
-                <span class="dot">•</span>
-                <span id="routeMiles">— mi</span>
-              </div>
+              <button id="perkMoreBtn" class="btn btn-primary">View more</button>
+            </div>
+            <div class="perk-stats">
+              <span id="perkEta">—</span>
+              <span>•</span>
+              <span id="perkMiles">— mi</span>
             </div>
           </div>
         </section>
 
       <!-- Charge / Wallet / Profile now padded pages (not overlay sheets) -->
-      <section id="pageCharge" class="page page-padded">
-        <div id="chargePane" class="pane">
+      <section id="pageCharge" class="page">
+        <!-- Map for route to charger -->
+        <div id="chargeMap" class="map app-map" role="application" aria-label="Map"></div>
+        
+        
+        <!-- Floating perk recommendation over map -->
+        <div class="floating-perk-card">
+          <div class="perk-card">
+            <div class="perk-card__left">
+              <img src="/app/img/coffee.svg" alt="" class="perk-icon">
+              <div class="perk-meta">
+                <div class="perk-title">Coffee & Pastry</div>
+                <div class="perk-sub">Free coffee and pastry with charging.</div>
+              </div>
+            </div>
+            <button class="btn btn-primary">View more</button>
+          </div>
+          <div class="perk-stats">
+            <span>~83 min</span>
+            <span>•</span>
+            <span>70.6 mi</span>
+          </div>
+        </div>
+        
+        <div id="chargePane" class="pane" style="display:none;">
           <div class="card" id="chargeStatusCard" style="margin:12px;">
             <h3>Charging activity</h3>
 
@@ -191,41 +201,49 @@
         </div>
       </section>
 
-      <section id="pageMe" class="page page-padded">
-        <section class="card content-card">
-          <h2 class="section-title">Profile</h2>
-          <p class="muted">Signed in as demo@nerava.app</p>
-          
-          <!-- Profile Stats -->
-          <div class="profile-stats" style="margin: 16px 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-            <div class="stat-card" style="padding: 12px; background: var(--surface); border-radius: 8px; text-align: center;">
-              <div style="font-size: 24px; font-weight: 700; color: var(--brand);">47</div>
-              <div style="font-size: 12px; color: var(--muted);">Total Sessions</div>
+      <section id="pageMe" class="page hidden" aria-labelledby="meHeading">
+        <div class="sheet">
+          <header class="sheet__header">
+            <h2 id="meHeading">Your profile</h2>
+          </header>
+          <div class="sheet__body">
+            <div class="card profile-card">
+              <img class="avatar" src="/app/img/avatar-demo.svg" alt="Profile photo"/>
+              <div class="profile-meta">
+                <div class="name">@you</div>
+                <div class="rep">Green Reputation: <strong id="repScore">—</strong></div>
+                <div class="follows">
+                  <span id="followersCount">0</span> followers ·
+                  <span id="followingCount">0</span> following
+                </div>
+              </div>
+              <button id="editPrefsBtn" class="btn-secondary">Preferences</button>
             </div>
-            <div class="stat-card" style="padding: 12px; background: var(--surface); border-radius: 8px; text-align: center;">
-              <div style="font-size: 24px; font-weight: 700; color: var(--brand);">1,247</div>
-              <div style="font-size: 12px; color: var(--muted);">kWh Charged</div>
+
+            <div class="card">
+              <h3>Vehicle</h3>
+              <div id="vehicleInfo">Add your EV for smarter suggestions</div>
+              <button id="editCarBtn" class="btn">Add vehicle</button>
+            </div>
+
+            <div class="card">
+              <h3>Notifications</h3>
+              <label class="switch">
+                <input id="greenHourNotif" type="checkbox" />
+                <span>Green Hour alerts</span>
+              </label>
+              <label class="switch">
+                <input id="perkNotif" type="checkbox" />
+                <span>Nearby perk alerts</span>
+              </label>
+            </div>
+
+            <div class="card">
+              <h3>Account</h3>
+              <button id="logoutBtn" class="btn-danger">Sign out</button>
             </div>
           </div>
-
-          <!-- Preferences -->
-          <h3 style="margin: 16px 0 8px 0; font-size: 16px;">Preferences</h3>
-          <div class="prefs">
-            <label><input type="checkbox" checked> Coffee & Bakery</label>
-            <label><input type="checkbox" checked> Quick Bites</label>
-            <label><input type="checkbox"> Dog Friendly</label>
-            <label><input type="checkbox"> Kid Friendly</label>
-            <label><input type="checkbox"> Shopping</label>
-          </div>
-
-          <!-- Actions -->
-          <div class="profile-actions" style="margin: 16px 0;">
-            <button class="btn btn-secondary" style="width: 100%; margin-bottom: 8px;">My QR Code</button>
-            <button class="btn btn-secondary" style="width: 100%; margin-bottom: 8px;">Notification Settings</button>
-            <button class="btn btn-secondary" style="width: 100%; margin-bottom: 8px;">Privacy Settings</button>
-            <button class="btn" style="width: 100%; color: var(--danger);">Sign out</button>
-          </div>
-        </section>
+        </div>
       </section>
 
   </div>
@@ -276,13 +294,30 @@
     </div>
   </dialog>
 
-  <!-- Venmo-style 5-Tab Navigation -->
+  <!-- 5-Tab Navigation -->
   <nav id="bottom-nav" class="bottom-nav" role="tablist" aria-label="Primary">
-    <button id="tabExplore" class="tab" role="tab" aria-controls="pageExplore"><img class="icon" src="/app/img/nav-explore.svg" alt="" /><span>Explore</span></button>
-    <button id="tabCharge"  class="tab" role="tab" aria-controls="pageCharge"><img class="icon" src="/app/img/nav-charge.svg" alt="" /><span>Charge</span></button>
-    <button id="tabClaim"   class="tab tab-center" role="tab" aria-controls="pageClaim" aria-label="Claim"><img class="icon" src="/app/img/nav-claim.svg" alt="" /></button>
-    <button id="tabWallet"  class="tab" role="tab" aria-controls="pageWallet"><img class="icon" src="/app/img/nav-wallet.svg" alt="" /><span>Wallet</span></button>
-    <button id="tabMe"      class="tab" role="tab" aria-controls="pageMe"><img class="avatar-icon" src="/app/img/avatar-demo.svg" alt="" /><span>Me</span></button>
+    <button id="tabExplore" class="tab" aria-label="Explore">
+      <img src="/app/img/nav-explore.svg" class="icon" alt="" />
+      <span>Explore</span>
+    </button>
+    <button id="tabCharge" class="tab" aria-label="Charge">
+      <img src="/app/img/nav-charge.svg" class="icon" alt="" />
+      <span>Charge</span>
+    </button>
+
+    <button id="tabScan" class="scan-fab" aria-label="Claim">
+      <img src="/app/img/nav-claim.svg" class="icon" alt=""/>
+      <span>Claim</span>
+    </button>
+
+    <button id="tabWallet" class="tab" aria-label="Wallet">
+      <img src="/app/img/nav-wallet.svg" class="icon" alt="" />
+      <span>Wallet</span>
+    </button>
+    <button id="tabMe" class="tab" aria-label="Me">
+      <img src="/app/img/nav-me.svg" class="icon" alt="" />
+      <span>Me</span>
+    </button>
   </nav>
 
   <!-- Scan modal -->
@@ -307,19 +342,19 @@
   </dialog>
 
   <!-- Core modules -->
-  <script src="js/core/api.js"></script>
-  <script src="js/core/map.js"></script>
-  <script src="js/core/utils.js"></script>
+  <script src="js/core/api.js" defer></script>
+  <script src="js/core/map.js" defer></script>
+  <script src="js/core/utils.js" defer></script>
   
   <!-- Page modules -->
-  <script src="js/pages/explore.js"></script>
-  <script src="js/pages/charge.js"></script>
-  <script src="js/pages/claim.js"></script>
-  <script src="js/pages/wallet.js"></script>
-  <script src="js/pages/me.js"></script>
+  <script src="js/pages/explore.js" defer></script>
+  <script src="js/pages/charge.js" defer></script>
+  <script src="js/pages/claim.js" defer></script>
+  <script src="js/pages/wallet.js" defer></script>
+  <script src="js/pages/me.js" defer></script>
   
   <!-- Animations and main app -->
-  <script src="js/animations.js"></script>
+  <script src="js/animations.js" defer></script>
   <script src="js/app.js" defer></script>
 </body>
 </html>
