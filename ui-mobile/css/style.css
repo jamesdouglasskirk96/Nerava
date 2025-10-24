@@ -234,33 +234,26 @@ background:var(--bg);color:var(--text);
 
 /* CSS Variables for consistent styling */
 :root {
-  --brand: #3B82F6;           /* Nerava text blue */
-  --icon-stroke: #94A3B8;     /* light gray for outlines */
+  --icon-stroke: #9aa3af;        /* navbar outline gray */
+  --brand-blue: #3B6EF5;         /* Nerava text blue */
 }
 
-/* Map card container */
-#map-card{ border-radius:18px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,.08); background:#fff; }
-#map{ width:100%; height:360px; }
-.leaflet-control-attribution{ display:none !important; visibility:hidden !important; }
-
-/* Earn FAB alignment and outline color */
-.fab{
-  position:absolute; left:50%;
-  transform: translateX(-50%) translateY(-12px); /* lower to align with icons */
-  background: var(--brand);
-  color:#fff;
-  border:2px solid var(--icon-stroke); /* match nav outline */
-  border-radius:20px; padding:10px 14px; min-width:84px;
-  display:flex; gap:8px; align-items:center; justify-content:center;
-  box-shadow:0 12px 24px rgba(0,0,0,.18);
+/* Rounded card container for the map */
+.map-card {
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0,0,0,.08);
+  background: #fff;
 }
-.fab svg, .fab .icon{ width:20px; height:20px; stroke:#fff; }
 
-/* Hide Leaflet attribution permanently */
+/* Force attribution off (requested) */
 .leaflet-control-attribution,
-.leaflet-bottom.leaflet-right {
-  display: none !important; 
-  visibility: hidden !important; 
+.leaflet-bottom.leaflet-right { display: none !important; }
+
+.fab {
+  background: var(--brand-blue);
+  border: 2px solid var(--icon-stroke);   /* match navbar outline */
+  color: #fff;
 }
 
 /* Ensure tab items distribute evenly with space-around */

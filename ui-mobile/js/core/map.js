@@ -1,49 +1,43 @@
-// ui-mobile/js/core/map.js
 /* globals L */
+let _map = null;
+let _overlays = [];
 
-let map; // shared singleton for the whole app
-let mapContainerId = 'map'; // default id; can be overridden by caller
-
-export function ensureMap(lat = 30.4021, lng = -97.7258, options = {}) {
-  const el = document.getElementById(mapContainerId) || document.getElementById('map');
+export function ensureMap(containerId = 'map', { lat = 30.4025, lng = -97.7258, zoom = 15 } = {}) {
+  const el = document.getElementById(containerId);
   if (!el) return null;
-  // If a Leaflet instance already attached to this element, reuse it.
-  if (map && map._leaflet_id) {
-    map.invalidateSize();
-    return map;
+
+  // Reuse existing map if already bound to same container
+  if (_map && _map._container === el) {
+    _map.invalidateSize();
+    return _map;
   }
-  // Defensive: if element got a map previously, clear it.
-  if (el._leaflet_id) {
-    try { el._leaflet_id = undefined; el.innerHTML = ''; } catch {}
+
+  // If a map exists on a different container, remove it first
+  if (_map) {
+    try { _map.remove(); } catch {}
+    _map = null;
+    _overlays = [];
   }
-  map = L.map(el, { zoomControl: false, ...options }).setView([lat, lng], 16);
+
+  _map = L.map(el, { zoomControl: false }).setView([lat, lng], zoom);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; OpenStreetMap'
-  }).addTo(map);
-  return map;
+    maxZoom: 19, attribution: '' // we'll hide attribution via CSS
+  }).addTo(_map);
+  return _map;
 }
 
-export function setMapContainerId(id) { mapContainerId = id; }
-
-let _route = null, _markers = [];
-
-export function clearRoute() {
-  if (_route) { 
-    map.removeLayer(_route); 
-    _route = null; 
-  }
-  _markers.forEach(m => map.removeLayer(m)); 
-  _markers.length = 0;
+export function addOverlay(layer) {
+  if (_map && layer) { layer.addTo(_map); _overlays.push(layer); }
 }
 
-export function drawWalkingRoute(a, b) {
-  if (!map || !a || !b) return;
-  clearRoute();
-  const latlngs = [a, b];
-  _route = L.polyline(latlngs, { dashArray: '6,6', weight: 4, color: '#2563eb', opacity: .9 }).addTo(map);
-  _markers.push(L.circleMarker(a, { radius: 6, color: '#2563eb', fillOpacity: 1 }).addTo(map));
-  _markers.push(L.circleMarker(b, { radius: 6, color: '#2563eb', fillOpacity: 1 }).addTo(map));
-  const pad = { paddingTopLeft: [16, 16], paddingBottomRight: [16, 96], maxZoom: 17 };
-  map.fitBounds(_route.getBounds(), pad);
+export function clearOverlays() {
+  if (!_map) return;
+  _overlays.forEach(l => { try { _map.removeLayer(l); } catch {} });
+  _overlays = [];
 }
+
+export function fitBounds(bounds, padding = [60, 60], maxZoom = 17) {
+  if (_map && bounds) _map.fitBounds(bounds, { padding, maxZoom });
+}
+
+export function getMap() { return _map; }
