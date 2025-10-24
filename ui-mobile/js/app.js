@@ -2,7 +2,8 @@
 import { loadDemoState } from './core/demo.js';
 import { ensureDemoBanner } from './components/demoBanner.js';
 import { apiGet, apiPost } from './core/api.js';
-import { ensureMap, fitMapToRoute, drawDashedRoute, placeCircle, mapRef } from './js/core/map.js';
+import { ensureMap } from './js/core/map.js';
+export { ensureMap }; // so other modules can import from '../app.js' if needed
 window.Nerava = window.Nerava || {};
 
 // === SSO → prefs → wallet pre-balance → push banner flow ===
@@ -60,10 +61,6 @@ function loadRecommendation(){
 // Alias for setActive (legacy compatibility)
 function setTab(tab) { 
   setActive(tab); 
-  // Invalidate map when switching back to explore
-  if (tab === 'explore' && mapRef) {
-    mapRef.invalidateSize(true);
-  }
 }
 
 // Map initialization now handled by js/core/map.js module
@@ -373,7 +370,7 @@ function triggerWalletToast(msg){
 
 window.addEventListener('load', async ()=>{
   setTab('explore');
-  ensureMap('map', [30.4025, -97.7258], 15); // Initialize map once
+  ensureMap('map'); // Initialize map once
   await loadBanner();
   await loadWallet();
   await loadPrefs();

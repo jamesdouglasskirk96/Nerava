@@ -1,37 +1,43 @@
-import { ensureMap, fitMapToRoute, drawDashedRoute, placeCircle, mapRef } from '../js/core/map.js';
+import { ensureMap, drawStraightRoute } from '../core/map.js';
 import { apiGet } from '../core/api.js';
 
-export async function initExplore(){
-  // Safe fallbacks if backend 404s
-  let hub = null, deal = null;
-  try { hub = await apiGet('/v1/hubs/recommend'); } catch(_) {}
-  try { deal = await apiGet('/v1/deals/nearby'); } catch(_) {}
+// Defensive helper
+const num = v => (Number.isFinite(v) ? v : null);
 
-  // Fallback coordinates (Domain, Austin) if APIs unavailable
-  const charger = {
-    lat: Number(hub?.lat ?? 30.4025),
-    lng: Number(hub?.lng ?? -97.7258)
-  };
-  const merchant = {
-    lat: Number(deal?.items?.[0]?.lat ?? 30.2729),
-    lng: Number(deal?.items?.[0]?.lng ?? -97.7413)
-  };
+export async function initExplore() {
+  const map = ensureMap('map');
+  if (!map) return;
 
-  ensureMap('map', [charger.lat, charger.lng], 15);
+  // Try API, but fall back to demo coordinates on 404/Network
+  let hub, deal;
+  try {
+    hub = await apiGet('/v1/hubs/recommend');
+  } catch (_) {}
+  try {
+    const deals = await apiGet('/v1/deals/nearby');
+    deal = deals?.[0];
+  } catch (_) {}
 
-  // Clear & draw simple route/markers
-  placeCircle(charger.lat, charger.lng, { radius:9 });
-  placeCircle(merchant.lat, merchant.lng, { radius:9 });
-  drawDashedRoute(charger, merchant);
-  fitMapToRoute(charger, merchant, 60);
+  // Fallback coordinates (Domain, Austin)
+  const charger = [
+    num(hub?.lat) ?? 30.4062,
+    num(hub?.lng) ?? -97.7260,
+  ];
+  const merchant = [
+    num(deal?.lat) ?? 30.3990,
+    num(deal?.lng) ?? -97.7230,
+  ];
+
+  // Draw simple straight route for now (OSRM optional; not required here)
+  drawStraightRoute(charger, merchant);
 
   // Simple perk card with fallback data
   const card = document.getElementById('perk-card');
   if (card) {
-    const merchantName = deal?.items?.[0]?.name || 'Nearby perk';
-    const merchantReward = deal?.items?.[0]?.reward_text || 'Cheaper during Green Hour';
-    const merchantWindow = deal?.items?.[0]?.window || '2–4pm';
-    const merchantDistance = deal?.items?.[0]?.distance_text || '0.3 mi from charger';
+    const merchantName = deal?.name || 'Nearby perk';
+    const merchantReward = deal?.reward_text || 'Cheaper during Green Hour';
+    const merchantWindow = deal?.window || '2–4pm';
+    const merchantDistance = deal?.distance_text || '0.3 mi from charger';
 
     card.innerHTML = `
       <div class="perk-card">

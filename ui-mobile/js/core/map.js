@@ -1,47 +1,54 @@
-export let mapRef = null;
-let tileLayerRef = null;
+/* globals L */
+// Singleton Leaflet map + helpers. Safe to import from any page script.
+let _map = null;
+let _routeLayer = null;
 
-export function ensureMap(elId = 'map', center = [30.4025, -97.7258], zoom = 15) {
-  // Idempotent map boot
-  const el = document.getElementById(elId);
+export function ensureMap(containerId = 'map', opts = {}) {
+  const el = document.getElementById(containerId);
   if (!el) return null;
-
-  // Leaflet throws if reusing the same element; clear previous instance safely
-  if (mapRef && mapRef._container === el) {
-    mapRef.invalidateSize();
-    return mapRef;
+  if (_map) {
+    // If a previous map is mounted on a different element, detach and reattach
+    if (_map._container !== el) {
+      el.innerHTML = '';
+      _map = null;
+    } else {
+      setTimeout(() => _map.invalidateSize(), 0);
+      return _map;
+    }
   }
-  if (mapRef) {
-    try { mapRef.remove(); } catch (_) {}
-    mapRef = null;
-    tileLayerRef = null;
+  _map = L.map(el, { zoomControl: false, attributionControl: false }).setView(
+    [30.4021, -97.7265],
+    15
+  );
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19
+  }).addTo(_map);
+  setTimeout(() => _map.invalidateSize(), 0);
+  return _map;
+}
+
+export function clearRoute() {
+  if (_routeLayer) {
+    _routeLayer.remove();
+    _routeLayer = null;
   }
-
-  mapRef = L.map(el, { zoomControl: false }).setView(center, clampZoom(zoom));
-  tileLayerRef = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19, attribution: '&copy; OpenStreetMap'
-  }).addTo(mapRef);
-  return mapRef;
 }
 
-export function clampZoom(z) { return Math.max(13, Math.min(17, Number(z)||15)); }
-
-export function fitMapToRoute(a, b, padPx = 60) {
-  if (!mapRef) return;
-  if (!isFinite(a?.lat) || !isFinite(a?.lng) || !isFinite(b?.lat) || !isFinite(b?.lng)) return;
-  const bounds = L.latLngBounds([ [a.lat, a.lng], [b.lat, b.lng] ]);
-  mapRef.fitBounds(bounds, { padding: [padPx, padPx], maxZoom: 16 });
+export function drawStraightRoute(a, b) {
+  if (!_map || !a || !b) return;
+  clearRoute();
+  _routeLayer = L.layerGroup().addTo(_map);
+  const line = L.polyline([a, b], {
+    color: '#3b82f6',
+    weight: 5,
+    opacity: 0.7,
+    dashArray: '8 8'
+  }).addTo(_routeLayer);
+  L.circleMarker(a, { radius: 7, color: '#2563eb', fillColor: '#2563eb', fillOpacity: 1 }).addTo(_routeLayer);
+  L.circleMarker(b, { radius: 7, color: '#2563eb', fillColor: '#2563eb', fillOpacity: 1 }).addTo(_routeLayer);
+  _map.fitBounds(line.getBounds(), { padding: [28, 28], maxZoom: 17 });
 }
 
-export function drawDashedRoute(a, b) {
-  if (!mapRef) return null;
-  const latlngs = [[a.lat, a.lng], [b.lat, b.lng]];
-  return L.polyline(latlngs, { color:'#4178f7', weight:6, opacity:0.8, dashArray:'8,10' }).addTo(mapRef);
-}
-
-export function placeCircle(lat, lng, opts={}) {
-  if (!mapRef || !isFinite(lat) || !isFinite(lng)) return null;
-  return L.circleMarker([lat, lng], {
-    radius: 8, color:'#4178f7', fillColor:'#4178f7', fillOpacity:1, ...opts
-  }).addTo(mapRef);
+export function fitBounds(bounds) {
+  if (_map && bounds) _map.fitBounds(bounds, { padding: [28, 28], maxZoom: 17 });
 }

@@ -239,14 +239,18 @@ background:var(--bg);color:var(--text);
   --tabbar-height: 76px;
 }
 
+/* Rounded map card container */
 .map-card {
   border-radius: 20px;
   overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.12);
   margin: 16px;
   background: #fff;
 }
-.map{ height: 46vh; width: 100%; }
+#map {
+  width: 100%;
+  height: 360px;
+}
 
 /* Always hide Leaflet attribution for demo */
 .leaflet-control-attribution,
