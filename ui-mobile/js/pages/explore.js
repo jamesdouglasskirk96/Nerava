@@ -62,10 +62,29 @@ async function loadRecommendedHub(){
   if (!nameEl || !tierEl) { return; }
   
   const live = await apiGet('/v1/hubs/recommended');
-  if (live && live.lat && live.lng) return live;
+  if (live && live.lat && live.lng) {
+    // Get nearby merchants for dual-zone verification
+    const nearby = await apiGet('/v1/merchants/nearby?lat='+live.lat+'&lng='+live.lng+'&radius_km=0.3').catch(()=>({items:[]}));
+    const merchant = (nearby?.items?.[0]) || { id:'m_demo', name:'Nearby Perk', lat: live.lat+0.001, lng: live.lng+0.001 };
+
+    // Start dual-zone session if function exists
+    if (typeof startDualSession === 'function') {
+      startDualSession(localStorage.NERAVA_USER || 'demo@nerava.app', live, merchant);
+    }
+    
+    return live;
+  }
 
   // fallback data near Austin (adjust as needed)
-  return { id: 'fallback_hub', name: 'Nerava Hub', lat: 30.2672, lng: -97.7431 };
+  const fallback = { id: 'fallback_hub', name: 'Nerava Hub', lat: 30.2672, lng: -97.7431 };
+  
+  // Start dual-zone session with fallback merchant
+  const merchant = { id:'m_demo', name:'Nearby Perk', lat: fallback.lat+0.001, lng: fallback.lng+0.001 };
+  if (typeof startDualSession === 'function') {
+    startDualSession(localStorage.NERAVA_USER || 'demo@nerava.app', fallback, merchant);
+  }
+  
+  return fallback;
 }
 
 async function getRecommendedHub() {

@@ -251,3 +251,117 @@ function capHero(){
   const hero = document.querySelector('.perk-hero img, .perk-hero svg');
   if (hero) { hero.removeAttribute('width'); hero.removeAttribute('height'); }
 }
+
+// ---- geo helpers ----
+const meters = (lat1, lon1, lat2, lon2) => {
+  const toRad = d=>d*Math.PI/180, R = 6371000;
+  const dlat = toRad(lat2-lat1), dlon = toRad(lon2-lon1);
+  const a = Math.sin(dlat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dlon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(a));
+};
+const walkETAmin = (m) => Math.max(1, Math.round(m/1.4/60)); // 1.4 m/s
+
+// Leaflet layers for route/markers
+let walkLayer, chargerMarker, merchantMarker;
+
+async function drawWalkingRoute(charger, merchant){
+  if(!__mapInstance) ensureMap(charger.lat, charger.lng);
+  if(walkLayer){ try{ walkLayer.remove(); }catch(e){} }
+  if(chargerMarker){ try{ chargerMarker.remove(); }catch(e){} }
+  if(merchantMarker){ try{ merchantMarker.remove(); }catch(e){} }
+
+  // markers
+  chargerMarker = L.circleMarker([charger.lat, charger.lng], {radius:6, color:'#0ea5e9'});
+  merchantMarker = L.circleMarker([merchant.lat, merchant.lng], {radius:6, color:'#f59e0b'});
+  chargerMarker.addTo(__mapInstance); merchantMarker.addTo(__mapInstance);
+
+  // try OSRM pedestrian (best effort; optional)
+  let line;
+  try{
+    const url = `https://router.project-osrm.org/route/v1/foot/${charger.lng},${charger.lat};${merchant.lng},${merchant.lat}?overview=full&geometries=geojson`;
+    const r = await fetch(url, { mode:'cors' });
+    const j = r.ok ? await r.json() : null;
+    const coords = j?.routes?.[0]?.geometry?.coordinates?.map(([x,y])=>[y,x]);
+    if(coords && coords.length){ line = L.polyline(coords, {weight:5, opacity:.9}); }
+  }catch(_){} // ignore
+
+  // fallback: straight line
+  if(!line){ line = L.polyline([[charger.lat,charger.lng],[merchant.lat,merchant.lng]], {dashArray:'6,8', weight:4}); }
+  walkLayer = line.addTo(__mapInstance);
+
+  // fit and badge
+  const distM = meters(charger.lat, charger.lng, merchant.lat, merchant.lng);
+  __mapInstance.fitBounds(L.latLngBounds([[charger.lat,charger.lng],[merchant.lat,merchant.lng]]), { padding:[40,40] });
+  showWalkCTA(charger.name||'Charger', merchant.name||'Merchant', distM);
+  
+  // Show route badge
+  const badge = document.getElementById('route-badge');
+  if (badge) badge.style.removeProperty('display');
+}
+
+function showWalkCTA(chargerName, merchantName, distM){
+  let box = document.getElementById('walk-cta');
+  if(!box){
+    box = document.createElement('div');
+    box.id = 'walk-cta'; box.className = 'walk-cta';
+    document.getElementById('page-explore')?.prepend(box);
+  }
+  const eta = walkETAmin(distM);
+  box.innerHTML = `Walk to <b>${merchantName}</b> from ${chargerName} • ~${eta} min (${Math.round(distM)}m)
+    <button id="btn-start-walk">Start</button>`;
+  document.getElementById('btn-start-walk').onclick = ()=> setTab('explore'); // already here; keep focus
+}
+
+// --- Dual-zone MVP ---
+let dualSession = null;
+let geoWatchId = null;
+let lastTick = 0;
+
+async function startDualSession(user_id, charger, merchant){
+  // hit backend to create a session (flag-gated)
+  try{
+    const res = await NeravaAPI.apiPost('/v1/dual/start', {
+      user_id, charger_id: charger.id, merchant_id: merchant.id,
+      charger_radius_m: 40, merchant_radius_m: 100, dwell_threshold_s: 180
+    });
+    dualSession = { id: res.session_id, charger, merchant };
+    drawWalkingRoute(charger, merchant);
+    startGeoWatch();
+  }catch(e){ console.warn('dual start failed (flag off or server down)', e); }
+}
+
+function startGeoWatch(){
+  if(geoWatchId) return;
+  if(!navigator.geolocation){ console.warn('no geolocation'); return; }
+  geoWatchId = navigator.geolocation.watchPosition(pos=>{
+    const now = Date.now();
+    if(now - lastTick < 12000) return; // throttle 12s
+    lastTick = now;
+
+    const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    if(dualSession){
+      // optimistic front-end verify tick (no server dependency in demo)
+      const m1 = meters(p.lat,p.lng, dualSession.charger.lat, dualSession.charger.lng);
+      const m2 = meters(p.lat,p.lng, dualSession.merchant.lat, dualSession.merchant.lng);
+      // call server (best effort)
+      NeravaAPI.apiPost('/v1/dual/tick', {
+        session_id: dualSession.id,
+        user_pos: p,
+        charger_pos: { lat: dualSession.charger.lat, lng: dualSession.charger.lng },
+        merchant_pos:{ lat: dualSession.merchant.lat, lng: dualSession.merchant.lng }
+      }).then(j=>{
+        if(j?.status==='verified'){
+          triggerWalletToast('✅ Session verified by location. Reward added.');
+        }
+      }).catch(()=>{/* ignore in demo */});
+    }
+  }, err=>console.warn('geo error', err), { enableHighAccuracy:false, maximumAge:15000, timeout:12000 });
+}
+
+function triggerWalletToast(msg){
+  try{
+    const t = document.createElement('div');
+    t.style.cssText='position:fixed;left:50%;bottom:calc(var(--tabbar-height) + 18px);transform:translateX(-50%);background:#111;color:#fff;padding:10px 14px;border-radius:12px;z-index:9999;font-weight:700';
+    t.textContent = msg; document.body.appendChild(t); setTimeout(()=>t.remove(), 3200);
+  }catch(_){}
+}

@@ -61,6 +61,7 @@ from .routers import (
     finance,
     ai_growth,
     demo,
+    dual_zone,
 )
 
 # Auth + JWT preferences
@@ -152,3 +153,4 @@ app.include_router(ai_rewards.router)
 app.include_router(finance.router)
 app.include_router(ai_growth.router)
 app.include_router(demo.router)
+app.include_router(dual_zone.router)

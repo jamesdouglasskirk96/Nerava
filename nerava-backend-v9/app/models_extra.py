@@ -1,5 +1,5 @@
 from datetime import datetime, time
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Time
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Time, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.sqlite import JSON as SQLITE_JSON
 from .db import Base
@@ -298,3 +298,29 @@ class GrowthCampaign(Base):
     campaign_id = Column(String, unique=True, nullable=False)
     variants = Column(JSON, default=list)
     status = Column(String, default="draft")
+
+# Dual-Radius Verification Model
+class DualZoneSession(Base):
+    __tablename__ = "dual_zone_sessions"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(String, index=True, nullable=False)
+    charger_id = Column(String, index=True, nullable=False)
+    merchant_id = Column(String, index=True, nullable=False)
+
+    # timestamps
+    started_at = Column(DateTime, default=datetime.utcnow, index=True)   # app-side start
+    charger_entered_at = Column(DateTime, nullable=True)
+    merchant_entered_at = Column(DateTime, nullable=True)
+    verified_at = Column(DateTime, nullable=True)
+
+    # parameters
+    charger_radius_m = Column(Integer, default=40)   # R1
+    merchant_radius_m = Column(Integer, default=100) # R2
+    dwell_threshold_s = Column(Integer, default=300) # 5 min
+
+    # computed
+    dwell_seconds = Column(Integer, default=0)
+    status = Column(String, default="pending")  # pending|verified|expired
+    meta = Column(JSON, default=dict)
+
+Index("ix_dual_zone_user_active", DualZoneSession.user_id, DualZoneSession.status)

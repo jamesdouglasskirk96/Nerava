@@ -34,6 +34,7 @@ class Settings(BaseModel):
     feature_ai_reward_opt: bool = False
     feature_esg_finance_gateway: bool = False
     feature_ai_growth_automation: bool = False
+    feature_dual_radius_verification: bool = False
 
 settings = Settings()
 ACCESS_TOKEN_EXPIRE = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
