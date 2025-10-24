@@ -366,25 +366,25 @@
 
 
   <!-- Core modules -->
-  <script type="module" src="js/core/api.js" defer></script>
-  <script type="module" src="js/core/map.js" defer></script>
-  <script src="js/core/utils.js" defer></script>
+  <script type="module" src="/app/js/core/api.js" defer></script>
+  <script type="module" src="/app/js/core/map.js" defer></script>
+  <script src="/app/js/core/utils.js" defer></script>
   
   <!-- Page modules -->
-  <script type="module" src="js/pages/explore.js" defer></script>
-  <script type="module" src="js/pages/charge.js" defer></script>
-  <script src="js/pages/claim.js" defer></script>
-  <script type="module" src="js/pages/wallet.js" defer></script>
-  <script type="module" src="js/pages/me.js" defer></script>
-  <script type="module" src="js/pages/dev.js" defer></script>
+  <script type="module" src="/app/js/pages/explore.js" defer></script>
+  <script type="module" src="/app/js/pages/charge.js" defer></script>
+  <script src="/app/js/pages/claim.js" defer></script>
+  <script type="module" src="/app/js/pages/wallet.js" defer></script>
+  <script type="module" src="/app/js/pages/me.js" defer></script>
+  <script type="module" src="/app/js/pages/dev.js" defer></script>
   <script type="module">
-    import { initChargePage } from './js/pages/charge.js';
+    import { initChargePage } from '/app/js/pages/charge.js';
     window.addEventListener('load', initChargePage);
   </script>
   
   <!-- Animations and main app -->
-  <script src="js/animations.js" defer></script>
-  <script type="module" src="js/app.js" defer></script>
+  <script src="/app/js/animations.js" defer></script>
+  <script type="module" src="/app/js/app.js" defer></script>
   
 </body>
 </html>
