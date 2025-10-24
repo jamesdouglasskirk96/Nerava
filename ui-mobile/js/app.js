@@ -4,6 +4,45 @@ import { ensureDemoBanner } from './components/demoBanner.js';
 import { apiGet, apiPost } from './core/api.js';
 window.Nerava = window.Nerava || {};
 
+// ---- Leaflet singleton helpers ----
+let MAP = null;
+
+export function ensureMap(lat=30.4021, lng=-97.7265, options={}) {
+  const el = document.getElementById('map');
+  if (!el) return null;
+  // Reuse existing map if already bound to the same element
+  if (MAP && MAP._container === el) { MAP.invalidateSize(); return MAP; }
+  // If Leaflet previously attached to this DOM node, clear safely
+  if (el._leaflet_id) { try { el._leaflet_id = undefined; el.innerHTML = ''; } catch{} }
+  MAP = L.map(el, { zoomControl:false, ...options }).setView([lat,lng], 16);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    maxZoom: 19, attribution: '&copy; OpenStreetMap'
+  }).addTo(MAP);
+  return MAP;
+}
+
+export function getMap(){ return MAP; }
+
+export function drawWalkingRoute(map, a, b) {
+  if (!map || !a || !b) return;
+  // Clear any existing route
+  if (map._neravaRoute) {
+    try { map.removeLayer(map._neravaRoute); } catch {}
+  }
+  if (map._neravaMarkers) {
+    map._neravaMarkers.forEach(m => { try { map.removeLayer(m); } catch {} });
+  }
+  
+  const latlngs = [a, b];
+  map._neravaRoute = L.polyline(latlngs, { dashArray: '6,6', weight: 4, color: '#2563eb', opacity: .9 }).addTo(map);
+  map._neravaMarkers = [
+    L.circleMarker(a, { radius: 6, color: '#2563eb', fillOpacity: 1 }).addTo(map),
+    L.circleMarker(b, { radius: 6, color: '#2563eb', fillOpacity: 1 }).addTo(map)
+  ];
+  const pad = { paddingTopLeft: [16, 16], paddingBottomRight: [16, 96], maxZoom: 17 };
+  map.fitBounds(map._neravaRoute.getBounds(), pad);
+}
+
 // === SSO → prefs → wallet pre-balance → push banner flow ===
 function getUser(){ return localStorage.NERAVA_USER || null; }
 function setUser(email){ localStorage.NERAVA_USER = email; const b = document.getElementById('auth-badge'); if(b) b.textContent=email; }
@@ -379,6 +418,17 @@ function triggerWalletToast(msg){
     t.textContent = msg; document.body.appendChild(t); setTimeout(()=>t.remove(), 3200);
   }catch(_){}
 }
+
+// IMPORTANT: do not call L.map() anywhere else in this file.
+// Boot should call initExplore(); do NOT call another initMap().
+
+window.addEventListener('load', async ()=>{
+  setTab('explore');
+  await loadBanner();
+  await loadWallet();
+  await loadPrefs();
+  // explore page script calls ensureMap() itself
+});
 
 // Export functions for use by other modules
 // Removed exports to avoid "does not provide an export named" errors

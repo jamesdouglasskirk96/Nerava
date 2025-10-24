@@ -7,8 +7,8 @@ function toUrl(path){
 async function _req(path,{method='GET',body,headers={}}={}){
   const r=await fetch(toUrl(path),{method,headers:{'Accept':'application/json',...(body?{'Content-Type':'application/json'}:{}),...headers},body:body?JSON.stringify(body):undefined}).catch(() => null);
   if (!r || !r.ok) {
-    // Soft 404/Network: return null; caller will use fallbacks.
-    if (r && r.status && r.status !== 404) console.debug('apiGet non-OK', r.status, path);
+    // Treat 404 / network as soft; return null so callers use fallbacks.
+    if (r && r.status && r.status !== 404) console.debug('apiGet:', r.status, path);
     return null;
   }
   // Some 204/empty responses: return null

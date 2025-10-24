@@ -1,18 +1,18 @@
-import { ensureMap, drawWalkingRoute } from '../core/map.js';
+import { ensureMap, drawWalkingRoute } from '../app.js';
 import { apiGet } from '../core/api.js';
 
 export async function initExplore() {
   const map = ensureMap();
-  if (!map) return; // DOM not ready
+  if (!map) return;
   
   // fetch recommend & deals (soft-null allowed)
-  const rec = await apiGet('/v1/hubs/recommend', { lat: 30.4025, lng: -97.7258, radius_km: 2 }) || {};
-  const deals = await apiGet('/v1/deals/nearby', { lat: 30.4025, lng: -97.7258 }) || { items: [] };
+  const rec   = (await apiGet('/v1/hubs/recommend', { lat:30.4025, lng:-97.7258, radius_km:2 })) || {};
+  const deals = (await apiGet('/v1/deals/nearby',    { lat:30.4025, lng:-97.7258 })) || { items:[] };
   
   // fallback demo points:
   const charger = rec.lat ? { lat: rec.lat, lng: rec.lng } : { lat: 30.4029, lng: -97.7255 };
   const merchant = deals.items?.[0]?.pos || { lat: 30.4039, lng: -97.7242 };
-  drawWalkingRoute(charger, merchant); // function already handles OSRM fallback
+  drawWalkingRoute(map, charger, merchant);
 
   // Perk card
   const card = document.getElementById('perk-card');
@@ -23,9 +23,9 @@ export async function initExplore() {
         <div class="perk-body">
           <div class="logo">☕</div>
           <div class="info">
-            <h3>${deal?.name || 'Nearby perk'}</h3>
-            <p>${deal?.reward_text || 'Cheaper during Green Hour'} • ${deal?.window || '2–4pm'}<br/>
-            ${deal?.distance_text || '0.3 mi from charger'}</p>
+            <h3>${deals.items?.[0]?.name || 'Nearby perk'}</h3>
+            <p>${deals.items?.[0]?.reward_text || 'Cheaper during Green Hour'} • ${deals.items?.[0]?.window || '2–4pm'}<br/>
+            ${deals.items?.[0]?.distance_text || '0.3 mi from charger'}</p>
           </div>
           <button id="btn-charge-here" class="btn btn-primary">Charge here</button>
         </div>
