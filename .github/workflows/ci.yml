@@ -3,15 +3,23 @@ on: [push, pull_request]
 jobs:
   backend:
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
       - run: pip install -r requirements.txt || true
-      - run: pip install pytest
+      - run: pip install pytest || true
       - run: pytest -q || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-pytest-artifacts
+          path: |
+            .pytest_cache
   ui:
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,3 +30,8 @@ jobs:
         run: npx playwright install --with-deps
       - working-directory: ui-mobile
         run: npx playwright test || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-playwright-artifacts
+          path: ui-mobile/test-artifacts

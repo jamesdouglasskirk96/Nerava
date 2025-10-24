@@ -184,4 +184,16 @@ def get_cloud(utility_id: str, window: str, db: Session = None) -> Dict[str, Any
     compute_time = (datetime.utcnow() - start_time).total_seconds() * 1000
     log_info(f"Behavior cloud compute time: {compute_time:.2f}ms")
     
+    # include meta:{version:"v1", compute_ms, cached, sample_sizes:{...}}
+    result["meta"] = {
+        "version": "v1",
+        "compute_ms": compute_time,
+        "cached": False,
+        "sample_sizes": {
+            "segments": len(segments),
+            "total_users": participation_data["total_users"],
+            "active_participants": participation_data["active_participants"]
+        }
+    }
+    
     return result

@@ -29,10 +29,20 @@ async function getRecommendedHubOrFallback() {
   return { id: 'demo_hub', name: 'Demo Hub', lat: 30.2672, lng: -97.7431 };
 }
 
+// NOTE: add retry/backoff; timeout
+async function _withTimeout(p, ms=8000){ return Promise.race([p, new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')), ms))]); }
+async function apiGetSafe(path, {retries=2, delay=250}={}){
+  for(let i=0;i<=retries;i++){
+    try{ return await _withTimeout(apiJson(path), 8000); }
+    catch(e){ if(i===retries) throw e; await new Promise(r=>setTimeout(r, delay*(i+1))); }
+  }
+}
+
 // Export to global namespace
 window.Nerava.core.api = {
   API_BASE,
   canCallApi,
   apiJson,
+  apiGetSafe,
   getRecommendedHubOrFallback
 };

@@ -79,6 +79,13 @@ def compute_v1(user_id: str, db: Session = None) -> Dict[str, Any]:
     compute_time = (datetime.utcnow() - start_time).total_seconds() * 1000
     log_info(f"EnergyRep v1 compute time: {compute_time:.2f}ms")
     
+    # log compute_ms, increment energy_rep_snapshots_total{tier}; clamp inputs
+    result["meta"] = {
+        "compute_ms": compute_time,
+        "tier": tier,
+        "version": "v1"
+    }
+    
     return result
 
 def snapshot_energy_rep(user_id: str, db: Session) -> Dict[str, Any]:

@@ -10,7 +10,11 @@
 
 *{box-sizing:border-box}
 html,body,#app{height:100%;margin:0}
-body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Helvetica,Arial,sans-serif}
+body{
+font-family: -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+background:var(--bg);color:var(--text);
+}
 
 #map{position:absolute; inset:0; z-index:1; min-height:100%}
 .ui-layer{position:relative; z-index:2}
@@ -70,3 +74,10 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .bottom-nav .tab.active{color:var(--nav-label-active); font-weight:800}
 .bottom-nav img{width:22px;height:22px;color:var(--nav-icon); filter: none; opacity: 0.95;}
 .bottom-nav .tab.active img{color:var(--nav-icon-active); opacity: 1;}
+
+.card{background:var(--card); border:1px solid #e2e8f0; border-radius:var(--radius-2); padding:var(--space-4); box-shadow:var(--shadow-1);}
+.grid{display:grid; gap:16px; grid-template-columns:1fr; }
+@media(min-width:980px){ .grid{grid-template-columns:1fr 1fr 1fr;} }
+.text-quiet{color:var(--text-quiet)}
+.h2{font-size:18px; font-weight:700; margin:0 0 8px}
+.h3{font-size:16px; font-weight:700; margin:0 0 6px}

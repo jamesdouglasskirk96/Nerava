@@ -35,6 +35,9 @@ async def get_merchant_intel_overview(
         "actor_id": current_user.get("user_id")
     })
     
+    # clamp grid_load_pct to 0..100 before passing to service
+    grid_load_pct = max(0.0, min(100.0, grid_load_pct))
+    
     try:
         result = get_overview(merchant_id, grid_load_pct)
         

@@ -35,6 +35,10 @@ async def get_utility_behavior_cloud(
         "actor_id": current_user.get("user_id")
     })
     
+    # window must be one of {"6h","24h","7d"}; default "24h"
+    if window not in ["6h", "24h", "7d"]:
+        window = "24h"
+    
     try:
         result = get_cloud(utility_id, window)
         

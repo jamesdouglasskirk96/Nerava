@@ -1,5 +1,10 @@
 # Nerava Development Guide
 
+## Investor Polish (Day Plan)
+- Run `./scripts/investor_run.sh` then open the UI. Press **D** for Dev tab.
+- Capture screenshots: Explore (deal chip), Charge (map), Wallet (reward), Me (EnergyRep modal), Dev (charts).
+- CI uploads artifacts on failure under GitHub Actions.
+
 ## 🎬 Investor Demo
 
 ### Quick Start (7-9 minutes)

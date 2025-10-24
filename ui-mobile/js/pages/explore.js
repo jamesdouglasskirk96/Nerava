@@ -1,5 +1,7 @@
 // Explore page logic
 import { dealChip } from '../components/dealChip.js';
+import { apiGetSafe } from '../core/api.js';
+import { toast } from '../components/toast.js';
 window.Nerava = window.Nerava || {};
 window.Nerava.pages = window.Nerava.pages || {};
 
@@ -187,26 +189,15 @@ async function initExploreMinimal() {
 }
 
 async function loadDealChips() {
-  try {
-    const deals = await window.Nerava.core.api.apiJson('/v1/deals/green_hours?lat=30.2672&lng=-97.7431');
-    if (deals && deals.length > 0) {
-      const container = document.createElement('div');
-      container.className = 'deal-chips';
-      container.style.cssText = 'display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0;';
-      
-      deals.slice(0, 3).forEach(deal => {
-        const chip = dealChip(deal);
-        container.appendChild(chip);
-      });
-      
-      // Insert after perk sheet
-      const perkSheet = document.getElementById('perkSheet');
-      if (perkSheet) {
-        perkSheet.parentNode.insertBefore(container, perkSheet.nextSibling);
-      }
-    }
-  } catch (e) {
-    console.warn('Failed to load deals:', e);
+  const dealsRoot = document.getElementById('deals-root');
+  if(!dealsRoot) return;
+  dealsRoot.innerHTML = `<div class="skeleton" style="height:38px;width:220px"></div>`;
+  try{
+    const data = await apiGetSafe(`/v1/deals/green_hours?lat=30.2672&lng=-97.7431`);
+    dealsRoot.innerHTML='';
+    (data?.deals||[]).slice(0,3).forEach(d=>dealsRoot.appendChild(dealChip(d)));
+  }catch(e){
+    dealsRoot.innerHTML=''; toast('Could not load deals. Pull to refresh.');
   }
 }
 

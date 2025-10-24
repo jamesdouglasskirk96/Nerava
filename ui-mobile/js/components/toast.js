@@ -1,0 +1,2 @@
+const q=[]; export function toast(msg){ let c=document.getElementById('toast'); if(!c){ c=document.createElement('div'); c.id='toast'; c.style.cssText='position:fixed;top:10px;right:10px;z-index:99999;display:flex;flex-direction:column;gap:8px'; document.body.appendChild(c); }
+  const t=document.createElement('div'); t.className='card fade-in'; t.textContent=msg; c.appendChild(t); setTimeout(()=>{ t.remove(); }, 2600); }

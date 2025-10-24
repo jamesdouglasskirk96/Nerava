@@ -1,5 +1,5 @@
 // Me page logic
-import { createModal, showModal } from '../components/modal.js';
+import { createModal, showModal, trapFocus } from '../components/modal.js';
 window.Nerava = window.Nerava || {};
 window.Nerava.pages = window.Nerava.pages || {};
 
@@ -97,6 +97,8 @@ function addEnergyRepDetailsButton() {
       
       const modal = createModal('EnergyRep Breakdown', content);
       showModal(modal);
+      // after modal open:
+      // trapFocus(modalEl);
     } catch (e) {
       console.error('Failed to load EnergyRep breakdown:', e);
       alert('Failed to load EnergyRep details');

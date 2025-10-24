@@ -250,4 +250,16 @@ def get_overview(merchant_id: str, grid_load_pct: float = 75.0, db: Session = No
     compute_time = (datetime.utcnow() - start_time).total_seconds() * 1000
     log_info(f"Merchant intel compute time: {compute_time:.2f}ms")
     
+    # include meta:{version:"v1", compute_ms, cached, sample_sizes:{...}} in response and log
+    result["meta"] = {
+        "version": "v1",
+        "compute_ms": compute_time,
+        "cached": False,
+        "sample_sizes": {
+            "events": len(events),
+            "cohorts": len(cohorts),
+            "promos": len(dynamic_promos_list)
+        }
+    }
+    
     return result
