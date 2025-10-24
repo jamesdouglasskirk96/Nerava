@@ -136,8 +136,21 @@ function setActive(tab){
     const perkSheet = document.getElementById('perkSheet') || document.querySelector('[data-role="perk-sheet"]');
     const h = perkSheet ? Math.min(320, perkSheet.offsetHeight || 320) : 320;
     setMapInsets({ hasSheet: true, sheetPx: h });
-    // Invalidate map when switching to Explore
-    try { ensureMap(); } catch(_) {}
+    
+    // Initialize explore only once, then just invalidate map
+    if (!window.__exploreBooted) {
+      import('./pages/explore.js').then(module => {
+        module.initExplore();
+        window.__exploreBooted = true;
+      }).catch(() => {});
+    } else {
+      // Just invalidate map size on tab show
+      requestAnimationFrame(() => {
+        import('./core/map.js').then(module => {
+          module.invalidateMap();
+        }).catch(() => {});
+      });
+    }
   } else if (tab === 'Claim') {
     const claimSheet = document.getElementById('claimSheet') || document.querySelector('[data-role="claim-sheet"]');
     const h = claimSheet ? Math.min(360, claimSheet.offsetHeight || 360) : 360;

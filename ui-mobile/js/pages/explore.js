@@ -1,5 +1,5 @@
 import { setTab } from '../app.js';
-import { ensureMap, fitAndDrawStraight } from '../core/map.js';
+import { ensureMap, invalidateMap, fitBoundsSafe, getMap } from '../core/map.js';
 import { apiGet } from '../core/api.js';
 
 const W_LAT = 30.4025, W_LNG = -97.7258;
@@ -20,15 +20,34 @@ export async function initExplore(){
 
   // Map & route
   if (window.L && document.getElementById('map') && isFinite(hub.lat) && isFinite(merchant.lat)) {
-    // ensure map exists
-    const map = ensureMap({ containerId: 'map' });
+    // ensure map exists (idempotent)
+    const map = ensureMap('map');
     
-    // when you have positions, draw fallback straight route and fit:
-    fitAndDrawStraight({
-      from: L.latLng(hub.lat, hub.lng),
-      to:   L.latLng(merchant.lat, merchant.lng),
-      options: { color: '#3b82f6' }
-    });
+    if (map) {
+      // Remove old route layer if it exists
+      if (window.__routeLayer) {
+        try { map.removeLayer(window.__routeLayer); } catch {}
+      }
+      
+      // Draw new route
+      const from = L.latLng(hub.lat, hub.lng);
+      const to = L.latLng(merchant.lat, merchant.lng);
+      const route = L.polyline([from, to], { 
+        color: '#3b82f6', 
+        weight: 4, 
+        opacity: 0.9, 
+        dashArray: '6,6' 
+      }).addTo(map);
+      
+      // Store route layer reference
+      window.__routeLayer = route;
+      
+      // Fit bounds safely
+      fitBoundsSafe(L.latLngBounds([from, to]), { padding: [24, 24], maxZoom: 16 });
+      
+      // Invalidate map size after route/card render
+      queueMicrotask(() => invalidateMap());
+    }
   }
 
   // Perk card
