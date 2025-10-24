@@ -199,6 +199,12 @@ async function initExploreMinimal() {
   // Update UI
   document.getElementById('perkTitle').textContent = perk.title || 'Special Offer';
   document.getElementById('perkSub').textContent = perk.description || 'Free coffee with any charge';
+  
+  // Update reward information
+  const rewardEl = document.getElementById('perkReward');
+  if (rewardEl) {
+    rewardEl.textContent = `Earn ${perk.value || '$2.50'} + 50 points`;
+  }
 
   // Load and render deal chips
   await loadDealChips();
@@ -212,10 +218,17 @@ async function initExploreMinimal() {
     noteRoutingFallback();
   }
   
-  // Wire up "View more" button
+  // Wire up "Charge here" button
+  document.getElementById('chargeHereBtn')?.addEventListener('click', () => {
+    // Switch to Charge tab
+    const chargeTab = document.querySelector('[data-tab="charge"]');
+    if (chargeTab) chargeTab.click();
+  });
+
+  // Wire up "View more perks" button
   document.getElementById('perkMoreBtn')?.addEventListener('click', () => {
-    // Switch to Claim tab
-    const claimTab = document.getElementById('tabScan');
+    // Switch to Claim tab to show more perks
+    const claimTab = document.querySelector('[data-tab="claim"]');
     if (claimTab) claimTab.click();
   });
 }

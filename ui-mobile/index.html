@@ -70,28 +70,35 @@
     <!-- Map is global and behind -->
     <div id="mapContainer" role="img" aria-label="Map"></div>
 
-        <!-- EXPLORE: Minimal route + single perk -->
+        <!-- EXPLORE: Walking route + AI-recommended perk -->
         <section id="pageExplore" class="page active" aria-labelledby="exploreTitle">
-          <div id="route-badge" class="route-badge" style="display:none">Walking route • Beta</div>
+          <div id="route-badge" class="route-badge">Walking route • Beta</div>
           <div class="map-wrap"><div id="map" class="map"></div></div>
 
-          <!-- Minimal sheet for single perk -->
+          <!-- AI-recommended perk card -->
           <div id="perkSheet" class="mini-sheet">
-            <div class="mini-sheet__header">Nearby perk</div>
+            <div class="mini-sheet__header">
+              <span>Recommended by Nerava AI</span>
+              <div class="ai-badge">AI</div>
+            </div>
             <div class="perk-card">
               <div class="perk-card__left">
-                <img src="/app/img/coffee.svg" alt="" class="perk-icon">
+                <img src="/app/img/coffee.svg" alt="" class="perk-icon" id="perkIcon">
                 <div class="perk-meta">
                   <div class="perk-title" id="perkTitle">Starbucks</div>
                   <div class="perk-sub" id="perkSub">Free tall coffee • 2–4pm</div>
+                  <div class="perk-reward" id="perkReward">Earn $2.50 + 50 points</div>
                 </div>
               </div>
-              <button id="perkMoreBtn" class="btn btn-primary">View more</button>
+              <button id="chargeHereBtn" class="btn btn-primary">Charge here</button>
             </div>
             <div class="perk-stats">
-              <span id="perkEta">—</span>
+              <span id="perkEta">~5 min walk</span>
               <span>•</span>
-              <span id="perkMiles">— mi</span>
+              <span id="perkMiles">0.2 mi</span>
+            </div>
+            <div class="perk-actions">
+              <button id="perkMoreBtn" class="btn btn-secondary">View more perks</button>
             </div>
           </div>
         </section>
@@ -365,26 +372,6 @@
     </button>
   </nav>
 
-  <!-- Scan modal -->
-  <dialog id="scanModal" class="sheet sheet--modal" aria-label="Scan a charger">
-    <div class="sheet__header">
-      <div class="sheet__handle"></div>
-      <h3>Scan charger</h3>
-    </div>
-    <div class="sheet__body">
-      <div id="scanViewport" class="scan-viewport"></div>
-      <div class="stack v16">
-        <button id="scanStart" class="btn btn-primary">Start camera</button>
-        <button id="scanStop" class="btn">Stop camera</button>
-        <div class="sep or">or</div>
-        <label class="field">
-          <span>Enter code</span>
-          <input id="scanManual" inputmode="numeric" placeholder="ABC-123" />
-        </label>
-        <button id="scanSubmit" class="btn btn-primary">Continue</button>
-      </div>
-    </div>
-  </dialog>
 
   <!-- Core modules -->
   <script type="module" src="js/core/api.js" defer></script>
