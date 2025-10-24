@@ -1,43 +1,63 @@
-import { ensureMap, drawWalkingRoute } from '../app.js';
+import { ensureMap, drawRoute, fitBounds, addMerchantDot, addChargerDot, clearRoute } from '../core/map.js';
 import { apiGet } from '../core/api.js';
 
 export async function initExplore() {
-  const map = ensureMap(); // creates or reuses
-  // Defaults if APIs 404
-  let hub = { lat: 30.4029, lng: -97.7247 };
-  let merchant = { lat: 30.4046, lng: -97.7241 };
+  const m = ensureMap('map');
+  if (m) {
+    const charger = [30.4025, -97.7258]; // fallback
+    const merch = [30.4033, -97.7240]; // fallback
 
-  try {
-    const rec = await apiGet('/v1/hubs/recommend'); // may 404
-    if (rec && Number.isFinite(rec.lat) && Number.isFinite(rec.lng)) {
-      hub = { lat: rec.lat, lng: rec.lng };
-    }
-  } catch(_) {}
+    try {
+      const rec = await apiGet('/v1/hubs/recommend'); // may 404
+      if (rec && Number.isFinite(rec.lat) && Number.isFinite(rec.lng)) {
+        charger[0] = rec.lat;
+        charger[1] = rec.lng;
+      }
+    } catch(_) {}
 
-  try {
-    const deals = await apiGet('/v1/deals/nearby'); // may 404
-    const d0 = Array.isArray(deals) ? deals[0] : null;
-    if (d0 && Number.isFinite(d0.lat) && Number.isFinite(d0.lng)) {
-      merchant = { lat: d0.lat, lng: d0.lng };
-    }
-  } catch(_) {}
+    try {
+      const deals = await apiGet('/v1/deals/nearby'); // may 404
+      const d0 = Array.isArray(deals) ? deals[0] : null;
+      if (d0 && Number.isFinite(d0.lat) && Number.isFinite(d0.lng)) {
+        merch[0] = d0.lat;
+        merch[1] = d0.lng;
+      }
+    } catch(_) {}
 
-  // Only draw when both are valid
-  const ok = p => p && Number.isFinite(p.lat) && Number.isFinite(p.lng);
-  if (ok(hub) && ok(merchant)) drawWalkingRoute(hub, merchant);
+    addChargerDot(charger);
+    addMerchantDot(merch);
+    drawRoute([charger, merch], { dashed:true });
+  }
 
   // Perk card
   const card = document.getElementById('perk-card');
   if (card) {
+    // Get merchant data for display
+    let merchantName = 'Nearby perk';
+    let merchantReward = 'Cheaper during Green Hour';
+    let merchantWindow = '2–4pm';
+    let merchantDistance = '0.3 mi from charger';
+
+    try {
+      const deals = await apiGet('/v1/deals/nearby');
+      const d0 = Array.isArray(deals) ? deals[0] : null;
+      if (d0) {
+        merchantName = d0.name || merchantName;
+        merchantReward = d0.reward_text || merchantReward;
+        merchantWindow = d0.window || merchantWindow;
+        merchantDistance = d0.distance_text || merchantDistance;
+      }
+    } catch(_) {}
+
     card.innerHTML = `
       <div class="perk-card">
         <div class="ai-chip">⚡ Recommended by Nerava AI</div>
         <div class="perk-body">
           <div class="logo">☕</div>
           <div class="info">
-            <h3>${merchant.name || 'Nearby perk'}</h3>
-            <p>${merchant.reward_text || 'Cheaper during Green Hour'} • ${merchant.window || '2–4pm'}<br/>
-            ${merchant.distance_text || '0.3 mi from charger'}</p>
+            <h3>${merchantName}</h3>
+            <p>${merchantReward} • ${merchantWindow}<br/>
+            ${merchantDistance}</p>
           </div>
           <button id="btn-charge-here" class="btn btn-primary">Charge here</button>
         </div>
