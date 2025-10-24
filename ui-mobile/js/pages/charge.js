@@ -1,4 +1,5 @@
 // Charge page logic
+import { apiGet, apiPost } from '../core/api.js';
 window.Nerava = window.Nerava || {};
 window.Nerava.pages = window.Nerava.pages || {};
 
@@ -8,7 +9,7 @@ async function loadChargeFeed() {
   if (!listEl) return;
   listEl.innerHTML = `<div class="muted">Loading activity…</div>`;
   try {
-    const items = await window.Nerava.core.api.apiJson('/v1/social/feed');
+    const items = await apiGet('/v1/social/feed');
     if (!items.length) {
       listEl.innerHTML = `<div class="muted">No recent activity yet.</div>`;
       return;
@@ -43,7 +44,7 @@ function renderFeedRow(it) {
 
 async function isFollowing(me, other) {
   if (!window.Nerava.core.api.canCallApi()) return false;
-  const following = await window.Nerava.core.api.apiJson(`/v1/social/following?user_id=${encodeURIComponent(me)}`);
+  const following = await apiGet(`/v1/social/following?user_id=${encodeURIComponent(me)}`);
   return following.some(f => f.followee_id === other);
 }
 
@@ -59,7 +60,7 @@ function wireFollowChips(scopeEl, items) {
       const following = btn.classList.toggle('following');
       btn.textContent = following ? 'Following' : 'Follow';
       try {
-        await window.Nerava.core.api.apiJson('/v1/social/follow', {
+        await apiPost('/v1/social/follow', {
           method: 'POST',
           body: JSON.stringify({
             follower_id: me,
@@ -189,7 +190,7 @@ async function getUserLocation() {
 async function getNearestCharger() {
   // Try to get from API, fallback to static location
   try {
-    const hub = await window.Nerava.core.api.apiJson('/v1/hubs/recommended');
+    const hub = await apiGet('/v1/hubs/recommended');
     if (hub && hub.lat && hub.lng) {
       return { lat: hub.lat, lng: hub.lng };
     }

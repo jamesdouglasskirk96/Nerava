@@ -1,5 +1,6 @@
 // Me page logic
 import { createModal, showModal, trapFocus } from '../components/modal.js';
+import { apiGet, apiPost } from '../core/api.js';
 window.Nerava = window.Nerava || {};
 window.Nerava.pages = window.Nerava.pages || {};
 
@@ -11,14 +12,14 @@ window.Nerava.pages = window.Nerava.pages || {};
     const rep = document.getElementById('repScore');
 
     // Try hitting social APIs; fallback to zeros
-    if (window.Nerava && window.Nerava.core && window.Nerava.core.api && window.Nerava.core.api.apiJson) {
-      window.Nerava.core.api.apiJson('/v1/social/followers?user_id=you').then(r => { 
+    if (window.Nerava && window.Nerava.core && window.Nerava.core.api) {
+      apiGet('/v1/social/followers?user_id=you').then(r => { 
         if (fs) fs.textContent = (r?.length ?? 0); 
       }).catch(()=>{ 
         if (fs) fs.textContent = '0'; 
       });
       
-      window.Nerava.core.api.apiJson('/v1/social/following?user_id=you').then(r => { 
+      apiGet('/v1/social/following?user_id=you').then(r => { 
         if (fg) fg.textContent = (r?.length ?? 0); 
       }).catch(()=>{ 
         if (fg) fg.textContent = '0'; 
@@ -39,7 +40,7 @@ async function loadEnergyRepScore() {
   if (!rep) return;
   
   try {
-    const data = await window.Nerava.core.api.apiJson('/v1/profile/energy_rep?user_id=current_user');
+    const data = await apiGet('/v1/profile/energy_rep?user_id=current_user');
     if (data && data.total_score !== undefined) {
       rep.textContent = data.total_score;
     } else {
@@ -62,7 +63,7 @@ function addEnergyRepDetailsButton() {
   
   detailsBtn.addEventListener('click', async () => {
     try {
-      const data = await window.Nerava.core.api.apiJson('/v1/profile/energy_rep?user_id=current_user');
+      const data = await apiGet('/v1/profile/energy_rep?user_id=current_user');
       const breakdown = data?.breakdown || {};
       
       const content = `

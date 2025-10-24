@@ -1,4 +1,5 @@
 // Wallet page logic
+import { apiGet, apiPost } from '../core/api.js';
 window.Nerava = window.Nerava || {};
 window.Nerava.pages = window.Nerava.pages || {};
 
@@ -16,7 +17,7 @@ async function updateCommunityPool() {
   if (!window.Nerava.core.api.canCallApi()) return;
   
   try {
-    const pool = await window.Nerava.core.api.apiJson('/v1/social/pool');
+    const pool = await apiGet('/v1/social/pool');
     const poolEl = document.getElementById('communityPool');
     if (poolEl) {
       const amount = window.Nerava.core.utils.formatCurrency(pool.total_community_cents);
@@ -31,7 +32,7 @@ async function loadPayoutHistory() {
   if (!window.Nerava.core.api.canCallApi()) return;
   
   try {
-    const history = await window.Nerava.core.api.apiJson('/v1/payouts/visa/history?user_id=current_user');
+    const history = await apiGet('/v1/payouts/visa/history?user_id=current_user');
     const historyEl = document.getElementById('payoutHistory');
     if (historyEl && history.payouts) {
       historyEl.innerHTML = history.payouts.map(payout => `
@@ -66,7 +67,7 @@ async function initiateWithdrawal() {
   }
   
   try {
-    const result = await window.Nerava.core.api.apiJson('/v1/payouts/visa/direct', {
+    const result = await apiPost('/v1/payouts/visa/direct', {
       method: 'POST',
       body: JSON.stringify({
         user_id: 'current_user',
@@ -91,7 +92,7 @@ async function loadRecentActivity() {
   if (!window.Nerava.core.api.canCallApi()) return;
   
   try {
-    const exportData = await window.Nerava.core.api.apiJson('/v1/demo/export');
+    const exportData = await apiGet('/v1/demo/export');
     const activityEl = document.getElementById('wallet-activity');
     if (activityEl && exportData.events) {
       const recentEvents = exportData.events.slice(0, 5);

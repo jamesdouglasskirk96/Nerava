@@ -1,6 +1,6 @@
 // Explore page logic
 import { dealChip } from '../components/dealChip.js';
-import { apiGetSafe } from '../core/api.js';
+import { apiGet } from '../core/api.js';
 import { toast } from '../components/toast.js';
 window.Nerava = window.Nerava || {};
 window.Nerava.pages = window.Nerava.pages || {};
@@ -54,7 +54,14 @@ async function drawRoute(fromLatLng, toLatLng) {
 }
 
 async function loadRecommendedHub(){
-  const live = await window.Nerava.core.api.apiJson('/v1/hubs/recommended');
+  const root = document.getElementById('page-explore');
+  if (!root) return;
+  
+  const nameEl = document.getElementById('hub-name');
+  const tierEl = document.getElementById('hub-tier');
+  if (!nameEl || !tierEl) { return; }
+  
+  const live = await apiGet('/v1/hubs/recommended');
   if (live && live.lat && live.lng) return live;
 
   // fallback data near Austin (adjust as needed)
@@ -64,7 +71,7 @@ async function loadRecommendedHub(){
 async function getRecommendedHub() {
   if (!window.Nerava.core.api.canCallApi()) return FALLBACK_HUB;
   try {
-    const r = await window.Nerava.core.api.apiJson('/v1/hubs/recommended');
+    const r = await apiGet('/v1/hubs/recommended');
     if (!r.ok) throw 0;
     const [first] = await r.json();
     return first || FALLBACK_HUB;
@@ -75,19 +82,19 @@ async function getPreferredPerk(hubId) {
   if (!window.Nerava.core.api.canCallApi()) return FALLBACK_PERK;
   try {
     // Try ML recommendations first
-    const mlRecs = await window.Nerava.core.api.apiJson(`/v1/ml/recommend/perks?hub_id=${encodeURIComponent(hubId)}&user_id=current_user`);
+    const mlRecs = await apiGet(`/v1/ml/recommend/perks?hub_id=${encodeURIComponent(hubId)}&user_id=current_user`);
     if (mlRecs.recommendations && mlRecs.recommendations.length > 0) {
       const topPerk = mlRecs.recommendations[0].perk;
       return {
-        id: topPerk.id,
-        title: topPerk.name,
-        description: topPerk.description,
-        value: `$${(topPerk.value_cents / 100).toFixed(2)}`
+        id: topPerk.id || 'perk_demo',
+        title: topPerk.name || 'Special Offer',
+        description: topPerk.description || 'Get a free perk with any charge',
+        value: `$${((topPerk.value_cents || 0) / 100).toFixed(2)}`
       };
     }
     
     // Fallback to regular perks
-    const r = await window.Nerava.core.api.apiJson(`/v1/places/perks?hub_id=${encodeURIComponent(hubId)}`);
+    const r = await apiGet(`/v1/places/perks?hub_id=${encodeURIComponent(hubId)}`);
     if (!r.ok) throw 0;
     const list = await r.json();
     return list?.[0] || FALLBACK_PERK;
@@ -158,11 +165,14 @@ function noteRoutingFallback(){
 }
 
 async function initExploreMinimal() {
+  const root = document.getElementById('page-explore');
+  if (!root) return;
+  
   const map = window.Nerava.core.map.ensureMap();
   if (!map) return;
 
   const hub = await loadRecommendedHub();
-  const perk = await getPreferredPerk(hub.id);
+  const perk = await getPreferredPerk(hub.id || 'hub_demo');
 
   // Update UI
   document.getElementById('perkTitle').textContent = perk.title || 'Special Offer';
@@ -193,7 +203,7 @@ async function loadDealChips() {
   if(!dealsRoot) return;
   dealsRoot.innerHTML = `<div class="skeleton" style="height:38px;width:220px"></div>`;
   try{
-    const data = await apiGetSafe(`/v1/deals/green_hours?lat=30.2672&lng=-97.7431`);
+    const data = await apiGet(`/v1/deals/green_hours?lat=30.2672&lng=-97.7431`);
     dealsRoot.innerHTML='';
     (data?.deals||[]).slice(0,3).forEach(d=>dealsRoot.appendChild(dealChip(d)));
   }catch(e){

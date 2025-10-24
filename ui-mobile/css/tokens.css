@@ -1,5 +1,5 @@
 :root{
-  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
-  --radius-1:8px; --radius-2:12px; --shadow-1:0 2px 10px rgba(0,0,0,.06);
-  --text-quiet:#64748b; --text-strong:#0f172a; --brand:#22c55e; --card:#ffffff; --muted:#f8fafc;
+  --brand: #22c55e;    /* fallback; can be overridden at runtime from logo color */
+  --brand-ink: #063d1f;
+  --safe-bottom: env(safe-area-inset-bottom, 16px);
 }

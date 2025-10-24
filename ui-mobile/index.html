@@ -11,6 +11,22 @@
     <link rel="stylesheet" href="css/appleish.css" />
     <link rel="stylesheet" href="css/demo.css" />
     <link rel="stylesheet" href="css/modal.css" />
+    <style>
+      /* Map container sizing + rounding */
+      .map-wrap{ position:relative; height: calc(100vh - 260px); margin: 12px 16px 0; border-radius: 16px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,.10); }
+      #map{ height:100%; width:100%; }
+      /* Keep attribution readable but away from tab bar */
+      .leaflet-control-attribution{ margin-bottom: calc(env(safe-area-inset-bottom, 16px) + 56px) !important; }
+
+      /* AI badge brand styling */
+      .ai-badge{
+        display:inline-flex;align-items:center;gap:4px;
+        background: var(--brand); color: #fff;
+        padding:6px 10px;border-radius:999px;font-weight:700;font-size:12px;
+        box-shadow:0 6px 18px color-mix(in srgb, var(--brand) 25%, transparent);
+        white-space:nowrap
+      }
+    </style>
   <link rel="icon" href="assets/favicon.ico" />
 
   <!-- Leaflet core -->
@@ -39,7 +55,7 @@
 
         <!-- EXPLORE: Minimal route + single perk -->
         <section id="pageExplore" class="page active" aria-labelledby="exploreTitle">
-          <div id="map" class="map"></div>
+          <div class="map-wrap"><div id="map" class="map"></div></div>
 
           <!-- Minimal sheet for single perk -->
           <div id="perkSheet" class="mini-sheet">
@@ -355,25 +371,22 @@
   </dialog>
 
   <!-- Core modules -->
-  <script src="js/core/api.js" defer></script>
+  <script type="module" src="js/core/api.js" defer></script>
   <script src="js/core/map.js" defer></script>
   <script src="js/core/utils.js" defer></script>
   
   <!-- Page modules -->
-  <script src="js/pages/explore.js" defer></script>
-  <script src="js/pages/charge.js" defer></script>
+  <script type="module" src="js/pages/explore.js" defer></script>
+  <script type="module" src="js/pages/charge.js" defer></script>
   <script src="js/pages/claim.js" defer></script>
-  <script src="js/pages/wallet.js" defer></script>
-  <script src="js/pages/me.js" defer></script>
+  <script type="module" src="js/pages/wallet.js" defer></script>
+  <script type="module" src="js/pages/me.js" defer></script>
   <script type="module" src="js/pages/dev.js" defer></script>
   
   <!-- Animations and main app -->
   <script src="js/animations.js" defer></script>
   <script type="module" src="js/app.js" defer></script>
   
-  <!-- Demo autorun scripts -->
-  <script src="js/demo/autorun.js"></script>
-  <script src="js/demo/poller.js"></script>
 </body>
 </html>
 
