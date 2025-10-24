@@ -365,3 +365,6 @@ function triggerWalletToast(msg){
     t.textContent = msg; document.body.appendChild(t); setTimeout(()=>t.remove(), 3200);
   }catch(_){}
 }
+
+// Export functions for use by other modules
+export { setTab, ensureMap };
