@@ -25,7 +25,12 @@ function setTab(tab){
   document.querySelectorAll('.tabbar .tab').forEach(b=>{
     b.classList.toggle('active', b.dataset.tab===tab);
   });
-  if(tab==='explore') show(banner); else hide(banner);
+  if(tab==='explore'){ 
+    show(banner); 
+    try{ map && map.invalidateSize(false); }catch(_){ }
+    if(window.lastBounds) fitMapToRoute(window.lastBounds);
+  }
+  else { hide(banner); }
 }
 
 document.querySelectorAll('.tabbar .tab').forEach(b=>{
@@ -33,13 +38,24 @@ document.querySelectorAll('.tabbar .tab').forEach(b=>{
 });
 
 // ---------- map ----------
-let map;
+let map, walkLayer, chargerMarker, merchantMarker;
 function initMap(lat=30.4021,lng=-97.7265){
-  if(map) return;
-  map = L.map('map',{ zoomControl:false }).setView([lat,lng], 14);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-    maxZoom: 19, attribution: '&copy; OpenStreetMap'
-  }).addTo(map);
+  if(!map){
+    map = L.map('map',{ zoomControl:false });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+      maxZoom: 19, attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+  }
+  try { map.setView([lat,lng], Math.max(map.getZoom()||14, 14)); } catch(_){}
+  requestAnimationFrame(()=>setTimeout(()=>{ try{ map.invalidateSize(false); }catch(_){ } }, 60));
+}
+
+function fitMapToRoute(bounds){
+  if(!map || !bounds) return;
+  try{
+    map.fitBounds(bounds, { padding:[60,60], maxZoom:16, animate:true });
+    requestAnimationFrame(()=>setTimeout(()=>{ try{ map.invalidateSize(false); }catch(_){ } }, 60));
+  }catch(_){}
 }
 
 // ---------- data fetch ----------
@@ -86,22 +102,43 @@ async function loadRecommendation(){
     $('#hub-status').textContent = status;
     $('#hub-tier').textContent   = tierText;   // show "10% cheaper" instead of "premium"
 
-    // Navigate CTA
-    $('#btn-navigate').onclick = () => {
-      window.open(
-        `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}`,
-        '_blank'
-      );
-    };
+    // CTA now starts walking route UI if merchant candidate is present (set later)
+    $('#btn-navigate').onclick = () => setTab('explore');
 
-    // Map stays visible under the card
+    // Ensure map alive
     initMap(rec?.lat || lat, rec?.lng || lng);
-    if (map) map.setView([rec?.lat||lat, rec?.lng||lng], 15);
   }catch(e){
     console.warn('recommend error', e);
     initMap(); // keep map visible even if API hiccups
   }
 }
+
+// Draw a route and fit (used by dual-session code)
+window.drawWalkingRoute = async function drawWalkingRoute(charger, merchant){
+  if(!charger || !merchant) return;
+  initMap(charger.lat, charger.lng);
+  if(walkLayer){ try{ walkLayer.remove(); }catch(_){ } }
+  if(chargerMarker){ try{ chargerMarker.remove(); }catch(_){ } }
+  if(merchantMarker){ try{ merchantMarker.remove(); }catch(_){ } }
+
+  chargerMarker   = L.circleMarker([charger.lat, charger.lng],   {radius:6, color:'#0ea5e9'}).addTo(map);
+  merchantMarker  = L.circleMarker([merchant.lat, merchant.lng], {radius:6, color:'#f59e0b'}).addTo(map);
+
+  // try OSRM foot; fallback to straight line
+  let poly;
+  try{
+    const url = `https://router.project-osrm.org/route/v1/foot/${charger.lng},${charger.lat};${merchant.lng},${merchant.lat}?overview=full&geometries=geojson`;
+    const r = await fetch(url,{mode:'cors'}); const j = r.ok ? await r.json() : null;
+    const coords = j?.routes?.[0]?.geometry?.coordinates?.map(([x,y])=>[y,x]);
+    if(coords?.length) poly = L.polyline(coords,{weight:5,opacity:.9});
+  }catch(_){}
+  if(!poly) poly = L.polyline([[charger.lat,charger.lng],[merchant.lat,merchant.lng]], {dashArray:'6,8', weight:4});
+  walkLayer = poly.addTo(map);
+
+  const b = L.latLngBounds([[charger.lat,charger.lng],[merchant.lat,merchant.lng]]);
+  fitMapToRoute(b);
+  window.lastBounds = b;
+};
 
 async function loadWallet(){
   try{
@@ -164,4 +201,8 @@ window.addEventListener('load', async ()=>{
   await loadRecommendation();
   await loadWallet();
   await loadPrefs();
+  // keep Leaflet healthy on resize/orientation
+  let t; const kick = ()=>{ clearTimeout(t); t=setTimeout(()=>{ try{ map && map.invalidateSize(false); }catch(_){ } }, 120); };
+  window.addEventListener('resize', kick, {passive:true});
+  window.addEventListener('orientationchange', kick, {passive:true});
 });

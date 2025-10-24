@@ -54,12 +54,9 @@ async function drawRoute(fromLatLng, toLatLng) {
 }
 
 async function loadRecommendedHub(){
-  const root = document.getElementById('page-explore');
-  if (!root) return;
-  
+  const host = document.getElementById('page-explore');
   const nameEl = document.getElementById('hub-name');
-  const tierEl = document.getElementById('hub-tier');
-  if (!nameEl || !tierEl) { return; }
+  if(!host || !nameEl) return;
   
   const live = await apiGet('/v1/hubs/recommended');
   if (live && live.lat && live.lng) {
@@ -67,9 +64,12 @@ async function loadRecommendedHub(){
     const nearby = await apiGet('/v1/merchants/nearby?lat='+live.lat+'&lng='+live.lng+'&radius_km=0.3').catch(()=>({items:[]}));
     const merchant = (nearby?.items?.[0]) || { id:'m_demo', name:'Nearby Perk', lat: live.lat+0.001, lng: live.lng+0.001 };
 
-    // Start dual-zone session if function exists
-    if (typeof startDualSession === 'function') {
-      startDualSession(localStorage.NERAVA_USER || 'demo@nerava.app', live, merchant);
+    // Draw walking route if function exists
+    if(typeof window.drawWalkingRoute === 'function'){
+      window.drawWalkingRoute(
+        { id: live.id, name: live.name, lat: live.lat, lng: live.lng },
+        { id: merchant.id, name: merchant.name, lat: merchant.lat, lng: merchant.lng },
+      );
     }
     
     return live;
@@ -78,10 +78,13 @@ async function loadRecommendedHub(){
   // fallback data near Austin (adjust as needed)
   const fallback = { id: 'fallback_hub', name: 'Nerava Hub', lat: 30.2672, lng: -97.7431 };
   
-  // Start dual-zone session with fallback merchant
+  // Draw walking route with fallback merchant
   const merchant = { id:'m_demo', name:'Nearby Perk', lat: fallback.lat+0.001, lng: fallback.lng+0.001 };
-  if (typeof startDualSession === 'function') {
-    startDualSession(localStorage.NERAVA_USER || 'demo@nerava.app', fallback, merchant);
+  if(typeof window.drawWalkingRoute === 'function'){
+    window.drawWalkingRoute(
+      { id: fallback.id, name: fallback.name, lat: fallback.lat, lng: fallback.lng },
+      { id: merchant.id, name: merchant.name, lat: merchant.lat, lng: merchant.lng },
+    );
   }
   
   return fallback;

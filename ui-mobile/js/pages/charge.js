@@ -1,7 +1,5 @@
 // Charge page logic
 import { apiGet, apiPost } from '../core/api.js';
-window.Nerava = window.Nerava || {};
-window.Nerava.pages = window.Nerava.pages || {};
 
 // Load charge feed from API
 async function loadChargeFeed() {
@@ -18,194 +16,110 @@ async function loadChargeFeed() {
     wireFollowChips(listEl, items);
   } catch (e) {
     console.error(e);
-    listEl.innerHTML = `<div class="muted">Unable to load activity right now.</div>`;
+    listEl.innerHTML = `<div class="muted">Unable to load activity.</div>`;
   }
 }
 
-function renderFeedRow(it) {
-  const amt = (it.gross_cents / 100).toFixed(2);
-  const when = window.Nerava.core.utils.formatTime(it.timestamp);
-  const sub = [it.meta?.hub_name, it.meta?.city].filter(Boolean).join(' · ');
-  const initials = (it.user_id || '??').slice(0,2).toUpperCase();
-
+function renderFeedRow(item) {
+  const timeAgo = formatTimeAgo(new Date(item.timestamp));
   return `
-  <div class="feed-row" data-user="${it.user_id}">
-    <div class="avatar">${initials}</div>
-    <div class="feed-main">
-      <div class="title"><b>${it.user_id}</b> earned $${amt}${it.meta?.kwh ? ` for ${it.meta.kwh} kWh` : ''}</div>
-      <div class="sub">${sub || 'Nerava'}</div>
-      <div class="meta muted">${when}</div>
+    <div class="feed-row">
+      <div class="feed-avatar">
+        <img src="/app/img/avatar-demo.svg" alt="User" />
+      </div>
+      <div class="feed-content">
+        <div class="feed-header">
+          <span class="feed-user">${item.user_name || 'User'}</span>
+          <span class="feed-time">${timeAgo}</span>
+        </div>
+        <div class="feed-text">${item.description || 'Charged at ' + (item.location || 'hub')}</div>
+        <div class="feed-actions">
+          <button class="follow-chip" data-user-id="${item.user_id}">
+            ${item.is_following ? 'Following' : 'Follow'}
+          </button>
+        </div>
+      </div>
     </div>
-    <button class="chip follow-chip" data-user="${it.user_id}" aria-label="Follow ${it.user_id}">
-      Follow
-    </button>
-  </div>`;
+  `;
 }
 
-async function isFollowing(me, other) {
-  if (!window.Nerava.core.api.canCallApi()) return false;
-  const following = await apiGet(`/v1/social/following?user_id=${encodeURIComponent(me)}`);
-  return following.some(f => f.followee_id === other);
-}
-
-function wireFollowChips(scopeEl, items) {
-  const me = window.NERAVA_USER_ID || 'you';
-  scopeEl.querySelectorAll('.follow-chip').forEach(async btn => {
-    const other = btn.dataset.user;
-    if (other === me) { btn.remove(); return; }
-    try {
-      if (await isFollowing(me, other)) btn.classList.add('following'), btn.textContent = 'Following';
-    } catch {}
-    btn.addEventListener('click', async () => {
-      const following = btn.classList.toggle('following');
-      btn.textContent = following ? 'Following' : 'Follow';
+function wireFollowChips(container, items) {
+  container.querySelectorAll('.follow-chip').forEach(btn => {
+    btn.onclick = async () => {
+      const userId = btn.dataset.userId;
+      const isFollowing = btn.textContent === 'Following';
+      
       try {
-        await apiPost('/v1/social/follow', {
-          method: 'POST',
-          body: JSON.stringify({
-            follower_id: me,
-            followee_id: other,
-            follow: following
-          })
-        });
+        await apiPost('/v1/social/follow', { user_id: userId, follow: !isFollowing });
+        btn.textContent = isFollowing ? 'Follow' : 'Following';
+        btn.classList.toggle('following', !isFollowing);
       } catch (e) {
-        btn.classList.toggle('following');
-        btn.textContent = btn.classList.contains('following') ? 'Following' : 'Follow';
+        console.error('Follow toggle failed:', e);
       }
-    });
+    };
   });
 }
 
-async function initCharge() {
-  // Initialize map for route to charger
-  await initChargeMap();
+function formatTimeAgo(date) {
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
   
-  // Load social feed
+  if (diffMins < 1) return 'now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  return `${diffDays}d ago`;
+}
+
+// Initialize charge page with verify-by-location fallback
+export function initChargePage(){
+  const root = document.getElementById('page-charge');
+  if(!root) return;
+  const cardId = 'verify-card';
+  let card = document.getElementById(cardId);
+  if(!card){
+    card = document.createElement('div');
+    card.id = cardId; card.className = 'verify-card';
+    card.innerHTML = `
+      <h3>Verify by location</h3>
+      <p>Stand near the charger and tap verify. We'll confirm eligibility automatically.</p>
+      <button id="btn-verify-loc" class="verify-btn">Verify now</button>
+    `;
+    root.prepend(card);
+  }
+  const btn = document.getElementById('btn-verify-loc');
+  if(btn){
+    btn.onclick = async ()=>{
+      if(!navigator.geolocation){ alert('Location is required.'); return; }
+      navigator.geolocation.getCurrentPosition(async pos=>{
+        try{
+          // Optional: ping backend you already wired; this is best-effort.
+          await apiPost('/v1/dual/tick', {
+            session_id: window.dualSession?.id || 0,
+            user_pos: { lat: pos.coords.latitude, lng: pos.coords.longitude },
+            charger_pos: window.dualSession?.charger
+              ? { lat: window.dualSession.charger.lat, lng: window.dualSession.charger.lng }
+              : { lat: 30.4025, lng: -97.7258 },
+            merchant_pos: window.dualSession?.merchant
+              ? { lat: window.dualSession.merchant.lat, lng: window.dualSession.merchant.lng }
+              : { lat: 30.4032, lng: -97.7241 },
+          }).catch(()=>{});
+          toast('Checking… move near the merchant to complete verification.');
+        }catch{ toast('Verification queued.'); }
+      }, ()=>alert('Please enable location services.'));
+    };
+  }
+}
+
+function toast(msg){
+  const t = document.createElement('div');
+  t.style.cssText='position:fixed;left:50%;bottom:calc(var(--tabbar-height) + 18px);transform:translateX(-50%);background:#111;color:#fff;padding:10px 14px;border-radius:12px;z-index:9999;font-weight:700';
+  t.textContent = msg; document.body.appendChild(t); setTimeout(()=>t.remove(), 2600);
+}
+
+// Load feed when page becomes active
+document.addEventListener('DOMContentLoaded', () => {
   loadChargeFeed();
-  
-  // Hide scan panel in demo mode
-  if (document.body.classList.contains('demo')) {
-    const scanPanel = document.querySelector('[data-role="scan-panel"]');
-    if (scanPanel) scanPanel.style.display = 'none';
-  }
-}
-
-async function initChargeMap() {
-  // Wait for Leaflet to be available
-  if (!window.L) {
-    setTimeout(initChargeMap, 100);
-    return;
-  }
-  
-  const mapEl = document.getElementById('chargeMap');
-  if (!mapEl) return;
-  
-  // Initialize map
-  const map = L.map('chargeMap').setView([37.7749, -122.4194], 13);
-  
-  // Add tile layer
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors'
-  }).addTo(map);
-  
-  // Get user location and show route to nearest charger
-  try {
-    const userPos = await getUserLocation();
-    const chargerPos = await getNearestCharger();
-    
-    // Add markers
-    L.marker([userPos.lat, userPos.lng]).addTo(map)
-      .bindPopup('Your location');
-    
-    L.marker([chargerPos.lat, chargerPos.lng]).addTo(map)
-      .bindPopup('Charging station');
-    
-    // Draw route if routing is available
-    if (L.Routing && L.Routing.control) {
-      const routeControl = L.Routing.control({
-        waypoints: [
-          L.latLng(userPos.lat, userPos.lng),
-          L.latLng(chargerPos.lat, chargerPos.lng)
-        ],
-        addWaypoints: false,
-        draggableWaypoints: false,
-        routeWhileDragging: false,
-        show: false,
-        fitSelectedRoutes: true,
-        lineOptions: {
-          styles: [{ color: '#2a6bf2', weight: 6, opacity: 0.95 }]
-        }
-      });
-      
-      routeControl.addTo(map);
-      
-      routeControl.on('routesfound', (e) => {
-        const route = e.routes[0];
-        const summary = route.summary;
-        const distance = (summary.totalDistance / 1609.34).toFixed(1);
-        const time = Math.round(summary.totalTime / 60);
-        
-        // Update the perk stats with real route data
-        const statsEl = document.querySelector('.perk-stats');
-        if (statsEl) {
-          statsEl.innerHTML = `<span>~${time} min</span><span>•</span><span>${distance} mi</span>`;
-        }
-      });
-    } else {
-      // Fallback: draw straight line
-      L.polyline([
-        [userPos.lat, userPos.lng],
-        [chargerPos.lat, chargerPos.lng]
-      ], { color: '#2a6bf2', weight: 5, opacity: 0.9 }).addTo(map);
-      
-      // Fit bounds to show both points
-      map.fitBounds([
-        [userPos.lat, userPos.lng],
-        [chargerPos.lat, chargerPos.lng]
-      ], { padding: [20, 20] });
-    }
-    
-  } catch (error) {
-    console.error('Error initializing charge map:', error);
-    // Show default map centered on SF
-    map.setView([37.7749, -122.4194], 13);
-  }
-}
-
-async function getUserLocation() {
-  return new Promise((resolve) => {
-    if (!navigator.geolocation) {
-      resolve({ lat: 37.7849, lng: -122.4094 }); // Default SF location
-      return;
-    }
-    
-    navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => resolve({ lat: 37.7849, lng: -122.4094 }), // Fallback
-      { enableHighAccuracy: true, maximumAge: 60000, timeout: 4000 }
-    );
-  });
-}
-
-async function getNearestCharger() {
-  // Try to get from API, fallback to static location
-  try {
-    const hub = await apiGet('/v1/hubs/recommended');
-    if (hub && hub.lat && hub.lng) {
-      return { lat: hub.lat, lng: hub.lng };
-    }
-  } catch (error) {
-    console.log('Using fallback charger location');
-  }
-  
-  // Fallback charger location
-  return { lat: 37.7849, lng: -122.4094 };
-}
-
-// Export init function
-window.Nerava.pages.charge = {
-  init: initCharge
-};
-
-// Also make it globally available for app.js
-window.initCharge = initCharge;
+});

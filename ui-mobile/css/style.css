@@ -153,3 +153,21 @@ background:var(--bg);color:var(--text);
   padding:8px 12px;
   margin-left:8px;
 }
+
+/* Deprecate QR scanning UI (kept in DOM for safety, hidden visually) */
+.scan-panel, #scan-panel {
+  display: none !important;
+}
+
+/* Charge tab: simple verify-by-location button */
+.verify-card{
+  margin:16px; padding:16px; border-radius:14px;
+  background:#fff; box-shadow:0 6px 20px rgba(0,0,0,.08);
+}
+
+.verify-card h3{ margin:0 0 8px; font-size:16px; }
+
+.verify-btn{
+  display:inline-block; background:var(--brand); color:#fff;
+  border:0; border-radius:10px; padding:10px 14px; font-weight:700;
+}

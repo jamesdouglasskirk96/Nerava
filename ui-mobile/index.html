@@ -401,6 +401,10 @@
   <script type="module" src="js/pages/wallet.js" defer></script>
   <script type="module" src="js/pages/me.js" defer></script>
   <script type="module" src="js/pages/dev.js" defer></script>
+  <script type="module">
+    import { initChargePage } from './js/pages/charge.js';
+    window.addEventListener('load', initChargePage);
+  </script>
   
   <!-- Animations and main app -->
   <script src="js/animations.js" defer></script>
