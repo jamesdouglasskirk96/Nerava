@@ -2,6 +2,7 @@
   --brand-blue: #2F6FE0;   /* iOS-like blue pulled from provided home screen */
   --brand-blue-ink: #0E2E75;
   --icon-muted: #8B93A1;   /* outline gray for inactive icons */
+  --nav-icon: #9AA3AF;    /* light gray outline tone for consistency */
   --tabbar-height: 72px;
   --radius-lg: 18px;
   --radius-xl: 24px;

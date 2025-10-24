@@ -37,18 +37,36 @@ document.querySelectorAll('.tabbar .tab').forEach(b=> b.addEventListener('click'
 document.querySelector('.earn-pill')?.addEventListener('click', ()=> setTab('earn'));
 
 let map;
-export function ensureMap(lat = 30.4021, lng = -97.7265) {
-  if (map) { map.invalidateSize(); return map; }
+export function ensureMap(lat = 30.4021, lng = -97.7265, zoom = 15) {
+  // reuse existing map instance if present
+  if (window._neravaMap) {
+    try { window._neravaMap.invalidateSize(); } catch(_) {}
+    return window._neravaMap;
+  }
+
   const el = document.getElementById('map');
   if (!el || !window.L) return null;
-  map = L.map(el, { zoomControl:false }).setView([lat, lng], 14);
+
+  const m = L.map(el, { zoomControl: false }).setView([lat, lng], zoom);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap'
-  }).addTo(map);
+  }).addTo(m);
+
+  // 🔒 hide Leaflet attribution permanently
+  const hideAttribution = () => {
+    const ctrl = document.querySelector('.leaflet-control-attribution');
+    const wrapper = document.querySelector('.leaflet-bottom.leaflet-right');
+    if (ctrl) ctrl.style.display = 'none';
+    if (wrapper) wrapper.style.display = 'none';
+  };
+  setTimeout(hideAttribution, 250);
+  m.on('load', hideAttribution);
+
+  window._neravaMap = m;
   // expose once for any legacy code
-  window.map = map;
-  return map;
+  window.map = m;
+  return m;
 }
 
 // Draw route + markers + ETA (foot). Fallback to straight line if OSRM blocked.

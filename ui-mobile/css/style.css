@@ -226,6 +226,12 @@ background:var(--bg);color:var(--text);
 .earn-pill .icon{ width:20px; height:20px; color:#fff; stroke-width:1.5; }
 .earn-pill .label{ color:#fff; font-weight:600; margin-top:2px; font-size:10px; }
 
+/* Earn button outline matches nav icon color */
+.tabbar .tab--primary {
+  border: 2px solid var(--nav-icon, #9AA3AF); /* same as inactive icon color */
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
 /* Ensure tab items distribute evenly with space-around */
 .tabbar-inner{
   position:relative; width:100%; height:100%;
