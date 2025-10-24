@@ -239,12 +239,12 @@ background:var(--bg);color:var(--text);
   --tabbar-height: 76px;
 }
 
-.map-card{
-  margin:16px;
-  border-radius:18px;
-  overflow:hidden;
-  box-shadow: 0 10px 30px rgba(0,0,0,.08);
-  background:#fff;
+.map-card {
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  margin: 16px;
+  background: #fff;
 }
 .map{ height: 46vh; width: 100%; }
 

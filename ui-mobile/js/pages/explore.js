@@ -1,4 +1,4 @@
-import { ensureMap, fitMapToRoute, drawDashedRoute, placeCircle, mapRef } from '../core/map.js';
+import { ensureMap, fitMapToRoute, drawDashedRoute, placeCircle, mapRef } from '../js/core/map.js';
 import { apiGet } from '../core/api.js';
 
 export async function initExplore(){
@@ -24,7 +24,6 @@ export async function initExplore(){
   placeCircle(merchant.lat, merchant.lng, { radius:9 });
   drawDashedRoute(charger, merchant);
   fitMapToRoute(charger, merchant, 60);
-}
 
   // Simple perk card with fallback data
   const card = document.getElementById('perk-card');
