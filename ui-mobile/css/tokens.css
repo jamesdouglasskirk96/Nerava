@@ -573,3 +573,37 @@ body {
   font-size: 13px; color: var(--muted); margin-top: 10px;
 }
 .route-meta .dot { opacity: .5; }
+
+/* Payout history styles */
+.payout-list {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.payout-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface);
+}
+.payout-info {
+  display: flex; flex-direction: column; gap: 4px;
+}
+.payout-amount {
+  font-weight: 700; font-size: 16px; color: var(--text);
+}
+.payout-card {
+  font-size: 14px; color: var(--muted);
+}
+.payout-status {
+  padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 600;
+}
+.payout-status.completed {
+  background: var(--success-100); color: var(--success-600);
+}
+.payout-status.pending {
+  background: var(--warning-100); color: var(--warning-600);
+}
+.payout-status.failed {
+  background: var(--danger-100); color: var(--danger-600);
+}
+.payout-date {
+  font-size: 12px; color: var(--muted); margin-top: 4px;
+}

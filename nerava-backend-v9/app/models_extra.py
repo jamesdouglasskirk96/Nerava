@@ -73,3 +73,25 @@ class CommunityPeriod(Base):
     total_community_cents = Column(Integer, default=0)
     total_distributed_cents = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+# --- Group Challenges ---
+
+class Challenge(Base):
+    __tablename__ = "challenges"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    scope = Column(String, nullable=False)  # 'city' or 'global'
+    starts_at = Column(DateTime, nullable=False)
+    ends_at = Column(DateTime, nullable=False)
+    goal_kwh = Column(Integer, nullable=False)  # Total kWh goal
+    sponsor_merchant_id = Column(String, index=True)  # Optional sponsor
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+class Participation(Base):
+    __tablename__ = "participations"
+    id = Column(Integer, primary_key=True)
+    challenge_id = Column(Integer, ForeignKey("challenges.id"), index=True, nullable=False)
+    user_id = Column(String, index=True, nullable=False)
+    kwh = Column(Integer, default=0)  # User's contribution
+    points = Column(Integer, default=0)  # Points earned
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

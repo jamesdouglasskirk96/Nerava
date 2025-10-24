@@ -161,7 +161,15 @@
           <!-- Quick Actions -->
           <div class="wallet-actions" style="margin: 16px 0; display: flex; gap: 8px;">
             <button class="btn btn-secondary" style="flex: 1;">Add Funds</button>
-            <button class="btn btn-secondary" style="flex: 1;">Withdraw</button>
+            <button id="withdrawBtn" class="btn btn-secondary" style="flex: 1;">Withdraw</button>
+          </div>
+          
+          <!-- Payout History -->
+          <div class="payout-history" style="margin: 16px 0;">
+            <h3 style="margin: 0 0 8px 0; font-size: 16px;">Recent Withdrawals</h3>
+            <div id="payoutHistory" class="payout-list">
+              <!-- Payout history will be loaded here -->
+            </div>
           </div>
           
           <ul class="list" id="wallet-activity">
