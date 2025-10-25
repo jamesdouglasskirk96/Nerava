@@ -72,29 +72,41 @@
             <div id="map" class="leaflet-map"></div>
           </div>
 
-          <h2 class="section-title">Nearby perk</h2>
+          <section id="perkSection" class="section">
+            <h2 class="h2">Nearby perk</h2>
 
-          <article id="perkCard" class="perk-card" aria-live="polite">
-            <div class="perk-logo" id="perkLogo">☕️</div>
-            <div class="perk-headline">
-              <span class="ai-chip" id="perkAI">
-                <svg viewBox="0 0 24 24"><path fill="currentColor" d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>
-                Recommended by Nerava AI
+            <!-- left-aligned badge under heading -->
+            <div id="perk-badge-row">
+              <span id="perk-badge" class="perk-badge">
+                <span class="bolt" aria-hidden="true">⚡</span>
+                <span>Recommended by Nerava AI</span>
               </span>
             </div>
-            <div>
-              <div class="perk-merchant" id="perkName">Merchant name</div>
-              <div class="perk-address" id="perkAddr">123 Main St, Austin, TX</div>
-              <div class="perk-details" id="perkDetails">Free coffee 2–4pm · 3 min walk from charger</div>
-              <div style="margin-top:10px">
-                <button id="btnChargeHere" class="btn-primary">Charge here</button>
-              </div>
-            </div>
-          </article>
 
-          <div class="view-more-wrap">
-            <button id="btnViewMore" class="btn-ghost">View more perks</button>
-          </div>
+            <!-- Perk card -->
+            <article id="perkCard" class="perk-card">
+              <div class="perk-card__body">
+                <div class="perk-card__text">
+                  <h3 id="perk-title" class="perk-title">Starbucks</h3>
+                  <p id="perk-address" class="perk-address">310 E 5th St, Austin, TX</p>
+                  <p id="perk-sub" class="perk-sub">Free coffee 2–4pm • 3 min walk</p>
+                </div>
+                <div class="perk-card__media">
+                  <img id="perk-logo" class="perk-logo" src="./img/coffee.png" alt="Starbucks" />
+                </div>
+              </div>
+
+              <button id="perk-cta" class="btn btn-wide" type="button">Charge here</button>
+            </article>
+
+            <!-- View more -->
+            <button id="view-more" class="btn btn-wide btn-ghost" type="button">
+              View more perks
+            </button>
+          </section>
+
+          <!-- Spacer to ensure View more button is above tab bar -->
+          <div style="height: calc(var(--tabbar-height, 88px) + env(safe-area-inset-bottom, 16px));"></div>
         </section>
 
       <!-- Charge / Wallet / Profile now padded pages (not overlay sheets) -->

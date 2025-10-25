@@ -802,3 +802,56 @@ background:var(--bg);color:var(--text);
   position: relative;
   padding: 10px 20px calc(var(--tabbar-height,72px) + 10px);
 }
+
+/* --- Nearby perk layout --- */
+.section { padding: 16px 20px 24px; }
+
+.h2 {
+  font-size: 22px; font-weight: 700; letter-spacing: .2px;
+  color: #121212; margin: 6px 0 10px;
+}
+
+#perk-badge-row { margin: 4px 0 12px; }
+.perk-badge {
+  display:inline-flex; align-items:center; gap:8px;
+  padding:6px 12px; border-radius:999px;
+  color: var(--brand, #3B6FE8); background: color-mix(in srgb, var(--brand, #3B6FE8) 12%, white);
+  border: 1px solid color-mix(in srgb, var(--brand, #3B6FE8) 30%, white);
+  font-weight:600; font-size:14px;
+}
+.perk-badge .bolt { font-size:14px; line-height:0; }
+
+.perk-card {
+  background:#fff; border-radius:16px; padding:14px;
+  box-shadow:0 12px 30px rgba(16,24,40,.08);
+  border:1px solid rgba(2,16,43,.06);
+}
+.perk-card__body {
+  display:grid; grid-template-columns: 1fr 84px; gap:14px; align-items:center;
+}
+.perk-card__text { min-width:0; }
+.perk-title { margin:2px 0 4px; font-size:20px; font-weight:700; color:#0b1020; }
+.perk-address { margin:0 0 6px; color:#5b6472; font-size:14px; }
+.perk-sub {
+  margin:0; color:#2a2f38; font-weight:600; font-size:14px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.perk-card__media { display:flex; justify-content:flex-end; }
+.perk-logo {
+  width:64px; height:64px; border-radius:14px; object-fit:cover;
+  box-shadow:0 6px 16px rgba(16,24,40,.12);
+}
+
+.btn-wide {
+  width:100%; margin-top:12px;
+  height:52px; border-radius:14px; font-weight:700; font-size:16px;
+  background:#fff; color:#0b1020; border:1px solid rgba(2,16,43,.10);
+  box-shadow:0 8px 18px rgba(16,24,40,.07);
+}
+.btn-ghost {
+  background: #f5f7fb; color:#0b1020; border:1px solid rgba(2,16,43,.06);
+}
+#view-more { margin-top:16px; }
+
+/* Map card spacing above perk section */
+#mapCard { margin: 14px 20px 10px; }
