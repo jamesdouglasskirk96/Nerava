@@ -2,7 +2,7 @@
 import { loadDemoState } from './core/demo.js';
 import { ensureDemoBanner } from './components/demoBanner.js';
 import { apiGet, apiPost } from './core/api.js';
-import { ensureMap } from './js/core/map.js';
+import { ensureMap } from './core/map.js';
 export { ensureMap }; // so other modules can import from '../app.js' if needed
 window.Nerava = window.Nerava || {};
 
