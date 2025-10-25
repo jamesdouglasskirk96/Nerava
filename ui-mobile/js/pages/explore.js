@@ -1,16 +1,33 @@
 import { apiGet } from '../core/api.js';
-// ensureMap should already exist in app.js; if not, create a local fallback
+import { ensureMap } from '../app.js';
+
+// Safe map initialization that prevents duplicate initialization
 const getMap = (center=[30.4025,-97.7258], zoom=14) => {
-  if (window.ensureMap) return window.ensureMap(center[0], center[1], zoom);
-  // Minimal local init fallback (won't duplicate)
-  if (!window._map) {
-    window._map = L.map('map', { zoomControl:false }).setView(center, zoom);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{ maxZoom:19 }).addTo(window._map);
+  // Use the existing ensureMap from app.js which has proper duplicate prevention
+  if (window.ensureMap) {
+    return window.ensureMap(center[0], center[1], zoom);
   }
-  return window._map;
+  
+  // Fallback: check if map already exists and return it
+  const mapElement = document.getElementById('map');
+  if (!mapElement) return null;
+  
+  // Check if Leaflet map already exists on this element
+  if (mapElement._leaflet_id) {
+    return L.map.getLayer(mapElement._leaflet_id);
+  }
+  
+  // Only create new map if none exists
+  const map = L.map('map', { zoomControl:false }).setView(center, zoom);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{ maxZoom:19 }).addTo(map);
+  return map;
 };
 
 export async function initExplore(){
+  // Prevent duplicate initialization
+  if (window.__exploreInitialized) return;
+  window.__exploreInitialized = true;
+  
   // 1) Data (with graceful fallbacks)
   let hub = null, deal = null;
   try { hub = await apiGet('/v1/hubs/recommend'); } catch {}
@@ -25,6 +42,18 @@ export async function initExplore(){
 
   // 2) Map inside rounded card
   const map = getMap([hub.lat, hub.lng], 15);
+  if (!map) {
+    console.warn('Map initialization failed');
+    return;
+  }
+  
+  // Clear any existing layers before adding new ones
+  map.eachLayer(layer => {
+    if (layer instanceof L.Polyline || layer instanceof L.CircleMarker) {
+      map.removeLayer(layer);
+    }
+  });
+  
   // Optional: simple route dots to a mock merchant spot near hub
   const merchant = { lat: hub.lat - 0.005, lng: hub.lng + 0.002 };
   const route = L.polyline([[hub.lat,hub.lng],[merchant.lat,merchant.lng]], {
