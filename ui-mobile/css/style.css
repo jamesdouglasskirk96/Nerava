@@ -188,10 +188,20 @@ background:var(--bg);color:var(--text);
   box-shadow:0 2px 8px rgba(0,0,0,.05);
 }
 .brand-logo{
-  font-weight:700; letter-spacing:.04em; font-size:20px;
+  font-weight: 600; 
+  letter-spacing: 0.04em; 
+  font-size: 20px;
   color: var(--brand-blue);
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
-.brand-logo .bolt{ color:#F5B400 }
+.brand-logo .bolt{ 
+  color: #F5B400;
+  font-size: 18px;
+}
 
 /* Tabbar */
 .tabbar{

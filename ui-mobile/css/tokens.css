@@ -4,7 +4,7 @@
   --ink-weak: #9CA3AF;        /* gray outline icon color */
   --nav-height: 82px;         /* total navbar frame */
   --fab-size: 68px;           /* Earn pill size */
-  --fab-elev: 18px;           /* how much it rises above nav */
+  --fab-elev: 12px;           /* how much it rises above nav */
   --radius-xxl: 24px;
   --radius-xl: 20px;
   --shadow-soft: 0 10px 30px rgba(17,24,39,0.15);
