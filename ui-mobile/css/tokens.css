@@ -2,11 +2,16 @@
   --brand-blue: #4A72F5;
   --ink: #111827;
   --ink-weak: #9CA3AF;        /* gray outline icon color */
-  --nav-height: 82px;         /* total navbar frame */
-  --fab-size: 68px;           /* Earn pill size */
-  --fab-elev: 12px;           /* how much it rises above nav */
+  
+  /* Tabbar and FAB tokens */
+  --tabbar-height: 84px;         /* keep current height you're using */
+  --fab-size: 64px;              /* button diameter */
+  --fab-radius: 18px;            /* rounded square look */
+  --fab-shadow: 0 8px 22px rgba(0,0,0,.22);
+  /* overlap = how much the FAB "dips" into the tabbar area */
+  --fab-overlap: calc((var(--tabbar-height) - var(--fab-size)) / 2);
+  
   --radius-xxl: 24px;
   --radius-xl: 20px;
   --shadow-soft: 0 10px 30px rgba(17,24,39,0.15);
-  --shadow-fab: 0 8px 18px rgba(17,24,39,0.35);
 }

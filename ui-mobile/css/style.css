@@ -613,21 +613,28 @@ background:var(--bg);color:var(--text);
 
 /* --- Center FAB (Earn) --- */
 #fab-earn{
-  position: fixed; left: 50%;
-  bottom: calc(var(--nav-height) - var(--fab-elev));
+  position: fixed;
+  left: 50%;
   transform: translateX(-50%);
-  width: var(--fab-size); height: var(--fab-size);
-  border-radius: 18px;
+  width: var(--fab-size);
+  height: var(--fab-size);
+  border-radius: var(--fab-radius);
+  bottom: calc(var(--fab-overlap) + env(safe-area-inset-bottom, 0px));
+  z-index: 1000;                 /* above tabbar */
+  box-shadow: var(--fab-shadow);
   background: var(--brand-blue);
-  color: #fff; display:grid; place-items:center;
-  gap: 2px;
-  box-shadow: var(--shadow-fab);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;            /* icon + label */
+  padding: 0 14px;     /* if it's pill-shaped with label; remove if icon-only */
+  line-height: 1;
   border: 2px solid rgba(0,0,0,0.85); /* subtle black outline per mock */
-  z-index: 30;
 }
 #fab-earn .icon{ width: 28px; height: 28px; }
 #fab-earn .icon svg{ width: 28px; height: 28px; stroke:#fff; fill:none; stroke-width:2.4; }
-#fab-earn .label{ font-weight:600; font-size:14px; margin-top:-2px; }
+#fab-earn .label{ font-weight:600; font-size:14px; }
 
 /* spacing so neighbors don't crowd the FAB */
 .tabbar .tab:nth-child(3){ margin: 0 14px; }  /* center slot gutters */
