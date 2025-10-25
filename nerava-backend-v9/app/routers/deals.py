@@ -58,3 +58,16 @@ async def get_green_hour_deals(
             "error": str(e)
         })
         raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.get("/nearby")
+def nearby():
+    # Simple fallback for frontend expectations
+    return [{
+        "id": "demo_deal",
+        "name": "Coffee & Pastry",
+        "reward_text": "Cheaper during Green Hour",
+        "window": "2–4pm",
+        "distance_text": "0.3 mi from charger",
+        "lat": 30.3990,
+        "lng": -97.7230
+    }]
