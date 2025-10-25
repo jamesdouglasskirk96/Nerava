@@ -624,17 +624,21 @@ background:var(--bg);color:var(--text);
   box-shadow: var(--fab-shadow);
   background: var(--brand-blue);
   color: #fff;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;            /* icon + label */
-  padding: 0 14px;     /* if it's pill-shaped with label; remove if icon-only */
-  line-height: 1;
-  border: 2px solid rgba(0,0,0,0.85); /* subtle black outline per mock */
+  border: 2px solid var(--ink-weak); /* gray outline to match nav icons */
 }
-#fab-earn .icon{ width: 28px; height: 28px; }
-#fab-earn .icon svg{ width: 28px; height: 28px; stroke:#fff; fill:none; stroke-width:2.4; }
-#fab-earn .label{ font-weight:600; font-size:14px; }
+#fab-earn .fab-content{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+#fab-earn .icon{ width: 24px; height: 24px; }
+#fab-earn .icon svg{ width: 24px; height: 24px; stroke:#fff; fill:none; stroke-width:2.4; }
+#fab-earn .label{ font-weight:600; font-size:12px; line-height:1; }
 
 /* spacing so neighbors don't crowd the FAB */
 .tabbar .tab:nth-child(3){ margin: 0 14px; }  /* center slot gutters */
