@@ -40,12 +40,19 @@ async function selectCharger(idx){
   const c = _chargers[_cIdx];
 
   // 1) Update perk card content
-  const $t = (sel)=>document.querySelector(sel);
-  $t('#perk-title')?.textContent = c.merchant?.name || 'Nearby merchant';
-  $t('#perk-address')?.textContent = c.addr || '';
-  $t('#perk-sub')?.textContent = c.perk || '';
+  const $t = (sel) => document.querySelector(sel);
+  const titleEl = $t('#perk-title');
+  const addressEl = $t('#perk-address');
+  const subEl = $t('#perk-sub');
   const logo = $t('#perk-logo');
-  if(logo && c.merchant?.logo){ logo.src = c.merchant.logo; logo.alt = c.merchant.name; }
+  
+  if (titleEl) titleEl.textContent = c.merchant?.name || 'Nearby merchant';
+  if (addressEl) addressEl.textContent = c.addr || '';
+  if (subEl) subEl.textContent = c.perk || '';
+  if (logo && c.merchant?.logo) { 
+    logo.src = c.merchant.logo; 
+    logo.alt = c.merchant.name; 
+  }
 
   // 2) Update map: charger (c.lat/lng) to merchant (fake offset for demo)
   const charger = { lat: c.lat, lng: c.lng };
