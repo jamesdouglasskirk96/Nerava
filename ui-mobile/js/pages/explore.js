@@ -47,6 +47,8 @@ async function selectCharger(idx){
 
   _cIdx = (idx + _chargers.length) % _chargers.length;
   const c = _chargers[_cIdx];
+  
+  console.log('selectCharger called with idx:', idx, 'charger:', c);
 
   // 1) Update perk card content
   const $t = (sel) => document.querySelector(sel);
@@ -67,8 +69,15 @@ async function selectCharger(idx){
   const charger = { lat: c.lat, lng: c.lng };
   const merchant = { lat: c.lat + 0.0045, lng: c.lng - 0.0030 }; // small offset so route is visible
   
+  console.log('About to draw route from charger:', charger, 'to merchant:', merchant);
+  console.log('window.drawWalkingRoute available:', !!window.drawWalkingRoute);
+  
   if(window.drawWalkingRoute){
+    console.log('Calling drawWalkingRoute...');
     await window.drawWalkingRoute(charger, merchant, { fit: true, maxZoom: 16 });
+    console.log('drawWalkingRoute completed');
+  } else {
+    console.warn('drawWalkingRoute function not available on window object');
   }
 }
 
