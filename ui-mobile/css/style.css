@@ -73,8 +73,8 @@ background:var(--bg);color:var(--text);
 .main-layer{padding-top:108px; padding-bottom:100px}
 
 /* Pages */
-.page{display:none}
-.page.active{display:block}
+.page{display:none; padding-top: 0;}
+.page.active{display:block !important}
 
 /* Cards */
 .card{background:var(--surface); color:var(--text); border-radius:28px; box-shadow: 0 10px 30px rgba(2, 8, 20, .06); padding:22px}
@@ -184,7 +184,7 @@ background:var(--bg);color:var(--text);
 /* Header */
 .topbar{
   height:64px; display:flex; align-items:center; justify-content:center;
-  background:#fff; position:sticky; top:0; z-index:20;
+  background:#fff; position:sticky; top:0; z-index:100;
   box-shadow:0 2px 8px rgba(0,0,0,.05);
 }
 .brand-logo{
@@ -579,8 +579,7 @@ background:var(--bg);color:var(--text);
   box-shadow: var(--shadow-soft);
   background: #fff;
 }
-.map-card #map{ height: 56vh; width: 100%; }
-@media (min-height: 800px){ .map-card #map{ height: 60vh; } }
+.map-card #map{ height: 280px; width: 100%; }
 
 /* --- Tab bar --- */
 .tabbar{
