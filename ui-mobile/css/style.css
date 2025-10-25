@@ -821,30 +821,56 @@ background:var(--bg);color:var(--text);
 }
 .perk-badge .bolt { font-size:14px; line-height:0; }
 
+/* Perk card: two-row grid
+   Row 1: text | media
+   Row 2: CTA (spans 2 cols)
+*/
 .perk-card {
-  background:#fff; border-radius:16px; padding:14px;
-  box-shadow:0 12px 30px rgba(16,24,40,.08);
-  border:1px solid rgba(2,16,43,.06);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  grid-template-areas:
+    "text media"
+    "cta  cta";
+  gap: 14px 16px;                 /* row gap | col gap */
+  padding: 16px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(16,24,40,.12);
 }
-.perk-card__body {
-  display:grid; grid-template-columns: 1fr 84px; gap:14px; align-items:center;
+
+/* Let children of __body participate directly in the grid */
+.perk-card__body { display: contents; }
+
+/* Text column */
+.perk-card__text {
+  grid-area: text;
+  min-width: 0;                   /* prevents overflow */
 }
-.perk-card__text { min-width:0; }
-.perk-title { margin:2px 0 4px; font-size:20px; font-weight:700; color:#0b1020; }
-.perk-address { margin:0 0 6px; color:#5b6472; font-size:14px; }
-.perk-sub {
-  margin:0; color:#2a2f38; font-weight:600; font-size:14px;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-}
-/* Perk logo sizing/containment */
-.perk-card__media { display:flex; justify-content:flex-end; }
+.perk-title   { margin: 0 0 6px; font-weight: 700; font-size: 20px; }
+.perk-address { margin: 0 0 4px;  color: #64748b; font-size: 14px; }
+.perk-sub     { margin: 0;        color: #334155; font-size: 14px; }
+
+/* Logo on the right */
+.perk-card__media { grid-area: media; align-self: start; }
 .perk-logo {
-  width:64px; height:64px;
-  border-radius:14px;
-  object-fit: contain;         /* keep aspect, no cropping */
-  background:#fff;             /* neutral backdrop */
-  box-shadow:0 6px 16px rgba(16,24,40,.12);
-  border:1px solid rgba(2,16,43,.06);
+  width: 64px; height: 64px;
+  border-radius: 14px;
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid rgba(2,16,43,.06);
+  box-shadow: 0 6px 16px rgba(16,24,40,.12);
+}
+
+/* CTA spans full width as its own row */
+#perk-cta {
+  grid-area: cta;
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 16px;
+  margin-top: 2px;                /* tiny breathing room */
 }
 
 .btn-wide {
