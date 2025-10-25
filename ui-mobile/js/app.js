@@ -217,7 +217,6 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   } catch(_) {}
 
   setTab('Explore');            // now guaranteed defined
-  initMap();
   // Gate on SSO; after SSO completes, it calls the loaders again.
   if (typeof ensureAuth === 'function' && !ensureAuth()) return;
   await loadBanner();
@@ -325,7 +324,7 @@ function triggerWalletToast(msg){
 window.addEventListener('load', async ()=>{
   setTab('explore');
   // lazy import to avoid cyclic loads
-  const { initExplore } = await import('./js/pages/explore.js');
+  const { initExplore } = await import('/app/js/pages/explore.js');
   initExplore();
   await loadBanner();
   await loadWallet();
