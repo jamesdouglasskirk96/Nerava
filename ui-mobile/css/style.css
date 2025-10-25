@@ -112,6 +112,12 @@ overflow:hidden;
   margin: 0 16px 8px;
 }
 
+/* Flexible spacer to fill remaining space */
+.flex-spacer{
+  flex: 1 1 auto;
+  min-height: 20px;
+}
+
 /* Cards */
 .card{background:var(--surface); color:var(--text); border-radius:28px; box-shadow: 0 10px 30px rgba(2, 8, 20, .06); padding:22px}
 .hub-card{width:92%; margin:0 auto; position:fixed; left:50%; transform:translateX(-50%); bottom:88px}
