@@ -83,6 +83,10 @@ async function selectCharger(idx){
         console.log('User location:', userLocation);
         console.log('Drawing route from user to charger...');
         
+        // Calculate driving time
+        const drivingTime = calculateDrivingTime(userLocation, charger);
+        updateDrivingTime(drivingTime);
+        
         if(window.drawWalkingRoute){
           await window.drawWalkingRoute(userLocation, charger, { fit: true, maxZoom: 16 });
           console.log('Route from user to charger completed');
@@ -96,6 +100,10 @@ async function selectCharger(idx){
         const defaultLocation = { lat: 30.2672, lng: -97.7431 };
         console.log('Using default location:', defaultLocation);
         
+        // Calculate driving time for default location
+        const drivingTime = calculateDrivingTime(defaultLocation, charger);
+        updateDrivingTime(drivingTime);
+        
         if(window.drawWalkingRoute){
           window.drawWalkingRoute(defaultLocation, charger, { fit: true, maxZoom: 16 });
           console.log('Route from default location to charger completed');
@@ -105,6 +113,10 @@ async function selectCharger(idx){
   } else {
     console.warn('Geolocation not supported, using default location');
     const defaultLocation = { lat: 30.2672, lng: -97.7431 };
+    
+    // Calculate driving time for default location
+    const drivingTime = calculateDrivingTime(defaultLocation, charger);
+    updateDrivingTime(drivingTime);
     
     if(window.drawWalkingRoute){
       window.drawWalkingRoute(defaultLocation, charger, { fit: true, maxZoom: 16 });
@@ -196,4 +208,40 @@ export async function initExplore(){
   // Make sure the map card never overlaps content
   const card = $('.map-card');
   if (card){ card.style.zIndex = 0; }
+}
+
+// Calculate driving time between two points
+function calculateDrivingTime(from, to) {
+  // Simple distance calculation using Haversine formula
+  const R = 6371; // Earth's radius in kilometers
+  const dLat = (to.lat - from.lat) * Math.PI / 180;
+  const dLng = (to.lng - from.lng) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(from.lat * Math.PI / 180) * Math.cos(to.lat * Math.PI / 180) *
+    Math.sin(dLng/2) * Math.sin(dLng/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const distance = R * c; // Distance in kilometers
+  
+  // Estimate driving time (assuming average speed of 30 km/h in city)
+  const drivingTimeMinutes = Math.round((distance / 30) * 60);
+  
+  return Math.max(1, drivingTimeMinutes); // Minimum 1 minute
+}
+
+// Update the driving time display
+function updateDrivingTime(minutes) {
+  const timeElement = document.getElementById('driving-time');
+  if (timeElement) {
+    if (minutes < 60) {
+      timeElement.textContent = `${minutes} min drive`;
+    } else {
+      const hours = Math.floor(minutes / 60);
+      const remainingMinutes = minutes % 60;
+      if (remainingMinutes === 0) {
+        timeElement.textContent = `${hours}h drive`;
+      } else {
+        timeElement.textContent = `${hours}h ${remainingMinutes}m drive`;
+      }
+    }
+  }
 }
