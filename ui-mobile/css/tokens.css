@@ -1,17 +1,12 @@
 :root{
-  --brand-blue: #2F6FE0;   /* iOS-like blue pulled from provided home screen */
-  --brand-blue-ink: #0E2E75;
-  --icon-muted: #8B93A1;   /* outline gray for inactive icons */
-  --nav-icon: #9AA3AF;    /* light gray outline tone for consistency */
-  --tabbar-height: 72px;
-  --radius-lg: 18px;
-  --radius-xl: 24px;
-  --shadow-card: 0 12px 30px rgba(0,0,0,.08);
-
-  --ink:#1a1a1a;
-  --muted:#667085;
-  --card:#ffffff;
-  --bg:#f7f8fb;
-  --radius:18px;
-  --shadow-lg:0 16px 40px rgba(16,24,40,.16);
+  --brand-blue: #4A72F5;
+  --ink: #111827;
+  --ink-weak: #9CA3AF;        /* gray outline icon color */
+  --nav-height: 82px;         /* total navbar frame */
+  --fab-size: 68px;           /* Earn pill size */
+  --fab-elev: 18px;           /* how much it rises above nav */
+  --radius-xxl: 24px;
+  --radius-xl: 20px;
+  --shadow-soft: 0 10px 30px rgba(17,24,39,0.15);
+  --shadow-fab: 0 8px 18px rgba(17,24,39,0.35);
 }

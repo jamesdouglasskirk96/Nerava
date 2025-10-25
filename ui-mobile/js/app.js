@@ -2,7 +2,19 @@
 import { loadDemoState } from './core/demo.js';
 import { ensureDemoBanner } from './components/demoBanner.js';
 import { apiGet, apiPost } from './core/api.js';
-// ensureMap now lives in js/core/map.js; do not re-declare here
+// Single ensureMap definition
+export let mapInstance = null;
+export function ensureMap(lat=30.4021, lng=-97.7265, zoom=13){
+  if (mapInstance) { setTimeout(()=>mapInstance.invalidateSize(),0); return mapInstance; }
+  const el = document.getElementById('map');
+  if (!el) return null;
+  mapInstance = L.map(el, { zoomControl:false }).setView([lat,lng], zoom);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    maxZoom: 19, attribution: '&copy; OpenStreetMap'
+  }).addTo(mapInstance);
+  return mapInstance;
+}
+
 window.Nerava = window.Nerava || {};
 
 // === SSO → prefs → wallet pre-balance → push banner flow ===
@@ -105,78 +117,25 @@ function handleHashRoute() {
   }
 }
 
-function setActive(tab){
-  tabs.forEach(n => {
-    const on = (n === tab);
-    document.getElementById(`tab${n}`)?.classList.toggle('active', on);
-    document.getElementById(`page${n}`)?.classList.toggle('hidden', !on);
-  });
-
-  // Layout rules per tab
-  if (tab === 'Explore') {
-    // Only the compact perk sheet is shown; set its approximate height
-    const perkSheet = document.getElementById('perkSheet') || document.querySelector('[data-role="perk-sheet"]');
-    const h = perkSheet ? Math.min(320, perkSheet.offsetHeight || 320) : 320;
-    setMapInsets({ hasSheet: true, sheetPx: h });
-    
-    // Initialize explore only once, then just invalidate map
-    if (!window.__exploreBooted) {
-      import('./pages/explore.js').then(module => {
-        module.initExplore();
-        window.__exploreBooted = true;
-      }).catch(() => {});
-    } else {
-      // Just invalidate map size on tab show
-      requestAnimationFrame(() => {
-        import('./core/map.js').then(module => {
-          module.invalidateMap();
-        }).catch(() => {});
-      });
-    }
-  } else if (tab === 'Claim') {
-    const claimSheet = document.getElementById('claimSheet') || document.querySelector('[data-role="claim-sheet"]');
-    const h = claimSheet ? Math.min(360, claimSheet.offsetHeight || 360) : 360;
-    setMapInsets({ hasSheet: true, sheetPx: h });
-  } else {
-    // Charge, Wallet, Me → no sheet for now; show full map behind header/nav
-    setMapInsets({ hasSheet: false, sheetPx: 0 });
-  }
-
-  // Hide Scan panel when on Charge (temporary)
-  if (tab === 'Charge' && SCAN_TEMP_DISABLED) {
-    const scan = document.querySelector('[data-role="scan-panel"]');
-    if (scan) scan.classList.add('hidden');
-  }
-
-  // Lazy init per page
-  if (!inited[tab]) {
-    inited[tab] = true;
-    const initFn = window[`init${tab}`];
-    if (typeof initFn === 'function') initFn();
-  }
-
-  // Map repaint on Explore only
-  if (tab === 'Explore' && typeof window.repaintMap === 'function') {
-    requestAnimationFrame(window.repaintMap);
-  }
+export function setTab(tab){
+  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active', p.id==='page-'+tab));
+  document.querySelectorAll('.tabbar .tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===tab));
+  if(tab==='explore') ensureMap();
 }
 
-// Wire tab buttons
-function wireTabs() {
-  document.getElementById('tabExplore')?.addEventListener('click', ()=>setActive('Explore'));
-  document.getElementById('tabCharge')?.addEventListener('click',  ()=>setActive('Charge'));
-  document.getElementById('tabWallet')?.addEventListener('click',  ()=>setActive('Wallet'));
-  document.getElementById('tabMe')?.addEventListener('click',      ()=>setActive('Me'));
+// Wire tab buttons and FAB
+document.querySelectorAll('.tabbar .tab').forEach(t=>{
+  t.addEventListener('click', () => setTab(t.dataset.tab));
+});
 
-  document.getElementById('tabScan')?.addEventListener('click',    ()=> {
-    // Open scan modal/sheet if you have it, or route to Claim
-    setActive('Claim');
-  });
-}
+document.getElementById('fab-earn')?.addEventListener('click', ()=> {
+  // open earn flow; for now just navigate to wallet to show progress
+  setTab('wallet');
+  setTimeout(()=>setTab('explore'), 0);
+});
 
 // Initialize app
 async function initApp() {
-  wireTabs();
   
   // Load demo state and show banner if enabled
   await loadDemoState();
