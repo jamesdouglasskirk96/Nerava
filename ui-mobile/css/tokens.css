@@ -1,10 +1,10 @@
 :root{
-  --brand: #3B5BFE;           /* Original Nerava blue */
+  --brand: #3B5FFF;           /* Nerava blue */
   --brand-ink: #1E2B5C;       /* deep ink for text on brand bg if needed */
-  --bolt: #FFB800;            /* ⚡ gold */
-  --ink-900: #1A1A1A;         /* readable dark text */
+  --bolt: #FFC107;            /* ⚡ gold */
+  --ink-900: #1E1E1E;         /* readable dark text */
   --ink-700: #3B4456;
-  --ink-500: #838AA3;
+  --ink-500: #9CA3AF;         /* inactive tab text */
   --ink-300: #C9CFDC;         /* light stroke for outlines */
   --surface: #FFFFFF;
   --card: #FFFFFF;
