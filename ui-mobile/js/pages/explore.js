@@ -27,9 +27,18 @@ const CHARGER_FALLBACK = [
 let _chargers = [];     // resolved list (api or fallback)
 let _cIdx = 0;          // index in the list
 
-// Help: safe API fetch with null on 404
+// Help: safe API fetch with null on 404 (silent for expected failures)
 async function tryGet(url){
-  try { return await apiGet(url); } catch(e){ return null; }
+  try { 
+    return await apiGet(url); 
+  } catch(e){ 
+    // Silently handle 404s for optional endpoints
+    if (e.message && e.message.includes('404')) {
+      return null;
+    }
+    console.warn(`API call failed for ${url}:`, e.message);
+    return null; 
+  }
 }
 
 // Draw currently selected charger into map + perk
@@ -106,6 +115,8 @@ export async function initExplore(){
     merchant: r.merchant || { name: 'Starbucks', logo: 'https://logo.clearbit.com/starbucks.com' },
     perk: r.perk || 'Free coffee 2–4pm • 3 min walk'
   })) : CHARGER_FALLBACK.slice();
+
+  console.log(`Loaded ${_chargers.length} chargers (${around ? 'API' : 'fallback'})`);
 
   // initial selection
   await selectCharger(0);
