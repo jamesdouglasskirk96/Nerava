@@ -149,12 +149,39 @@ function _bindPerk(deal=_fallbackDeal) {
     logoEl.alt = deal.merchant?.name || "Starbucks";
   }
 
-              // Ensure CTA has correct classes and behavior
-              const cta = document.getElementById('perk-cta');
-              if (cta) {
-                cta.classList.add('btn', 'btn-primary', 'btn-wide');
-                cta.onclick = () => setTab('charge'); // existing helper
+          // Ensure CTA has correct classes and behavior
+          const cta = document.getElementById('perk-cta');
+          if (cta) {
+            cta.classList.add('btn', 'btn-primary', 'btn-wide');
+            cta.onclick = async () => {
+              try {
+                const payload = {
+                  stationId: 'TESLA_AUS_001',
+                  stationName: 'Tesla Supercharger – Domain',
+                  merchantName: 'Starbucks',
+                  perkTitle: 'Free coffee 2–4pm',
+                  address: '310 E 5th St, Austin, TX',
+                  etaMinutes: 15,
+                  merchantLat: 30.2653, 
+                  merchantLng: -97.7393,
+                  stationLat: 30.4021,  
+                  stationLng: -97.7266
+                };
+                const r = await fetch('/v1/intents', {
+                  method: 'POST',
+                  headers: {'Content-Type': 'application/json'},
+                  credentials: 'include',
+                  body: JSON.stringify(payload)
+                });
+                if (!r.ok) throw new Error('save_failed');
+                showToast('Saved to Earn');
+                setTab('earn');
+              } catch (e) { 
+                console.error(e); 
+                showToast('Could not save'); 
               }
+            };
+          }
   $("#view-more")?.addEventListener("click", ()=> window.openPerksList?.());
 }
 

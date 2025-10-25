@@ -109,6 +109,7 @@ export function setTab(tab){
   document.querySelectorAll('.tabbar .tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===tab));
   if(tab==='explore') ensureMap();
   if(tab==='activity') initActivity();
+  if(tab==='earn') initEarn();
 }
 
 // Wire tab buttons and FAB
@@ -325,6 +326,16 @@ async function initActivity() {
     const { initActivityPage } = await import('/app/js/pages/activity.js');
     await initActivityPage(activityEl);
     activityEl.dataset.initialized = 'true';
+  }
+}
+
+// Initialize earn page when tab is switched
+async function initEarn() {
+  const earnEl = document.getElementById('page-earn');
+  if (earnEl && !earnEl.dataset.initialized) {
+    const { initEarnPage } = await import('/app/js/pages/earn.js');
+    await initEarnPage(earnEl);
+    earnEl.dataset.initialized = 'true';
   }
 }
 
