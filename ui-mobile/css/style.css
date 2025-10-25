@@ -665,9 +665,12 @@ background:var(--bg);color:var(--text);
 #map.leaflet-host{
   width:100%;
   height:260px;          /* fits neatly under header */
+  border-radius:16px;    /* rounded corners for the map */
+  overflow:hidden;        /* ensure content stays within bounds */
 }
 .leaflet-container{
   border-radius:16px;    /* enforce rounded tiles inside */
+  overflow:hidden;        /* prevent map from extending beyond container */
 }
 
 /* Perk card */
