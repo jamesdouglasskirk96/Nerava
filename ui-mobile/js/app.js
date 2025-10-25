@@ -69,10 +69,7 @@ function loadRecommendation(){
   if (typeof capHero === 'function') capHero();
 }
 
-// Alias for setActive (legacy compatibility)
-function setTab(tab) { 
-  setActive(tab); 
-}
+// setTab now defined as export function below
 
 // ---- legacy global exports for non-module callers ----
 // Removed exports to avoid "does not provide an export named" errors
@@ -153,7 +150,7 @@ async function initApp() {
   handleHashRoute();
   
   // Set initial tab
-  setActive('Explore');
+  setTab('explore');
   
   // Add bottom padding to all pages
   const pages = document.querySelectorAll('.page, #pageExplore, #pageCharge, #pageWallet, #pageMe, #pageClaim');
