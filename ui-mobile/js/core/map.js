@@ -39,7 +39,26 @@ export function drawRoute(points){ // points: [[lat,lng],[lat,lng]]
   clearRoute();
   console.log('Creating polyline with points:', points);
   
-  _routeLayer = L.polyline(points, { 
+  // If points are too close, add intermediate points to make route visible
+  let routePoints = [...points];
+  const [start, end] = points;
+  const distance = start.distanceTo ? start.distanceTo(end) : L.latLng(start).distanceTo(L.latLng(end));
+  
+  if (distance < 100) { // Less than 100 meters
+    console.log('Points too close, adding intermediate points');
+    const midLat = (start[0] + end[0]) / 2;
+    const midLng = (start[1] + end[1]) / 2;
+    const offset = 0.001; // Small offset to make route visible
+    routePoints = [
+      start,
+      [midLat + offset, midLng + offset],
+      [midLat - offset, midLng - offset],
+      end
+    ];
+    console.log('New route points:', routePoints);
+  }
+  
+  _routeLayer = L.polyline(routePoints, { 
     color:'#FF0000',  // Bright red for visibility
     weight:8,         // Thicker line
     opacity:1.0,     // Full opacity
@@ -63,14 +82,24 @@ export function drawRoute(points){ // points: [[lat,lng],[lat,lng]]
     fill: true
   }).addTo(_map));
   
-  const bounds = L.latLngBounds(points);
-  _map.fitBounds(bounds, { padding:[28,28], maxZoom:17 });
+  // Ensure we have proper bounds and zoom
+  const bounds = L.latLngBounds(routePoints);
+  console.log('Bounds:', bounds);
+  console.log('Points distance:', bounds.getNorthEast().distanceTo(bounds.getSouthWest()));
+  
+  // If points are too close, expand the bounds
+  if (bounds.getNorthEast().distanceTo(bounds.getSouthWest()) < 100) {
+    console.log('Points too close, expanding bounds');
+    bounds.extend(bounds.getCenter().toBounds(1000)); // 1km buffer
+  }
+  
+  _map.fitBounds(bounds, { padding:[50,50], maxZoom:16 });
   
   // Force a redraw to ensure visibility
   setTimeout(() => {
     _map.invalidateSize();
     console.log('Map invalidated for route visibility');
-  }, 100);
+  }, 200);
   
   console.log('Route drawn successfully');
 }
