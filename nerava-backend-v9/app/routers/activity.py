@@ -14,33 +14,35 @@ async def get_activity_data(db: Session = Depends(get_db)):
     # In production, this would come from authentication
     me = "demo-user-123"
     
-    # Get reputation
-    rep_query = text("SELECT score, tier FROM user_reputation WHERE user_id = :user_id")
+    # Get current month
+    from datetime import datetime
+    month = int(datetime.now().strftime("%Y%m"))
+    
+    # Get reputation with streak_days
+    rep_query = text("SELECT score, tier, COALESCE(streak_days, 0) FROM user_reputation WHERE user_id = :user_id")
     rep_result = db.execute(rep_query, {'user_id': me})
     rep_row = rep_result.fetchone()
     reputation = {
-        'score': rep_row[0] if rep_row else 0,
-        'tier': rep_row[1] if rep_row else 'Bronze'
+        'score': rep_row[0] if rep_row else 180,
+        'tier': rep_row[1] if rep_row else 'Silver',
+        'streakDays': rep_row[2] if rep_row else 7
     }
     
-    # Get earnings from last 30 days
-    since = "NOW() - INTERVAL '30 days'"
+    # Get earnings from monthly table (fallback to demo data)
     earn_query = text("""
-        SELECT payer_user_id AS user_id,
+        SELECT fem.payer_user_id AS user_id,
                COALESCE(u.handle,'member') AS handle,
                u.avatar_url,
                COALESCE(ur.tier,'Bronze') AS tier,
-               SUM(amount_cents)::int AS amount_cents
-        FROM follow_earnings_events fee
-        LEFT JOIN users u ON u.id = fee.payer_user_id
-        LEFT JOIN user_reputation ur ON ur.user_id = fee.payer_user_id
-        WHERE fee.receiver_user_id = :user_id AND fee.created_at >= :since
-        GROUP BY payer_user_id, u.handle, u.avatar_url, ur.tier
-        ORDER BY SUM(amount_cents) DESC
-        LIMIT 200
+               fem.amount_cents
+        FROM follow_earnings_monthly fem
+        LEFT JOIN users u ON u.id = fem.payer_user_id
+        LEFT JOIN user_reputation ur ON ur.user_id = fem.payer_user_id
+        WHERE fem.month_yyyymm = :month AND fem.receiver_user_id = :user_id
+        ORDER BY fem.amount_cents DESC
     """)
     
-    earn_result = db.execute(earn_query, {'user_id': me, 'since': since})
+    earn_result = db.execute(earn_query, {'month': month, 'user_id': me})
     earnings = []
     total_cents = 0
     
@@ -54,10 +56,33 @@ async def get_activity_data(db: Session = Depends(get_db)):
         })
         total_cents += int(row[4])
     
+    # If no earnings found, return demo data
+    if not earnings:
+        earnings = [
+            {
+                'userId': 'demo-user-1',
+                'handle': 'alex',
+                'avatarUrl': None,
+                'tier': 'Gold',
+                'amountCents': 185
+            },
+            {
+                'userId': 'demo-user-2',
+                'handle': 'sam', 
+                'avatarUrl': None,
+                'tier': 'Bronze',
+                'amountCents': 90
+            }
+        ]
+        total_cents = 275
+    
     return {
+        'month': month,
         'reputation': reputation,
-        'earnings': earnings,
-        'totalCents': total_cents
+        'followEarnings': earnings,
+        'totals': {
+            'followCents': total_cents
+        }
     }
 
 @router.post("/v1/session/verify")
