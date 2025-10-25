@@ -119,6 +119,21 @@ overflow:hidden;
   max-height: 40px;
 }
 
+/* Charge page styling */
+.charge-content{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 20px;
+}
+
+.charge-content h1{
+  font-size: 24px;
+  color: var(--text);
+  text-align: center;
+}
+
 /* Cards */
 .card{background:var(--surface); color:var(--text); border-radius:28px; box-shadow: 0 10px 30px rgba(2, 8, 20, .06); padding:22px}
 .hub-card{width:92%; margin:0 auto; position:fixed; left:50%; transform:translateX(-50%); bottom:88px}

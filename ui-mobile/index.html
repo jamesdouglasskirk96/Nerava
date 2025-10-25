@@ -133,93 +133,10 @@
                     </section>
 
       <!-- Charge / Wallet / Profile now padded pages (not overlay sheets) -->
+      <!-- Charge page - blank for rebuilding -->
       <section id="page-charge" class="page">
-        <!-- Map for route to charger -->
-        <div id="chargeMap" class="map app-map" role="application" aria-label="Map"></div>
-        
-        
-        <!-- Floating perk recommendation over map -->
-        <div class="floating-perk-card">
-          <div class="perk-card">
-            <div class="perk-card__left">
-              <img src="/app/img/coffee.svg" alt="" class="perk-icon">
-              <div class="perk-meta">
-                <div class="perk-title">Coffee & Pastry</div>
-                <div class="perk-sub">Free coffee and pastry with charging.</div>
-              </div>
-            </div>
-            <button class="btn btn-primary">View more</button>
-          </div>
-          <div class="perk-stats">
-            <span>~83 min</span>
-            <span>•</span>
-            <span>70.6 mi</span>
-          </div>
-          </div>
-
-        <div id="chargePane" class="pane" style="display:none;">
-          <div class="card" id="chargeStatusCard" style="margin:12px;">
-            <h3>Charging activity</h3>
-
-            <!-- Cumulative kWh total -->
-            <div id="cumulativeKwh" style="margin:8px 0; padding:10px; border:1px solid #e5e7eb; border-radius:12px; background:#f9fafb;">
-              <div><strong>Total charged:</strong> <span id="totalKwh">0.0</span> kWh</div>
-            </div>
-
-            <!-- Live window / reward preview -->
-            <div id="rewardPreview" style="display:none; margin:8px 0; padding:10px; border-radius:12px; background:#0B2A4A; color:#fff;">
-              <div id="rewardPreviewText" style="font-weight:600;"></div>
-              <div id="rewardPreviewSub" style="opacity:0.85; font-size:0.9em;"></div>
-            </div>
-
-            <!-- Active session status -->
-            <div id="activeSession" style="display:none; margin:8px 0; padding:10px; border:1px solid #e5e7eb; border-radius:12px;">
-              <div><strong>Session:</strong> <span id="sessionIdShort"></span></div>
-              <div><strong>Started:</strong> <span id="sessionStart"></span></div>
-              <div><strong>Elapsed:</strong> <span id="sessionElapsed"></span></div>
-            </div>
-
-            <!-- Controls -->
-            <div id="chargeControls" style="margin-top:10px; display:flex; gap:8px;">
-              <button id="btnStartCharge" class="btn btn-primary" style="flex:1;">Start charging</button>
-              <button id="btnStopCharge" class="btn btn-secondary" style="flex:1;" disabled>Stop & credit</button>
-            </div>
-
-            <!-- kWh prompt (shown on stop) -->
-            <dialog id="kwhDialog" style="z-index:3000;">
-              <form method="dialog" style="min-width:260px;">
-                <h4>How many kWh did you add?</h4>
-                <input id="kwhInput" type="number" min="0.1" step="0.1" placeholder="e.g. 18.6" required style="width:100%; padding:8px; margin:8px 0;">
-                <menu style="display:flex; gap:8px; justify-content:flex-end;">
-                  <button data-return="cancel">Cancel</button>
-                  <button data-return="confirm">Confirm</button>
-                </menu>
-              </form>
-            </dialog>
-          </div>
-
-
-          <!-- Community Activity (Venmo-style) -->
-          <section id="communityActivity" class="card" style="margin:12px;">
-            <div class="card-header">
-              <h3>Community Activity</h3>
-              <div class="seg">
-                <button id="feedAllBtn" class="seg-btn active">All</button>
-                <button id="feedFollowingBtn" class="seg-btn">Following</button>
-              </div>
-            </div>
-            <ul id="activityFeed" class="feed-list">
-              <!-- items injected -->
-            </ul>
-      </section>
-
-          <!-- Leaderboard -->
-          <section id="leaderboard" class="card" style="margin:12px;">
-            <h3>Weekly Leaders</h3>
-            <div id="leaderboardList" class="leaderboard-list">
-              <!-- items injected -->
-          </div>
-        </section>
+        <div class="charge-content">
+          <h1>Charge page here</h1>
         </div>
       </section>
 
