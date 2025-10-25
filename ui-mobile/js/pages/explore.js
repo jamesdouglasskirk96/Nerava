@@ -6,7 +6,7 @@ const $ = (s, r=document) => r.querySelector(s);
 
 // Fallback deal/hub data if APIs 404
 const _fallbackDeal = {
-  merchant: { name: "Starbucks", address: "310 E 5th St, Austin, TX", logo: "./img/coffee.png" },
+  merchant: { name: "Starbucks", address: "310 E 5th St, Austin, TX", logo: "https://dummyimage.com/64x64/f2f4f7/8B5A2B.png&text=☕" },
   blurb: "Free coffee 2–4pm • 3 min walk"
 };
 
