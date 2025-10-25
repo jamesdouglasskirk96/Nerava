@@ -822,7 +822,7 @@ background:var(--bg);color:var(--text);
   color: #FFD700 !important; /* bright golden yellow - cannot be overridden */
   display: inline-block;
   vertical-align: middle; /* ensure proper vertical alignment */
-  line-height: 1; /* match text line height */
+  line-height: 0.875; /* custom line height for bolt positioning */
 }
 
 /* ========= NAVBAR STYLING ========= */
