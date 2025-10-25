@@ -40,29 +40,37 @@ export function drawRoute(points){ // points: [[lat,lng],[lat,lng]]
   console.log('Creating polyline with points:', points);
   
   _routeLayer = L.polyline(points, { 
-    color:'#3B82F6', 
-    weight:6, 
-    opacity:0.8, 
-    dashArray:'8 10' 
+    color:'#FF0000',  // Bright red for visibility
+    weight:8,         // Thicker line
+    opacity:1.0,     // Full opacity
+    dashArray:'10 5'  // More visible dashes
   }).addTo(_map);
   
   const [a,b] = points;
   _markers.push(L.circleMarker(a,{ 
-    radius:8, 
-    color:'#22C55E', 
-    weight:3, 
-    fillOpacity:0.8 
+    radius:12, 
+    color:'#00FF00',  // Bright green
+    weight:4, 
+    fillOpacity:1.0,
+    fill: true
   }).addTo(_map));
   
   _markers.push(L.circleMarker(b,{ 
-    radius:8, 
-    color:'#2563EB', 
-    weight:3, 
-    fillOpacity:0.8 
+    radius:12, 
+    color:'#0000FF',  // Bright blue
+    weight:4, 
+    fillOpacity:1.0,
+    fill: true
   }).addTo(_map));
   
   const bounds = L.latLngBounds(points);
   _map.fitBounds(bounds, { padding:[28,28], maxZoom:17 });
+  
+  // Force a redraw to ensure visibility
+  setTimeout(() => {
+    _map.invalidateSize();
+    console.log('Map invalidated for route visibility');
+  }, 100);
   
   console.log('Route drawn successfully');
 }
