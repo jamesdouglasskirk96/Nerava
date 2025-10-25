@@ -33,6 +33,7 @@ from .routers import (
     analytics,
     social,
     activity,
+    intents,
     admin,
     ml,
     ledger,
@@ -125,6 +126,7 @@ app.include_router(incentives.router)
 app.include_router(energyhub.router)
 app.include_router(social.router)
 app.include_router(activity.router)
+app.include_router(intents.router)
 app.include_router(admin.router)
 app.include_router(ml.router)
 app.include_router(ledger.router)

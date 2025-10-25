@@ -18,14 +18,16 @@ async def get_activity_data(db: Session = Depends(get_db)):
     from datetime import datetime
     month = int(datetime.now().strftime("%Y%m"))
     
-    # Get reputation with streak_days
-    rep_query = text("SELECT score, tier, COALESCE(streak_days, 0) FROM user_reputation WHERE user_id = :user_id")
+    # Get reputation with streak_days and counts
+    rep_query = text("SELECT score, tier, COALESCE(streak_days, 0), COALESCE(followers_count, 0), COALESCE(following_count, 0) FROM user_reputation WHERE user_id = :user_id")
     rep_result = db.execute(rep_query, {'user_id': me})
     rep_row = rep_result.fetchone()
     reputation = {
         'score': rep_row[0] if rep_row else 180,
         'tier': rep_row[1] if rep_row else 'Silver',
-        'streakDays': rep_row[2] if rep_row else 7
+        'streakDays': rep_row[2] if rep_row else 7,
+        'followers_count': rep_row[3] if rep_row else 12,
+        'following_count': rep_row[4] if rep_row else 8
     }
     
     # Get earnings from monthly table (fallback to demo data)
