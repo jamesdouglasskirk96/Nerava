@@ -1005,7 +1005,6 @@ background:var(--bg);color:var(--text);
 
 /* View more button - sits above nav bar */
 .view-more{
-  margin: 0 16px 16px;
   background: #f6f7fb;
   color: var(--ink-900);
   border: 2px solid #e5e7eb; /* increased border width for better edge visibility */
@@ -1024,8 +1023,15 @@ background:var(--bg);color:var(--text);
 .btn-primary-outline:active{ transform: translateY(1px); }
 #next-charger-btn .btn__icon{ margin-right: 8px; }
 
-/* Keep last two action cards above tabbar with safe-area */
-.action-card{ margin: 12px 16px; }
+/* Keep action cards above tabbar with safe-area */
+.action-card{ 
+  margin: 12px 16px; 
+  padding: 0; /* remove any default padding */
+}
+.action-card .btn{
+  width: 100%; /* ensure button takes full width of container */
+  margin: 0; /* remove any button margins */
+}
 @supports (padding: max(0px)){
   .action-card:last-of-type{ margin-bottom: max(16px, env(safe-area-inset-bottom)); }
 }
