@@ -80,7 +80,12 @@ overflow:hidden;
   height: calc(100vh - var(--tabbar-height, 76px));
   overflow: hidden;
 }
-.page.active{display:block !important}
+.page.active{
+  display:block !important;
+}
+.page:not(.active){
+  display:none !important;
+}
 
 /* Ensure Explore page fits in viewport */
 #page-explore{
