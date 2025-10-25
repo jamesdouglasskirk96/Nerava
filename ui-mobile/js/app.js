@@ -203,8 +203,15 @@ window.getMap = getMap;
 // Draw walking route from user to charger
 async function drawWalkingRoute(userLocation, charger, options = {}) {
   try {
+    console.log('drawWalkingRoute called with:', { userLocation, charger });
+    
     const map = await ensureMap();
-    if (!map) return;
+    console.log('Map from ensureMap:', map);
+    
+    if (!map) {
+      console.error('No map instance available');
+      return;
+    }
     
     // Clear any existing routes first
     clearRoute();
@@ -221,7 +228,7 @@ async function drawWalkingRoute(userLocation, charger, options = {}) {
     drawRoute(routePoints);
     
   } catch (error) {
-    console.warn('Failed to draw walking route:', error);
+    console.error('Failed to draw walking route:', error);
   }
 }
 

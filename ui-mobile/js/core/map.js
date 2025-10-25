@@ -22,14 +22,49 @@ export function clearRoute(){
 }
 
 export function drawRoute(points){ // points: [[lat,lng],[lat,lng]]
-  if(!_map || !Array.isArray(points) || points.length < 2) return;
+  console.log('drawRoute called with points:', points);
+  console.log('_map exists:', !!_map);
+  console.log('L exists:', typeof L !== 'undefined');
+  
+  if(!_map || !Array.isArray(points) || points.length < 2) {
+    console.warn('drawRoute: Invalid map or points');
+    return;
+  }
+  
+  if (typeof L === 'undefined') {
+    console.error('Leaflet (L) is not loaded');
+    return;
+  }
+  
   clearRoute();
-  _routeLayer = L.polyline(points, { color:'#3B82F6', weight:6, opacity:0.6, dashArray:'8 10' }).addTo(_map);
+  console.log('Creating polyline with points:', points);
+  
+  _routeLayer = L.polyline(points, { 
+    color:'#3B82F6', 
+    weight:6, 
+    opacity:0.8, 
+    dashArray:'8 10' 
+  }).addTo(_map);
+  
   const [a,b] = points;
-  _markers.push(L.circleMarker(a,{ radius:7, color:'#2563EB', weight:6, opacity:0.25 }).addTo(_map));
-  _markers.push(L.circleMarker(b,{ radius:7, color:'#2563EB', weight:6, opacity:1 }).addTo(_map));
+  _markers.push(L.circleMarker(a,{ 
+    radius:8, 
+    color:'#22C55E', 
+    weight:3, 
+    fillOpacity:0.8 
+  }).addTo(_map));
+  
+  _markers.push(L.circleMarker(b,{ 
+    radius:8, 
+    color:'#2563EB', 
+    weight:3, 
+    fillOpacity:0.8 
+  }).addTo(_map));
+  
   const bounds = L.latLngBounds(points);
   _map.fitBounds(bounds, { padding:[28,28], maxZoom:17 });
+  
+  console.log('Route drawn successfully');
 }
 
 export function getMap(){ return _map; }
