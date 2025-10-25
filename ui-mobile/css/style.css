@@ -250,7 +250,7 @@ background:var(--bg);color:var(--text);
 }
 
 .map-card{border-radius:20px;overflow:hidden;box-shadow:0 10px 24px rgba(0,0,0,.12);background:#fff;margin:16px}
-#map{width:100%;height:360px}
+#map{width:100%;height:200px}
 
 .leaflet-bottom.leaflet-right{ display:none !important; }
 
@@ -405,7 +405,7 @@ background:var(--bg);color:var(--text);
   box-shadow:0 10px 30px rgba(0,0,0,.08);
   background:#fff;
 }
-#map{ width:100%; height:340px; }
+#map{ width:100%; height:200px; }
 .leaflet-control-attribution{
   margin-bottom: calc( env(safe-area-inset-bottom, 0px) + var(--tabbar-height) + 8px ) !important;
 }
@@ -579,7 +579,7 @@ background:var(--bg);color:var(--text);
   box-shadow: var(--shadow-soft);
   background: #fff;
 }
-.map-card #map{ height: 280px; width: 100%; }
+.map-card #map{ height: 200px; width: 100%; }
 
 /* --- Tab bar --- */
 .tabbar{
@@ -872,7 +872,7 @@ background:var(--bg);color:var(--text);
 .map-card .map-frame{
   overflow: hidden;
   border-radius: 16px;
-  height: 200px; /* map height - leave space for info bar */
+  height: 200px;
 }
 .map-card #map{
   width: 100%;
