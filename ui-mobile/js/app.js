@@ -104,6 +104,7 @@ function handleHashRoute() {
 }
 
 export function setTab(tab){
+  console.log('setTab called with:', tab);
   document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active', p.id==='page-'+tab));
   document.querySelectorAll('.tabbar .tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===tab));
   if(tab==='explore') ensureMap();
@@ -306,6 +307,7 @@ function triggerWalletToast(msg){
 // Boot should call initExplore(); do NOT call another initMap().
 
 window.addEventListener('load', async ()=>{
+  // Start with explore tab by default
   setTab('explore');
   // lazy import to avoid cyclic loads
   const { initExplore } = await import('/app/js/pages/explore.js');
