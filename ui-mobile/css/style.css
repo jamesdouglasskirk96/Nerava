@@ -807,15 +807,15 @@ background:var(--bg);color:var(--text);
 .brand-logo{
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 600;
+  gap: 4px; /* minimal spacing like in image */
+  font-weight: 700; /* bold weight like in image */
   letter-spacing: 0.04em;
   font-size: 28px;
   line-height: 1;
   padding-top: 8px; /* reduced top padding */
 }
-.brand-logo .brand-word{ color: #4C6EF5; }
-.brand-logo .brand-bolt{ color: #FFB000; }
+.brand-logo .brand-word{ color: #2563EB; /* medium-dark blue like in image */ }
+.brand-logo .brand-bolt{ color: #F59E0B; /* golden yellow like in image */ }
 
 /* ========= NAVBAR STYLING ========= */
 .tabbar .tab{
@@ -830,7 +830,7 @@ background:var(--bg);color:var(--text);
 
 /* ========= EARN FAB RESTORED ========= */
 #fab-earn{
-  background: #4C6EF5;
+  background: #2563EB;
   color: #FFF;
   border-radius: 16px;
   box-shadow: 0 2px 6px rgba(0,0,0,0.1);
@@ -890,7 +890,7 @@ background:var(--bg);color:var(--text);
   padding: 6px 12px;
   border-radius: 999px;
   background: #eef2ff;
-  color: #4C6EF5;
+  color: #2563EB;
   border: 1px solid #dbe1ff;
   font-weight: 600;
   font-size: 14px;
@@ -902,7 +902,7 @@ background:var(--bg);color:var(--text);
 .ai-chip svg{
   width: 14px;
   height: 14px;
-  color: #4C6EF5;
+  color: #2563EB;
 }
 
 /* Perk card - responsive with viewport fit */
@@ -968,7 +968,7 @@ background:var(--bg);color:var(--text);
   border-radius: 16px;
   padding: 14px 18px;
   border: none;
-  background: #4C6EF5;
+  background: #2563EB;
   color: #FFF;
   font-weight: 600;
   cursor: pointer;
@@ -977,7 +977,7 @@ background:var(--bg);color:var(--text);
   box-shadow: 0 2px 10px rgba(0,0,0,0.05);
 }
 .btn-primary{
-  background: #4C6EF5;
+  background: #2563EB;
   color: #FFF;
   border: none;
 }
