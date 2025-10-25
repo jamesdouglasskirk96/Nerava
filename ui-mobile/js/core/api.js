@@ -1,29 +1,4 @@
-function baseUrl(){ return (localStorage.NERAVA_URL || location.origin.replace(/\/$/, '')); }
-function toUrl(path){
-  if(/^https?:\/\//i.test(path)) return path;
-  if(path.startsWith('/')) return baseUrl()+path;
-  return baseUrl()+'/'+path.replace(/^\/+/, '');
-}
-async function _req(path,{method='GET',body,headers={}}={}){
-  const r=await fetch(toUrl(path),{method,headers:{'Accept':'application/json',...(body?{'Content-Type':'application/json'}:{}),...headers},body:body?JSON.stringify(body):undefined}).catch(() => null);
-  if (!r || !r.ok) {
-    // Treat 404 / network as soft; return mock fallback data
-    if (r && r.status && r.status !== 404) console.debug('apiGet:', r.status, path);
-    
-    // Mock fallback data for specific endpoints
-    if (path.includes('/hubs/recommend')) {
-      return [{ id: 1, name: 'Mock Charger Hub', lat: 30.2672, lng: -97.7431 }];
-    }
-    if (path.includes('/deals/nearby')) {
-      return [{ id: 1, merchant: 'Coffee Shop', reward: 'Free Latte', lat: 30.268, lng: -97.742 }];
-    }
-    
-    return null;
-  }
-  // Some 204/empty responses: return null
-  if (r.status === 204) return null;
-  const ct=r.headers.get('content-type')||''; return ct.includes('application/json')?r.json():r.text();
-}
+// Removed old _req function - using new implementation below
 const BASE = localStorage.NERAVA_URL || location.origin;
 async function _req(path, opts={}){
   const r = await fetch(BASE + path, { headers:{Accept:'application/json'}, ...opts });
