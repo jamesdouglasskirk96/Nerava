@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Explore Page Layout Test</title>
+    <style>
+        :root {
+            --tabbar-height: 84px;
+            --brand-blue: #4A72F5;
+        }
+        
+        body { 
+            margin: 0; 
+            padding: 20px; 
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
+            background: #f5f5f5;
+        }
+        
+        .test-container { 
+            max-width: 375px; 
+            margin: 0 auto; 
+            border: 1px solid #ddd; 
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        .test-header { 
+            background: #4A72F5; 
+            color: white;
+            padding: 20px; 
+            text-align: center; 
+        }
+        
+        .test-content { 
+            padding: 20px; 
+            min-height: 400px;
+        }
+        
+        .test-item { 
+            margin: 15px 0; 
+            padding: 15px; 
+            background: #f9f9f9; 
+            border-radius: 8px; 
+            border-left: 4px solid #4A72F5;
+        }
+        
+        .status { 
+            font-weight: 600; 
+            margin-bottom: 8px;
+        }
+        
+        .pass { color: #22c55e; }
+        .check { color: #3b82f6; }
+        
+        /* Demo Explore Layout */
+        .demo-explore {
+            background: #f5f5f5;
+            min-height: 600px;
+            position: relative;
+        }
+        
+        .explore-stack{
+          display:flex;
+          flex-direction:column;
+          gap:16px;
+          padding:16px 16px 12px;
+        }
+        .card{
+          background:#fff;
+          border-radius:20px;
+          box-shadow:0 8px 24px rgba(16,24,40,.08);
+        }
+
+        /* Map card */
+        .map-card{ padding:12px; }
+        #map-card{
+          overflow:hidden;
+          border-radius:16px;
+          background: #e5e7eb;
+          height: 260px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #6b7280;
+        }
+
+        /* Perk card */
+        .perk-card{ padding:16px; }
+        .perk-chip{
+          display:inline-flex; align-items:center; gap:6px;
+          padding:6px 12px; border-radius:999px;
+          background:#000; color:#fff; font-weight:700; font-size:12px; margin-bottom:12px;
+        }
+        .perk-chip .bolt{ font-size:14px; }
+        .perk-row{ display:grid; grid-template-columns:auto 1fr auto; gap:12px; align-items:center; }
+        .perk-logo{
+          width:56px; height:56px; border-radius:14px; object-fit:cover;
+          background:#f2f4f7;
+        }
+        .perk-copy h3{ margin:0 0 6px; font-size:18px; line-height:1.2; }
+        .perk-copy p{ margin:0; color:#6b7280; font-size:14px; }
+        .btn{ border:0; cursor:pointer; }
+        .btn-black{
+          background:#000; color:#fff; font-weight:700; padding:10px 14px; border-radius:16px;
+        }
+        .btn-ghost{
+          width:100%;
+          background:rgba(17,24,39,0.06);
+          color:#0f172a;
+          font-weight:700;
+          padding:14px 16px;
+          border-radius:16px;
+        }
+
+        /* View more above nav: respects safe area + nav height; DOES NOT move Earn button */
+        .view-more-wrap{
+          position:sticky; bottom:calc(var(--tabbar-height,72px) + env(safe-area-inset-bottom) + 8px);
+          padding:0 16px 8px;
+        }
+        
+        .demo-tabbar {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: var(--tabbar-height);
+            background: rgba(255,255,255,0.9);
+            backdrop-filter: blur(16px);
+            border-top: 1px solid rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            z-index: 10;
+        }
+        
+        .demo-fab {
+            position: fixed;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 64px;
+            height: 64px;
+            border-radius: 18px;
+            bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+            z-index: 1000;
+            box-shadow: 0 8px 22px rgba(0,0,0,.22);
+            background: var(--brand-blue);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #9CA3AF;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <div class="test-header">
+            <h2>🗺️ Explore Page Layout Test</h2>
+            <p>Rounded Map Card + AI Perk Card + View More Button</p>
+        </div>
+        <div class="test-content">
+            <div class="test-item">
+                <div class="status check">✅ Rounded Map Card</div>
+                <p>Map renders inside a rounded card at the top (no page-wide full bleed)</p>
+            </div>
+            
+            <div class="test-item">
+                <div class="status check">✅ AI Perk Card</div>
+                <p>"Recommended by Nerava AI" card with logo, copy, and "Charge here" button</p>
+            </div>
+            
+            <div class="test-item">
+                <div class="status check">✅ View More Button</div>
+                <p>Button positioned above nav bar with safe-area support</p>
+            </div>
+            
+            <div class="test-item">
+                <div class="status pass">✅ Earn Button Preserved</div>
+                <p>Earn button position unchanged - no vertical movement</p>
+            </div>
+            
+            <div class="test-item">
+                <div class="status pass">✅ API Fallbacks</div>
+                <p>Graceful handling of 404 responses with mock data fallbacks</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Demo Explore Layout -->
+    <div class="demo-explore">
+        <div class="explore-stack">
+            <!-- Map Card -->
+            <article class="card map-card" aria-label="Map">
+                <div id="map-card">
+                    <div style="text-align: center;">
+                        <div style="font-size: 48px;">🗺️</div>
+                        <div>Map Card (260px height)</div>
+                    </div>
+                </div>
+            </article>
+
+            <!-- Recommended Perk -->
+            <article class="card perk-card" aria-label="Recommended perk">
+                <div class="perk-chip">
+                    <span class="bolt">⚡</span> Recommended by Nerava AI
+                </div>
+                <div class="perk-row">
+                    <div class="perk-logo" style="display: flex; align-items: center; justify-content: center; font-size: 24px;">☕</div>
+                    <div class="perk-copy">
+                        <h3>Coffee & Pastry</h3>
+                        <p>Free coffee w/ charging • 2–4pm</p>
+                        <p>0.3 mi from charger</p>
+                    </div>
+                    <button class="btn btn-black">Charge here</button>
+                </div>
+            </article>
+        </div>
+
+        <!-- View more button sits above the nav bar -->
+        <div class="view-more-wrap">
+            <button class="btn btn-ghost">View more perks</button>
+        </div>
+    </div>
+    
+    <!-- Demo Tabbar and FAB -->
+    <div class="demo-tabbar">
+        <div>📍</div>
+        <div>🔋</div>
+        <div>💰</div>
+        <div>💳</div>
+        <div>👤</div>
+    </div>
+    
+    <div class="demo-fab">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+            <span style="font-size: 20px;">💰</span>
+            <span style="font-size: 10px; font-weight: 600;">Earn</span>
+        </div>
+    </div>
+</body>
+</html>

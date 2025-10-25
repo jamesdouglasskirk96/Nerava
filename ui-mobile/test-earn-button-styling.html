@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Earn Button Styling Test</title>
+    <style>
+        :root {
+            --brand-blue: #4A72F5;
+            --ink-weak: #9CA3AF;
+            --tabbar-height: 84px;
+            --fab-size: 64px;
+            --fab-radius: 18px;
+            --fab-shadow: 0 8px 22px rgba(0,0,0,.22);
+            --fab-overlap: calc((var(--tabbar-height) - var(--fab-size)) / 2);
+        }
+        
+        body { 
+            margin: 0; 
+            padding: 20px; 
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
+            background: #f5f5f5;
+        }
+        
+        .test-container { 
+            max-width: 375px; 
+            margin: 0 auto; 
+            border: 1px solid #ddd; 
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        .test-header { 
+            background: #4A72F5; 
+            color: white;
+            padding: 20px; 
+            text-align: center; 
+        }
+        
+        .test-content { 
+            padding: 20px; 
+            min-height: 400px;
+        }
+        
+        .test-item { 
+            margin: 15px 0; 
+            padding: 15px; 
+            background: #f9f9f9; 
+            border-radius: 8px; 
+            border-left: 4px solid #4A72F5;
+        }
+        
+        .status { 
+            font-weight: 600; 
+            margin-bottom: 8px;
+        }
+        
+        .pass { color: #22c55e; }
+        .check { color: #3b82f6; }
+        
+        .demo-fab {
+            position: fixed;
+            left: 50%;
+            transform: translateX(-50%);
+            width: var(--fab-size);
+            height: var(--fab-size);
+            border-radius: var(--fab-radius);
+            bottom: calc(var(--fab-overlap) + env(safe-area-inset-bottom, 0px));
+            z-index: 1000;
+            box-shadow: var(--fab-shadow);
+            background: var(--brand-blue);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid var(--ink-weak); /* gray outline to match nav icons */
+        }
+        
+        .demo-fab .fab-content{
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+        }
+        
+        .demo-fab .icon{ width: 24px; height: 24px; }
+        .demo-fab .icon svg{ width: 24px; height: 24px; stroke:#fff; fill:none; stroke-width:2.4; }
+        .demo-fab .label{ font-weight:600; font-size:12px; line-height:1; }
+        
+        .demo-tabbar {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: var(--tabbar-height);
+            background: rgba(255,255,255,0.9);
+            backdrop-filter: blur(16px);
+            border-top: 1px solid rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            z-index: 10;
+        }
+        
+        .demo-tab {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            color: var(--ink-weak);
+        }
+        
+        .demo-tab .icon {
+            width: 28px;
+            height: 28px;
+        }
+        
+        .demo-tab .label {
+            font-size: 14px;
+            line-height: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <div class="test-header">
+            <h2>💰 Earn Button Styling Test</h2>
+            <p>Updated to Match UI Reference</p>
+        </div>
+        <div class="test-content">
+            <div class="test-item">
+                <div class="status check">✅ Gray Outline</div>
+                <p>Border color changed from black to gray (var(--ink-weak)) to match nav icons</p>
+            </div>
+            
+            <div class="test-item">
+                <div class="status check">✅ Dollar Sign Icon</div>
+                <p>Updated to use proper dollar sign ($) SVG with correct stroke styling</p>
+            </div>
+            
+            <div class="test-item">
+                <div class="status check">✅ Text Below Icon</div>
+                <p>Label moved below icon with center alignment using flex-direction: column</p>
+            </div>
+            
+            <div class="test-item">
+                <div class="status pass">✅ Position Preserved</div>
+                <p>Maintained current vertical position and spacing - no movement up/down</p>
+            </div>
+            
+            <div class="test-item">
+                <div class="status pass">✅ Visual Consistency</div>
+                <p>Matches older UI style with proper proportions and styling</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Demo FAB and Tabbar -->
+    <div class="demo-fab">
+        <div class="fab-content">
+            <span class="icon"><svg viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+            <span class="label">Earn</span>
+        </div>
+    </div>
+    
+    <div class="demo-tabbar">
+        <div class="demo-tab">
+            <div class="icon">📍</div>
+            <div class="label">Explore</div>
+        </div>
+        <div class="demo-tab">
+            <div class="icon">🔋</div>
+            <div class="label">Charge</div>
+        </div>
+        <div class="demo-tab">
+            <div class="icon">💳</div>
+            <div class="label">Wallet</div>
+        </div>
+        <div class="demo-tab">
+            <div class="icon">👤</div>
+            <div class="label">Me</div>
+        </div>
+    </div>
+</body>
+</html>

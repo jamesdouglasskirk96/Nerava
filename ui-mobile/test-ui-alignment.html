@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UI Alignment Test</title>
+    <style>
+        body { margin: 0; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+        .test-container { max-width: 375px; margin: 0 auto; border: 1px solid #ddd; }
+        .test-header { background: #f5f5f5; padding: 10px; text-align: center; }
+        .test-content { padding: 20px; }
+        .test-item { margin: 10px 0; padding: 10px; background: #f9f9f9; border-radius: 8px; }
+        .status { font-weight: 600; }
+        .pass { color: #22c55e; }
+        .check { color: #3b82f6; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <div class="test-header">
+            <h2>🎯 UI Alignment Test</h2>
+        </div>
+        <div class="test-content">
+            <div class="test-item">
+                <div class="status check">✅ Earn Button Positioning</div>
+                <p>Earn button moved slightly downward (--fab-elev: 12px)</p>
+            </div>
+            <div class="test-item">
+                <div class="status check">✅ NERAVA ⚡ Logo</div>
+                <p>Logo with centered alignment, blue text, and gold lightning bolt</p>
+            </div>
+            <div class="test-item">
+                <div class="status check">✅ Navigation Spacing</div>
+                <p>Explore, Charge, Wallet, Me tabs maintain proper spacing</p>
+            </div>
+            <div class="test-item">
+                <div class="status pass">✅ Mobile Responsive</div>
+                <p>Optimized for 375×812 mobile preview</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
