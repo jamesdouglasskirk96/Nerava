@@ -63,7 +63,10 @@ function setTab(tab) {
   setActive(tab); 
 }
 
-// Map initialization now handled by js/core/map.js module
+// Map initialization function
+function initMap() {
+  ensureMap();
+}
 
 // ---- legacy global exports for non-module callers ----
 // Removed exports to avoid "does not provide an export named" errors
