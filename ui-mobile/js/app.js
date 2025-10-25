@@ -108,6 +108,7 @@ export function setTab(tab){
   document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active', p.id==='page-'+tab));
   document.querySelectorAll('.tabbar .tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===tab));
   if(tab==='explore') ensureMap();
+  if(tab==='activity') initActivity();
 }
 
 // Wire tab buttons and FAB
@@ -316,6 +317,16 @@ window.addEventListener('load', async ()=>{
   await loadWallet();
   await loadPrefs();
 });
+
+// Initialize activity page when tab is switched
+async function initActivity() {
+  const activityEl = document.getElementById('page-activity');
+  if (activityEl && !activityEl.dataset.initialized) {
+    const { initActivityPage } = await import('/app/js/pages/activity.js');
+    await initActivityPage(activityEl);
+    activityEl.dataset.initialized = 'true';
+  }
+}
 
 // Export functions for use by other modules
 // Removed exports to avoid "does not provide an export named" errors
