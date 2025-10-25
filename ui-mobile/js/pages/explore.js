@@ -1,5 +1,5 @@
 import { apiGet } from '../core/api.js';
-import { ensureMap } from '../app.js';
+import { ensureMap } from '../core/map.js';
 import { setTab } from '../app.js';
 
 const $ = (s, r=document) => r.querySelector(s);
