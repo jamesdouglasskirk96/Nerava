@@ -200,17 +200,24 @@ window.drawRoute = drawRoute;
 window.clearRoute = clearRoute;
 window.getMap = getMap;
 
-// Draw walking route between charger and merchant
-async function drawWalkingRoute(charger, merchant, options = {}) {
+// Draw walking route from user to charger
+async function drawWalkingRoute(userLocation, charger, options = {}) {
   try {
     const map = await ensureMap();
     if (!map) return;
     
-    // Create route points from charger to merchant
+    // Clear any existing routes first
+    if (window.clearRoute) {
+      window.clearRoute();
+    }
+    
+    // Create route points from user to charger
     const routePoints = [
-      [charger.lat, charger.lng],
-      [merchant.lat, merchant.lng]
+      [userLocation.lat, userLocation.lng],
+      [charger.lat, charger.lng]
     ];
+    
+    console.log('Drawing route points:', routePoints);
     
     // Use the drawRoute function from map module
     if (window.drawRoute) {
@@ -224,17 +231,17 @@ async function drawWalkingRoute(charger, merchant, options = {}) {
         dashArray: '8 10'
       }).addTo(map);
       
-      // Add markers for charger and merchant
-      const chargerMarker = L.circleMarker([charger.lat, charger.lng], {
+      // Add markers for user location and charger
+      const userMarker = L.circleMarker([userLocation.lat, userLocation.lng], {
         radius: 8,
-        color: '#2563EB',
+        color: '#22C55E', // Green for user location
         weight: 3,
         fillOpacity: 0.8
       }).addTo(map);
       
-      const merchantMarker = L.circleMarker([merchant.lat, merchant.lng], {
+      const chargerMarker = L.circleMarker([charger.lat, charger.lng], {
         radius: 8,
-        color: '#22C55E',
+        color: '#2563EB', // Blue for charger
         weight: 3,
         fillOpacity: 0.8
       }).addTo(map);

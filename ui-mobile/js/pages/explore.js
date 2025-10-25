@@ -65,19 +65,51 @@ async function selectCharger(idx){
     logo.alt = c.merchant.name; 
   }
 
-  // 2) Update map: charger (c.lat/lng) to merchant (fake offset for demo)
+  // 2) Update map: user location to charger
   const charger = { lat: c.lat, lng: c.lng };
-  const merchant = { lat: c.lat + 0.0045, lng: c.lng - 0.0030 }; // small offset so route is visible
   
-  console.log('About to draw route from charger:', charger, 'to merchant:', merchant);
+  console.log('About to draw route to charger:', charger);
   console.log('window.drawWalkingRoute available:', !!window.drawWalkingRoute);
   
-  if(window.drawWalkingRoute){
-    console.log('Calling drawWalkingRoute...');
-    await window.drawWalkingRoute(charger, merchant, { fit: true, maxZoom: 16 });
-    console.log('drawWalkingRoute completed');
+  // Get user's current location
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const userLocation = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        };
+        
+        console.log('User location:', userLocation);
+        console.log('Drawing route from user to charger...');
+        
+        if(window.drawWalkingRoute){
+          await window.drawWalkingRoute(userLocation, charger, { fit: true, maxZoom: 16 });
+          console.log('Route from user to charger completed');
+        } else {
+          console.warn('drawWalkingRoute function not available');
+        }
+      },
+      (error) => {
+        console.warn('Could not get user location:', error);
+        // Fallback: use a default location (Austin downtown)
+        const defaultLocation = { lat: 30.2672, lng: -97.7431 };
+        console.log('Using default location:', defaultLocation);
+        
+        if(window.drawWalkingRoute){
+          window.drawWalkingRoute(defaultLocation, charger, { fit: true, maxZoom: 16 });
+          console.log('Route from default location to charger completed');
+        }
+      }
+    );
   } else {
-    console.warn('drawWalkingRoute function not available on window object');
+    console.warn('Geolocation not supported, using default location');
+    const defaultLocation = { lat: 30.2672, lng: -97.7431 };
+    
+    if(window.drawWalkingRoute){
+      window.drawWalkingRoute(defaultLocation, charger, { fit: true, maxZoom: 16 });
+      console.log('Route from default location to charger completed');
+    }
   }
 }
 
