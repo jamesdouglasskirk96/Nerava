@@ -109,13 +109,14 @@ overflow:hidden;
 
 #page-explore .action-card{
   flex: 0 0 auto;
-  margin: 0 16px 8px;
+  margin: 0 16px 4px;
 }
 
 /* Flexible spacer to fill remaining space */
 .flex-spacer{
-  flex: 1 1 auto;
-  min-height: 20px;
+  flex: 0 1 auto;
+  min-height: 8px;
+  max-height: 40px;
 }
 
 /* Cards */
