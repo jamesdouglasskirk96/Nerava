@@ -14,7 +14,14 @@ const getMap = (center=[30.4025,-97.7258], zoom=14) => {
   
   // Check if Leaflet map already exists on this element
   if (mapElement._leaflet_id) {
-    return L.map.getLayer(mapElement._leaflet_id);
+    // Try to get existing map instance, fallback to creating new one if fails
+    try {
+      return L.Map.get(mapElement._leaflet_id);
+    } catch (e) {
+      // If getting existing map fails, clear the element and create new one
+      mapElement.innerHTML = '';
+      delete mapElement._leaflet_id;
+    }
   }
   
   // Only create new map if none exists
