@@ -66,8 +66,15 @@ async function selectCharger(idx){
   // 2) Update map: charger (c.lat/lng) to merchant (fake offset for demo)
   const charger = { lat: c.lat, lng: c.lng };
   const merchant = { lat: c.lat + 0.0045, lng: c.lng - 0.0030 }; // small offset so route is visible
+  
+  console.log('Drawing route from charger:', charger, 'to merchant:', merchant);
+  
   if(window.drawWalkingRoute){
+    console.log('Calling drawWalkingRoute...');
     await window.drawWalkingRoute(charger, merchant, { fit: true, maxZoom: 16 });
+    console.log('Route drawing completed');
+  } else {
+    console.warn('drawWalkingRoute function not available');
   }
 }
 
