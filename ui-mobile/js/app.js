@@ -207,9 +207,7 @@ async function drawWalkingRoute(userLocation, charger, options = {}) {
     if (!map) return;
     
     // Clear any existing routes first
-    if (window.clearRoute) {
-      window.clearRoute();
-    }
+    clearRoute();
     
     // Create route points from user to charger
     const routePoints = [
@@ -220,36 +218,8 @@ async function drawWalkingRoute(userLocation, charger, options = {}) {
     console.log('Drawing route points:', routePoints);
     
     // Use the drawRoute function from map module
-    if (window.drawRoute) {
-      window.drawRoute(routePoints);
-    } else {
-      // Fallback: create a simple polyline
-      const polyline = L.polyline(routePoints, {
-        color: '#3B82F6',
-        weight: 6,
-        opacity: 0.8,
-        dashArray: '8 10'
-      }).addTo(map);
-      
-      // Add markers for user location and charger
-      const userMarker = L.circleMarker([userLocation.lat, userLocation.lng], {
-        radius: 8,
-        color: '#22C55E', // Green for user location
-        weight: 3,
-        fillOpacity: 0.8
-      }).addTo(map);
-      
-      const chargerMarker = L.circleMarker([charger.lat, charger.lng], {
-        radius: 8,
-        color: '#2563EB', // Blue for charger
-        weight: 3,
-        fillOpacity: 0.8
-      }).addTo(map);
-      
-      // Fit bounds to show the route
-      const bounds = L.latLngBounds(routePoints);
-      map.fitBounds(bounds, { padding: [20, 20], maxZoom: options.maxZoom || 16 });
-    }
+    drawRoute(routePoints);
+    
   } catch (error) {
     console.warn('Failed to draw walking route:', error);
   }

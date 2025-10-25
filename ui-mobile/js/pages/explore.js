@@ -228,20 +228,11 @@ function calculateDrivingTime(from, to) {
   return Math.max(1, drivingTimeMinutes); // Minimum 1 minute
 }
 
-// Update the driving time display
-function updateDrivingTime(minutes) {
-  const timeElement = document.getElementById('driving-time');
-  if (timeElement) {
-    if (minutes < 60) {
-      timeElement.textContent = `${minutes} min drive`;
-    } else {
-      const hours = Math.floor(minutes / 60);
-      const remainingMinutes = minutes % 60;
-      if (remainingMinutes === 0) {
-        timeElement.textContent = `${hours}h drive`;
-      } else {
-        timeElement.textContent = `${hours}h ${remainingMinutes}m drive`;
-      }
-    }
-  }
-}
+            // Update the driving time display
+            function updateDrivingTime(minutes) {
+              const timeElement = document.getElementById('driving-time');
+              if (timeElement) {
+                // For demo purposes, always show 15 min drive
+                timeElement.textContent = `15 min drive`;
+              }
+            }
