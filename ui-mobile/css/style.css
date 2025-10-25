@@ -1005,9 +1005,9 @@ background:var(--bg);color:var(--text);
 
 /* View more button - sits above nav bar */
 .view-more{
-  background: #f5f7fb; /* previous grey color */
-  color: #0b1020; /* previous text color */
-  border: 1px solid rgba(2,16,43,.06); /* previous border */
+  background: #f5f7fb !important; /* previous grey color - force override */
+  color: #0b1020 !important; /* previous text color - force override */
+  border: 1px solid rgba(2,16,43,.06) !important; /* previous border - force override */
   border-radius: 16px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.05);
   flex: 0 0 auto;
