@@ -173,7 +173,10 @@ function _bindPerk(deal=_fallbackDeal) {
                   credentials: 'include',
                   body: JSON.stringify(payload)
                 });
-                if (!r.ok) throw new Error('save_failed');
+                if (!r.ok) {
+                  console.error('Save intent failed:', r.status, r.statusText);
+                  throw new Error('save_failed');
+                }
                 showToast('Saved to Earn');
                 setTab('earn');
               } catch (e) { 
@@ -183,6 +186,15 @@ function _bindPerk(deal=_fallbackDeal) {
             };
           }
   $("#view-more")?.addEventListener("click", ()=> window.openPerksList?.());
+}
+
+// Toast helper
+function showToast(message) {
+  const toast = document.createElement('div');
+  toast.style.cssText = 'position:fixed;left:50%;bottom:100px;transform:translateX(-50%);background:#111;color:#fff;padding:10px 14px;border-radius:12px;z-index:9999;font-weight:700';
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
 }
 
 export async function initExplore(){

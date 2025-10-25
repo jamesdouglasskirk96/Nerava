@@ -56,9 +56,12 @@ export async function initActivityPage(rootEl) {
     </section>
   `;
 
-  try {
-    const res = await fetch('/v1/activity', { credentials:'include' });
-    const data = await res.json();
+          try {
+            const res = await fetch('/v1/activity', { credentials:'include' });
+            if (!res.ok) {
+              throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+            }
+            const data = await res.json();
 
     // Reputation
     const { score, tier, streakDays } = data.reputation;
