@@ -41,7 +41,12 @@ function _bindPerk(deal=_fallbackDeal) {
     logoEl.alt = deal.merchant?.name || "Starbucks";
   }
 
-  $("#perk-cta")?.addEventListener("click", ()=> window.setTab?.("charge"));
+              // Ensure CTA has correct classes and behavior
+              const cta = document.getElementById('perk-cta');
+              if (cta) {
+                cta.classList.add('btn', 'btn-primary', 'btn-wide');
+                cta.onclick = () => setTab('charge'); // existing helper
+              }
   $("#view-more")?.addEventListener("click", ()=> window.openPerksList?.());
 }
 
