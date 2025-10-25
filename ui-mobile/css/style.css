@@ -250,7 +250,7 @@ background:var(--bg);color:var(--text);
 }
 
 .map-card{border-radius:20px;overflow:hidden;box-shadow:0 10px 24px rgba(0,0,0,.12);background:#fff;margin:16px}
-#map{width:100%;height:200px}
+#map{width:100%;height:180px}
 
 .leaflet-bottom.leaflet-right{ display:none !important; }
 
@@ -405,7 +405,7 @@ background:var(--bg);color:var(--text);
   box-shadow:0 10px 30px rgba(0,0,0,.08);
   background:#fff;
 }
-#map{ width:100%; height:200px; }
+#map{ width:100%; height:180px; }
 .leaflet-control-attribution{
   margin-bottom: calc( env(safe-area-inset-bottom, 0px) + var(--tabbar-height) + 8px ) !important;
 }
@@ -579,7 +579,7 @@ background:var(--bg);color:var(--text);
   box-shadow: var(--shadow-soft);
   background: #fff;
 }
-.map-card #map{ height: 200px; width: 100%; }
+.map-card #map{ height: 180px; width: 100%; }
 
 /* --- Tab bar --- */
 .tabbar{
@@ -872,7 +872,7 @@ background:var(--bg);color:var(--text);
 .map-card .map-frame{
   overflow: hidden;
   border-radius: 16px;
-  height: 200px;
+  height: 180px;
 }
 .map-card #map{
   width: 100%;
@@ -1041,8 +1041,9 @@ background:var(--bg);color:var(--text);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px 8px;
+  padding: 12px 16px 12px;
   background: #f8f9fa;
+  min-height: 40px;
   border-radius: 0 0 16px 16px;
   margin: 0 -12px -12px -12px;
 }
