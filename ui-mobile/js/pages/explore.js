@@ -2,6 +2,10 @@ import { ensureMap, drawStraightRoute } from '../core/map.js';
 import { apiGet } from '../core/api.js';
 
 export async function initExplore() {
+  // Prevent duplicate initialization
+  if (window.__exploreInitialized) return;
+  window.__exploreInitialized = true;
+  
   // Always ensure map is initialized
   ensureMap();
 
@@ -62,5 +66,4 @@ export async function initExplore() {
   document.getElementById('btn-view-more')?.addEventListener('click', () => alert('List of perks based on your preferences (coming soon)'));
 }
 
-// boot when page shown
-document.addEventListener('DOMContentLoaded', ()=> initExplore());
+// Initialization is handled by app.js tab switching logic
