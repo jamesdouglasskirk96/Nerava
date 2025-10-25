@@ -32,6 +32,7 @@ from .routers import (
     flags,
     analytics,
     social,
+    activity,
     admin,
     ml,
     ledger,
@@ -123,6 +124,7 @@ app.include_router(merchants_local.router, prefix="/v1/local", tags=["local_merc
 app.include_router(incentives.router)
 app.include_router(energyhub.router)
 app.include_router(social.router)
+app.include_router(activity.router)
 app.include_router(admin.router)
 app.include_router(ml.router)
 app.include_router(ledger.router)
