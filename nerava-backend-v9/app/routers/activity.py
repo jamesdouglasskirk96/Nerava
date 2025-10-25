@@ -34,7 +34,8 @@ async def get_activity_data(db: Session = Depends(get_db)):
                COALESCE(u.handle,'member') AS handle,
                u.avatar_url,
                COALESCE(ur.tier,'Bronze') AS tier,
-               fem.amount_cents
+               fem.amount_cents,
+               fem.context
         FROM follow_earnings_monthly fem
         LEFT JOIN users u ON u.id = fem.payer_user_id
         LEFT JOIN user_reputation ur ON ur.user_id = fem.payer_user_id
@@ -52,7 +53,8 @@ async def get_activity_data(db: Session = Depends(get_db)):
             'handle': row[1],
             'avatarUrl': row[2],
             'tier': row[3],
-            'amountCents': int(row[4])
+            'amountCents': int(row[4]),
+            'context': row[5]
         })
         total_cents += int(row[4])
     
@@ -64,17 +66,43 @@ async def get_activity_data(db: Session = Depends(get_db)):
                 'handle': 'alex',
                 'avatarUrl': None,
                 'tier': 'Gold',
-                'amountCents': 185
+                'amountCents': 185,
+                'context': 'charged and chilled at Starbucks'
             },
             {
                 'userId': 'demo-user-2',
                 'handle': 'sam', 
                 'avatarUrl': None,
                 'tier': 'Bronze',
-                'amountCents': 90
+                'amountCents': 90,
+                'context': 'topped up at Target'
+            },
+            {
+                'userId': 'demo-user-3',
+                'handle': 'riley',
+                'avatarUrl': None,
+                'tier': 'Silver',
+                'amountCents': 75,
+                'context': 'smart-charged at Whole Foods'
+            },
+            {
+                'userId': 'demo-user-4',
+                'handle': 'jordan',
+                'avatarUrl': None,
+                'tier': 'Gold',
+                'amountCents': 120,
+                'context': 'queued and earned at H-E-B'
+            },
+            {
+                'userId': 'demo-user-5',
+                'handle': 'morgan',
+                'avatarUrl': None,
+                'tier': 'Bronze',
+                'amountCents': 60,
+                'context': 'plugged in at Costco'
             }
         ]
-        total_cents = 275
+        total_cents = 530
     
     return {
         'month': month,
