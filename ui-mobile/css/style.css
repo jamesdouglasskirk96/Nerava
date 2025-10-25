@@ -814,8 +814,8 @@ background:var(--bg);color:var(--text);
   line-height: 1;
   padding-top: 8px; /* reduced top padding */
 }
-.brand-logo .brand-word{ color: #3B5FFF; }
-.brand-logo .brand-bolt{ color: #FFC107; }
+.brand-logo .brand-word{ color: #4C6EF5; }
+.brand-logo .brand-bolt{ color: #FFB000; }
 
 /* ========= NAVBAR STYLING ========= */
 .tabbar .tab{
@@ -830,7 +830,7 @@ background:var(--bg);color:var(--text);
 
 /* ========= EARN FAB RESTORED ========= */
 #fab-earn{
-  background: #3B5FFF;
+  background: #4C6EF5;
   color: #FFF;
   border-radius: 16px;
   box-shadow: 0 2px 6px rgba(0,0,0,0.1);
@@ -890,7 +890,7 @@ background:var(--bg);color:var(--text);
   padding: 6px 12px;
   border-radius: 999px;
   background: #eef2ff;
-  color: #3B5FFF;
+  color: #4C6EF5;
   border: 1px solid #dbe1ff;
   font-weight: 600;
   font-size: 14px;
@@ -902,7 +902,7 @@ background:var(--bg);color:var(--text);
 .ai-chip svg{
   width: 14px;
   height: 14px;
-  color: #3B5FFF;
+  color: #4C6EF5;
 }
 
 /* Perk card - responsive with viewport fit */
@@ -968,7 +968,7 @@ background:var(--bg);color:var(--text);
   border-radius: 16px;
   padding: 14px 18px;
   border: none;
-  background: #3B5FFF;
+  background: #4C6EF5;
   color: #FFF;
   font-weight: 600;
   cursor: pointer;
@@ -977,7 +977,7 @@ background:var(--bg);color:var(--text);
   box-shadow: 0 2px 10px rgba(0,0,0,0.05);
 }
 .btn-primary{
-  background: #3B5FFF;
+  background: #4C6EF5;
   color: #FFF;
   border: none;
 }

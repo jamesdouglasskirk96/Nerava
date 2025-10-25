@@ -1,7 +1,7 @@
 :root{
-  --brand: #3B5FFF;           /* Nerava blue */
+  --brand: #4C6EF5;           /* Lighter Nerava blue */
   --brand-ink: #1E2B5C;       /* deep ink for text on brand bg if needed */
-  --bolt: #FFC107;            /* ⚡ gold */
+  --bolt: #FFB000;            /* ⚡ golden yellow */
   --ink-900: #1E1E1E;         /* readable dark text */
   --ink-700: #3B4456;
   --ink-500: #9CA3AF;         /* inactive tab text */
