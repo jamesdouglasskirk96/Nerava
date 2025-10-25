@@ -803,14 +803,41 @@ background:var(--bg);color:var(--text);
   padding: 10px 20px calc(var(--tabbar-height,72px) + 10px);
 }
 
-/* ========= EXPLORE PAGE LAYOUT FIX ========= */
+/* ========= HEADER LOGO STYLING ========= */
+.brand-logo{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-size: 28px;
+  line-height: 1;
+}
+.brand-logo .brand-word{ color: var(--brand); }
+.brand-logo .brand-bolt{ color: var(--bolt); }
 
-/* Map card at top - restored with proper styling */
+/* ========= EARN FAB POLISH ========= */
+.tabbar__fab{
+  background: var(--brand);
+  color: #FFF;
+  border: 2px solid var(--ink-300);
+  box-shadow: 0 8px 22px rgba(var(--shadow-rgb)/0.22);
+}
+.tabbar__fab .ico{ color: #FFF; }
+.tabbar__fab .label{ color: #FFF; font-weight: 600; }
+
+/* Neutralize any previous dark outline */
+.tabbar__fab,
+.tabbar__fab *{ text-shadow: none; }
+
+/* ========= EXPLORE PAGE LAYOUT ========= */
+
+/* Map card at top */
 .map-card{
-  background: #ffffff;
+  background: var(--card);
   border-radius: 20px;
   padding: 12px;
-  box-shadow: 0 10px 30px rgba(16,24,40,.08);
+  box-shadow: 0 10px 30px rgba(var(--shadow-rgb)/0.08);
   margin: 16px 16px 12px;
   overflow: hidden;
 }
@@ -828,7 +855,7 @@ background:var(--bg);color:var(--text);
 /* Section title - "Nearby perk" */
 .section-title{
   margin: 8px 16px 6px;
-  color: #0f172a;
+  color: var(--ink-900);
   font-weight: 800;
   font-size: 22px;
   letter-spacing: .2px;
@@ -841,9 +868,9 @@ background:var(--bg);color:var(--text);
   gap: 8px;
   padding: 8px 12px;
   border-radius: 999px;
-  background: #eef2ff;
-  color: #4B63FF;
-  border: 1px solid #dbe1ff;
+  background: color-mix(in srgb, var(--brand) 14%, #fff);
+  color: var(--brand);
+  border: 1px solid color-mix(in srgb, var(--brand) 50%, #fff);
   font-weight: 600;
   font-size: 14px;
   line-height: 1;
@@ -853,79 +880,77 @@ background:var(--bg);color:var(--text);
 .ai-chip svg{
   width: 14px;
   height: 14px;
-  color: #4B63FF;
+  color: var(--brand);
 }
 
-/* Perk card - consistent width with view more */
+/* Perk card - flex column with CTA at bottom */
 .perk-card{
-  margin: 0 16px 14px;
-  background: #ffffff;
-  border-radius: 18px;
-  box-shadow: 0 10px 30px rgba(16,24,40,.08);
-  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--card);
+  border-radius: 20px;
+  padding: 16px 16px 20px;
+  box-shadow: 0 10px 28px rgba(var(--shadow-rgb)/0.08);
+  width: min(640px, 92vw);
+  margin-inline: auto;
+  margin-bottom: 14px;
 }
 .perk-card__body{
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 12px 16px;
+  gap: 16px;
   align-items: center;
-  margin-bottom: 12px;
+  flex: 1;
+}
+.perk-card__text{
+  min-width: 0;
 }
 .perk-title{
-  margin: 0 0 6px;
-  font-size: 20px;
-  font-weight: 800;
-  color: #0f172a;
-  opacity: 1;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--ink-900);
 }
 .perk-address{
-  margin: 0 0 4px;
-  font-size: 14px;
-  color: #64748b;
+  color: var(--ink-700);
+  margin-top: 6px;
 }
 .perk-sub{
-  margin: 0;
-  font-size: 14px;
-  color: #334155;
-  white-space: normal;
-  line-height: 1.3;
+  color: var(--ink-700);
+  margin-top: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.perk-card__media{
-  order: 2;
-  align-self: center;
-}
-.perk-logo{
-  width: 56px;
-  height: 56px;
+.perk-card__media .perk-logo{
+  width: 64px;
+  height: 64px;
   border-radius: 12px;
-  object-fit: cover;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  display: block;
-  box-shadow: 0 6px 16px rgba(16,24,40,.08);
+  object-fit: contain;
+  background: #FFF;
+  box-shadow: 0 4px 12px rgba(var(--shadow-rgb)/0.08);
 }
 
 /* Buttons - brand blue primary */
-.btn{
-  -webkit-tap-highlight-color: transparent;
-  cursor: pointer;
-}
+.btn,
 .btn-wide{
-  width: 100%;
-  padding: 14px 16px;
-  border-radius: 14px;
-  border: 1px solid #e5e7eb;
-  background: #ffffff;
-  color: #0f172a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  padding: 14px 18px;
+  border: 1px solid var(--ink-300);
+  background: #FFF;
+  color: var(--ink-900);
   font-weight: 700;
-  font-size: 16px;
-  box-shadow: 0 8px 20px rgba(16,24,40,.06);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 .btn-primary{
-  background: #4B63FF;
-  color: #ffffff;
-  border: 1px solid rgba(75,99,255,.25);
-  box-shadow: 0 8px 20px rgba(75,99,255,.15);
+  background: var(--brand);
+  color: #FFF;
+  border-color: transparent;
+  box-shadow: 0 8px 20px rgba(75,99,255,0.30);
 }
 .btn-primary:hover{
   filter: brightness(1.05);
@@ -934,12 +959,18 @@ background:var(--bg);color:var(--text);
   transform: translateY(1px);
 }
 
+/* CTA sits at bottom of card */
+.perk-card .btn-primary{
+  margin-top: auto;
+  width: 100%;
+}
+
 /* View more button - same width as perk card */
 .view-more{
   margin: 0 16px 24px;
   background: #f6f7fb;
-  color: #0f172a;
-  border: 1px solid #e5e7eb;
+  color: var(--ink-900);
+  border: 1px solid var(--ink-300);
 }
 
 /* Legacy support for existing classes */

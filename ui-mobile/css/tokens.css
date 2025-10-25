@@ -1,14 +1,14 @@
 :root{
-  --brand: #4A63EA;              /* Nerava blue */
-  --brand-ink: #1a2b6b;
-  --bolt: #F5B301;               /* lightning accent (logo) */
-  --ink-1: #0f172a;              /* headings */
-  --ink-2: #334155;              /* body strong */
-  --ink-3: #64748b;              /* body */
-  --surface: #ffffff;
-  --surface-soft: #f6f7fb;
-  --stroke: #e5e7eb;
-  --shadow-med: 0 10px 30px rgba(16,24,40,.08);
+  --brand: #4B63FF;           /* Nerava blue */
+  --brand-ink: #1E2B5C;       /* deep ink for text on brand bg if needed */
+  --bolt: #F5B400;            /* ⚡ gold */
+  --ink-900: #0B0F1A;
+  --ink-700: #3B4456;
+  --ink-500: #838AA3;
+  --ink-300: #C9CFDC;         /* light stroke for outlines */
+  --surface: #FFFFFF;
+  --card: #FFFFFF;
+  --shadow-rgb: 15 23 42;     /* slate-900 */
   
   /* Tabbar and FAB tokens */
   --tabbar-height: 84px;         /* keep current height you're using */
