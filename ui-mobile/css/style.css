@@ -709,3 +709,74 @@ background:var(--bg);color:var(--text);
 
 /* Ensure the big floating Earn stays as-is (no vertical changes) */
 .fab-earn{ /* class should already exist; no position edits here */ }
+
+/* ========= Nearby Perk Restyle ========= */
+:root{
+  /* ensure brand token exists */
+  --brand: #4C74F6; /* Nerava blue */
+  --ink-weak: #8B93A7;
+  --card-bg: #fff;
+  --card-shadow: 0 12px 40px rgba(27, 39, 89, 0.12);
+  --radius-xl: 20px;
+}
+
+.section-title{
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: .2px;
+  color: #2c2f36;
+  margin: 18px 18px 10px;
+}
+
+.card{
+  background: var(--card-bg);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--card-shadow);
+}
+.map-card{ margin: 10px 18px 14px; padding: 10px; }
+.map-card .map{ width:100%; height: 280px; border-radius: 14px; overflow:hidden; }
+
+.perk-card{ margin: 10px 18px; padding: 14px; }
+.perk-header{ display:flex; justify-content:flex-start; margin-bottom: 8px; }
+.ai-chip{
+  display:inline-flex; align-items:center; gap:8px;
+  padding:6px 10px; border-radius: 999px;
+  background: color-mix(in srgb, var(--brand) 12%, #eef2ff);
+  color: var(--brand); font-weight: 700; font-size: 12.5px;
+  border: 1px solid color-mix(in srgb, var(--brand) 40%, transparent);
+  white-space: nowrap;
+}
+
+.perk-body{
+  display:grid; grid-template-columns: 56px 1fr auto; align-items:center;
+  gap: 12px;
+}
+.perk-logo{
+  width:56px; height:56px; border-radius: 14px; object-fit: cover;
+  background:#f2f4f7;
+}
+.perk-main{ display:flex; flex-direction:column; gap:6px; }
+.perk-merchant h3{
+  margin:0; font-size:18px; font-weight: 800; color:#1e222b;
+}
+.perk-address{
+  margin:0; font-size:12.5px; color: var(--ink-weak);
+}
+.perk-line{
+  margin:0; font-size:13.5px; color:#2b3140;
+}
+
+.btn{ cursor:pointer; border:none; }
+.btn-secondary{
+  padding:10px 14px; border-radius: 12px;
+  background: #fff; border:1px solid #e5e7ef; box-shadow: var(--card-shadow);
+  font-weight: 700; color:#111827;
+}
+.btn-secondary:active{ transform: translateY(1px); }
+
+.btn-ghost.block{
+  display:block; width: calc(100% - 36px); margin: 14px 18px 28px;
+  padding:14px 16px; border-radius: 16px; font-weight:800; font-size:16px;
+  background:#f3f5fb; color:#161a26; border:1px solid #e7eaf3;
+  box-shadow: 0 18px 40px rgba(40,56,120,.18);
+}

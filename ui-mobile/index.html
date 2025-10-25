@@ -68,35 +68,34 @@
 
         <!-- Explore page -->
         <section id="page-explore" class="page active" aria-label="Explore">
-          <div class="explore-stack">
-            <!-- Map Card -->
-            <article class="card map-card" aria-label="Map">
-              <div id="map-card">
-                <div id="map" class="leaflet-host" aria-label="Charging & perk map"></div>
-              </div>
-            </article>
+          <!-- Map Card (already present) -->
+          <section id="map-card" class="card map-card">
+            <div id="map" class="map"></div>
+          </section>
 
-            <!-- Recommended Perk -->
-            <article class="card perk-card" aria-label="Recommended perk">
-              <div class="perk-chip">
-                <span class="bolt">⚡</span> Recommended by Nerava AI
-              </div>
-              <div class="perk-row">
-                <img id="perk-logo" class="perk-logo" alt="Merchant logo" src="" />
-                <div class="perk-copy">
-                  <h3 id="perk-title">Coffee &amp; Pastry</h3>
-                  <p id="perk-sub">Free coffee w/ charging • 2–4pm</p>
-                  <p id="perk-dist">0.3 mi from charger</p>
+          <!-- Section title -->
+          <h2 class="section-title" id="nearby-title">Nearby perk</h2>
+
+          <!-- Perk Card -->
+          <article id="perk-card" class="card perk-card" aria-live="polite">
+            <div class="perk-header">
+              <span class="ai-chip" id="perk-ai-chip">⚡ Recommended by Nerava AI</span>
+            </div>
+            <div class="perk-body">
+              <img id="perk-logo" class="perk-logo" alt="Merchant logo" src="" />
+              <div class="perk-main">
+                <div class="perk-merchant">
+                  <h3 id="perk-name">Coffee &amp; Pastry</h3>
+                  <p id="perk-address" class="perk-address">123 Domain Dr, Austin</p>
                 </div>
-                <button id="perk-cta" class="btn btn-black">Charge here</button>
+                <p id="perk-line" class="perk-line">Free coffee 2–4pm • 3 min walk from charger</p>
               </div>
-            </article>
-          </div>
+              <button id="perk-cta" class="btn btn-secondary">Charge here</button>
+            </div>
+          </article>
 
-          <!-- View more button sits above the nav bar -->
-          <div class="view-more-wrap">
-            <button id="btn-view-more" class="btn btn-ghost" aria-label="View more perks">View more perks</button>
-          </div>
+          <!-- View more -->
+          <button id="view-more" class="btn btn-ghost block">View more perks</button>
         </section>
 
       <!-- Charge / Wallet / Profile now padded pages (not overlay sheets) -->
