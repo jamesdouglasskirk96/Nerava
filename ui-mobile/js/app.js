@@ -215,6 +215,64 @@ const meters = (lat1, lon1, lat2, lon2) => {
 const walkETAmin = (m) => Math.max(1, Math.round(m/1.4/60)); // 1.4 m/s
 
 // Map functionality now handled by js/core/map.js module
+import { ensureMap, drawRoute, clearRoute, getMap } from './core/map.js';
+
+// Make map functions available globally
+window.ensureMap = ensureMap;
+window.drawRoute = drawRoute;
+window.clearRoute = clearRoute;
+window.getMap = getMap;
+
+// Draw walking route between charger and merchant
+async function drawWalkingRoute(charger, merchant, options = {}) {
+  try {
+    const map = await ensureMap();
+    if (!map) return;
+    
+    // Create route points from charger to merchant
+    const routePoints = [
+      [charger.lat, charger.lng],
+      [merchant.lat, merchant.lng]
+    ];
+    
+    // Use the drawRoute function from map module
+    if (window.drawRoute) {
+      window.drawRoute(routePoints);
+    } else {
+      // Fallback: create a simple polyline
+      const polyline = L.polyline(routePoints, {
+        color: '#3B82F6',
+        weight: 6,
+        opacity: 0.8,
+        dashArray: '8 10'
+      }).addTo(map);
+      
+      // Add markers for charger and merchant
+      const chargerMarker = L.circleMarker([charger.lat, charger.lng], {
+        radius: 8,
+        color: '#2563EB',
+        weight: 3,
+        fillOpacity: 0.8
+      }).addTo(map);
+      
+      const merchantMarker = L.circleMarker([merchant.lat, merchant.lng], {
+        radius: 8,
+        color: '#22C55E',
+        weight: 3,
+        fillOpacity: 0.8
+      }).addTo(map);
+      
+      // Fit bounds to show the route
+      const bounds = L.latLngBounds(routePoints);
+      map.fitBounds(bounds, { padding: [20, 20], maxZoom: options.maxZoom || 16 });
+    }
+  } catch (error) {
+    console.warn('Failed to draw walking route:', error);
+  }
+}
+
+// Make drawWalkingRoute available globally
+window.drawWalkingRoute = drawWalkingRoute;
 
 function showWalkCTA(chargerName, merchantName, distM){
   let box = document.getElementById('walk-cta');
