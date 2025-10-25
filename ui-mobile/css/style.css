@@ -803,7 +803,117 @@ background:var(--bg);color:var(--text);
   padding: 10px 20px calc(var(--tabbar-height,72px) + 10px);
 }
 
-/* --- Nearby perk layout --- */
+/* 1) Consistent content width for card + view-more */
+:root{
+  --content-pad: 18px;                  /* shared side padding */
+  --content-max: 720px;                 /* same cap for both */
+}
+
+/* parent section – ensures both widgets share the same inner width */
+.section-explore,
+#page-explore {
+  padding-inline: var(--content-pad);
+}
+
+/* view-more button wrapper should not add extra horizontal padding */
+.view-more-wrap { padding-inline: 0; max-width: var(--content-max); margin: 0 auto; }
+
+/* perk card width = view-more width */
+.perk-card {
+  max-width: var(--content-max);
+  margin: 0 auto 16px;
+  width: 100%;
+}
+
+/* 2) Grid that lets the subline span under the logo
+   Rows: title | media
+         address | media
+         sub | sub
+         cta | cta
+*/
+.perk-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto auto auto;
+  grid-template-areas:
+    "title   media"
+    "address media"
+    "sub     sub"
+    "cta     cta";
+  gap: 10px 16px; /* row gap | col gap */
+  padding: 16px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(16,24,40,.12);
+}
+
+/* we previously used display: contents on __body – keep that */
+.perk-card__body { display: contents; }
+
+/* flatten text group so its children can be grid items */
+.perk-card__text { display: contents; }
+
+/* 3) Map text elements to grid areas */
+.perk-title   { grid-area: title;   margin: 0; }
+.perk-address { grid-area: address; margin: 0; }
+.perk-sub     { grid-area: sub;     margin: 0; }
+
+/* Logo stays in the right column */
+.perk-card__media { grid-area: media; align-self: start; }
+.perk-logo{
+  width: 56px; height: 56px;
+  border-radius: 12px;
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid rgba(2,16,43,.06);
+  box-shadow: 0 6px 16px rgba(16,24,40,.12);
+}
+
+/* CTA spans full width, matching view-more width rhythm */
+#perk-cta{
+  grid-area: cta;
+  width: 100%;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 14px 16px;
+}
+
+/* 4) Readability & one-line handling */
+
+.perk-title{
+  font-weight: 800;
+  font-size: 20px;               /* bump for readability */
+  letter-spacing: -.01em;
+  color: #0f172a;                /* slate-900 */
+  line-height: 1.15;
+}
+
+.perk-address{
+  font-size: 14px;
+  color: #64748b;                /* slate-500 */
+  line-height: 1.25;
+}
+
+.perk-sub{
+  font-size: 14px;               /* small enough to often fit one line */
+  color: #334155;                /* slate-700 */
+  line-height: 1.25;
+  white-space: normal;           /* allow wrap under logo on small screens */
+}
+
+/* 5) Make "Recommended by Nerava AI" badge align under the heading */
+.reco-chip{
+  margin: 8px 0 12px;            /* top under "Nearby perk", then space to card */
+}
+
+/* 6) View more: same width, centered */
+#viewMorePerks{
+  max-width: var(--content-max);
+  width: 100%;
+  margin: 0 auto 18px;
+  display: inline-flex; justify-content: center; align-items: center;
+}
+
+/* Legacy support for existing classes */
 .section { padding: 16px 20px 24px; }
 
 .h2 {
@@ -820,58 +930,6 @@ background:var(--bg);color:var(--text);
   font-weight:600; font-size:14px;
 }
 .perk-badge .bolt { font-size:14px; line-height:0; }
-
-/* Perk card: two-row grid
-   Row 1: text | media
-   Row 2: CTA (spans 2 cols)
-*/
-.perk-card {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-rows: auto auto;
-  grid-template-areas:
-    "text media"
-    "cta  cta";
-  gap: 14px 16px;                 /* row gap | col gap */
-  padding: 16px;
-  border-radius: 18px;
-  background: #fff;
-  box-shadow: 0 12px 28px rgba(16,24,40,.12);
-}
-
-/* Let children of __body participate directly in the grid */
-.perk-card__body { display: contents; }
-
-/* Text column */
-.perk-card__text {
-  grid-area: text;
-  min-width: 0;                   /* prevents overflow */
-}
-.perk-title   { margin: 0 0 6px; font-weight: 700; font-size: 20px; }
-.perk-address { margin: 0 0 4px;  color: #64748b; font-size: 14px; }
-.perk-sub     { margin: 0;        color: #334155; font-size: 14px; }
-
-/* Logo on the right */
-.perk-card__media { grid-area: media; align-self: start; }
-.perk-logo {
-  width: 64px; height: 64px;
-  border-radius: 14px;
-  object-fit: contain;
-  background: #fff;
-  border: 1px solid rgba(2,16,43,.06);
-  box-shadow: 0 6px 16px rgba(16,24,40,.12);
-}
-
-/* CTA spans full width as its own row */
-#perk-cta {
-  grid-area: cta;
-  width: 100%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 14px 16px;
-  margin-top: 2px;                /* tiny breathing room */
-}
 
 .btn-wide {
   width:100%; margin-top:12px;
