@@ -17,6 +17,44 @@ const _fallbackDeal = {
   blurb: "Free coffee 2–4pm • 3 min walk"
 };
 
+// === Explore: Next Charger Micro-State =====================================
+const CHARGER_FALLBACK = [
+  { id: 'hub_arboretum', name:'Arboretum Supercharger', addr:'9722 Great Hills Trl, Austin, TX', lat:30.3996, lng:-97.7472, merchant:{name:'Starbucks', logo:'https://logo.clearbit.com/starbucks.com'}, perk:'Free coffee 2–4pm • 3 min walk' },
+  { id: 'hub_domain',     name:'Domain Northside',      addr:'11821 Rock Rose Ave, Austin, TX', lat:30.4019, lng:-97.7251, merchant:{name:'Neiman Marcus', logo:'https://logo.clearbit.com/neimanmarcus.com'}, perk:'10% off with charge • 4 min walk' },
+  { id: 'hub_dt',         name:'Downtown 5th & Lavaca', addr:'500 Lavaca St, Austin, TX',       lat:30.2676, lng:-97.7429, merchant:{name:'Starbucks', logo:'https://logo.clearbit.com/starbucks.com'}, perk:'Free coffee 2–4pm • 3 min walk' }
+];
+
+let _chargers = [];     // resolved list (api or fallback)
+let _cIdx = 0;          // index in the list
+
+// Help: safe API fetch with null on 404
+async function tryGet(url){
+  try { return await apiGet(url); } catch(e){ return null; }
+}
+
+// Draw currently selected charger into map + perk
+async function selectCharger(idx){
+  if(!_chargers.length) return;
+
+  _cIdx = (idx + _chargers.length) % _chargers.length;
+  const c = _chargers[_cIdx];
+
+  // 1) Update perk card content
+  const $t = (sel)=>document.querySelector(sel);
+  $t('#perk-title')?.textContent = c.merchant?.name || 'Nearby merchant';
+  $t('#perk-address')?.textContent = c.addr || '';
+  $t('#perk-sub')?.textContent = c.perk || '';
+  const logo = $t('#perk-logo');
+  if(logo && c.merchant?.logo){ logo.src = c.merchant.logo; logo.alt = c.merchant.name; }
+
+  // 2) Update map: charger (c.lat/lng) to merchant (fake offset for demo)
+  const charger = { lat: c.lat, lng: c.lng };
+  const merchant = { lat: c.lat + 0.0045, lng: c.lng - 0.0030 }; // small offset so route is visible
+  if(window.drawWalkingRoute){
+    await window.drawWalkingRoute(charger, merchant, { fit: true, maxZoom: 16 });
+  }
+}
+
 function _bindPerk(deal=_fallbackDeal) {
   const $ = (sel)=>document.querySelector(sel);
   $("#perk-title").textContent   = deal.merchant?.name || "Starbucks";
@@ -53,6 +91,28 @@ function _bindPerk(deal=_fallbackDeal) {
 export async function initExplore(){
   const map = await ensureMap();          // uses existing map initializer
   setTimeout(() => map.invalidateSize(), 0);
+
+  // resolve chargers from API, then fallback
+  const around = await tryGet('/v1/hubs/available');   // OPTIONAL endpoint
+  _chargers = Array.isArray(around) && around.length ? around.map(r => ({
+    id: r.id, name: r.name, addr: r.address, lat: r.lat, lng: r.lng,
+    merchant: r.merchant || { name: 'Starbucks', logo: 'https://logo.clearbit.com/starbucks.com' },
+    perk: r.perk || 'Free coffee 2–4pm • 3 min walk'
+  })) : CHARGER_FALLBACK.slice();
+
+  // initial selection
+  await selectCharger(0);
+
+  // wire next button
+  const nextBtn = document.getElementById('next-charger-btn');
+  if(nextBtn && !nextBtn._wired){
+    nextBtn._wired = true;
+    nextBtn.addEventListener('click', async ()=>{
+      await selectCharger(_cIdx + 1);
+      // small haptic-like feedback
+      nextBtn.animate([{transform:'scale(1)'},{transform:'scale(0.97)'},{transform:'scale(1)'}],{duration:120});
+    });
+  }
 
   // Fit to any existing route bounds if available; otherwise default city view
   if (window.lastBounds){

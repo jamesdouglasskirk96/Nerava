@@ -1011,6 +1011,21 @@ background:var(--bg);color:var(--text);
   flex: 0 0 auto;
 }
 
+/* Next charger: outline variant aligned with brand */
+.btn-primary-outline{
+  border: 2px solid color-mix(in srgb, var(--brand, #3b82f6) 88%, #ffffff 12%);
+  background: #fff;
+  color: color-mix(in srgb, var(--brand, #3b82f6) 92%, #000 8%);
+}
+.btn-primary-outline:active{ transform: translateY(1px); }
+#next-charger-btn .btn__icon{ margin-right: 8px; }
+
+/* Keep last two action cards above tabbar with safe-area */
+.action-card{ margin: 12px 16px; }
+@supports (padding: max(0px)){
+  .action-card:last-of-type{ margin-bottom: max(16px, env(safe-area-inset-bottom)); }
+}
+
 /* Legacy support for existing classes */
 .section { padding: 16px 20px 24px; }
 
