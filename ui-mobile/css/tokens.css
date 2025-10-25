@@ -1,7 +1,7 @@
 :root{
   --brand: #2563EB;           /* Medium-dark blue like in image */
   --brand-ink: #1E2B5C;       /* deep ink for text on brand bg if needed */
-  --bolt: #F59E0B;            /* ⚡ golden yellow like in image */
+  --bolt: #FFD700;            /* ⚡ bright golden yellow */
   --ink-900: #1E1E1E;         /* readable dark text */
   --ink-700: #3B4456;
   --ink-500: #9CA3AF;         /* inactive tab text */

@@ -815,7 +815,7 @@ background:var(--bg);color:var(--text);
   padding-top: 8px; /* reduced top padding */
 }
 .brand-logo .brand-word{ color: #2563EB; /* medium-dark blue like in image */ }
-.brand-logo .brand-bolt{ color: #F59E0B; /* golden yellow like in image */ }
+.brand-logo .brand-bolt{ color: #FFD700; /* bright golden yellow */ }
 
 /* ========= NAVBAR STYLING ========= */
 .tabbar .tab{
