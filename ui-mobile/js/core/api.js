@@ -24,13 +24,18 @@ async function _req(path,{method='GET',body,headers={}}={}){
   if (r.status === 204) return null;
   const ct=r.headers.get('content-type')||''; return ct.includes('application/json')?r.json():r.text();
 }
-export async function apiGet(path, params={}) {
-  const url = new URL((localStorage.NERAVA_URL || location.origin) + path);
-  Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
-  const r = await fetch(url, { headers:{Accept:'application/json'} });
-  if (!r.ok) return null;              // tolerate 404
-  return r.json().catch(()=>null);
+const BASE = localStorage.NERAVA_URL || location.origin;
+async function _req(path, opts={}){
+  const r = await fetch(BASE + path, { headers:{Accept:'application/json'}, ...opts });
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error(`${r.status} ${path}`);
+  return r.json();
 }
+export const apiGet = (path, params) => {
+  const url = new URL(BASE + path);
+  Object.entries(params || {}).forEach(([k,v])=>url.searchParams.set(k,v));
+  return _req(url.pathname + url.search);
+};
 export async function apiPost(p,b={},h={}){ return _req(p,{method:'POST',body:b,headers:h}); }
 if(typeof window!=='undefined'){ window.NeravaAPI=window.NeravaAPI||{}; window.NeravaAPI.apiGet=apiGet; window.NeravaAPI.apiPost=apiPost; }
 export default { apiGet, apiPost };

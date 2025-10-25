@@ -1,69 +1,30 @@
-import { ensureMap, drawStraightRoute } from '../core/map.js';
 import { apiGet } from '../core/api.js';
+import { ensureMap, drawRoute } from '../core/map.js';
 
-export async function initExplore() {
-  // Prevent duplicate initialization
-  if (window.__exploreInitialized) return;
-  window.__exploreInitialized = true;
-  
-  // Always ensure map is initialized
-  ensureMap();
+export async function initExplore(){
+  // Map in rounded card
+  const map = ensureMap([30.4025,-97.7258], 14);
+  if(!map) return;
 
-  // Try API, but fall back to demo coordinates on 404/Network
-  let hub, deal;
-  try {
-    hub = await apiGet('/v1/hubs/recommend');
-  } catch (_) {}
-  try {
-    const deals = await apiGet('/v1/deals/nearby');
-    deal = deals?.[0];
-  } catch (_) {}
+  // Try live APIs; fall back to demo coords on 404
+  let hub = null, deal = null;
+  try { hub = await apiGet('/v1/hubs/recommend'); } catch {}
+  try { deal = await apiGet('/v1/deals/nearby'); } catch {}
 
-  // Use API data if available, otherwise fallback coordinates
-  const charger = [
-    (hub?.lat && Number.isFinite(hub.lat)) ? hub.lat : 30.4062,
-    (hub?.lng && Number.isFinite(hub.lng)) ? hub.lng : -97.7260,
-  ];
-  const merchant = [
-    (deal?.lat && Number.isFinite(deal.lat)) ? deal.lat : 30.3990,
-    (deal?.lng && Number.isFinite(deal.lng)) ? deal.lng : -97.7230,
-  ];
+  // Fallback demo data (domain → coffee)
+  const start = hub?.lat && hub?.lng ? [hub.lat, hub.lng] : [30.4029,-97.7262];      // Charger
+  const end   = deal?.lat && deal?.lng ? [deal.lat, deal.lng] : [30.4021,-97.7242];  // Merchant
 
-  // Draw straight route
-  drawStraightRoute(charger, merchant);
+  drawRoute([start, end]);
 
-  // Simple perk card with fallback data
-  const card = document.getElementById('perk-card');
-  if (card) {
-    const merchantName = deal?.name || 'Nearby perk';
-    const merchantReward = deal?.reward_text || 'Cheaper during Green Hour';
-    const merchantWindow = deal?.window || '2–4pm';
-    const merchantDistance = deal?.distance_text || '0.3 mi from charger';
-
-    card.innerHTML = `
-      <div class="perk-card">
-        <div class="ai-chip">⚡ Recommended by Nerava AI</div>
-        <div class="perk-body">
-          <div class="logo">☕</div>
-          <div class="info">
-            <h3>${merchantName}</h3>
-            <p>${merchantReward} • ${merchantWindow}<br/>
-            ${merchantDistance}</p>
-          </div>
-          <button id="btn-charge-here" class="btn btn-primary">Charge here</button>
-        </div>
-      </div>
-    `;
-    document.getElementById('btn-charge-here')?.addEventListener('click', () => {
-      // Switch to charge tab
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      document.querySelector('[data-tab="charge"]')?.classList.add('active');
-      document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
-      document.getElementById('page-charge')?.classList.remove('hidden');
-    });
+  // Fill the perk card (AI chip + CTA)
+  const name = deal?.merchant_name || 'Coffee & Pastry';
+  const when = deal?.window_text || '2–4pm';
+  const reward = deal?.reward_text || 'Free coffee w/ charging';
+  const card = document.getElementById('perkCard');
+  if(card){
+    card.querySelector('.perk__name').textContent = name;
+    card.querySelector('.perk__desc').textContent = `${reward} • ${when}`;
+    card.querySelector('.perk__cta').onclick = () => document.querySelector('[data-tab="charge"]')?.click();
   }
-
-  document.getElementById('btn-view-more')?.addEventListener('click', () => alert('List of perks based on your preferences (coming soon)'));
 }
-
-// Initialization is handled by app.js tab switching logic

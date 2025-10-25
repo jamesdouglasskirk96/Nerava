@@ -69,14 +69,23 @@
 
         <!-- Explore page -->
         <section id="page-explore" class="page active" aria-label="Explore">
-          <div id="mapCard" class="map-card">
-            <div id="map"></div>
-          </div>
-          <h2 class="section-title">Nearby perk</h2>
-          <div id="perk-card"></div>
-          <div class="actions">
-            <button id="btn-view-more" class="btn">View more perks</button>
-          </div>
+          <section class="map-card" id="mapCard">
+            <div class="map-frame"><div id="map" class="map"></div></div>
+          </section>
+
+          <section class="perk-card" id="perkCard" aria-live="polite">
+            <div class="perk__ai"><span class="bolt">⚡</span> Recommended by Nerava AI</div>
+            <div class="perk__body">
+              <div class="perk__logo">☕️</div>
+              <div class="perk__text">
+                <div class="perk__name">Coffee &amp; Pastry</div>
+                <div class="perk__desc">Free coffee w/ charging • 2–4pm</div>
+              </div>
+              <button class="perk__cta">Charge here</button>
+            </div>
+          </section>
+
+          <button id="viewMore" class="viewmore-fab" aria-label="View more perks">View<br/>more<br/>perks</button>
         </section>
 
       <!-- Charge / Wallet / Profile now padded pages (not overlay sheets) -->
@@ -365,25 +374,7 @@
   </button>
 
 
-  <!-- Core modules -->
-  <script type="module" src="/app/js/core/api.js" defer></script>
-  <script type="module" src="/app/js/core/map.js" defer></script>
-  <script src="/app/js/core/utils.js" defer></script>
-  
-  <!-- Page modules -->
-  <script type="module" src="/app/js/pages/explore.js" defer></script>
-  <script type="module" src="/app/js/pages/charge.js" defer></script>
-  <script src="/app/js/pages/claim.js" defer></script>
-  <script type="module" src="/app/js/pages/wallet.js" defer></script>
-  <script type="module" src="/app/js/pages/me.js" defer></script>
-  <script type="module" src="/app/js/pages/dev.js" defer></script>
-  <script type="module">
-    import { initChargePage } from '/app/js/pages/charge.js';
-    window.addEventListener('load', initChargePage);
-  </script>
-  
-  <!-- Animations and main app -->
-  <script src="/app/js/animations.js" defer></script>
+  <!-- Main app -->
   <script type="module" src="/app/js/app.js" defer></script>
   
 </body>

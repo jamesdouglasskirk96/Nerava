@@ -2,8 +2,7 @@
 import { loadDemoState } from './core/demo.js';
 import { ensureDemoBanner } from './components/demoBanner.js';
 import { apiGet, apiPost } from './core/api.js';
-import { ensureMap } from './core/map.js';
-export { ensureMap }; // so other modules can import from '../app.js' if needed
+// ensureMap now lives in js/core/map.js; do not re-declare here
 window.Nerava = window.Nerava || {};
 
 // === SSO → prefs → wallet pre-balance → push banner flow ===
@@ -63,16 +62,10 @@ function setTab(tab) {
   setActive(tab); 
 }
 
-// Map initialization function
-function initMap() {
-  ensureMap();
-}
-
 // ---- legacy global exports for non-module callers ----
 // Removed exports to avoid "does not provide an export named" errors
 if (typeof window !== 'undefined') {
   window.setTab = setTab;
-  window.initMap = initMap;
   window.loadRecommendation = loadRecommendation;
   window.loadBanner = loadBanner;
   window.loadWallet = loadWallet;
@@ -331,7 +324,9 @@ function triggerWalletToast(msg){
 
 window.addEventListener('load', async ()=>{
   setTab('explore');
-  ensureMap('map'); // Initialize map once
+  // lazy import to avoid cyclic loads
+  const { initExplore } = await import('./js/pages/explore.js');
+  initExplore();
   await loadBanner();
   await loadWallet();
   await loadPrefs();
