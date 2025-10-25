@@ -69,10 +69,35 @@
 
         <!-- Explore page -->
         <section id="page-explore" class="page active" aria-label="Explore">
-          <div class="map-card">
-            <div id="map"></div>
+          <div class="explore-stack">
+            <!-- Map Card -->
+            <article class="card map-card" aria-label="Map">
+              <div id="map-card">
+                <div id="map" class="leaflet-host" aria-label="Charging & perk map"></div>
+              </div>
+            </article>
+
+            <!-- Recommended Perk -->
+            <article class="card perk-card" aria-label="Recommended perk">
+              <div class="perk-chip">
+                <span class="bolt">⚡</span> Recommended by Nerava AI
+              </div>
+              <div class="perk-row">
+                <img id="perk-logo" class="perk-logo" alt="Merchant logo" src="" />
+                <div class="perk-copy">
+                  <h3 id="perk-title">Coffee &amp; Pastry</h3>
+                  <p id="perk-sub">Free coffee w/ charging • 2–4pm</p>
+                  <p id="perk-dist">0.3 mi from charger</p>
+                </div>
+                <button id="perk-cta" class="btn btn-black">Charge here</button>
+              </div>
+            </article>
           </div>
-          <!-- other explore content can follow -->
+
+          <!-- View more button sits above the nav bar -->
+          <div class="view-more-wrap">
+            <button id="btn-view-more" class="btn btn-ghost" aria-label="View more perks">View more perks</button>
+          </div>
         </section>
 
       <!-- Charge / Wallet / Profile now padded pages (not overlay sheets) -->

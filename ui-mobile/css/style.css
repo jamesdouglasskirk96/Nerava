@@ -642,3 +642,67 @@ background:var(--bg);color:var(--text);
 
 /* spacing so neighbors don't crowd the FAB */
 .tabbar .tab:nth-child(3){ margin: 0 14px; }  /* center slot gutters */
+
+/* ========= Explore layout ========= */
+.explore-stack{
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+  padding:16px 16px 12px;
+}
+.card{
+  background:#fff;
+  border-radius:20px;
+  box-shadow:0 8px 24px rgba(16,24,40,.08);
+}
+
+/* Map card */
+.map-card{ padding:12px; }
+#map-card{
+  overflow:hidden;
+  border-radius:16px;
+}
+#map.leaflet-host{
+  width:100%;
+  height:260px;          /* fits neatly under header */
+}
+.leaflet-container{
+  border-radius:16px;    /* enforce rounded tiles inside */
+}
+
+/* Perk card */
+.perk-card{ padding:16px; }
+.perk-chip{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:6px 12px; border-radius:999px;
+  background:#000; color:#fff; font-weight:700; font-size:12px; margin-bottom:12px;
+}
+.perk-chip .bolt{ font-size:14px; }
+.perk-row{ display:grid; grid-template-columns:auto 1fr auto; gap:12px; align-items:center; }
+.perk-logo{
+  width:56px; height:56px; border-radius:14px; object-fit:cover;
+  background:#f2f4f7;
+}
+.perk-copy h3{ margin:0 0 6px; font-size:18px; line-height:1.2; }
+.perk-copy p{ margin:0; color:#6b7280; font-size:14px; }
+.btn{ border:0; cursor:pointer; }
+.btn-black{
+  background:#000; color:#fff; font-weight:700; padding:10px 14px; border-radius:16px;
+}
+.btn-ghost{
+  width:100%;
+  background:rgba(17,24,39,0.06);
+  color:#0f172a;
+  font-weight:700;
+  padding:14px 16px;
+  border-radius:16px;
+}
+
+/* View more above nav: respects safe area + nav height; DOES NOT move Earn button */
+.view-more-wrap{
+  position:sticky; bottom:calc(var(--tabbar-height,72px) + env(safe-area-inset-bottom) + 8px);
+  padding:0 16px 8px;
+}
+
+/* Ensure the big floating Earn stays as-is (no vertical changes) */
+.fab-earn{ /* class should already exist; no position edits here */ }
