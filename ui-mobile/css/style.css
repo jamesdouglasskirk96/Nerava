@@ -836,10 +836,15 @@ background:var(--bg);color:var(--text);
   margin:0; color:#2a2f38; font-weight:600; font-size:14px;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
+/* Perk logo sizing/containment */
 .perk-card__media { display:flex; justify-content:flex-end; }
 .perk-logo {
-  width:64px; height:64px; border-radius:14px; object-fit:cover;
+  width:64px; height:64px;
+  border-radius:14px;
+  object-fit: contain;         /* keep aspect, no cropping */
+  background:#fff;             /* neutral backdrop */
   box-shadow:0 6px 16px rgba(16,24,40,.12);
+  border:1px solid rgba(2,16,43,.06);
 }
 
 .btn-wide {

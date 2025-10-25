@@ -4,9 +4,16 @@ import { setTab } from '../app.js';
 
 const $ = (s, r=document) => r.querySelector(s);
 
-// Fallback deal/hub data if APIs 404
+// Prefer local asset; will fallback to Clearbit if it fails to load.
+const STARBUCKS_LOGO_LOCAL = "./img/brands/starbucks.png";
+const STARBUCKS_LOGO_CDN   = "https://logo.clearbit.com/starbucks.com";
+
 const _fallbackDeal = {
-  merchant: { name: "Starbucks", address: "310 E 5th St, Austin, TX", logo: "https://dummyimage.com/64x64/f2f4f7/8B5A2B.png&text=☕" },
+  merchant: {
+    name: "Starbucks",
+    address: "310 E 5th St, Austin, TX",
+    logo: STARBUCKS_LOGO_LOCAL
+  },
   blurb: "Free coffee 2–4pm • 3 min walk"
 };
 
@@ -15,9 +22,25 @@ function _bindPerk(deal=_fallbackDeal) {
   $("#perk-title").textContent   = deal.merchant?.name || "Starbucks";
   $("#perk-address").textContent = deal.merchant?.address || "310 E 5th St, Austin, TX";
   $("#perk-sub").textContent     = deal.blurb || "Free coffee 2–4pm • 3 min walk";
-  if (deal.merchant?.logo) $("#perk-logo").src = deal.merchant.logo;
 
-  // CTA -> go to Charge tab without moving Earn button
+  const logoEl = $("#perk-logo");
+  if (logoEl) {
+    const primary = deal.merchant?.logo || STARBUCKS_LOGO_LOCAL;
+    logoEl.src = primary;
+
+    // Fallback if the primary (local) fails
+    logoEl.onerror = () => {
+      if (logoEl.dataset.fallback !== "1") {
+        logoEl.dataset.fallback = "1";
+        logoEl.src = STARBUCKS_LOGO_CDN;
+      }
+    };
+    // Ensure containment styling applies even if external image loads
+    logoEl.decoding = "async";
+    logoEl.loading = "lazy";
+    logoEl.alt = deal.merchant?.name || "Starbucks";
+  }
+
   $("#perk-cta")?.addEventListener("click", ()=> window.setTab?.("charge"));
   $("#view-more")?.addEventListener("click", ()=> window.openPerksList?.());
 }
