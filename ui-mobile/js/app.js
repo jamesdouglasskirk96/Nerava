@@ -5,7 +5,16 @@ import { apiGet, apiPost } from './core/api.js';
 // Single ensureMap definition
 export let mapInstance = null;
 export function ensureMap(lat=30.4021, lng=-97.7265, zoom=13){
-  if (mapInstance) { setTimeout(()=>mapInstance.invalidateSize(),0); return mapInstance; }
+  if (mapInstance) { 
+    // Only call invalidateSize if the map container has changed size
+    // This prevents the map from breaking out of the card
+    setTimeout(() => {
+      if (mapInstance.getContainer().offsetHeight > 0) {
+        mapInstance.invalidateSize();
+      }
+    }, 100);
+    return mapInstance; 
+  }
   const el = document.getElementById('map');
   if (!el) return null;
   mapInstance = L.map(el, { zoomControl:false }).setView([lat,lng], zoom);

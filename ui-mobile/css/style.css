@@ -58,7 +58,7 @@ font-family: -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-
 background:var(--bg);color:var(--text);
 }
 
-#map{position:absolute; inset:0; z-index:1; min-height:100%}
+/* Removed conflicting full-screen map rule - map is now contained in card */
 .ui-layer{position:relative; z-index:2}
 
 .full-height{ height: calc(100vh - 56px - 36px); }
