@@ -1,0 +1,95 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+from app.db import get_db
+from app.core.config import settings
+
+router = APIRouter()
+
+@router.get("/v1/activity")
+async def get_activity_data(db: Session = Depends(get_db)):
+    """Get user's activity data including reputation and follow earnings"""
+    
+    # For demo purposes, we'll use a hardcoded user ID
+    # In production, this would come from authentication
+    me = "demo-user-123"
+    
+    # Get reputation
+    rep_query = text("SELECT score, tier FROM user_reputation WHERE user_id = :user_id")
+    rep_result = db.execute(rep_query, {'user_id': me})
+    rep_row = rep_result.fetchone()
+    reputation = {
+        'score': rep_row[0] if rep_row else 0,
+        'tier': rep_row[1] if rep_row else 'Bronze'
+    }
+    
+    # Get earnings from last 30 days
+    since = "NOW() - INTERVAL '30 days'"
+    earn_query = text("""
+        SELECT payer_user_id AS user_id,
+               COALESCE(u.handle,'member') AS handle,
+               u.avatar_url,
+               COALESCE(ur.tier,'Bronze') AS tier,
+               SUM(amount_cents)::int AS amount_cents
+        FROM follow_earnings_events fee
+        LEFT JOIN users u ON u.id = fee.payer_user_id
+        LEFT JOIN user_reputation ur ON ur.user_id = fee.payer_user_id
+        WHERE fee.receiver_user_id = :user_id AND fee.created_at >= :since
+        GROUP BY payer_user_id, u.handle, u.avatar_url, ur.tier
+        ORDER BY SUM(amount_cents) DESC
+        LIMIT 200
+    """)
+    
+    earn_result = db.execute(earn_query, {'user_id': me, 'since': since})
+    earnings = []
+    total_cents = 0
+    
+    for row in earn_result:
+        earnings.append({
+            'userId': row[0],
+            'handle': row[1],
+            'avatarUrl': row[2],
+            'tier': row[3],
+            'amountCents': int(row[4])
+        })
+        total_cents += int(row[4])
+    
+    return {
+        'reputation': reputation,
+        'earnings': earnings,
+        'totalCents': total_cents
+    }
+
+@router.post("/v1/session/verify")
+async def verify_session(session_data: dict, db: Session = Depends(get_db)):
+    """Verify a charging session and trigger auto-follow + rewards"""
+    
+    # For demo purposes, we'll use hardcoded values
+    me = "demo-user-123"
+    session_id = session_data.get('sessionId', str(uuid.uuid4()))
+    station_id = session_data.get('stationId', 'STATION_A')
+    energy_kwh = session_data.get('energyKwh', 15.0)
+    
+    # Get session details
+    session_query = text("""
+        SELECT id, user_id, station_id, start_at, energy_kwh 
+        FROM sessions 
+        WHERE id = :session_id AND user_id = :user_id
+    """)
+    
+    session_result = db.execute(session_query, {
+        'session_id': session_id,
+        'user_id': me
+    })
+    
+    session_row = session_result.fetchone()
+    if not session_row:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    # Trigger auto-follow
+    from app.services.activity import auto_follow_on_verified_session, reward_followers_for_session
+    
+    await auto_follow_on_verified_session(me, station_id, session_row[3])
+    await reward_followers_for_session(me, session_id, station_id, float(session_row[4] or 0))
+    
+    return {"ok": True}
