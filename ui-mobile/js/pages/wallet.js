@@ -1,6 +1,6 @@
 export async function initWalletPage(rootEl) {
   rootEl.innerHTML = `
-    <div class="page stack">
+    <div class="wallet-content stack">
       <!-- Balance / Actions -->
       <section class="card card--xl">
         <div class="row-between">

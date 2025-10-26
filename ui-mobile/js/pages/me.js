@@ -1,6 +1,6 @@
 export async function initMePage(rootEl) {
   rootEl.innerHTML = `
-    <div class="page stack">
+    <div class="me-content stack">
 
       <!-- Profile -->
       <section class="card card--xl">

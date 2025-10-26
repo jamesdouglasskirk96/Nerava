@@ -80,6 +80,9 @@ overflow:hidden;
   height: calc(100vh - var(--tabbar-height, 76px));
   overflow: hidden;
 }
+.page .page.stack {
+  display: grid !important; /* Override for nested page elements */
+}
 .page.active{
   display:block !important;
 }

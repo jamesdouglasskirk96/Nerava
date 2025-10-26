@@ -103,20 +103,20 @@ function handleHashRoute() {
   }
 }
 
-export function setTab(tab){
+export async function setTab(tab){
   console.log('setTab called with:', tab);
   document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active', p.id==='page-'+tab));
   document.querySelectorAll('.tabbar .tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===tab));
   if(tab==='explore') ensureMap();
-  if(tab==='activity') initActivity();
-  if(tab==='earn') initEarn();
+  if(tab==='activity') await initActivity();
+  if(tab==='earn') await initEarn();
   if(tab==='wallet') {
     console.log('Calling initWallet...');
-    initWallet();
+    await initWallet();
   }
   if(tab==='profile') {
     console.log('Calling initMe...');
-    initMe();
+    await initMe();
   }
 }
 
