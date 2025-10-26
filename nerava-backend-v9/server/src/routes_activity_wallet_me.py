@@ -27,25 +27,169 @@ def activity(user_id: str = Depends(current_user_id), db: Session = Depends(get_
         "followEarnings": earnings, "totals":{"followCents": total}, "month": month
     }
 
-@router.get("/wallet/summary")
-def wallet_summary(user_id: str = Depends(current_user_id), db: Session = Depends(get_db)):
-    """Simplified wallet summary"""
+@router.get("/wallet/debug")
+def wallet_debug(user_id: str = Depends(current_user_id), db: Session = Depends(get_db)):
+    """Debug wallet data"""
     try:
-        # Get wallet events
-        wallet_rows = db.query(WalletEvent).filter(WalletEvent.user_id==user_id).order_by(WalletEvent.created_at.desc()).all()
+        from sqlalchemy import text
         
-        # Calculate balance from wallet events only
+        result = {
+            "user_id": user_id,
+            "wallet_events": [],
+            "payments": [],
+            "rewards": []
+        }
+        
+        # Test wallet events
+        try:
+            wallet_rows = db.query(WalletEvent).filter(WalletEvent.user_id==user_id).all()
+            for row in wallet_rows:
+                result["wallet_events"].append({
+                    "id": row.id,
+                    "title": row.title,
+                    "amount_cents": row.amount_cents,
+                    "type": row.type,
+                    "created_at": str(row.created_at)
+                })
+        except Exception as e:
+            result["wallet_error"] = str(e)
+        
+        # Test payments
+        try:
+            payments_result = db.execute(text("SELECT * FROM payments WHERE user_id = :user_id"), {'user_id': user_id})
+            for row in payments_result:
+                result["payments"].append({
+                    "id": row[0],
+                    "merchant_id": row[2],
+                    "status": row[5],
+                    "amount_cents": row[6],
+                    "created_at": str(row[9])
+                })
+        except Exception as e:
+            result["payment_error"] = str(e)
+        
+        # Test rewards
+        try:
+            rewards_result = db.execute(text("SELECT * FROM reward_events WHERE user_id = :user_id"), {'user_id': user_id})
+            for row in rewards_result:
+                result["rewards"].append({
+                    "id": row[0],
+                    "type": row[2],
+                    "amount_cents": row[3],
+                    "created_at": str(row[4])
+                })
+        except Exception as e:
+            result["reward_error"] = str(e)
+        
+        return result
+        
+    except Exception as e:
+        import traceback
+        return {"error": str(e), "traceback": str(traceback.format_exc())}
+
+@router.get("/wallet/simple")
+def wallet_simple(user_id: str = Depends(current_user_id), db: Session = Depends(get_db)):
+    """Simple wallet test"""
+    try:
+        from sqlalchemy import text
+        
+        # Just get wallet events first
+        wallet_rows = db.query(WalletEvent).filter(WalletEvent.user_id==user_id).all()
+        
         balance = sum(r.amount_cents if r.type=="earn" else -r.amount_cents for r in wallet_rows)
         
-        # Simple breakdown
-        breakdown = [ {"title":r.title, "amountCents": r.amount_cents, "type": r.type} for r in wallet_rows[:5] ]
+        breakdown = [{"title": r.title, "amountCents": r.amount_cents, "type": r.type} for r in wallet_rows[:5]]
         
         return {"balanceCents": balance, "breakdown": breakdown, "history": breakdown}
         
     except Exception as e:
-        print(f"Wallet summary error: {e}")
         import traceback
-        traceback.print_exc()
+        return {"error": str(e), "traceback": traceback.format_exc()}
+
+@router.get("/wallet/summary")
+def wallet_summary(user_id: str = Depends(current_user_id), db: Session = Depends(get_db)):
+    """Wallet summary including payments and rewards"""
+    try:
+        from sqlalchemy import text
+        
+        # Get wallet events (this works)
+        wallet_rows = db.query(WalletEvent).filter(WalletEvent.user_id==user_id).order_by(WalletEvent.created_at.desc()).all()
+        
+        # Calculate balance from wallet events
+        balance = sum(r.amount_cents if r.type=="earn" else -r.amount_cents for r in wallet_rows)
+        
+        # Get completed payments
+        try:
+            payments_result = db.execute(text("""
+                SELECT merchant_id, amount_cents, created_at
+                FROM payments 
+                WHERE user_id = :user_id AND status = 'COMPLETED'
+                ORDER BY created_at DESC
+            """), {'user_id': user_id})
+            payments = payments_result.fetchall()
+            
+            # Subtract payments from balance
+            for payment in payments:
+                balance -= payment[1]  # Subtract amount_cents
+                
+        except Exception as e:
+            print(f"Payment query error: {e}")
+            payments = []
+        
+        # Get reward events
+        try:
+            rewards_result = db.execute(text("""
+                SELECT type, amount_cents, created_at
+                FROM reward_events 
+                WHERE user_id = :user_id
+                ORDER BY created_at DESC
+            """), {'user_id': user_id})
+            rewards = rewards_result.fetchall()
+            
+            # Add rewards to balance
+            for reward in rewards:
+                balance += reward[1]  # Add amount_cents
+                
+        except Exception as e:
+            print(f"Reward query error: {e}")
+            rewards = []
+        
+        # Build breakdown
+        breakdown = []
+        
+        # Add wallet events
+        for row in wallet_rows:
+            breakdown.append({
+                'title': row.title,
+                'amountCents': row.amount_cents,
+                'type': row.type
+            })
+        
+        # Add completed payments
+        for payment in payments:
+            breakdown.append({
+                'title': f"Payment @ {payment[0]}",
+                'amountCents': -payment[1],  # Negative for payments
+                'type': 'payment'
+            })
+        
+        # Add reward events
+        for reward in rewards:
+            breakdown.append({
+                'title': f"Reward: {reward[0]}",
+                'amountCents': reward[1],
+                'type': 'reward'
+            })
+        
+        # Sort by created_at (approximate - using order from queries)
+        breakdown = breakdown[:10]  # Limit to 10 items
+        
+        return {"balanceCents": balance, "breakdown": breakdown, "history": breakdown}
+        
+    except Exception as e:
+        import traceback
+        print(f"Wallet summary error: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
         return {"balanceCents": 0, "breakdown": [], "history": []}
 
 @router.get("/wallet/test")
