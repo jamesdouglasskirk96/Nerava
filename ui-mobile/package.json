@@ -15,7 +15,8 @@
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
-    "@playwright/test": "^1.56.1"
+    "@playwright/test": "^1.56.1",
+    "sharp": "^0.34.4"
   },
   "dependencies": {
     "qrcode-terminal": "^0.12.0",
