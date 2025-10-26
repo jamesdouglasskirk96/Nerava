@@ -90,6 +90,23 @@ overflow:hidden;
   display:none !important;
 }
 
+/* Allow Wallet and Me page content to be visible */
+.page-scroll {
+  display: block !important;
+}
+
+/* Ensure Wallet and Me pages are visible when active */
+#page-wallet.active,
+#page-profile.active {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: relative !important;
+  z-index: 1 !important;
+  height: auto !important;
+  overflow: visible !important;
+}
+
 /* Ensure Explore page fits in viewport */
 #page-explore{
   height: calc(100vh - var(--tabbar-height, 76px));
@@ -1284,29 +1301,87 @@ overflow:hidden;
 .page { padding: 12px 12px 96px; }                 /* bottom room for tabbar */
 .stack { display: grid; gap: 12px; }
 
-.card {
-  background: #fff; border-radius: 16px;
-  box-shadow: 0 10px 30px rgba(0,0,0,.06);
+/* Base text */
+body { color: #111827; }
+
+/* Kill any global opacity used before */
+.muted, .soft, .dim, .is-dimmed { opacity: 1 !important; color: #4b5563 !important; }
+
+/* Headings / labels */
+.h1, .page-title { color: #111827; }
+.section-title, .eyebrow { color: #374151; }
+
+/* Compact global typography */
+body {
+  font-size: 14px;
+  line-height: 1.4;
+  color: #111827;
+  overflow-y: auto;
 }
-.card--pad { padding: 16px; }
-.card--xl { padding: 20px; }
-.card-title { font-weight: 800; font-size: 18px; color: #0f172a; letter-spacing:.2px; }
-.kicker { color:#64748b; font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
+
+/* Card layout refinements */
+.card {
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(17,24,39,.06);
+  padding: 16px;
+  border: 1px solid rgba(17,24,39,.04);
+  margin: 10px;
+}
+
+.card--pad { padding: 14px 16px; }
+.card--xl { padding: 16px 18px; }
+
+/* Compact headers */
+.card h1, .card h2, .card h3, .card h4 {
+  margin: 4px 0;
+  font-weight: 600;
+}
+
+.card-title { font-weight: 600; font-size: 15px; color: #0f172a; letter-spacing:.1px; }
+.kicker { color:#334155; font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
 
 .row { display:flex; align-items:center; gap:12px; }
 .row-between { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .col { display:grid; gap:4px; }
 
-.amount-lg { font-size: 36px; font-weight: 800; color:#1e293b; line-height:1.05; }
-.subtle { color:#64748b; }
+/* Wallet page specific */
+.wallet-balance {
+  font-size: 26px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.1;
+}
+
+.wallet-streak {
+  font-size: 13px;
+  color: #475569;
+}
+
+.wallet-section h3 {
+  font-size: 15px;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.amount-lg { font-size: 26px; font-weight: 700; color:#1e293b; line-height:1.1; }
+.subtle { color:#334155; }
+
+/* Subtle gray text for secondary content */
+.subtext {
+  color: #64748b;
+  font-size: 13px;
+}
 
 .btn {
   display:inline-flex; align-items:center; justify-content:center;
-  height:44px; padding:0 16px; border-radius:12px; font-weight:700;
+  height:40px; padding:10px 18px; border-radius:10px; font-weight:600;
   border:1px solid transparent; cursor:pointer; user-select:none;
+  font-size: 14px;
 }
-.btn-primary { background:#3b5bfd; color:#fff; }
+.btn-primary { background:#22c55e; color:#fff; }
 .btn-success { background:#30b566; color:#fff; }
+.btn-secondary { background:#f1f5f9; color:#0f172a; }
 .btn-ghost   { background:#f8fafc; color:#0f172a; border-color:#e2e8f0; }
 .btn-block { width:100%; }
 
@@ -1329,12 +1404,107 @@ overflow:hidden;
   color:#3b5bfd; font-weight:800;
 }
 
-.badge {
-  padding:6px 10px; border-radius:999px; font-weight:700; font-size:12px;
-  background:#f1f5f9; color:#0f172a;
+/* List items for compact layout */
+.list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-top: 1px solid #f1f5f9;
+  font-size: 13px;
 }
-.badge.good { background:#ecfdf5; color:#065f46; }
+
+.list-item:first-child { border-top: none; }
+
+.badge {
+  padding:3px 8px; border-radius:8px; font-weight:600; font-size:12px;
+  background:#e2e8f0; color:#0f172a;
+}
+.badge.good { background:#dcfce7; color:#166534; }
 .badge.warn { background:#fff7ed; color:#9a3412; }
+
+/* Me page specific */
+.profile-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.profile-summary img, .profile-summary .avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.profile-summary .info {
+  flex: 1;
+}
+
+/* Toggle switches */
+.toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 13px;
+}
 
 .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .hr { height:1px; background:#f1f5f9; margin:8px 0; }
+
+/* Scroll container for smaller viewports */
+.page-scroll {
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  padding-bottom: 24px;
+}
+
+/* Subtle rows inside cards */
+.row--subtle { color: #4b5563; }
+
+/* Pills / chips */
+.pill { color: #374151; background: #f7f9fc; }
+
+/* Amounts / numbers */
+.amount, .stat { color: #111827; font-weight: 700; }
+
+/* Lists separators */
+.list .list-item { border-color: rgba(17,24,39,.08); }
+
+/* Buttons keep strong text */
+.btn, .btn-primary, .btn-ghost { color: #ffffff; }
+.btn-ghost { color: #374151; }
+
+/* Ensure readable caption text */
+.caption { color: #4b5563; }
+
+/* Prevent header or cards from using translucent backgrounds */
+.header, .wallet-hero, .profile-card { background: #ffffff; }
+
+/* Layout safety near tab bar */
+.page {
+  padding-bottom: calc(92px + 24px);
+}
+
+/* Tighten vertical rhythm on Wallet/Me */
+.card + .card { margin-top: 14px; }
+.section { margin: 16px 0; }
+
+/* Wallet specific rows */
+.wallet-earn-row .label { color: #374151; }
+.wallet-earn-row .value { color: #111827; font-weight: 600; }
+
+/* Me switches/labels */
+.me-toggle .label { color: #374151; }
+.me-section-title { color: #111827; font-weight: 700; }
+
+/* Remove any blur filters from legacy glass styles */
+.glass, .frost { backdrop-filter: none !important; background: #ffffff !important; }
+
+/* Responsive adjustments */
+@media (max-height: 750px) {
+  .wallet-balance { font-size: 22px; }
+  .btn { padding: 8px 16px; font-size: 13px; height: 36px; }
+  .card { padding: 10px 14px; margin: 8px; }
+  .page-scroll { max-height: calc(100vh - 100px); }
+}

@@ -1,5 +1,5 @@
 export async function initWalletPage(rootEl) {
-  console.log('WALLET.JS VERSION 2.0 - API CALL FIXED');
+  console.log('WALLET-NEW.JS VERSION 3.0 - FRESH FILE');
   rootEl.innerHTML = `
     <div style="padding: 20px; background: white; min-height: 400px;">
       <h1 style="color: #111827; font-size: 24px; margin-bottom: 20px;">Wallet</h1>
@@ -55,7 +55,7 @@ export async function initWalletPage(rootEl) {
         `).join('');
         earningsList.innerHTML = listItems;
       }
-      
+
       // Update history - find the withdrawals section and update it
       const history = data.history || [];
       const historyList = rootEl.querySelector('#wallet-withdrawals');
@@ -69,7 +69,7 @@ export async function initWalletPage(rootEl) {
         historyList.innerHTML = listItems;
       }
     } else {
-      throw new Error('Failed to load wallet data');
+      throw new Error('No data returned from API');
     }
   } catch (e) {
     console.error('Wallet API error:', e);

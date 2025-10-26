@@ -1,24 +1,28 @@
-:root{
-  --brand: #2563EB;           /* Medium-dark blue like in image */
-  --brand-ink: #1E2B5C;       /* deep ink for text on brand bg if needed */
-  --bolt: #FFD700;            /* ⚡ bright golden yellow */
-  --ink-900: #1E1E1E;         /* readable dark text */
-  --ink-700: #3B4456;
-  --ink-500: #9CA3AF;         /* inactive tab text */
-  --ink-300: #C9CFDC;         /* light stroke for outlines */
-  --surface: #FFFFFF;
-  --card: #FFFFFF;
-  --shadow-rgb: 0 0 0;        /* black shadows */
-  
-  /* Tabbar and FAB tokens */
-  --tabbar-height: 84px;         /* keep current height you're using */
-  --fab-size: 64px;              /* button diameter */
-  --fab-radius: 18px;            /* rounded square look */
-  --fab-shadow: 0 8px 22px rgba(0,0,0,.22);
-  /* overlap = how much the FAB "dips" into the tabbar area */
-  --fab-overlap: calc((var(--tabbar-height) - var(--fab-size)) / 2);
-  
-  --radius-xxl: 24px;
-  --radius-xl: 20px;
-  --shadow-soft: 0 10px 30px rgba(17,24,39,0.15);
+:root {
+  /* Ink / text scale (WCAG-friendly) */
+  --ink-900: #111827; /* primary titles */
+  --ink-800: #1f2937;
+  --ink-700: #374151;
+  --ink-600: #4b5563; /* secondary */
+  --ink-500: #6b7280; /* tertiary */
+  --ink-400: #9ca3af; /* captions */
+  --ink-300: #d1d5db;
+
+  /* Surfaces */
+  --surface: #ffffff;
+  --surface-muted: #f7f9fc;
+
+  /* Brand */
+  --brand: #3b5bfd;    /* NERAVA blue */
+  --brand-ink: #ffffff;
+  --accent-green: #22c55e;
+  --accent-blue-100: #e9efff;
+
+  /* FAB (Earn button) */
+  --fab-size: 56px;
+  --fab-radius: 18px;
+  --fab-overlap: 16px;
+  --fab-shadow: 0 4px 12px rgba(47,111,224,0.15);
+  --brand-blue: #2563EB;
+  --ink-weak: #e2e8f0;
 }

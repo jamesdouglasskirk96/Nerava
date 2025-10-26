@@ -8,6 +8,14 @@
   <meta http-equiv="Expires" content="0" />
   <title>Nerava</title>
 
+  <!-- PWA Meta Tags -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="white">
+  <meta name="apple-mobile-web-app-title" content="Nerava">
+  <link rel="apple-touch-icon" href="/assets/icon-512.png">
+  <meta name="theme-color" content="#1E40FF">
+
   <link rel="stylesheet" href="css/tokens.css?v=20250123" />
   <link rel="stylesheet" href="css/style.css?v=20250123" />
     <link rel="stylesheet" href="css/animations.css" />
@@ -204,7 +212,7 @@
           </header>
           <div class="sheet__body">
             <div class="card profile-card">
-              <img class="avatar" src="/app/img/avatar-demo.svg" alt="Profile photo"/>
+              <img class="avatar" src="/img/avatar-demo.svg" alt="Profile photo"/>
               <div class="profile-meta">
                 <div class="name">@you</div>
                 <div class="rep">Green Reputation: <strong id="repScore">—</strong></div>
@@ -260,7 +268,7 @@
     <div class="sheet">
       <div class="grip" role="presentation"></div>
       <section class="acct-hero">
-        <img class="avatar" src="/app/img/avatar-demo.svg" alt="User avatar"/>
+        <img class="avatar" src="/img/avatar-demo.svg" alt="User avatar"/>
         <div class="who">
           <h2>James Kirk</h2>
           <p class="sub">demo@nerava.app</p>
@@ -335,7 +343,7 @@
 
 
   <!-- Main app -->
-  <script type="module" src="/app/js/app.js" defer></script>
+  <script type="module" src="/js/app.js" defer></script>
   
 </body>
 </html>

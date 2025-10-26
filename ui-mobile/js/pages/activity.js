@@ -57,11 +57,10 @@ export async function initActivityPage(rootEl) {
   `;
 
           try {
-            const res = await fetch('/v1/activity', { credentials:'include' });
-            if (!res.ok) {
-              throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+            const data = await window.NeravaAPI.apiGet('/v1/activity');
+            if (!data) {
+              throw new Error('No data returned from API');
             }
-            const data = await res.json();
 
     // Reputation
     const { score, tier, streakDays } = data.reputation;

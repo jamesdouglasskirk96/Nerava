@@ -9,8 +9,7 @@ export async function initEarnPage(rootEl) {
 
   async function load() {
     try {
-      const res = await fetch('/v1/intent', { credentials: 'include' });
-      const items = res.ok ? await res.json() : [];
+      const items = await window.NeravaAPI.apiGet('/v1/intent') || [];
       ul.innerHTML = items.map(it => `
         <li class="intent">
           <div class="intent__main">
@@ -34,15 +33,11 @@ export async function initEarnPage(rootEl) {
       btn.addEventListener('click', async (e) => {
         const id = e.currentTarget.getAttribute('data-start');
         try {
-          const r = await fetch(`/v1/intent/${id}/start`, {
-            method: 'POST',
-            credentials: 'include'
-          });
-          if (!r.ok) {
+          const cfg = await window.NeravaAPI.apiPost(`/v1/intent/${id}/start`, '');
+          if (!cfg) {
             showToast('Cannot start');
             return;
           }
-          const cfg = await r.json();
           showToast('Started! Ready to verify location');
           load();
         } catch (e) {
@@ -56,11 +51,8 @@ export async function initEarnPage(rootEl) {
       btn.addEventListener('click', async (e) => {
         const id = e.currentTarget.getAttribute('data-notify');
         try {
-          const r = await fetch(`/v1/intent/${id}/notify`, {
-            method: 'POST',
-            credentials: 'include'
-          });
-          if (r.ok) {
+          const result = await window.NeravaAPI.apiPost(`/v1/intent/${id}/notify`, '');
+          if (result) {
             showToast('We will remind you 👍');
           } else {
             showToast('Notification setup failed');
