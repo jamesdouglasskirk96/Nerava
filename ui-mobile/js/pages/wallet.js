@@ -1,128 +1,78 @@
-// Wallet page logic
-import { apiGet, apiPost } from '../core/api.js';
-window.Nerava = window.Nerava || {};
-window.Nerava.pages = window.Nerava.pages || {};
-
-function updateWalletProgress() {
-  const progressEl = document.getElementById('walletProgress');
-  if (progressEl) {
-    const progress = progressEl.querySelector('.progress-bar');
-    if (progress) {
-      progress.style.width = '75%';
-    }
-  }
-}
-
-async function updateCommunityPool() {
-  if (!window.Nerava.core.api.canCallApi()) return;
-  
-  try {
-    const pool = await apiGet('/v1/social/pool');
-    const poolEl = document.getElementById('communityPool');
-    if (poolEl) {
-      const amount = window.Nerava.core.utils.formatCurrency(pool.total_community_cents);
-      poolEl.textContent = `Community shared this month: ${amount}`;
-    }
-  } catch (e) {
-    console.error('Failed to load community pool:', e);
-  }
-}
-
-async function loadPayoutHistory() {
-  if (!window.Nerava.core.api.canCallApi()) return;
-  
-  try {
-    const history = await apiGet('/v1/payouts/visa/history?user_id=current_user');
-    const historyEl = document.getElementById('payoutHistory');
-    if (historyEl && history.payouts) {
-      historyEl.innerHTML = history.payouts.map(payout => `
-        <div class="payout-item">
-          <div class="payout-info">
-            <div class="payout-amount">${window.Nerava.core.utils.formatCurrency(payout.amount_cents)}</div>
-            <div class="payout-card">****${payout.card_number}</div>
+export async function initWalletPage(rootEl) {
+  rootEl.innerHTML = `
+    <div class="page stack">
+      <!-- Balance / Actions -->
+      <section class="card card--xl">
+        <div class="row-between">
+          <div class="col">
+            <div class="kicker">Wallet</div>
+            <div class="amount-lg" id="w-balance">$19.00</div>
+            <div class="subtle" id="w-kicker">7-day charging streak 🔥</div>
           </div>
-          <div class="payout-status ${payout.status}">${payout.status}</div>
-          <div class="payout-date">${new Date(payout.created_at).toLocaleDateString()}</div>
+          <div class="pill" id="w-tier">Silver</div>
         </div>
-      `).join('');
-    }
-  } catch (e) {
-    console.error('Failed to load payout history:', e);
-  }
-}
+        <div class="grid-2" style="margin-top:16px">
+          <button class="btn btn-success btn-block" id="w-add">Add Funds</button>
+          <button class="btn btn-ghost btn-block" id="w-withdraw">Withdraw</button>
+        </div>
+      </section>
 
-async function initiateWithdrawal() {
-  if (!window.Nerava.core.api.canCallApi()) return;
-  
-  const amount = prompt('Enter withdrawal amount (in dollars):');
-  if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
-    alert('Please enter a valid amount');
-    return;
-  }
-  
-  const cardNumber = prompt('Enter card number (last 4 digits):');
-  if (!cardNumber || cardNumber.length !== 4) {
-    alert('Please enter the last 4 digits of your card');
-    return;
-  }
-  
-  try {
-    const result = await apiPost('/v1/payouts/visa/direct', {
-      method: 'POST',
-      body: JSON.stringify({
-        user_id: 'current_user',
-        amount_cents: Math.round(parseFloat(amount) * 100),
-        card_number: cardNumber
-      })
-    });
-    
-    if (result.success) {
-      alert(`Withdrawal initiated! Transaction ID: ${result.transaction_id}`);
-      loadPayoutHistory(); // Refresh history
-    } else {
-      alert(`Withdrawal failed: ${result.error || 'Unknown error'}`);
-    }
-  } catch (e) {
-    console.error('Failed to initiate withdrawal:', e);
-    alert('Withdrawal failed. Please try again.');
-  }
-}
+      <!-- Earnings breakdown -->
+      <section class="card card--pad">
+        <div class="row-between">
+          <div class="card-title">Ways you earned</div>
+          <div class="badge good" id="w-boost">+14% community boost</div>
+        </div>
+        <ul class="list" id="w-breakdown">
+          <!-- injected rows -->
+        </ul>
+      </section>
 
-async function loadRecentActivity() {
-  if (!window.Nerava.core.api.canCallApi()) return;
-  
-  try {
-    const exportData = await apiGet('/v1/demo/export');
-    const activityEl = document.getElementById('wallet-activity');
-    if (activityEl && exportData.events) {
-      const recentEvents = exportData.events.slice(0, 5);
-      activityEl.innerHTML = recentEvents.map(event => {
-        const amount = window.Nerava.core.utils.formatCurrency(event.amount_cents || 0);
-        const type = event.type === 'charge_verify' ? 'Verified charge' : 'Reward earned';
-        const location = event.meta?.location || 'Station ABC';
-        const kwh = event.meta?.kwh || '4.1';
-        return `<li><span>${type} • ${location} • ${kwh} kWh</span><strong>+${amount}</strong></li>`;
-      }).join('');
-    }
-  } catch (e) {
-    console.error('Failed to load recent activity:', e);
-  }
-}
+      <!-- Recent transactions -->
+      <section class="card card--pad">
+        <div class="row-between">
+          <div class="card-title">Recent withdrawals</div>
+          <div class="subtle" id="w-total">+$0.00</div>
+        </div>
+        <ul class="list" id="w-history"></ul>
+      </section>
+    </div>
+  `;
 
-function initWallet() {
-  updateWalletProgress();
-  updateCommunityPool();
-  loadPayoutHistory();
-  loadRecentActivity();
-  
-  // Wire up withdraw button
-  const withdrawBtn = document.getElementById('withdrawBtn');
-  if (withdrawBtn) {
-    withdrawBtn.addEventListener('click', initiateWithdrawal);
-  }
-}
+  // --- Demo/fallback data (replace with API later) ---
+  const breakdown = [
+    { icon:'⚡', label:'Off-peak charging', amount:'+ $8.25' },
+    { icon:'🏪', label:'Merchant perks',     amount:'+ $3.10' },
+    { icon:'👥', label:'Community boost',    amount:'+ $2.65' },
+  ];
+  const history = [
+    { who:'Green Hour', note:'You saved during Green Hour ☀️', amt:'+ $3.73' },
+    { who:'Starbucks',  note:'Co-fund perk ☕️',                amt:'+ $0.75' },
+    { who:'Off-peak',   note:'Award',                           amt:'+ $0.50' },
+  ];
 
-// Export init function
-window.Nerava.pages.wallet = {
-  init: initWallet
-};
+  document.querySelector('#w-breakdown').innerHTML = breakdown.map(x => `
+    <li class="li">
+      <div class="avatar">${x.icon}</div>
+      <div class="col">
+        <div>${x.label}</div>
+      </div>
+      <div class="badge">${x.amount}</div>
+    </li>
+  `).join('');
+
+  document.querySelector('#w-history').innerHTML = history.map(x => `
+    <li class="li">
+      <div class="avatar">💸</div>
+      <div class="col">
+        <div><strong>${x.who}</strong></div>
+        <div class="subtle">${x.note}</div>
+      </div>
+      <div class="badge">${x.amt}</div>
+    </li>
+  `).join('');
+
+  // Wire demo actions
+  document.querySelector('#w-add').addEventListener('click', () => alert('Add funds (coming soon)'));
+  document.querySelector('#w-withdraw').addEventListener('click', () => alert('Withdraw (coming soon)'));
+}

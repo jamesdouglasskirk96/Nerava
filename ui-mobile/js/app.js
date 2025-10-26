@@ -110,6 +110,8 @@ export function setTab(tab){
   if(tab==='explore') ensureMap();
   if(tab==='activity') initActivity();
   if(tab==='earn') initEarn();
+  if(tab==='wallet') initWallet();
+  if(tab==='profile') initMe();
 }
 
 // Wire tab buttons and FAB
@@ -335,6 +337,26 @@ async function initEarn() {
     const { initEarnPage } = await import('/app/js/pages/earn.js');
     await initEarnPage(earnEl);
     earnEl.dataset.initialized = 'true';
+  }
+}
+
+// Initialize wallet page when tab is switched
+async function initWallet() {
+  const walletEl = document.getElementById('page-wallet');
+  if (walletEl && !walletEl.dataset.initialized) {
+    const { initWalletPage } = await import('/app/js/pages/wallet.js');
+    await initWalletPage(walletEl);
+    walletEl.dataset.initialized = 'true';
+  }
+}
+
+// Initialize me page when tab is switched
+async function initMe() {
+  const meEl = document.getElementById('page-profile');
+  if (meEl && !meEl.dataset.initialized) {
+    const { initMePage } = await import('/app/js/pages/me.js');
+    await initMePage(meEl);
+    meEl.dataset.initialized = 'true';
   }
 }
 

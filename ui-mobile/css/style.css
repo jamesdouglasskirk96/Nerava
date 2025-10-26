@@ -1276,3 +1276,62 @@ overflow:hidden;
 .intent__cta{ display:flex; gap:8px; }
 .btn{ padding:8px 12px; border-radius:10px; border:1px solid #e2e8f0; background:#fff; }
 .btn-blue{ background:#3b5bfd; border-color:#3b5bfd; color:#fff; }
+
+/* ========== Wallet & Me ========== */
+.page { padding: 12px 12px 96px; }                 /* bottom room for tabbar */
+.stack { display: grid; gap: 12px; }
+
+.card {
+  background: #fff; border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.06);
+}
+.card--pad { padding: 16px; }
+.card--xl { padding: 20px; }
+.card-title { font-weight: 800; font-size: 18px; color: #0f172a; letter-spacing:.2px; }
+.kicker { color:#64748b; font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
+
+.row { display:flex; align-items:center; gap:12px; }
+.row-between { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.col { display:grid; gap:4px; }
+
+.amount-lg { font-size: 36px; font-weight: 800; color:#1e293b; line-height:1.05; }
+.subtle { color:#64748b; }
+
+.btn {
+  display:inline-flex; align-items:center; justify-content:center;
+  height:44px; padding:0 16px; border-radius:12px; font-weight:700;
+  border:1px solid transparent; cursor:pointer; user-select:none;
+}
+.btn-primary { background:#3b5bfd; color:#fff; }
+.btn-success { background:#30b566; color:#fff; }
+.btn-ghost   { background:#f8fafc; color:#0f172a; border-color:#e2e8f0; }
+.btn-block { width:100%; }
+
+.pill {
+  display:inline-flex; align-items:center; gap:8px; height:28px;
+  padding:0 10px; border-radius:999px; font-weight:700; font-size:12px;
+  background:#eef2ff; color:#3b5bfd;
+  border:1px solid #e5e7eb;
+}
+
+.list { list-style:none; margin:0; padding:0; }
+.li {
+  display:flex; align-items:center; gap:12px;
+  padding:14px 0; border-top:1px solid #f1f5f9;
+}
+.li:first-child { border-top:none; }
+.li .avatar {
+  width:36px; height:36px; border-radius:8px; background:#eef2ff;
+  display:flex; align-items:center; justify-content:center;
+  color:#3b5bfd; font-weight:800;
+}
+
+.badge {
+  padding:6px 10px; border-radius:999px; font-weight:700; font-size:12px;
+  background:#f1f5f9; color:#0f172a;
+}
+.badge.good { background:#ecfdf5; color:#065f46; }
+.badge.warn { background:#fff7ed; color:#9a3412; }
+
+.grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.hr { height:1px; background:#f1f5f9; margin:8px 0; }
