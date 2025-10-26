@@ -20,8 +20,8 @@ app.include_router(earn)
 app.include_router(awm)
 app.include_router(dev)
 
-# Serve static files from the ui-mobile directory
-app.mount("/app", StaticFiles(directory="../../ui-mobile", html=True), name="static")
+# Serve static files from the ui-mobile directory at root
+app.mount("/", StaticFiles(directory="../../ui-mobile", html=True), name="static")
 
 @app.get("/health") 
 def health(): return {"ok": True}
