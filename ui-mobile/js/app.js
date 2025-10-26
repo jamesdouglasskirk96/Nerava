@@ -110,8 +110,14 @@ export function setTab(tab){
   if(tab==='explore') ensureMap();
   if(tab==='activity') initActivity();
   if(tab==='earn') initEarn();
-  if(tab==='wallet') initWallet();
-  if(tab==='profile') initMe();
+  if(tab==='wallet') {
+    console.log('Calling initWallet...');
+    initWallet();
+  }
+  if(tab==='profile') {
+    console.log('Calling initMe...');
+    initMe();
+  }
 }
 
 // Wire tab buttons and FAB
@@ -343,20 +349,28 @@ async function initEarn() {
 // Initialize wallet page when tab is switched
 async function initWallet() {
   const walletEl = document.getElementById('page-wallet');
+  console.log('initWallet called, walletEl:', walletEl);
   if (walletEl && !walletEl.dataset.initialized) {
+    console.log('Initializing wallet page...');
     const { initWalletPage } = await import('/app/js/pages/wallet.js');
     await initWalletPage(walletEl);
     walletEl.dataset.initialized = 'true';
+    console.log('Wallet page initialized');
   }
 }
 
 // Initialize me page when tab is switched
 async function initMe() {
   const meEl = document.getElementById('page-profile');
+  console.log('initMe called, meEl:', meEl);
   if (meEl && !meEl.dataset.initialized) {
+    console.log('Initializing me page...');
+    // Remove hidden class first
+    meEl.classList.remove('hidden');
     const { initMePage } = await import('/app/js/pages/me.js');
     await initMePage(meEl);
     meEl.dataset.initialized = 'true';
+    console.log('Me page initialized');
   }
 }
 
