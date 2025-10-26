@@ -33,14 +33,12 @@ async def get_activity_data(db: Session = Depends(get_db)):
     # Get earnings from monthly table (fallback to demo data)
     earn_query = text("""
         SELECT fem.payer_user_id AS user_id,
-               COALESCE(u.handle,'member') AS handle,
-               u.avatar_url,
-               COALESCE(ur.tier,'Bronze') AS tier,
+               'member' AS handle,
+               NULL AS avatar_url,
+               'Bronze' AS tier,
                fem.amount_cents,
                fem.context
         FROM follow_earnings_monthly fem
-        LEFT JOIN users u ON u.id = fem.payer_user_id
-        LEFT JOIN user_reputation ur ON ur.user_id = fem.payer_user_id
         WHERE fem.month_yyyymm = :month AND fem.receiver_user_id = :user_id
         ORDER BY fem.amount_cents DESC
     """)
