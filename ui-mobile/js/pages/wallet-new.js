@@ -1,7 +1,18 @@
 export async function initWalletPage(rootEl) {
   console.log('WALLET-NEW.JS VERSION 3.0 - FRESH FILE');
+  
+  // Check if this is a payment success redirect
+  const urlParams = new URLSearchParams(window.location.search);
+  const paidParam = urlParams.get('paid');
+  const isPaymentSuccess = paidParam !== null;
+  
   rootEl.innerHTML = `
     <div style="padding: 20px; background: white; min-height: 400px;">
+      ${isPaymentSuccess ? `
+        <div style="background: #dcfce7; border: 1px solid #22c55e; color: #166534; padding: 12px; border-radius: 8px; margin-bottom: 20px; font-weight: 600;">
+          🎉 Payment completed! You earned rewards for this purchase.
+        </div>
+      ` : ''}
       <h1 style="color: #111827; font-size: 24px; margin-bottom: 20px;">Wallet</h1>
       <div style="background: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
         <div style="font-size: 32px; font-weight: bold; color: #111827; margin-bottom: 8px;" id="w-balance">$3.98</div>

@@ -1,0 +1,5 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" rx="64" fill="#3B82F6"/>
+  <path d="M256 100 L320 100 L320 200 L380 200 L380 300 L320 300 L320 400 L256 400 L256 300 L196 300 L196 200 L256 200 Z" fill="white"/>
+  <text x="256" y="480" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="42" font-weight="bold">NERAVA</text>
+</svg>

@@ -11,6 +11,16 @@ import { ensureMap, drawRoute, clearRoute, getMap } from './core/map.js';
 
 window.Nerava = window.Nerava || {};
 
+// Toast helper function
+function showToast(message) {
+  const toast = document.createElement('div');
+  toast.style.cssText = 'position:fixed;left:50%;bottom:100px;transform:translateX(-50%);background:#111;color:#fff;padding:10px 14px;border-radius:12px;z-index:9999;font-weight:700';
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  setTimeout(() => { toast.style.opacity = 1; }, 10);
+  setTimeout(() => { toast.style.opacity = 0; toast.addEventListener('transitionend', () => toast.remove()); }, 3000);
+}
+
 // === SSO → prefs → wallet pre-balance → push banner flow ===
 function getUser(){ return localStorage.NERAVA_USER || null; }
 function setUser(email){ localStorage.NERAVA_USER = email; const b = document.getElementById('auth-badge'); if(b) b.textContent=email; }
@@ -165,6 +175,17 @@ async function initApp() {
 
 // Start when DOM is ready
 document.addEventListener('DOMContentLoaded', async ()=>{ 
+  // Check for payment success in URL
+  const urlParams = new URLSearchParams(window.location.search);
+  const paidParam = urlParams.get('paid');
+  if (paidParam) {
+    // Show payment success message
+    showToast('🎉 Payment completed! Check your wallet for rewards.');
+    // Clean up URL
+    const newUrl = window.location.pathname + window.location.hash;
+    window.history.replaceState({}, document.title, newUrl);
+  }
+
   // Derive brand color from logo if present
   try {
     const logo = document.querySelector('#logo, .brand-logo, header .logo, .topbar .logo');
