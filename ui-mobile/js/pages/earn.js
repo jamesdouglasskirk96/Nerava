@@ -9,13 +9,13 @@ export async function initEarnPage(rootEl) {
 
   async function load() {
     try {
-      const res = await fetch('/v1/intents/me', { credentials: 'include' });
+      const res = await fetch('/v1/intent', { credentials: 'include' });
       const items = res.ok ? await res.json() : [];
       ul.innerHTML = items.map(it => `
         <li class="intent">
           <div class="intent__main">
-            <div class="title">${it.merchant_name || it.station_name}</div>
-            <div class="sub">${it.perk_title || ''} • ${it.address || ''}</div>
+            <div class="title">${it.title}</div>
+            <div class="sub">${it.subtitle}</div>
           </div>
           <div class="intent__cta">
             <button data-start="${it.id}" class="btn btn-blue">Start</button>
@@ -34,8 +34,8 @@ export async function initEarnPage(rootEl) {
       btn.addEventListener('click', async (e) => {
         const id = e.currentTarget.getAttribute('data-start');
         try {
-          const r = await fetch(`/v1/intents/${id}/start`, {
-            method: 'PATCH',
+          const r = await fetch(`/v1/intent/${id}/start`, {
+            method: 'POST',
             credentials: 'include'
           });
           if (!r.ok) {
@@ -43,27 +43,8 @@ export async function initEarnPage(rootEl) {
             return;
           }
           const cfg = await r.json();
-          
-          // Quick geo read
-          if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(async pos => {
-              const body = {
-                lat: pos.coords.latitude,
-                lng: pos.coords.longitude
-              };
-              const vr = await fetch(`/v1/intents/${id}/verify-geo`, {
-                method: 'POST',
-                credentials: 'include',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-              });
-              const vj = await vr.json();
-              showToast(vj.pass ? 'Verified ✅' : 'Not in both zones yet');
-              load();
-            }, () => showToast('Location denied'));
-          } else {
-            showToast('Location unavailable');
-          }
+          showToast('Started! Ready to verify location');
+          load();
         } catch (e) {
           console.error('Start failed:', e);
           showToast('Start failed');
@@ -72,7 +53,23 @@ export async function initEarnPage(rootEl) {
     });
     
     ul.querySelectorAll('[data-notify]').forEach(btn => {
-      btn.addEventListener('click', () => showToast('We will remind you 👍'));
+      btn.addEventListener('click', async (e) => {
+        const id = e.currentTarget.getAttribute('data-notify');
+        try {
+          const r = await fetch(`/v1/intent/${id}/notify`, {
+            method: 'POST',
+            credentials: 'include'
+          });
+          if (r.ok) {
+            showToast('We will remind you 👍');
+          } else {
+            showToast('Notification setup failed');
+          }
+        } catch (e) {
+          console.error('Notify failed:', e);
+          showToast('Notification setup failed');
+        }
+      });
     });
   }
 

@@ -155,19 +155,17 @@ function _bindPerk(deal=_fallbackDeal) {
             cta.classList.add('btn', 'btn-primary', 'btn-wide');
             cta.onclick = async () => {
               try {
+                // Get current perk data
+                const perk = await apiGet("/v1/deals/nearby").catch(() => null);
                 const payload = {
-                  stationId: 'TESLA_AUS_001',
-                  stationName: 'Tesla Supercharger – Domain',
-                  merchantName: 'Starbucks',
-                  perkTitle: 'Free coffee 2–4pm',
-                  address: '310 E 5th St, Austin, TX',
-                  etaMinutes: 15,
-                  merchantLat: 30.2653, 
-                  merchantLng: -97.7393,
-                  stationLat: 30.4021,  
-                  stationLng: -97.7266
+                  station_id: perk?.station_id || 'station-5th-st',
+                  station_name: perk?.station_name || 'Starbucks 5th St',
+                  merchant: perk?.merchant || 'Starbucks',
+                  address: perk?.address || '310 E 5th St, Austin, TX',
+                  window_text: perk?.window_text || 'Free coffee 2–4pm',
+                  distance_text: perk?.distance_text || '3 min walk'
                 };
-                const r = await fetch('/v1/intents', {
+                const r = await fetch('/v1/intent', {
                   method: 'POST',
                   headers: {'Content-Type': 'application/json'},
                   credentials: 'include',
@@ -177,7 +175,7 @@ function _bindPerk(deal=_fallbackDeal) {
                   console.error('Save intent failed:', r.status, r.statusText);
                   throw new Error('save_failed');
                 }
-                showToast('Saved to Earn');
+                showToast('Saved to Earn → Soon to be claimed');
                 setTab('earn');
               } catch (e) { 
                 console.error(e); 
@@ -202,14 +200,23 @@ export async function initExplore(){
   setTimeout(() => map.invalidateSize(), 0);
 
   // resolve chargers from API, then fallback
-  const around = await tryGet('/v1/hubs/available');   // OPTIONAL endpoint
-  _chargers = Array.isArray(around) && around.length ? around.map(r => ({
-    id: r.id, name: r.name, addr: r.address, lat: r.lat, lng: r.lng,
-    merchant: r.merchant || { name: 'Starbucks', logo: 'https://logo.clearbit.com/starbucks.com' },
-    perk: r.perk || 'Free coffee 2–4pm • 3 min walk'
-  })) : CHARGER_FALLBACK.slice();
+  const rec = await tryGet('/v1/hubs/recommend');
+  if (rec) {
+    _chargers = [{
+      id: 'hub_recommended',
+      name: `${rec.network?.name || 'Tesla'} Supercharger`,
+      addr: 'Recommended Location',
+      lat: Number(rec.dest?.lat || 30.401),
+      lng: Number(rec.dest?.lng || -97.725),
+      merchant: { name: 'Starbucks', logo: 'https://logo.clearbit.com/starbucks.com' },
+      perk: 'Free coffee 2–4pm • 3 min walk',
+      eta_min: rec.eta_min || 15
+    }];
+  } else {
+    _chargers = CHARGER_FALLBACK.slice();
+  }
 
-  console.log(`Loaded ${_chargers.length} chargers (${around ? 'API' : 'fallback'})`);
+  console.log(`Loaded ${_chargers.length} chargers (${rec ? 'API' : 'fallback'})`);
 
   // initial selection
   await selectCharger(0);
@@ -234,12 +241,20 @@ export async function initExplore(){
 
   // Populate perk card with API data or fallback
   try {
-    const [hub, deals] = await Promise.all([
-      apiGet("/v1/hubs/recommend").catch(()=>null),
-      apiGet("/v1/deals/nearby").catch(()=>null)
-    ]);
-    const deal = deals?.[0] || _fallbackDeal;
-    _bindPerk(deal);
+    const perk = await apiGet("/v1/deals/nearby");
+    if (perk) {
+      const deal = {
+        merchant: {
+          name: perk.merchant,
+          address: perk.address,
+          logo: perk.logo
+        },
+        blurb: `${perk.window_text} • ${perk.distance_text}`
+      };
+      _bindPerk(deal);
+    } else {
+      _bindPerk(_fallbackDeal);
+    }
   } catch {
     _bindPerk(_fallbackDeal);
   }

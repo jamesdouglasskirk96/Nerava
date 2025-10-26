@@ -60,10 +60,68 @@ export async function initMePage(rootEl) {
     </div>
   `;
 
-  // Demo handlers
+  // Load profile data from API
+  try {
+    const res = await fetch('/v1/profile/me', { credentials:'include' });
+    if (res.ok) {
+      const data = await res.json();
+      
+      // Update profile info
+      document.querySelector('#me-rep').textContent = `Energy Reputation — Silver • ${data.followers} followers · ${data.following} following`;
+      
+      // Update settings
+      const settings = data.settings || {};
+      document.querySelector('#n-green').checked = settings.greenAlerts !== false;
+      document.querySelector('#n-perk').checked = settings.perkAlerts !== false;
+      
+      // Update vehicle
+      if (settings.vehicle) {
+        document.querySelector('#me-vehicle-hint').textContent = `${settings.vehicle.model} • ${settings.vehicle.range} mi`;
+        document.querySelector('#me-edit-vehicle').style.display = 'inline-flex';
+      }
+    }
+  } catch (e) {
+    console.error('Profile API error:', e);
+  }
+
+  // Wire handlers
   document.querySelector('#me-prefs').addEventListener('click', () => alert('Preferences (coming soon)'));
-  document.querySelector('#me-add-vehicle').addEventListener('click', () => {
-    document.querySelector('#me-vehicle-hint').textContent = 'Tesla Model 3 • 272 mi';
-    document.querySelector('#me-edit-vehicle').style.display = 'inline-flex';
+  document.querySelector('#me-add-vehicle').addEventListener('click', async () => {
+    const vehicle = { model: 'Tesla Model 3', range: '272' };
+    try {
+      const res = await fetch('/v1/profile/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ vehicle })
+      });
+      if (res.ok) {
+        document.querySelector('#me-vehicle-hint').textContent = `${vehicle.model} • ${vehicle.range} mi`;
+        document.querySelector('#me-edit-vehicle').style.display = 'inline-flex';
+      }
+    } catch (e) {
+      console.error('Save vehicle failed:', e);
+    }
   });
+  
+  // Save settings when toggles change
+  document.querySelector('#n-green').addEventListener('change', saveSettings);
+  document.querySelector('#n-perk').addEventListener('change', saveSettings);
+  
+  async function saveSettings() {
+    try {
+      const settings = {
+        greenAlerts: document.querySelector('#n-green').checked,
+        perkAlerts: document.querySelector('#n-perk').checked
+      };
+      await fetch('/v1/profile/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(settings)
+      });
+    } catch (e) {
+      console.error('Save settings failed:', e);
+    }
+  }
 }

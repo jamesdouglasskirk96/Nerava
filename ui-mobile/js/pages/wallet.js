@@ -39,38 +39,78 @@ export async function initWalletPage(rootEl) {
     </div>
   `;
 
-  // --- Demo/fallback data (replace with API later) ---
-  const breakdown = [
-    { icon:'⚡', label:'Off-peak charging', amount:'+ $8.25' },
-    { icon:'🏪', label:'Merchant perks',     amount:'+ $3.10' },
-    { icon:'👥', label:'Community boost',    amount:'+ $2.65' },
-  ];
-  const history = [
-    { who:'Green Hour', note:'You saved during Green Hour ☀️', amt:'+ $3.73' },
-    { who:'Starbucks',  note:'Co-fund perk ☕️',                amt:'+ $0.75' },
-    { who:'Off-peak',   note:'Award',                           amt:'+ $0.50' },
-  ];
+  // Load wallet data from API
+  try {
+    const res = await fetch('/v1/wallet/summary', { credentials:'include' });
+    if (res.ok) {
+      const data = await res.json();
+      
+      // Update balance
+      const balance = (data.balanceCents / 100).toFixed(2);
+      document.querySelector('#w-balance').textContent = `$${balance}`;
+      
+      // Update breakdown
+      const breakdown = data.breakdown || [];
+      document.querySelector('#w-breakdown').innerHTML = breakdown.map(x => `
+        <li class="li">
+          <div class="avatar">${x.type === 'earn' ? '⚡' : '💸'}</div>
+          <div class="col">
+            <div>${x.title}</div>
+          </div>
+          <div class="badge">${x.type === 'earn' ? '+' : '-'} $${(x.amountCents / 100).toFixed(2)}</div>
+        </li>
+      `).join('');
+      
+      // Update history
+      const history = data.history || [];
+      document.querySelector('#w-history').innerHTML = history.map(x => `
+        <li class="li">
+          <div class="avatar">💸</div>
+          <div class="col">
+            <div><strong>${x.title}</strong></div>
+            <div class="subtle">${x.type === 'earn' ? 'Earned' : 'Withdrawn'}</div>
+          </div>
+          <div class="badge">${x.type === 'earn' ? '+' : '-'} $${(x.amountCents / 100).toFixed(2)}</div>
+        </li>
+      `).join('');
+    } else {
+      throw new Error('Failed to load wallet data');
+    }
+  } catch (e) {
+    console.error('Wallet API error:', e);
+    // Fallback to demo data
+    const breakdown = [
+      { icon:'⚡', label:'Off-peak charging', amount:'+ $8.25' },
+      { icon:'🏪', label:'Merchant perks',     amount:'+ $3.10' },
+      { icon:'👥', label:'Community boost',    amount:'+ $2.65' },
+    ];
+    const history = [
+      { who:'Green Hour', note:'You saved during Green Hour ☀️', amt:'+ $3.73' },
+      { who:'Starbucks',  note:'Co-fund perk ☕️',                amt:'+ $0.75' },
+      { who:'Off-peak',   note:'Award',                           amt:'+ $0.50' },
+    ];
 
-  document.querySelector('#w-breakdown').innerHTML = breakdown.map(x => `
-    <li class="li">
-      <div class="avatar">${x.icon}</div>
-      <div class="col">
-        <div>${x.label}</div>
-      </div>
-      <div class="badge">${x.amount}</div>
-    </li>
-  `).join('');
+    document.querySelector('#w-breakdown').innerHTML = breakdown.map(x => `
+      <li class="li">
+        <div class="avatar">${x.icon}</div>
+        <div class="col">
+          <div>${x.label}</div>
+        </div>
+        <div class="badge">${x.amount}</div>
+      </li>
+    `).join('');
 
-  document.querySelector('#w-history').innerHTML = history.map(x => `
-    <li class="li">
-      <div class="avatar">💸</div>
-      <div class="col">
-        <div><strong>${x.who}</strong></div>
-        <div class="subtle">${x.note}</div>
-      </div>
-      <div class="badge">${x.amt}</div>
-    </li>
-  `).join('');
+    document.querySelector('#w-history').innerHTML = history.map(x => `
+      <li class="li">
+        <div class="avatar">💸</div>
+        <div class="col">
+          <div><strong>${x.who}</strong></div>
+          <div class="subtle">${x.note}</div>
+        </div>
+        <div class="badge">${x.amt}</div>
+      </li>
+    `).join('');
+  }
 
   // Wire demo actions
   document.querySelector('#w-add').addEventListener('click', () => alert('Add funds (coming soon)'));

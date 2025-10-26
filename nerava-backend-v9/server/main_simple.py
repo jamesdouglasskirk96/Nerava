@@ -1,0 +1,27 @@
+# server/main_simple.py
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from src.db import Base, engine
+from src.seed import run as seed_run
+from src.routes_explore import router as explore
+from src.routes_earn import router as earn
+from src.routes_activity_wallet_me import router as awm
+from src.routes_dev import router as dev
+
+app = FastAPI(title="Nerava API")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+Base.metadata.create_all(bind=engine)
+seed_run()
+
+app.include_router(explore)
+app.include_router(earn)
+app.include_router(awm)
+app.include_router(dev)
+
+# Serve static files from the ui-mobile directory
+app.mount("/app", StaticFiles(directory="../../ui-mobile", html=True), name="static")
+
+@app.get("/health") 
+def health(): return {"ok": True}
