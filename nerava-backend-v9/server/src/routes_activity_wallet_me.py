@@ -29,10 +29,34 @@ def activity(user_id: str = Depends(current_user_id), db: Session = Depends(get_
 
 @router.get("/wallet/summary")
 def wallet_summary(user_id: str = Depends(current_user_id), db: Session = Depends(get_db)):
-    rows = db.query(WalletEvent).filter(WalletEvent.user_id==user_id).order_by(WalletEvent.created_at.desc()).all()
-    balance = sum(r.amount_cents if r.type=="earn" else -r.amount_cents for r in rows)
-    breakdown = [ {"title":r.title, "amountCents": r.amount_cents, "type": r.type} for r in rows[:5] ]
-    return {"balanceCents": balance, "breakdown": breakdown, "history": breakdown}
+    """Simplified wallet summary"""
+    try:
+        # Get wallet events
+        wallet_rows = db.query(WalletEvent).filter(WalletEvent.user_id==user_id).order_by(WalletEvent.created_at.desc()).all()
+        
+        # Calculate balance from wallet events only
+        balance = sum(r.amount_cents if r.type=="earn" else -r.amount_cents for r in wallet_rows)
+        
+        # Simple breakdown
+        breakdown = [ {"title":r.title, "amountCents": r.amount_cents, "type": r.type} for r in wallet_rows[:5] ]
+        
+        return {"balanceCents": balance, "breakdown": breakdown, "history": breakdown}
+        
+    except Exception as e:
+        print(f"Wallet summary error: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"balanceCents": 0, "breakdown": [], "history": []}
+
+@router.get("/wallet/test")
+def wallet_test(user_id: str = Depends(current_user_id), db: Session = Depends(get_db)):
+    """Minimal wallet test"""
+    try:
+        # Test basic query
+        count = db.query(WalletEvent).count()
+        return {"status": "success", "wallet_events_count": count}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
 
 @router.get("/profile/me")
 def profile_me(user_id: str = Depends(current_user_id), db: Session = Depends(get_db)):

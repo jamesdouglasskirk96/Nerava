@@ -157,29 +157,26 @@ function _bindPerk(deal=_fallbackDeal) {
               try {
                 // Get current perk data
                 const perk = await apiGet("/v1/deals/nearby").catch(() => null);
-                const payload = {
-                  station_id: perk?.station_id || 'station-5th-st',
-                  station_name: perk?.station_name || 'Starbucks 5th St',
-                  merchant: perk?.merchant || 'Starbucks',
-                  address: perk?.address || '310 E 5th St, Austin, TX',
-                  window_text: perk?.window_text || 'Free coffee 2–4pm',
-                  distance_text: perk?.distance_text || '3 min walk'
-                };
-                const r = await fetch('/v1/intent', {
-                  method: 'POST',
-                  headers: {'Content-Type': 'application/json'},
-                  credentials: 'include',
-                  body: JSON.stringify(payload)
-                });
-                if (!r.ok) {
-                  console.error('Save intent failed:', r.status, r.statusText);
-                  throw new Error('save_failed');
+                const merchantId = perk?.merchant?.toLowerCase() || 'starbucks';
+                const amountCents = 500; // $5.00 for demo
+                const note = `Perk @ ${perk?.merchant || 'Starbucks'}`;
+                
+                // Create Square checkout
+                const response = await window.NeravaAPI.apiPost('/v1/square/checkout', JSON.stringify({
+                  merchantId,
+                  amountCents,
+                  note
+                }), { 'Content-Type': 'application/json' });
+                
+                if (response && response.url) {
+                  // Redirect to Square checkout
+                  window.location.href = response.url;
+                } else {
+                  showToast('Could not create checkout link');
                 }
-                showToast('Saved to Earn → Soon to be claimed');
-                setTab('earn');
               } catch (e) { 
-                console.error(e); 
-                showToast('Could not save'); 
+                console.error('Square checkout failed:', e); 
+                showToast('Payment error. Try again.'); 
               }
             };
           }
