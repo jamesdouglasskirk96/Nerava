@@ -118,9 +118,8 @@ document.querySelectorAll('.tabbar .tab').forEach(t=>{
 });
 
 document.getElementById('fab-earn')?.addEventListener('click', ()=> {
-  // open earn flow; for now just navigate to wallet to show progress
-  setTab('wallet');
-  setTimeout(()=>setTab('explore'), 0);
+  // open earn flow
+  setTab('earn');
 });
 
 // Initialize app
