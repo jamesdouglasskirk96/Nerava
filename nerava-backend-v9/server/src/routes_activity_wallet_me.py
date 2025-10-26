@@ -154,6 +154,14 @@ def wallet_summary(user_id: str = Depends(current_user_id), db: Session = Depend
             print(f"Reward query error: {e}")
             rewards = []
         
+        # Calculate available credit (rewards + original balance, ignoring payments)
+        available_credit = sum(r.amount_cents if r.type=="earn" else -r.amount_cents for r in wallet_rows)
+        for reward in rewards:
+            available_credit += reward[1]
+        
+        # Calculate total spent
+        total_spent = sum(payment[1] for payment in payments)
+        
         # Build breakdown
         breakdown = []
         
@@ -184,7 +192,13 @@ def wallet_summary(user_id: str = Depends(current_user_id), db: Session = Depend
         # Sort by created_at (approximate - using order from queries)
         breakdown = breakdown[:10]  # Limit to 10 items
         
-        return {"balanceCents": balance, "breakdown": breakdown, "history": breakdown}
+        return {
+            "balanceCents": balance, 
+            "availableCreditCents": available_credit,
+            "totalSpentCents": total_spent,
+            "breakdown": breakdown, 
+            "history": breakdown
+        }
         
     except Exception as e:
         import traceback
