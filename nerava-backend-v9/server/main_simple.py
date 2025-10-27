@@ -7,14 +7,27 @@ from src.seed import run as seed_run
 from sqlalchemy import text
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 from src.routes_explore import router as explore
 from src.routes_earn import router as earn
 from src.routes_activity_wallet_me import router as awm
 from src.routes_dev import router as dev
 from src.routes_square import router as square
 
+# Load environment variables from .env file
+load_dotenv()
+
 app = FastAPI(title="Nerava API")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# CORS configuration from environment
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
 
 Base.metadata.create_all(bind=engine)
 

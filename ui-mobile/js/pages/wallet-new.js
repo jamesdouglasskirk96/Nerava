@@ -49,10 +49,20 @@ export async function initWalletPage(rootEl) {
     console.log('Wallet: API response:', data);
     if (data) {
       
-      // Update balance
-      const balance = (data.balanceCents / 100).toFixed(2);
+      // Update balance - show available credit instead of negative balance
+      const availableCredit = data.availableCreditCents || data.balanceCents;
+      const balance = (availableCredit / 100).toFixed(2);
       const balanceEl = document.querySelector('#w-balance');
-      if (balanceEl) balanceEl.textContent = `$${balance}`;
+      if (balanceEl) {
+        balanceEl.textContent = `$${balance}`;
+        // Add subtitle if there's a negative net balance
+        if (data.balanceCents < 0) {
+          const subtitle = document.createElement('div');
+          subtitle.style.cssText = 'font-size: 12px; color: #6b7280; margin-top: 4px;';
+          subtitle.textContent = `Net: $${(data.balanceCents / 100).toFixed(2)} (after payments)`;
+          balanceEl.parentNode.insertBefore(subtitle, balanceEl.nextSibling);
+        }
+      }
       
       // Update breakdown - find the earnings section and update it
       const breakdown = data.breakdown || [];

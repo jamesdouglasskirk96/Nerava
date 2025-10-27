@@ -1,8 +1,11 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import uuid
 import json
+import hashlib
+import base64
+import hmac
 from typing import Dict, Any
 from .db import get_db
 from .deps import current_user_id
@@ -10,6 +13,29 @@ from .square_client import square
 from .config import config
 
 router = APIRouter(prefix="/v1/square")
+
+def verify_square_signature(body: bytes, signature: str) -> bool:
+    """Verify Square webhook signature per Square docs"""
+    if config.DEV_WEBHOOK_BYPASS or config.SQUARE_WEBHOOK_SIGNATURE_KEY == 'REPLACE_ME':
+        return True  # Bypass in dev mode
+    
+    try:
+        # Decode signature from base64
+        expected_signature = base64.b64decode(signature)
+        
+        # Create HMAC signature from body
+        signature_key_bytes = config.SQUARE_WEBHOOK_SIGNATURE_KEY.encode('utf-8')
+        calculated_signature = hmac.new(
+            signature_key_bytes,
+            body,
+            hashlib.sha256
+        ).digest()
+        
+        # Compare signatures using constant-time comparison
+        return hmac.compare_digest(expected_signature, calculated_signature)
+    except Exception as e:
+        print(f"Signature verification error: {e}")
+        return False
 
 @router.post("/checkout")
 async def create_checkout(
@@ -67,20 +93,29 @@ async def create_checkout(
     }
 
 @router.post("/webhook")
-async def square_webhook(
-    request_data: Dict[str, Any],
-    db: Session = Depends(get_db)
-):
-    """Handle Square webhook events"""
+async def square_webhook(request: Request, db: Session = Depends(get_db)):
+    """Handle Square webhook events with signature verification and idempotency"""
     try:
-        event_type = request_data.get('type')
+        # Get raw body for signature verification
+        body = await request.body()
+        
+        # Verify signature (bypassed in dev mode)
+        signature = request.headers.get('X-Square-Signature', '')
+        if not verify_square_signature(body, signature):
+            raise HTTPException(status_code=401, detail="Invalid signature")
+        
+        # Parse webhook event
+        event = json.loads(body.decode('utf-8'))
+        event_type = event.get('type')
+        
         if event_type != 'payment.updated':
             return {'status': 'ignored'}
         
-        payment_data = request_data.get('data', {}).get('object', {}).get('payment', {})
+        payment_data = event.get('data', {}).get('object', {}).get('payment', {})
         if not payment_data:
             return {'status': 'ignored'}
         
+        # Extract payment details
         provider_payment_id = payment_data.get('id')
         amount_cents = int(payment_data.get('amountMoney', {}).get('amount', 0))
         status = payment_data.get('status')
@@ -89,10 +124,11 @@ async def square_webhook(
         nerava_id = metadata.get('nerava_payment_id')
         user_id = metadata.get('user_id')
         
-        if not nerava_id:
+        if not nerava_id or not user_id:
+            print(f"Missing metadata: nerava_id={nerava_id}, user_id={user_id}")
             return {'status': 'ignored'}
         
-        # Update payment status
+        # Upsert payment status
         db.execute(text("""
             UPDATE payments
             SET status = :status, provider_payment_id = :provider_payment_id
@@ -102,21 +138,47 @@ async def square_webhook(
             'provider_payment_id': provider_payment_id,
             'id': nerava_id
         })
+        db.flush()  # Ensure payment update is committed before reward check
         
-        # If completed, add reward event
-        if status == 'COMPLETED' and user_id:
+        # If completed, add reward event with idempotency
+        if status == 'COMPLETED':
+            # Check if reward already exists for this payment
+            existing_reward = db.execute(text("""
+                SELECT id FROM wallet_events 
+                WHERE user_id = :user_id 
+                AND source = 'merchant_reward'
+                AND json_extract(meta, '$.payment_id') = :payment_id
+                LIMIT 1
+            """), {
+                'user_id': user_id,
+                'payment_id': nerava_id
+            }).fetchone()
+            
+            if existing_reward:
+                print(f"Reward already exists for payment {nerava_id}")
+                db.commit()
+                return {'status': 'success', 'message': 'already_processed'}
+            
+            # Insert reward event
             reward_amount = int(amount_cents * 0.2)  # 20% reward
             reward_id = str(uuid.uuid4())
             
+            reward_meta = json.dumps({
+                'payment_id': nerava_id,
+                'provider_payment_id': provider_payment_id,
+                'amount_paid_cents': amount_cents
+            })
+            
             db.execute(text("""
-                INSERT INTO wallet_events (id, user_id, kind, source, amount_cents)
-                VALUES (:id, :user_id, :kind, :source, :amount_cents)
+                INSERT INTO wallet_events (id, user_id, kind, source, amount_cents, meta)
+                VALUES (:id, :user_id, :kind, :source, :amount_cents, :meta)
             """), {
                 'id': reward_id,
                 'user_id': user_id,
                 'kind': 'credit',
                 'source': 'merchant_reward',
-                'amount_cents': reward_amount
+                'amount_cents': reward_amount,
+                'meta': reward_meta
             })
         
         db.commit()
@@ -124,7 +186,9 @@ async def square_webhook(
         
     except Exception as e:
         print(f"Square webhook error: {e}")
-        return {'status': 'error'}
+        import traceback
+        traceback.print_exc()
+        return {'status': 'error', 'message': str(e)}
 
 @router.get("/payments/me")
 async def get_my_payments(
@@ -199,12 +263,23 @@ async def mock_payment_completion(
     request_data: Dict[str, Any],
     db: Session = Depends(get_db)
 ):
-    """Mock endpoint to simulate payment completion for testing"""
+    """Mock endpoint to simulate payment completion for testing (idempotent)"""
     payment_id = request_data.get('paymentId')
     status = request_data.get('status', 'COMPLETED')
     
     if not payment_id:
         raise HTTPException(status_code=400, detail="paymentId required")
+    
+    # Get payment details first
+    payment_result = db.execute(text("""
+        SELECT user_id, amount_cents FROM payments WHERE id = :id
+    """), {'id': payment_id})
+    
+    row = payment_result.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    
+    user_id, amount_cents = row
     
     # Update payment status
     db.execute(text("""
@@ -216,30 +291,57 @@ async def mock_payment_completion(
         'provider_payment_id': f"MOCK_{payment_id}",
         'id': payment_id
     })
+    db.flush()
     
-    # If completed, add reward event
+    # If completed, add reward event with idempotency check
     if status == 'COMPLETED':
-        # Get payment details
-        result = db.execute(text("""
-            SELECT user_id, amount_cents FROM payments WHERE id = :id
-        """), {'id': payment_id})
+        # Check if reward already exists for this payment
+        existing_reward = db.execute(text("""
+            SELECT id FROM wallet_events 
+            WHERE user_id = :user_id 
+            AND source = 'merchant_reward'
+            AND json_extract(meta, '$.payment_id') = :payment_id
+            LIMIT 1
+        """), {
+            'user_id': user_id,
+            'payment_id': payment_id
+        }).fetchone()
         
-        row = result.fetchone()
-        if row:
-            user_id, amount_cents = row
-            reward_amount = int(amount_cents * 0.2)  # 20% reward
-            reward_id = str(uuid.uuid4())
-            
-            db.execute(text("""
-                INSERT INTO wallet_events (id, user_id, kind, source, amount_cents)
-                VALUES (:id, :user_id, :kind, :source, :amount_cents)
-            """), {
-                'id': reward_id,
-                'user_id': user_id,
-                'kind': 'credit',
-                'source': 'merchant_reward',
-                'amount_cents': reward_amount
-            })
+        if existing_reward:
+            print(f"Reward already exists for payment {payment_id}")
+            db.commit()
+            return {'status': 'success', 'message': 'already_processed'}
+        
+        # Insert reward event
+        reward_amount = int(amount_cents * 0.2)  # 20% reward
+        reward_id = str(uuid.uuid4())
+        
+        reward_meta = json.dumps({
+            'payment_id': payment_id,
+            'provider_payment_id': f"MOCK_{payment_id}",
+            'amount_paid_cents': amount_cents
+        })
+        
+        db.execute(text("""
+            INSERT INTO wallet_events (id, user_id, kind, source, amount_cents, meta)
+            VALUES (:id, :user_id, :kind, :source, :amount_cents, :meta)
+        """), {
+            'id': reward_id,
+            'user_id': user_id,
+            'kind': 'credit',
+            'source': 'merchant_reward',
+            'amount_cents': reward_amount,
+            'meta': reward_meta
+        })
     
     db.commit()
     return {'status': 'success', 'message': f'Payment {payment_id} marked as {status}'}
+
+@router.post("/dev/square/mock-payment")
+async def dev_mock_payment_completion(
+    request_data: Dict[str, Any],
+    db: Session = Depends(get_db)
+):
+    """Dev-only endpoint to simulate payment completion for testing"""
+    # This is the same as mock-payment but under /dev path
+    return await mock_payment_completion(request_data, db)

@@ -1,9 +1,9 @@
 fastapi==0.103.2
-uvicorn==0.23.2
-sqlmodel==0.0.16
-httpx==0.25.1
+uvicorn[standard]==0.23.2
+sqlalchemy==2.0.23
+sqlalchemy-utils==0.41.1
 python-dotenv==1.0.0
-pydantic==1.10.13
-python-jose[cryptography]
-passlib[bcrypt]
-sqlalchemy
+pydantic==2.5.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+gunicorn==21.2.0
