@@ -6,6 +6,7 @@ from src.db import Base, engine
 from src.seed import run as seed_run
 from sqlalchemy import text
 import os
+from pathlib import Path
 from src.routes_explore import router as explore
 from src.routes_earn import router as earn
 from src.routes_activity_wallet_me import router as awm
@@ -46,8 +47,9 @@ app.include_router(awm)
 app.include_router(dev)
 app.include_router(square)
 
-# Serve static files from the ui-mobile directory at root
-app.mount("/", StaticFiles(directory="../../ui-mobile", html=True), name="static")
-
 @app.get("/health") 
 def health(): return {"ok": True}
+
+# Serve static files from the ui-mobile directory at root
+ui_mobile_path = Path(__file__).resolve().parent.parent.parent / "ui-mobile"
+app.mount("/", StaticFiles(directory=str(ui_mobile_path), html=True), name="static")
