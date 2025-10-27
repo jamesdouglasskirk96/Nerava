@@ -24,7 +24,11 @@ try:
         'migrations/20251025_square_mvp.sql',
         'migrations/20251025_square_indexes.sql', 
         'migrations/20251025_reward_events.sql',
-        'migrations/20251025_reward_events_index.sql'
+        'migrations/20251025_reward_events_index.sql',
+        'migrations/20251026_wallet_ledger.sql',
+        'migrations/20251026_wallet_ledger_create.sql',
+        'migrations/20251026_wallet_ledger_indexes.sql',
+        'migrations/20251026_wallet_ledger_migrate.sql'
     ]
     
     for migration_file in migrations:

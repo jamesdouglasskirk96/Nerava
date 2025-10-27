@@ -46,9 +46,10 @@ def wallet_debug(user_id: str = Depends(current_user_id), db: Session = Depends(
             for row in wallet_rows:
                 result["wallet_events"].append({
                     "id": row.id,
-                    "title": row.title,
+                    "kind": row.kind,
+                    "source": row.source,
                     "amount_cents": row.amount_cents,
-                    "type": row.type,
+                    "meta": row.meta,
                     "created_at": str(row.created_at)
                 })
         except Exception as e:
@@ -108,89 +109,33 @@ def wallet_simple(user_id: str = Depends(current_user_id), db: Session = Depends
 
 @router.get("/wallet/summary")
 def wallet_summary(user_id: str = Depends(current_user_id), db: Session = Depends(get_db)):
-    """Wallet summary including payments and rewards"""
+    """Wallet summary using unified ledger"""
     try:
-        from sqlalchemy import text
-        
-        # Get wallet events (this works)
+        # Get all wallet events for the user
         wallet_rows = db.query(WalletEvent).filter(WalletEvent.user_id==user_id).order_by(WalletEvent.created_at.desc()).all()
         
-        # Calculate balance from wallet events
-        balance = sum(r.amount_cents if r.type=="earn" else -r.amount_cents for r in wallet_rows)
+        # Calculate balance: credits minus debits
+        credits = sum(row.amount_cents for row in wallet_rows if row.kind == 'credit')
+        debits = sum(row.amount_cents for row in wallet_rows if row.kind == 'debit')
+        balance = credits - debits
         
-        # Get completed payments
-        try:
-            payments_result = db.execute(text("""
-                SELECT merchant_id, amount_cents, created_at
-                FROM payments 
-                WHERE user_id = :user_id AND status = 'COMPLETED'
-                ORDER BY created_at DESC
-            """), {'user_id': user_id})
-            payments = payments_result.fetchall()
-            
-            # Subtract payments from balance
-            for payment in payments:
-                balance -= payment[1]  # Subtract amount_cents
-                
-        except Exception as e:
-            print(f"Payment query error: {e}")
-            payments = []
+        # Calculate available credit (all credits)
+        available_credit = credits
         
-        # Get reward events
-        try:
-            rewards_result = db.execute(text("""
-                SELECT type, amount_cents, created_at
-                FROM reward_events 
-                WHERE user_id = :user_id
-                ORDER BY created_at DESC
-            """), {'user_id': user_id})
-            rewards = rewards_result.fetchall()
-            
-            # Add rewards to balance
-            for reward in rewards:
-                balance += reward[1]  # Add amount_cents
-                
-        except Exception as e:
-            print(f"Reward query error: {e}")
-            rewards = []
+        # Calculate total spent (all debits)
+        total_spent = debits
         
-        # Calculate available credit (rewards + original balance, ignoring payments)
-        available_credit = sum(r.amount_cents if r.type=="earn" else -r.amount_cents for r in wallet_rows)
-        for reward in rewards:
-            available_credit += reward[1]
-        
-        # Calculate total spent
-        total_spent = sum(payment[1] for payment in payments)
-        
-        # Build breakdown
+        # Build breakdown from wallet events
         breakdown = []
-        
-        # Add wallet events
-        for row in wallet_rows:
+        for row in wallet_rows[:10]:  # Last 10 entries
+            title = row.meta.get('title') if row.meta else f"{row.source} ({row.kind})"
             breakdown.append({
-                'title': row.title,
-                'amountCents': row.amount_cents,
-                'type': row.type
+                'title': title,
+                'amountCents': row.amount_cents if row.kind == 'credit' else -row.amount_cents,
+                'type': row.kind,
+                'source': row.source,
+                'createdAt': row.created_at.isoformat() if row.created_at else None
             })
-        
-        # Add completed payments
-        for payment in payments:
-            breakdown.append({
-                'title': f"Payment @ {payment[0]}",
-                'amountCents': -payment[1],  # Negative for payments
-                'type': 'payment'
-            })
-        
-        # Add reward events
-        for reward in rewards:
-            breakdown.append({
-                'title': f"Reward: {reward[0]}",
-                'amountCents': reward[1],
-                'type': 'reward'
-            })
-        
-        # Sort by created_at (approximate - using order from queries)
-        breakdown = breakdown[:10]  # Limit to 10 items
         
         return {
             "balanceCents": balance, 

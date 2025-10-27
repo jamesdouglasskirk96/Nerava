@@ -45,10 +45,11 @@ class ChargeIntent(Base):
 class WalletEvent(Base):
     __tablename__ = "wallet_events"
     id = Column(String, primary_key=True)
-    user_id = Column(String)
-    type = Column(String)  # "earn" | "withdraw"
-    title = Column(String)
-    amount_cents = Column(Integer)
+    user_id = Column(String, nullable=False)
+    kind = Column(String, nullable=False)  # 'credit' or 'debit'
+    source = Column(String, nullable=False)  # e.g., 'merchant_reward', 'payment', 'green_hour'
+    amount_cents = Column(Integer, nullable=False)
+    meta = Column(JSON, nullable=True)  # Additional metadata
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class Setting(Base):

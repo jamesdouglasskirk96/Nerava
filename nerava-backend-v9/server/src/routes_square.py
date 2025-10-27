@@ -109,12 +109,13 @@ async def square_webhook(
             reward_id = str(uuid.uuid4())
             
             db.execute(text("""
-                INSERT INTO reward_events (id, user_id, type, amount_cents)
-                VALUES (:id, :user_id, :type, :amount_cents)
+                INSERT INTO wallet_events (id, user_id, kind, source, amount_cents)
+                VALUES (:id, :user_id, :kind, :source, :amount_cents)
             """), {
                 'id': reward_id,
                 'user_id': user_id,
-                'type': 'merchant',
+                'kind': 'credit',
+                'source': 'merchant_reward',
                 'amount_cents': reward_amount
             })
         
@@ -230,12 +231,13 @@ async def mock_payment_completion(
             reward_id = str(uuid.uuid4())
             
             db.execute(text("""
-                INSERT INTO reward_events (id, user_id, type, amount_cents)
-                VALUES (:id, :user_id, :type, :amount_cents)
+                INSERT INTO wallet_events (id, user_id, kind, source, amount_cents)
+                VALUES (:id, :user_id, :kind, :source, :amount_cents)
             """), {
                 'id': reward_id,
                 'user_id': user_id,
-                'type': 'merchant',
+                'kind': 'credit',
+                'source': 'merchant_reward',
                 'amount_cents': reward_amount
             })
     

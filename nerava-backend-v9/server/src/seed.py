@@ -26,9 +26,11 @@ def run():
 
     if not db.query(WalletEvent).filter_by(user_id=DEMO).first():
         db.add_all([
-            WalletEvent(id=str(uuid4()), user_id=DEMO, type="earn", title="Green Hour savings", amount_cents=373),
-            WalletEvent(id=str(uuid4()), user_id=DEMO, type="earn", title="Starbucks co-fund", amount_cents=75),
-            WalletEvent(id=str(uuid4()), user_id=DEMO, type="withdraw", title="Off-peak award", amount_cents=50),
+            WalletEvent(id=str(uuid4()), user_id=DEMO, kind="credit", source="green_hour", amount_cents=373, meta={"title": "Green Hour savings"}),
+            WalletEvent(id=str(uuid4()), user_id=DEMO, kind="credit", source="merchant_reward", amount_cents=75, meta={"title": "Starbucks co-fund"}),
+            WalletEvent(id=str(uuid4()), user_id=DEMO, kind="debit", source="off_peak", amount_cents=50, meta={"title": "Off-peak award"}),
+            WalletEvent(id=str(uuid4()), user_id=DEMO, kind="credit", source="merchant_reward", amount_cents=100, meta={"title": "McDonald's reward"}),
+            WalletEvent(id=str(uuid4()), user_id=DEMO, kind="debit", source="payment", amount_cents=500, meta={"title": "Payment @ Starbucks"}),
         ])
     db.commit(); db.close()
 
