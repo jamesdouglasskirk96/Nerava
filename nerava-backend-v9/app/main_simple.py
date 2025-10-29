@@ -11,6 +11,7 @@ from .middleware.demo_banner import DemoBannerMiddleware
 
 from fastapi.staticfiles import StaticFiles
 import os
+from pathlib import Path
 
 # Domain routers
 from .routers import (
@@ -41,6 +42,8 @@ from .routers import (
     challenges,
     grid,
     payouts,
+    profile,
+    square,
     # 20 Feature Scaffold Routers
     merchant_intel,
     behavior_cloud,
@@ -65,6 +68,7 @@ from .routers import (
     demo,
     dual_zone,
 )
+from .routers import gpt, meta
 
 # Auth + JWT preferences
 from .routers.auth import router as auth_router
@@ -72,10 +76,17 @@ from .routers.user_prefs import router as prefs_router
 
 app = FastAPI(title="Nerava Backend v9", version="0.9.0")
 
+# Redirect root to /app
+@app.get("/")
+async def root():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/app/")
+
 # Mount UI after app is defined
-UI_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "ui-mobile"))
-if os.path.isdir(UI_DIR):
-    app.mount("/app", StaticFiles(directory=UI_DIR, html=True), name="ui")
+# Use Path(__file__) to resolve relative to this file's location
+UI_DIR = Path(__file__).parent.parent.parent / "ui-mobile"
+if UI_DIR.exists() and UI_DIR.is_dir():
+    app.mount("/app", StaticFiles(directory=str(UI_DIR), html=True), name="ui")
 
 # Create tables on startup (SQLite dev)
 Base.metadata.create_all(bind=engine)
@@ -106,6 +117,12 @@ app.include_router(analytics.router)
 # Health first
 app.include_router(health.router, prefix="/v1", tags=["health"])
 
+# Meta routes (health, version, debug)
+app.include_router(meta.router)
+
+# GPT routes
+app.include_router(gpt.router)
+
 # Auth + JWT prefs
 app.include_router(auth_router)
 app.include_router(prefs_router)
@@ -127,6 +144,7 @@ app.include_router(energyhub.router)
 app.include_router(social.router)
 app.include_router(activity.router)
 app.include_router(intents.router)
+app.include_router(profile.router)
 app.include_router(admin.router)
 app.include_router(ml.router)
 app.include_router(ledger.router)
@@ -134,6 +152,7 @@ app.include_router(merchant_analytics.router)
 app.include_router(challenges.router)
 app.include_router(grid.router)
 app.include_router(payouts.router)
+app.include_router(square.router)
 
 # 20 Feature Scaffold Routers (all behind flags)
 app.include_router(merchant_intel.router)

@@ -1,1 +1,2 @@
-web: cd nerava-backend-v9/server && gunicorn main_simple:app --workers 2 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --timeout 120
+web: cd nerava-backend-v9 && python -m alembic upgrade head && uvicorn app.main_simple:app --host 0.0.0.0 --port ${PORT:-8000} --workers ${WEB_CONCURRENCY:-4}
+

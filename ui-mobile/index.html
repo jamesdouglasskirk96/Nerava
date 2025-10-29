@@ -9,11 +9,11 @@
   <title>Nerava</title>
 
   <!-- PWA Meta Tags -->
-  <link rel="manifest" href="/manifest.json">
+  <link rel="manifest" href="manifest.json">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="white">
   <meta name="apple-mobile-web-app-title" content="Nerava">
-  <link rel="apple-touch-icon" href="/assets/icon-512.png">
+  <link rel="apple-touch-icon" href="assets/icon-512.png">
   <meta name="theme-color" content="#1E40FF">
 
   <link rel="stylesheet" href="css/tokens.css?v=20250123" />
@@ -85,8 +85,8 @@
                       <!-- Map -->
                       <section class="section">
                         <div class="map-card">
-                          <div class="map-frame">
-                            <div id="map" style="height: 180px;"></div>
+                          <div class="map-frame" style="height: 220px;">
+                            <div id="map" style="height: 100%;"></div>
                           </div>
                           <!-- Map info bar -->
                           <div class="map-info-bar">
@@ -117,7 +117,7 @@
                             <img id="perk-logo" class="perk-logo" src="https://logo.clearbit.com/starbucks.com" alt="Starbucks">
                           </div>
                         </div>
-                        <button id="perk-cta" class="btn btn-primary btn-wide" type="button">Pay & Claim</button>
+                        <button id="perk-cta" class="btn btn-primary btn-wide" type="button">Notify</button>
                       </article>
 
                       <!-- View more perks -->
@@ -125,19 +125,13 @@
                         <button class="btn btn-wide view-more" id="view-more">View more perks</button>
                       </div>
 
-                      <!-- Next available charger -->
-                      <div class="card action-card">
-                        <button id="next-charger-btn" class="btn btn-wide btn-primary-outline" type="button" aria-label="Show next available charger">
+                      <!-- Next available charger (hidden per new UX) -->
+                      <div class="card action-card" style="display: none;">
+                        <button id="next-charger-btn" class="btn btn-wide btn-primary-outline" type="button" aria-label="Show next available charger" style="display: none;">
                           <span class="btn__icon" aria-hidden="true">🔌</span>
                           <span class="btn__text">Next charger</span>
                         </button>
                       </div>
-
-                      <!-- Flexible spacer to fill remaining space -->
-                      <div class="flex-spacer"></div>
-
-                      <!-- Spacer to ensure View more button is above tab bar -->
-                      <div style="height: calc(var(--tabbar-height, 76px) + env(safe-area-inset-bottom, 8px));"></div>
                     </section>
 
       <!-- Charge / Wallet / Profile now padded pages (not overlay sheets) -->
@@ -212,7 +206,7 @@
           </header>
           <div class="sheet__body">
             <div class="card profile-card">
-              <img class="avatar" src="/img/avatar-demo.svg" alt="Profile photo"/>
+              <img class="avatar" src="img/avatar-demo.svg" alt="Profile photo"/>
               <div class="profile-meta">
                 <div class="name">@you</div>
                 <div class="rep">Green Reputation: <strong id="repScore">—</strong></div>
@@ -268,7 +262,7 @@
     <div class="sheet">
       <div class="grip" role="presentation"></div>
       <section class="acct-hero">
-        <img class="avatar" src="/img/avatar-demo.svg" alt="User avatar"/>
+        <img class="avatar" src="img/avatar-demo.svg" alt="User avatar"/>
         <div class="who">
           <h2>James Kirk</h2>
           <p class="sub">demo@nerava.app</p>
@@ -343,7 +337,7 @@
 
 
   <!-- Main app -->
-  <script type="module" src="/js/app.js" defer></script>
+  <script type="module" src="js/app.js" defer></script>
   
 </body>
 </html>

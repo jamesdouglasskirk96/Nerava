@@ -357,7 +357,7 @@ overflow:hidden;
 }
 
 .map-card{border-radius:20px;overflow:hidden;box-shadow:0 10px 24px rgba(0,0,0,.12);background:#fff;margin:16px}
-#map{width:100%;height:180px}
+#map{width:100%;height:220px}
 
 .leaflet-bottom.leaflet-right{ display:none !important; }
 
@@ -512,7 +512,7 @@ overflow:hidden;
   box-shadow:0 10px 30px rgba(0,0,0,.08);
   background:#fff;
 }
-#map{ width:100%; height:180px; }
+#map{ width:100%; height:220px; }
 .leaflet-control-attribution{
   margin-bottom: calc( env(safe-area-inset-bottom, 0px) + var(--tabbar-height) + 8px ) !important;
 }
@@ -686,7 +686,7 @@ overflow:hidden;
   box-shadow: var(--shadow-soft);
   background: #fff;
 }
-.map-card #map{ height: 180px; width: 100%; }
+.map-card #map{ width: 100%; height: 100%; }
 
 /* --- Tab bar --- */
 .tabbar{
@@ -770,7 +770,7 @@ overflow:hidden;
 }
 #map.leaflet-host{
   width:100%;
-  height:200px;          /* map height - leave space for info bar */
+  height:220px;          /* map height - leave space for info bar */
   border-radius:16px;    /* rounded corners for the map */
   overflow:hidden;        /* ensure content stays within bounds */
 }
@@ -822,11 +822,10 @@ overflow:hidden;
 .map-card{
   position: relative;
   border-radius: 18px;
-  overflow: hidden;
+  overflow: visible;
   background: #fff;
   box-shadow: 0 10px 24px rgba(0,0,0,.08);
   margin: 16px 20px 14px;
-  height: 240px; /* adjusts on small phones nicely */
   z-index: 0;
 }
 .map-card .leaflet-container{ height:100% !important; width:100%; }
@@ -836,7 +835,7 @@ overflow:hidden;
 
 /* Section title */
 .section-title{
-  margin: 6px 20px 8px;
+  margin: 2px 20px 6px;
   font-weight: 700;
   font-size: 20px;
   color: #222;
@@ -846,7 +845,7 @@ overflow:hidden;
 .perk-card{
   position: relative;
   z-index: 1;
-  margin: 0 20px 14px;
+  margin: 0 20px 8px;
   background: #fff;
   border-radius: 18px;
   box-shadow: 0 8px 22px rgba(0,0,0,.07);
@@ -979,7 +978,7 @@ overflow:hidden;
 .map-card .map-frame{
   overflow: hidden;
   border-radius: 16px;
-  height: 180px;
+  height: 220px;
 }
 .map-card #map{
   width: 100%;
@@ -1177,7 +1176,7 @@ overflow:hidden;
 }
 
 /* Legacy support for existing classes */
-.section { padding: 16px 20px 24px; }
+.section { padding: 8px 20px 12px; }
 
 .h2 {
   font-size: 22px; font-weight: 700; letter-spacing: .2px;

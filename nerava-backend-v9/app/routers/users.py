@@ -24,5 +24,17 @@ def get_prefs(user_id: str):
 def set_prefs(user_id: str, prefs: UserPrefs):
     ok = upsert_user_prefs(user_id, prefs.dict())
     if not ok:
-        raise HTTPException(status_code=500, detail="failed_to_update_prefs")
+        raise HTTPException(status_code=500, detail="failed_to_save_prefs")
     return prefs
+
+@router.get("/me/profile")
+def get_my_profile(user_id: str = "demo-user-123"):
+    """Get current user profile"""
+    return {
+        "id": user_id,
+        "email": f"{user_id}@nerava.app",
+        "name": "Demo User",
+        "tier": "Silver",
+        "followers": 12,
+        "following": 8
+    }

@@ -50,16 +50,18 @@ export async function initWalletPage(rootEl) {
     if (data) {
       
       // Update balance - show available credit instead of negative balance
-      const availableCredit = data.availableCreditCents || data.balanceCents;
+      // API returns balance_cents or balanceCents
+      const balanceCents = data.balance_cents || data.balanceCents || 0;
+      const availableCredit = data.availableCreditCents || balanceCents;
       const balance = (availableCredit / 100).toFixed(2);
       const balanceEl = document.querySelector('#w-balance');
       if (balanceEl) {
         balanceEl.textContent = `$${balance}`;
         // Add subtitle if there's a negative net balance
-        if (data.balanceCents < 0) {
+        if (balanceCents < 0) {
           const subtitle = document.createElement('div');
           subtitle.style.cssText = 'font-size: 12px; color: #6b7280; margin-top: 4px;';
-          subtitle.textContent = `Net: $${(data.balanceCents / 100).toFixed(2)} (after payments)`;
+          subtitle.textContent = `Net: $${(balanceCents / 100).toFixed(2)} (after payments)`;
           balanceEl.parentNode.insertBefore(subtitle, balanceEl.nextSibling);
         }
       }

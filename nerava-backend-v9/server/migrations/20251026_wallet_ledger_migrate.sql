@@ -13,3 +13,4 @@ FROM reward_events
 WHERE NOT EXISTS (
     SELECT 1 FROM wallet_events we WHERE we.id = reward_events.id
 );
+

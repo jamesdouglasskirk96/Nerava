@@ -22,7 +22,10 @@ class Settings(BaseSettings):
     cache_ttl_windows: int = 60
     
     # CORS
-    cors_allow_origins: str = "*"
+    cors_allow_origins: str = os.getenv("ALLOWED_ORIGINS", "*")
+    
+    # Public base URL
+    public_base_url: str = os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:8001")
     
     # Region
     region: str = "local"

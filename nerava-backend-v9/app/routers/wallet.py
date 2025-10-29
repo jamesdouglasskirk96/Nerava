@@ -69,6 +69,37 @@ def wallet_history(
         for r in q.all()
     ]
 
+@router.get("/wallet/summary")
+def wallet_summary(
+    user_id: str = "demo-user-123",
+    db: Session = Depends(get_db),
+):
+    """Get wallet summary with balance and recent history"""
+    balance = _balance(db, user_id)
+    
+    # Get recent history
+    q = (
+        db.query(CreditLedger)
+        .filter(CreditLedger.user_ref == user_id)
+        .order_by(CreditLedger.id.desc())
+        .limit(10)
+    )
+    history = [
+        {
+            "cents": r.cents,
+            "reason": r.reason,
+            "meta": r.meta,
+            "ts": r.created_at.isoformat()
+        }
+        for r in q.all()
+    ]
+    
+    return {
+        "balance_cents": balance,
+        "balance_dollars": round(balance / 100, 2),
+        "history": history
+    }
+
 class RedeemReq(BaseModel):
     user_id: str
     cents: int

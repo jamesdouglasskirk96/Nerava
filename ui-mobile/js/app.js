@@ -145,6 +145,19 @@ document.getElementById('fab-earn')?.addEventListener('click', ()=> {
   setTab('earn');
 });
 
+// Register service worker for PWA
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then((registration) => {
+        console.log('Service Worker registered:', registration.scope);
+      })
+      .catch((error) => {
+        console.log('Service Worker registration failed:', error);
+      });
+  });
+}
+
 // Initialize app
 async function initApp() {
   
@@ -345,7 +358,7 @@ window.addEventListener('load', async ()=>{
   // Start with explore tab by default
   setTab('explore');
   // lazy import to avoid cyclic loads
-  const { initExplore } = await import('/js/pages/explore.js');
+  const { initExplore } = await import('./pages/explore.js');
   initExplore();
   await loadBanner();
   await loadWallet();
@@ -362,7 +375,7 @@ window.addEventListener('load', async ()=>{
 async function initActivity() {
   const activityEl = document.getElementById('page-activity');
   if (activityEl && !activityEl.dataset.initialized) {
-    const { initActivityPage } = await import(`/js/pages/activity.js?v=${Date.now()}`);
+    const { initActivityPage } = await import(`./pages/activity.js?v=${Date.now()}`);
     await initActivityPage(activityEl);
     activityEl.dataset.initialized = 'true';
   }
@@ -372,7 +385,7 @@ async function initActivity() {
 async function initEarn() {
   const earnEl = document.getElementById('page-earn');
   if (earnEl && !earnEl.dataset.initialized) {
-    const { initEarnPage } = await import(`/js/pages/earn.js?v=${Date.now()}`);
+    const { initEarnPage } = await import(`./pages/earn.js?v=${Date.now()}`);
     await initEarnPage(earnEl);
     earnEl.dataset.initialized = 'true';
   }
@@ -384,7 +397,7 @@ async function initWallet() {
   console.log('initWallet called, walletEl:', walletEl);
   if (walletEl && !walletEl.dataset.initialized) {
     console.log('Initializing wallet page...');
-    const { initWalletPage } = await import('/js/pages/wallet-new.js');
+    const { initWalletPage } = await import('./pages/wallet-new.js');
     await initWalletPage(walletEl);
     walletEl.dataset.initialized = 'true';
     console.log('Wallet page initialized');
@@ -399,7 +412,7 @@ async function initMe() {
     console.log('Initializing me page...');
     // Remove hidden class first
     meEl.classList.remove('hidden');
-    const { initMePage } = await import(`/js/pages/me.js?v=${Date.now()}`);
+    const { initMePage } = await import(`./pages/me.js?v=${Date.now()}`);
     await initMePage(meEl);
     meEl.dataset.initialized = 'true';
     console.log('Me page initialized');

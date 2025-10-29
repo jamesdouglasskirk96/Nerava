@@ -106,3 +106,4 @@ def test_square_checkout_flow():
 
 if __name__ == "__main__":
     test_square_checkout_flow()
+

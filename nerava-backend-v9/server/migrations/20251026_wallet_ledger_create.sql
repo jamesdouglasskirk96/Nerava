@@ -10,3 +10,4 @@ CREATE TABLE IF NOT EXISTS wallet_events (
     meta JSON,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+

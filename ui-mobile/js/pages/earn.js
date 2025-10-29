@@ -10,15 +10,21 @@ export async function initEarnPage(rootEl) {
   async function load() {
     try {
       const items = await window.NeravaAPI.apiGet('/v1/intent') || [];
+      
+      if (items.length === 0) {
+        ul.innerHTML = '<li class="intent"><div class="sub">No saved intents yet. Tap "Notify" on a perk to save it!</div></li>';
+        return;
+      }
+      
       ul.innerHTML = items.map(it => `
         <li class="intent">
           <div class="intent__main">
-            <div class="title">${it.title}</div>
-            <div class="sub">${it.subtitle}</div>
+            <div class="title">${it.merchant || it.merchant_name || 'Unknown Merchant'}</div>
+            <div class="sub">${it.window_text || ''} • ${it.distance_text || ''}</div>
+            <div class="sub" style="font-size: 11px; color: #666; margin-top: 4px;">${it.station_name || ''}</div>
           </div>
           <div class="intent__cta">
-            <button data-start="${it.id}" class="btn btn-blue">Start</button>
-            <button data-notify="${it.id}" class="btn">Notify</button>
+            <button data-activate="${it.id}" class="btn btn-blue">Activate</button>
           </div>
         </li>`).join('');
       bind();
@@ -29,37 +35,21 @@ export async function initEarnPage(rootEl) {
   }
 
   function bind() {
-    ul.querySelectorAll('[data-start]').forEach(btn => {
+    ul.querySelectorAll('[data-activate]').forEach(btn => {
       btn.addEventListener('click', async (e) => {
-        const id = e.currentTarget.getAttribute('data-start');
+        const id = e.currentTarget.getAttribute('data-activate');
         try {
-          const cfg = await window.NeravaAPI.apiPost(`/v1/intent/${id}/start`, '');
-          if (!cfg) {
-            showToast('Cannot start');
-            return;
-          }
-          showToast('Started! Ready to verify location');
-          load();
+          // Placeholder for activation flow
+          // In the future, this could start a session or open navigation
+          showToast('Activation flow coming soon!');
+          console.log('Activate intent:', id);
+          
+          // Optional: remove the intent after activation
+          // await window.NeravaAPI.apiPost(`/v1/intent/${id}/start`, '');
+          // load();
         } catch (e) {
-          console.error('Start failed:', e);
-          showToast('Start failed');
-        }
-      });
-    });
-    
-    ul.querySelectorAll('[data-notify]').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        const id = e.currentTarget.getAttribute('data-notify');
-        try {
-          const result = await window.NeravaAPI.apiPost(`/v1/intent/${id}/notify`, '');
-          if (result) {
-            showToast('We will remind you 👍');
-          } else {
-            showToast('Notification setup failed');
-          }
-        } catch (e) {
-          console.error('Notify failed:', e);
-          showToast('Notification setup failed');
+          console.error('Activation failed:', e);
+          showToast('Activation failed');
         }
       });
     });

@@ -39,7 +39,8 @@ class ChargeIntent(Base):
     address = Column(String, nullable=True)
     window_text = Column(String, nullable=True)   # e.g. "2–4pm"
     distance_text = Column(String, nullable=True) # e.g. "3 min walk"
-    status = Column(String, default="pending")    # pending|started|notified|done
+    perk_id = Column(String, nullable=True)       # Perk identifier
+    status = Column(String, default="saved")      # saved|started|notified|verified|done
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class WalletEvent(Base):
@@ -58,3 +59,41 @@ class Setting(Base):
     green_alerts = Column(Boolean, default=True)
     perk_alerts = Column(Boolean, default=True)
     vehicle = Column(JSON, nullable=True)
+
+class Session(Base):
+    __tablename__ = "sessions"
+    id = Column(String, primary_key=True)
+    user_id = Column(String, nullable=False)
+    t0 = Column(DateTime, nullable=False)
+    station_id_guess = Column(String, nullable=True)
+    start_at = Column(DateTime, nullable=True)
+    end_at = Column(DateTime, nullable=True)
+    verified_charge = Column(Boolean, default=False)
+    kwh = Column(Float, nullable=True)
+    confidence = Column(String, nullable=True)  # NONE|MEDIUM|HIGH
+    start_lat = Column(Float, nullable=True)
+    start_lng = Column(Float, nullable=True)
+    last_lat = Column(Float, nullable=True)
+    last_lng = Column(Float, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class POSEvent(Base):
+    __tablename__ = "pos_events"
+    id = Column(String, primary_key=True)
+    user_id = Column(String, nullable=True)
+    merchant_id = Column(String, nullable=False)
+    provider = Column(String, nullable=False)
+    event_type = Column(String, nullable=False)
+    event_id = Column(String, nullable=False)
+    order_id = Column(String, nullable=True)
+    amount_cents = Column(Integer, nullable=False)
+    t_event = Column(DateTime, nullable=False)
+    raw_json = Column(String, nullable=True)  # Stored as text for JSON
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class MerchantBalance(Base):
+    __tablename__ = "merchant_balances"
+    merchant_id = Column(String, primary_key=True)
+    pending_cents = Column(Integer, default=0)
+    paid_cents = Column(Integer, default=0)
+    updated_at = Column(DateTime, default=datetime.utcnow)

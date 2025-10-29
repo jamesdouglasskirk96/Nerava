@@ -105,3 +105,41 @@ export function drawRoute(points){ // points: [[lat,lng],[lat,lng]]
 }
 
 export function getMap(){ return _map; }
+
+// Persistent layer for charger pins
+let _stationLayer = null;
+
+export function getOrCreateStationLayer() {
+  if (!_map) return null;
+  if (!_stationLayer) {
+    _stationLayer = L.layerGroup().addTo(_map);
+  }
+  return _stationLayer;
+}
+
+export function clearStations() {
+  if (_stationLayer) {
+    _stationLayer.clearLayers();
+  }
+}
+
+export function addStationDot(station, { onClick } = {}) {
+  const layer = getOrCreateStationLayer();
+  if (!layer) return null;
+  const m = L.circleMarker([station.lat, station.lng], {
+    radius: 7,
+    color: '#16a34a',    // stroke
+    fillColor: '#16a34a',// fill
+    fillOpacity: 1,
+    weight: 2
+  });
+  if (onClick) m.on('click', () => onClick(station));
+  m.addTo(layer);
+  return m;
+}
+
+export function fitToStations(stations, padding = 0.15) {
+  if (!_map || !stations?.length) return;
+  const bounds = L.latLngBounds(stations.map(s => [s.lat, s.lng]));
+  _map.fitBounds(bounds.pad(padding), { animate: true });
+}

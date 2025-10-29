@@ -1,5 +1,5 @@
 import { apiGet } from '../core/api.js';
-import { ensureMap } from '../core/map.js';
+import { ensureMap, clearStations, addStationDot, fitToStations } from '../core/map.js';
 import { setTab } from '../app.js';
 
 const $ = (s, r=document) => r.querySelector(s);
@@ -155,28 +155,37 @@ function _bindPerk(deal=_fallbackDeal) {
             cta.classList.add('btn', 'btn-primary', 'btn-wide');
             cta.onclick = async () => {
               try {
-                // Get current perk data
+                // Get current perk data and charger info
                 const perk = await apiGet("/v1/deals/nearby").catch(() => null);
-                const merchantId = perk?.merchant?.toLowerCase() || 'starbucks';
-                const amountCents = 500; // $5.00 for demo
-                const note = `Perk @ ${perk?.merchant || 'Starbucks'}`;
+                const rec = await tryGet('/v1/hubs/recommend');
+                const charger = _chargers[_cIdx];
                 
-                // Create Square checkout
-                const response = await window.NeravaAPI.apiPost('/v1/square/checkout', JSON.stringify({
-                  merchantId,
-                  amountCents,
-                  note
-                }), { 'Content-Type': 'application/json' });
+                // Build intent payload from current Explore context
+                const payload = {
+                  station_id: (charger && (charger.id || charger.station_id)) || rec?.dest?.id || null,
+                  station_name: (charger && (charger.name || charger.title)) || rec?.network?.name || null,
+                  merchant: perk?.merchant || 'Starbucks',
+                  address: perk?.address || '310 E 5th St, Austin, TX',
+                  window_text: perk?.window_text || 'Free coffee 2–4pm',
+                  distance_text: perk?.distance_text || '3 min walk',
+                  perk_id: perk?.id || null
+                };
                 
-                if (response && response.url) {
-                  // Redirect to Square checkout
-                  window.location.href = response.url;
+                // Save intent
+                const response = await window.NeravaAPI.apiPost('/v1/intent', JSON.stringify(payload), { 'Content-Type': 'application/json' });
+                
+                if (response && response.ok) {
+                  showToast('Saved to Earn. Activate it from the Earn page.');
+                  console.log('Saved intent ID:', response.id);
+                  // Optional: keep last intent id for UX or analytics
+                  window.Nerava = window.Nerava || {};
+                  window.Nerava.lastSavedIntentId = response.id;
                 } else {
-                  showToast('Could not create checkout link');
+                  showToast('Could not save. Please try again.');
                 }
               } catch (e) { 
-                console.error('Square checkout failed:', e); 
-                showToast('Payment error. Try again.'); 
+                console.error('Save intent failed:', e); 
+                showToast('Could not save. Try again.'); 
               }
             };
           }
@@ -196,37 +205,109 @@ export async function initExplore(){
   const map = await ensureMap();          // uses existing map initializer
   setTimeout(() => map.invalidateSize(), 0);
 
-  // resolve chargers from API, then fallback
-  const rec = await tryGet('/v1/hubs/recommend');
-  if (rec) {
-    _chargers = [{
-      id: 'hub_recommended',
-      name: `${rec.network?.name || 'Tesla'} Supercharger`,
-      addr: 'Recommended Location',
-      lat: Number(rec.dest?.lat || 30.401),
-      lng: Number(rec.dest?.lng || -97.725),
-      merchant: { name: 'Starbucks', logo: 'https://logo.clearbit.com/starbucks.com' },
-      perk: 'Free coffee 2–4pm • 3 min walk',
-      eta_min: rec.eta_min || 15
-    }];
-  } else {
-    _chargers = CHARGER_FALLBACK.slice();
+  // Load multiple stations from API
+  clearStations();
+  let stations = [];
+  let selectedStation = null;
+  
+  try {
+    const data = await apiGet('/v1/hubs/nearby');
+    if (data?.stations?.length) {
+      stations = data.stations;
+      console.log(`Loaded ${stations.length} stations from API`);
+    }
+  } catch (e) {
+    console.warn('Failed to load stations:', e);
   }
-
-  console.log(`Loaded ${_chargers.length} chargers (${rec ? 'API' : 'fallback'})`);
-
-  // initial selection
-  await selectCharger(0);
-
-  // wire next button
-  const nextBtn = document.getElementById('next-charger-btn');
-  if(nextBtn && !nextBtn._wired){
-    nextBtn._wired = true;
-    nextBtn.addEventListener('click', async ()=>{
-      await selectCharger(_cIdx + 1);
-      // small haptic-like feedback
-      nextBtn.animate([{transform:'scale(1)'},{transform:'scale(0.97)'},{transform:'scale(1)'}],{duration:120});
+  
+  // Fallback to single charger if API fails
+  if (stations.length === 0) {
+    const rec = await tryGet('/v1/hubs/recommend');
+    if (rec) {
+      stations = [{
+        id: 'hub_recommended',
+        name: `${rec.network?.name || 'Tesla'} Supercharger`,
+        lat: Number(rec.dest?.lat || 30.401),
+        lng: Number(rec.dest?.lng || -97.725),
+        network: rec.network?.name || 'Tesla',
+        eta_min: rec.eta_min || 15
+      }];
+    } else {
+      stations = CHARGER_FALLBACK.slice(0, 1).map(c => ({
+        id: c.id,
+        name: c.name,
+        lat: c.lat,
+        lng: c.lng,
+        network: 'Tesla',
+        eta_min: 15
+      }));
+    }
+  }
+  
+  // Add green dots for each station
+  stations.forEach(st => {
+    addStationDot(st, {
+      onClick: (station) => {
+        selectedStation = station;
+        // Update perk card with station info
+        const titleEl = document.querySelector('#perk-title');
+        const addressEl = document.querySelector('#perk-address');
+        const subEl = document.querySelector('#perk-sub');
+        if (titleEl) titleEl.textContent = station.name;
+        if (addressEl) addressEl.textContent = station.network || '';
+        if (subEl) subEl.textContent = `Drive time: ${station.eta_min || '?'} min`;
+      }
     });
+  });
+  
+  // Auto-select first station
+  if (stations.length > 0) {
+    selectedStation = stations[0];
+    const titleEl = document.querySelector('#perk-title');
+    const addressEl = document.querySelector('#perk-address');
+    const subEl = document.querySelector('#perk-sub');
+    if (titleEl) titleEl.textContent = stations[0].name;
+    if (addressEl) addressEl.textContent = stations[0].network || '';
+    if (subEl) subEl.textContent = `Drive time: ${stations[0].eta_min || '?'} min`;
+  }
+  
+  // Fit map to show all stations
+  fitToStations(stations);
+  
+  // Update _chargers for backwards compatibility with Notify button
+  _chargers = stations.map(st => ({
+    id: st.id,
+    name: st.name,
+    lat: st.lat,
+    lng: st.lng,
+    merchant: { name: 'Starbucks', logo: 'https://logo.clearbit.com/starbucks.com' },
+    perk: 'Free coffee 2–4pm • 3 min walk',
+    eta_min: st.eta_min || 15
+  }));
+  _cIdx = 0;
+
+  // Hide "Next charger" button and its parent card (per new UX)
+  const nextBtn = document.getElementById('next-charger-btn');
+  if(nextBtn){
+    // Hide the button itself
+    nextBtn.style.display = 'none';
+    nextBtn.disabled = true;
+    
+    // Hide the parent card if it exists
+    const cardEl = nextBtn.closest('.card, .action-card');
+    if(cardEl){
+      cardEl.style.display = 'none';
+    }
+    
+    // Remove event listener if it was previously wired
+    if(!nextBtn._wired){
+      nextBtn._wired = true;
+      // Keep the handler but don't attach it (button is hidden)
+      // nextBtn.addEventListener('click', async ()=>{
+      //   await selectCharger(_cIdx + 1);
+      //   nextBtn.animate([{transform:'scale(1)'},{transform:'scale(0.97)'},{transform:'scale(1)'}],{duration:120});
+      // });
+    }
   }
 
   // Fit to any existing route bounds if available; otherwise default city view
@@ -242,11 +323,11 @@ export async function initExplore(){
     if (perk) {
       const deal = {
         merchant: {
-          name: perk.merchant,
-          address: perk.address,
-          logo: perk.logo
+          name: perk.merchant || 'Starbucks',
+          address: perk.address || '310 E 5th St, Austin, TX',
+          logo: perk.logo || 'https://logo.clearbit.com/starbucks.com'
         },
-        blurb: `${perk.window_text} • ${perk.distance_text}`
+        blurb: `${perk.window_text || 'Free coffee 2–4pm'} • ${perk.distance_text || '3 min walk'}`
       };
       _bindPerk(deal);
     } else {
@@ -259,6 +340,13 @@ export async function initExplore(){
   // Make sure the map card never overlaps content
   const card = $('.map-card');
   if (card){ card.style.zIndex = 0; }
+  
+  // Trigger map resize to handle dynamic height
+  setTimeout(() => {
+    if (map && map.invalidateSize) {
+      map.invalidateSize();
+    }
+  }, 100);
 }
 
 // Calculate driving time between two points
