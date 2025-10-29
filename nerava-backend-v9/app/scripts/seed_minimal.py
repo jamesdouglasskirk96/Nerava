@@ -1,6 +1,7 @@
 """
 Minimal seed script for GPT endpoints.
 Inserts: 1 user, 10 coffee shops, 10 gyms, 6 offers.
+Generates demo API key for first coffee shop.
 """
 import sys
 from pathlib import Path
@@ -68,7 +69,28 @@ def seed_minimal():
                     VALUES (:name, 'coffee', :lat, :lng, :address, CURRENT_TIMESTAMP)
                 """), {"name": name, "lat": lat, "lng": lng, "address": address})
                 merchant_id = db.execute(text("SELECT last_insert_rowid()")).scalar()
-            merchant_ids.append(merchant_id)
+                merchant_ids.append(merchant_id)
+        
+        # Generate demo API key for first coffee shop
+        if merchant_ids:
+            import secrets
+            demo_api_key = f"demo_key_{secrets.token_urlsafe(16)}"
+            first_merchant_id = merchant_ids[0]
+            
+            db.execute(text("""
+                UPDATE merchants
+                SET api_key = :api_key, slug = :slug, owner_email = :email
+                WHERE id = :merchant_id
+            """), {
+                "api_key": demo_api_key,
+                "slug": f"coffee-shop-{first_merchant_id}",
+                "email": "demo@nerava.app",
+                "merchant_id": first_merchant_id
+            })
+            print(f"\n✅ Demo Merchant API Key Generated:")
+            print(f"   Merchant ID: {first_merchant_id}")
+            print(f"   API Key: {demo_api_key}")
+            print(f"   Dashboard: http://localhost:8001/m/dashboard?merchant_id={first_merchant_id}\n")
         
         # 3. Insert 10 gyms in Austin
         gyms = [

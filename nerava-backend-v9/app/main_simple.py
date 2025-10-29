@@ -68,7 +68,7 @@ from .routers import (
     demo,
     dual_zone,
 )
-from .routers import gpt, meta
+from .routers import gpt, meta, sessions, stripe_api, purchase_webhooks, dev_tools, merchant_api, merchant_ui
 
 # Auth + JWT preferences
 from .routers.auth import router as auth_router
@@ -123,6 +123,9 @@ app.include_router(meta.router)
 # GPT routes
 app.include_router(gpt.router)
 
+# Sessions/Verify routes (public)
+app.include_router(sessions.router)
+
 # Auth + JWT prefs
 app.include_router(auth_router)
 app.include_router(prefs_router)
@@ -152,6 +155,11 @@ app.include_router(merchant_analytics.router)
 app.include_router(challenges.router)
 app.include_router(grid.router)
 app.include_router(payouts.router)
+app.include_router(stripe_api.router)
+app.include_router(purchase_webhooks.router)
+app.include_router(dev_tools.router)
+app.include_router(merchant_api.router)
+app.include_router(merchant_ui.router)
 app.include_router(square.router)
 
 # 20 Feature Scaffold Routers (all behind flags)

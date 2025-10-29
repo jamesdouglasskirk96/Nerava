@@ -37,6 +37,40 @@ class Settings(BaseSettings):
     # Feature flags
     enable_sync_credit: bool = False
     
+    # JWT
+    jwt_secret: str = os.getenv("JWT_SECRET", "dev-secret")
+    jwt_alg: str = os.getenv("JWT_ALG", "HS256")
+    
+    # Verify Rewards
+    verify_reward_cents: int = int(os.getenv("VERIFY_REWARD_CENTS", "200"))
+    
+    # Stripe Connect
+    stripe_secret: str = os.getenv("STRIPE_SECRET", "")
+    stripe_connect_client_id: str = os.getenv("STRIPE_CONNECT_CLIENT_ID", "")
+    stripe_webhook_secret: str = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+    
+    # Payout Policy
+    payout_min_cents: int = int(os.getenv("PAYOUT_MIN_CENTS", "100"))
+    payout_max_cents: int = int(os.getenv("PAYOUT_MAX_CENTS", "10000"))
+    payout_daily_cap_cents: int = int(os.getenv("PAYOUT_DAILY_CAP_CENTS", "20000"))
+    
+    # Purchase Rewards
+    purchase_reward_flat_cents: int = int(os.getenv("PURCHASE_REWARD_FLAT_CENTS", "150"))
+    purchase_match_radius_m: int = int(os.getenv("PURCHASE_MATCH_RADIUS_M", "120"))
+    purchase_session_ttl_min: int = int(os.getenv("PURCHASE_SESSION_TTL_MIN", "30"))
+    webhook_shared_secret: str = os.getenv("WEBHOOK_SHARED_SECRET", "")
+    
+    # Anti-Fraud
+    max_verify_per_hour: int = int(os.getenv("MAX_VERIFY_PER_HOUR", "6"))
+    max_sessions_per_hour: int = int(os.getenv("MAX_SESSIONS_PER_HOUR", "6"))
+    max_different_ips_per_day: int = int(os.getenv("MAX_DIFFERENT_IPS_PER_DAY", "5"))
+    min_allowed_accuracy_m: float = float(os.getenv("MIN_ALLOWED_ACCURACY_M", "100"))
+    max_geo_jump_km: float = float(os.getenv("MAX_GEO_JUMP_KM", "50"))
+    block_score_threshold: int = int(os.getenv("BLOCK_SCORE_THRESHOLD", "100"))
+    
+    # Merchant Dashboard
+    dashboard_enable: bool = os.getenv("DASHBOARD_ENABLE", "true").lower() == "true"
+    
     class Config:
         env_file = ".env"
         case_sensitive = False

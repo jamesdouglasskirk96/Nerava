@@ -1,133 +1,232 @@
-from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
+"""
+Merchant analytics and summary services
+"""
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
-from ..models_extra import RewardEvent, FollowerShare
+from sqlalchemy import text
+from datetime import datetime, timedelta
+from typing import Dict, Any, List, Optional
 
-def aggregate_per_merchant(db: Session, period: str = 'month', merchant_id: Optional[str] = None) -> Dict[str, Any]:
+from app.utils.log import get_logger
+
+logger = get_logger(__name__)
+
+
+def merchant_summary(
+    db: Session,
+    merchant_id: int,
+    from_time: Optional[datetime] = None,
+    to_time: Optional[datetime] = None
+) -> Dict[str, Any]:
     """
-    Aggregate merchant analytics for a given period.
+    Generate merchant analytics summary.
     
-    Args:
-        db: Database session
-        period: 'month', 'week', or 'day'
-        merchant_id: Specific merchant ID (None for all)
-        
     Returns:
-        Dict with aggregated metrics
+        {
+            "merchant_id": int,
+            "verified_sessions": int (sessions within 600m),
+            "purchase_rewards": int (count),
+            "total_rewards_paid": int (cents),
+            "top_hours": dict (hour -> count),
+            "last_events": List[dict]
+        }
     """
-    # Calculate date range
-    now = datetime.utcnow()
-    if period == 'month':
-        start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    elif period == 'week':
-        start_date = now - timedelta(days=7)
-    else:  # day
-        start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    # Default to last 30 days
+    if not from_time:
+        from_time = datetime.utcnow() - timedelta(days=30)
+    if not to_time:
+        to_time = datetime.utcnow()
     
-    # Base query for reward events
-    query = db.query(RewardEvent).filter(RewardEvent.created_at >= start_date)
+    # Get merchant location
+    merchant_result = db.execute(text("""
+        SELECT lat, lng FROM merchants WHERE id = :merchant_id
+    """), {"merchant_id": merchant_id}).first()
     
-    if merchant_id:
-        # Filter by merchant (assuming merchant_id is in meta)
-        query = query.filter(RewardEvent.meta.contains({'merchant_id': merchant_id}))
+    if not merchant_result:
+        return {
+            "merchant_id": merchant_id,
+            "error": "Merchant not found"
+        }
     
-    events = query.all()
+    merchant_lat = float(merchant_result[0]) if merchant_result[0] else None
+    merchant_lng = float(merchant_result[1]) if merchant_result[1] else None
     
-    # Calculate metrics
-    total_events = len(events)
-    unique_users = len(set(event.user_id for event in events))
-    total_gross_cents = sum(event.gross_cents for event in events)
-    total_community_cents = sum(event.community_cents for event in events)
-    total_net_cents = sum(event.net_cents for event in events)
+    # 1. Verified sessions within 600m (using haversine)
+    # We'll approximate by checking sessions that are close enough
+    # For production, use PostGIS or similar, but for now use simple bounding box + haversine filter
+    verified_sessions = 0
+    if merchant_lat and merchant_lng:
+        # Get all verified sessions in time window
+        sessions_result = db.execute(text("""
+            SELECT id, lat, lng, started_at FROM sessions
+            WHERE status = 'verified'
+            AND verified_at >= :from_time
+            AND verified_at <= :to_time
+            AND lat IS NOT NULL AND lng IS NOT NULL
+        """), {
+            "from_time": from_time,
+            "to_time": to_time
+        })
+        
+        from app.services.geo import haversine_m
+        
+        for row in sessions_result:
+            session_lat = float(row[1])
+            session_lng = float(row[2])
+            distance = haversine_m(
+                merchant_lat, merchant_lng,
+                session_lat, session_lng
+            )
+            if distance <= 600:  # 600m radius
+                verified_sessions += 1
     
-    # Estimate incremental spend (assume 3x multiplier on rewards)
-    estimated_incremental_spend = total_net_cents * 3
+    # 2. Purchase rewards tied to this merchant
+    purchase_rewards_count = db.execute(text("""
+        SELECT COUNT(*) FROM payments
+        WHERE merchant_id = :merchant_id
+        AND status = 'confirmed'
+        AND claimed = 1
+        AND created_at >= :from_time
+        AND created_at <= :to_time
+    """), {
+        "merchant_id": merchant_id,
+        "from_time": from_time,
+        "to_time": to_time
+    }).scalar()
+    purchase_rewards_count = int(purchase_rewards_count) if purchase_rewards_count else 0
     
-    # Get co-fund paid (community portion)
-    co_fund_paid = total_community_cents
+    # 3. Total rewards paid (sum of purchase rewards for this merchant)
+    total_rewards_result = db.execute(text("""
+        SELECT COALESCE(SUM(amount_cents), 0) FROM payments
+        WHERE merchant_id = :merchant_id
+        AND status = 'confirmed'
+        AND claimed = 1
+        AND created_at >= :from_time
+        AND created_at <= :to_time
+    """), {
+        "merchant_id": merchant_id,
+        "from_time": from_time,
+        "to_time": to_time
+    }).scalar()
+    total_rewards_paid = int(total_rewards_result) if total_rewards_result else 0
     
-    # Calculate average reward per user
-    avg_reward_per_user = total_net_cents / unique_users if unique_users > 0 else 0
+    # 4. Top hours histogram (from sessions near merchant)
+    hours_hist = {}
+    if merchant_lat and merchant_lng:
+        from app.services.geo import haversine_m
+        
+        sessions_result = db.execute(text("""
+            SELECT lat, lng, verified_at FROM sessions
+            WHERE status = 'verified'
+            AND verified_at >= :from_time
+            AND verified_at <= :to_time
+            AND lat IS NOT NULL AND lng IS NOT NULL
+        """), {
+            "from_time": from_time,
+            "to_time": to_time
+        })
+        
+        for row in sessions_result:
+            session_lat = float(row[0])
+            session_lng = float(row[1])
+            verified_at = row[2]
+            
+            # Only count sessions within 600m
+            distance = haversine_m(
+                merchant_lat, merchant_lng,
+                session_lat, session_lng
+            )
+            
+            if distance <= 600 and verified_at:
+                try:
+                    if isinstance(verified_at, str):
+                        dt = datetime.fromisoformat(verified_at.replace('Z', '+00:00')[:19])
+                    else:
+                        dt = verified_at
+                    hour = dt.hour
+                    hours_hist[hour] = hours_hist.get(hour, 0) + 1
+                except:
+                    pass
+    
+    # 5. Last 10 events (purchases and verify rewards)
+    last_events = []
+    
+    # Purchases
+    purchases_result = db.execute(text("""
+        SELECT id, amount_cents, created_at, claimed
+        FROM payments
+        WHERE merchant_id = :merchant_id
+        AND created_at >= :from_time
+        AND created_at <= :to_time
+        ORDER BY created_at DESC
+        LIMIT 10
+    """), {
+        "merchant_id": merchant_id,
+        "from_time": from_time,
+        "to_time": to_time
+    })
+    
+    for row in purchases_result:
+        last_events.append({
+            "type": "purchase",
+            "id": str(row[0]),
+            "amount_cents": row[1],
+            "created_at": str(row[2]) if row[2] else None,
+            "claimed": bool(row[3]) if row[3] else False
+        })
+    
+    # Sort by created_at DESC and limit to 10
+    last_events.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    last_events = last_events[:10]
     
     return {
-        'period': period,
-        'start_date': start_date.isoformat(),
-        'end_date': now.isoformat(),
-        'merchant_id': merchant_id,
-        'metrics': {
-            'total_events': total_events,
-            'unique_users': unique_users,
-            'total_gross_cents': total_gross_cents,
-            'total_net_cents': total_net_cents,
-            'total_community_cents': total_community_cents,
-            'estimated_incremental_spend': estimated_incremental_spend,
-            'co_fund_paid': co_fund_paid,
-            'avg_reward_per_user': avg_reward_per_user
+        "merchant_id": merchant_id,
+        "verified_sessions": verified_sessions,
+        "purchase_rewards": purchase_rewards_count,
+        "total_rewards_paid": total_rewards_paid,
+        "top_hours": hours_hist,
+        "last_events": last_events,
+        "period": {
+            "from": from_time.isoformat(),
+            "to": to_time.isoformat()
         }
     }
 
-def get_top_merchants(db: Session, limit: int = 10, period: str = 'month') -> List[Dict[str, Any]]:
+
+def merchant_offers(db: Session, merchant_id: int) -> Dict[str, List[Dict[str, Any]]]:
     """
-    Get top performing merchants by metrics.
+    Get local and external offers for a merchant.
     
-    Args:
-        db: Database session
-        limit: Number of top merchants to return
-        period: Time period for analysis
-        
     Returns:
-        List of merchant performance data
+        {
+            "local": List[dict],  # From offers table
+            "external": List[dict]  # From external feed provider
+        }
     """
-    # Calculate date range
-    now = datetime.utcnow()
-    if period == 'month':
-        start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    elif period == 'week':
-        start_date = now - timedelta(days=7)
-    else:  # day
-        start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    # Local offers
+    local_offers_result = db.execute(text("""
+        SELECT id, title, start_time, end_time, reward_cents, active
+        FROM offers
+        WHERE merchant_id = :merchant_id
+        ORDER BY created_at DESC
+        LIMIT 20
+    """), {"merchant_id": merchant_id})
     
-    # Get all events in period
-    events = db.query(RewardEvent).filter(RewardEvent.created_at >= start_date).all()
-    
-    # Group by merchant_id (from meta)
-    merchant_stats = {}
-    for event in events:
-        merchant_id = event.meta.get('merchant_id', 'unknown') if event.meta else 'unknown'
-        
-        if merchant_id not in merchant_stats:
-            merchant_stats[merchant_id] = {
-                'merchant_id': merchant_id,
-                'total_events': 0,
-                'unique_users': set(),
-                'total_gross_cents': 0,
-                'total_net_cents': 0,
-                'total_community_cents': 0
-            }
-        
-        stats = merchant_stats[merchant_id]
-        stats['total_events'] += 1
-        stats['unique_users'].add(event.user_id)
-        stats['total_gross_cents'] += event.gross_cents
-        stats['total_net_cents'] += event.net_cents
-        stats['total_community_cents'] += event.community_cents
-    
-    # Convert to list and calculate final metrics
-    results = []
-    for merchant_id, stats in merchant_stats.items():
-        results.append({
-            'merchant_id': merchant_id,
-            'total_events': stats['total_events'],
-            'unique_users': len(stats['unique_users']),
-            'total_gross_cents': stats['total_gross_cents'],
-            'total_net_cents': stats['total_net_cents'],
-            'total_community_cents': stats['total_community_cents'],
-            'estimated_incremental_spend': stats['total_net_cents'] * 3,
-            'co_fund_paid': stats['total_community_cents']
+    local_offers = []
+    for row in local_offers_result:
+        local_offers.append({
+            "id": row[0],
+            "title": row[1] or "",
+            "window_start": str(row[2]) if row[2] else None,
+            "window_end": str(row[3]) if row[3] else None,
+            "est_reward_cents": int(row[4]) if row[4] else 0,
+            "active": bool(row[5]) if row[5] else False
         })
     
-    # Sort by total events (could be other metrics)
-    results.sort(key=lambda x: x['total_events'], reverse=True)
+    # External offers (via provider)
+    from app.services.offers_feed import fetch_external_offers
+    external_offers = fetch_external_offers(db, merchant_id)
     
-    return results[:limit]
+    return {
+        "local": local_offers,
+        "external": external_offers
+    }
