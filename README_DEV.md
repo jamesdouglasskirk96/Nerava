@@ -1,3 +1,29 @@
+## Real-time Verify: Browser GPS + 1-Minute Dwell
+
+1) Create a verify session link
+
+```bash
+curl -s -X POST http://localhost:8001/v1/gpt/create_session_link \
+  -H 'Content-Type: application/json' \
+  -d '{"user_id":1,"lat":30.2672,"lng":-97.7431}' | jq
+```
+
+2) Open the returned `url` in your browser (prompts for location). The page will start and ping automatically.
+
+Debug flow:
+
+```bash
+# Start
+curl -s -X POST http://localhost:8001/v1/sessions/verify/start \
+  -H 'Content-Type: application/json' \
+  -d '{"token":"<JWT>","lat":30.2673,"lng":-97.7430,"accuracy_m":20,"ua":"curl"}' | jq
+
+# Ping (repeat to simulate dwell)
+curl -s -X POST http://localhost:8001/v1/sessions/verify/ping \
+  -H 'Content-Type: application/json' \
+  -d '{"session_id":"<sid>","lat":30.26725,"lng":-97.74305,"accuracy_m":18}' | jq
+```
+
 # Nerava Development Guide
 
 ## How to Run Server
@@ -72,6 +98,10 @@ Key environment variables (see `ENV.example` for full list):
   - Returns: Array of merchants with distance, offers, sorted by distance
   - Default radius: 1500m
   - Example: `/v1/gpt/find_merchants?lat=30.2672&lng=-97.7431&category=coffee&radius_m=1200`
+  - **Deduplication**: Merchants are deduplicated by:
+    - Normalized name (lowercase, accents removed, generic suffixes like "coffee" trimmed)
+    - Rounded coordinates (lat/lng rounded to 5 decimal places to handle small jitter)
+    - When duplicates exist, keeps the merchant with the smallest `distance_m`
   
 - `GET /v1/gpt/find_charger?lat=<num>&lng=<num>&radius_m=<int?>`
   - Returns: Array of chargers with green_window and nearby_merchants

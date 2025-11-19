@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from .db import Base, engine
@@ -69,6 +69,11 @@ from .routers import (
     dual_zone,
 )
 from .routers import gpt, meta, sessions, stripe_api, purchase_webhooks, dev_tools, merchant_api, merchant_ui
+from .routers import events_api, pool_api, offers_api
+from .routers import sessions_verify
+from .routers import debug_verify
+from .routers import debug_pool
+from .routers import discover_api, affiliate_api, insights_api
 
 # Auth + JWT preferences
 from .routers.auth import router as auth_router
@@ -82,11 +87,77 @@ async def root():
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/app/")
 
+# Serve OpenAPI spec for ChatGPT Actions
+@app.get("/openapi-actions.yaml")
+async def get_openapi_spec(request: Request):
+    """Return OpenAPI spec for ChatGPT Actions"""
+    from pathlib import Path
+    import os
+    from fastapi.responses import Response
+    
+    # Get the current server URL from the request
+    current_url = str(request.url).replace("/openapi-actions.yaml", "")
+    
+    # Try to read the generated spec file (stored next to this module)
+    spec_file = Path(__file__).parent / "openapi-actions.yaml"
+    if spec_file.exists():
+        content = spec_file.read_text()
+        # Replace any old tunnel URLs with the current one
+        content = content.replace("https://the-lightweight-mention-extensions.trycloudflare.com", current_url)
+        content = content.replace("http://localhost:8001", current_url)
+        return Response(content=content, media_type="text/yaml")
+    
+    # Fallback: generate a basic spec
+    fallback_spec = f"""openapi: 3.0.0
+info:
+  title: Nerava API
+  version: 1.0.0
+  description: Nerava EV charging rewards platform
+servers:
+  - url: {current_url}
+    description: Nerava API
+paths:
+  /v1/gpt/find_merchants:
+    get:
+      summary: Find nearby merchants
+      operationId: find_merchants
+      responses:
+        '200':
+          description: List of merchants
+  /v1/gpt/find_charger:
+    get:
+      summary: Find nearby EV chargers
+      operationId: find_charger
+      responses:
+        '200':
+          description: List of chargers
+  /v1/gpt/create_session_link:
+    post:
+      summary: Create a verify link
+      operationId: create_session_link
+      responses:
+        '200':
+          description: Verify link created
+  /v1/gpt/me:
+    get:
+      summary: Get user profile and wallet
+      operationId: get_me
+      responses:
+        '200':
+          description: User profile
+"""
+    return Response(content=fallback_spec, media_type="text/yaml")
+
 # Mount UI after app is defined
 # Use Path(__file__) to resolve relative to this file's location
 UI_DIR = Path(__file__).parent.parent.parent / "ui-mobile"
 if UI_DIR.exists() and UI_DIR.is_dir():
     app.mount("/app", StaticFiles(directory=str(UI_DIR), html=True), name="ui")
+
+# Mount /static for verify assets
+STATIC_DIR = Path(__file__).parent / "static"
+if STATIC_DIR.exists() and STATIC_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR), html=False), name="static")
 
 # Create tables on startup (SQLite dev)
 Base.metadata.create_all(bind=engine)
@@ -101,12 +172,20 @@ app.add_middleware(CanaryRoutingMiddleware, canary_percentage=0.0)  # Disabled b
 app.add_middleware(DemoBannerMiddleware)
 
 # CORS (tighten in prod)
+# Parse ALLOWED_ORIGINS from env or use defaults
+allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "*")
+if allowed_origins_str == "*":
+    allowed_origins = ["*"]
+else:
+    # Split by comma and strip whitespace
+    allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",")]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_allow_origins.split(",") if settings.cors_allow_origins != "*" else ["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Api-Key", "X-Merchant-Key"],
 )
 
 # Operations routes
@@ -161,6 +240,17 @@ app.include_router(dev_tools.router)
 app.include_router(merchant_api.router)
 app.include_router(merchant_ui.router)
 app.include_router(square.router)
+app.include_router(events_api.router)
+app.include_router(pool_api.router)
+app.include_router(offers_api.router)
+app.include_router(sessions_verify.router)
+app.include_router(debug_verify.router)
+app.include_router(debug_pool.router)
+
+# vNext routers
+app.include_router(discover_api.router)
+app.include_router(affiliate_api.router)
+app.include_router(insights_api.router)
 
 # 20 Feature Scaffold Routers (all behind flags)
 app.include_router(merchant_intel.router)

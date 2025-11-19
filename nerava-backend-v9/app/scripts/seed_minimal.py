@@ -123,18 +123,91 @@ def seed_minimal():
                 merchant_id = db.execute(text("SELECT last_insert_rowid()")).scalar()
             merchant_ids.append(merchant_id)
         
-        # 4. Insert 6 offers tied to some merchants (first 6 coffee shops)
+        # 4. Insert 6 local offers tied to first 6 coffee shops into legacy offers and new offers_catalog
         # Using simple time windows: 14:00-16:00 (2pm-4pm)
         offer_merchant_ids = merchant_ids[:6]  # First 6 coffee shops
-        
         for merchant_id in offer_merchant_ids:
+            # Legacy offers table (if present)
+            try:
+                db.execute(text("""
+                    INSERT INTO offers (merchant_id, title, description, reward_cents, start_time, end_time, active, created_at)
+                    VALUES (:merchant_id, 'Afternoon Coffee', '2-4pm local offer', 200, '14:00:00', '16:00:00', 1, CURRENT_TIMESTAMP)
+                """), {"merchant_id": merchant_id})
+            except Exception:
+                pass
+            # New offers_catalog table
             db.execute(text("""
-                INSERT INTO offers (merchant_id, title, description, reward_cents, start_time, end_time, active, created_at)
-                VALUES (:merchant_id, 'Free Coffee', 'Enjoy a free coffee between 2pm and 4pm', 500, '14:00:00', '16:00:00', 1, CURRENT_TIMESTAMP)
-            """), {"merchant_id": merchant_id})
+                INSERT INTO offers_catalog (merchant_id, offer_ref, type, value, window_start, window_end, source, tracking_template)
+                VALUES (:mid, :oref, 'percent', 10, '14:00:00', '16:00:00', 'local', NULL)
+            """), {"mid": merchant_id, "oref": f"local_{merchant_id}_afternoon"})
+        
+        # 5. Insert a sample event (today, 14:00-16:00, Austin downtown)
+        from datetime import datetime, timedelta
+        now = datetime.utcnow()
+        today_start = now.replace(hour=14, minute=0, second=0, microsecond=0)
+        today_end = now.replace(hour=16, minute=0, second=0, microsecond=0)
+        
+        # If event time has passed today, schedule for tomorrow
+        if now >= today_end:
+            today_start += timedelta(days=1)
+            today_end += timedelta(days=1)
+        
+        event_result = db.execute(text("""
+            INSERT INTO events (
+                activator_id, title, description, category, city,
+                lat, lng, starts_at, ends_at,
+                green_window_start, green_window_end,
+                price_cents, capacity, visibility, status
+            ) VALUES (
+                1, 'Charge & Chill: Downtown Edition',
+                'Bring a towel. Green window 2-4pm.',
+                'wellness', 'Austin',
+                30.264, -97.744,
+                :starts_at, :ends_at,
+                '14:00', '16:00',
+                100, 40, 'public', 'scheduled'
+            )
+        """), {
+            "starts_at": today_start.isoformat(),
+            "ends_at": today_end.isoformat()
+        })
+        
+        event_id = event_result.lastrowid if hasattr(event_result, 'lastrowid') else None
         
         db.commit()
+        
         print(f"✅ Seeded: 1 user, {len(coffee_shops)} coffee shops, {len(gyms)} gyms, {len(offer_merchant_ids)} offers")
+        if event_id:
+            print(f"✅ Created event: event_id={event_id}")
+
+        # 6. Create 2 events in events2 (one merchant-hosted, one activator-hosted)
+        # merchant-hosted using first merchant
+        if merchant_ids:
+            db.execute(text("""
+                INSERT INTO events2 (
+                    host_type, host_id, title, description, category, city,
+                    lat, lng, radius_m, starts_at, ends_at, green_window_start, green_window_end,
+                    join_fee_cents, pool_commit_pct, capacity, verification_mode, min_dwell_sec, status
+                ) VALUES (
+                    'merchant', :host_id, 'Coffee Happy Hour', 'Merchant hosted event', 'coffee', 'Austin',
+                    30.264, -97.744, 120, :starts_at, :ends_at, '14:00:00', '16:00:00',
+                    0, 0.05, 50, 'geo', 0, 'scheduled'
+                )
+            """), {"host_id": merchant_ids[0], "starts_at": today_start, "ends_at": today_end})
+
+        # activator-hosted
+        db.execute(text("""
+            INSERT INTO events2 (
+                host_type, host_id, title, description, category, city,
+                lat, lng, radius_m, starts_at, ends_at, green_window_start, green_window_end,
+                join_fee_cents, pool_commit_pct, capacity, verification_mode, min_dwell_sec, status
+            ) VALUES (
+                'activator', 1, 'Park Meetup', 'Activator hosted event', 'community', 'Austin',
+                30.266, -97.744, 120, :starts_at, :ends_at, '14:00:00', '16:00:00',
+                0, 0.05, 80, 'geo', 0, 'scheduled'
+            )
+        """), {"starts_at": today_start, "ends_at": today_end})
+
         return True
         
     except Exception as e:

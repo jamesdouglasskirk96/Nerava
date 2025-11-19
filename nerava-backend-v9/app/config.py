@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     
     # Verify Rewards
     verify_reward_cents: int = int(os.getenv("VERIFY_REWARD_CENTS", "200"))
+    verify_pool_pct: int = int(os.getenv("VERIFY_POOL_PCT", "10"))
     
     # Stripe Connect
     stripe_secret: str = os.getenv("STRIPE_SECRET", "")
@@ -70,6 +71,24 @@ class Settings(BaseSettings):
     
     # Merchant Dashboard
     dashboard_enable: bool = os.getenv("DASHBOARD_ENABLE", "true").lower() == "true"
+    
+    # Events & Verification
+    push_enabled: bool = os.getenv("PUSH_ENABLED", "true").lower() == "true"
+    city_fallback: str = os.getenv("CITY_FALLBACK", "Austin")
+    max_push_per_day_per_user: int = int(os.getenv("MAX_PUSH_PER_DAY_PER_USER", "2"))
+    verify_geo_radius_m: int = int(os.getenv("VERIFY_GEO_RADIUS_M", "120"))
+    verify_default_radius_m: int = int(os.getenv("VERIFY_DEFAULT_RADIUS_M", "120"))
+    verify_min_accuracy_m: int = int(os.getenv("VERIFY_MIN_ACCURACY_M", "100"))
+    verify_dwell_required_s: int = int(os.getenv("VERIFY_DWELL_REQUIRED_S", "60"))
+    verify_ping_max_step_s: int = int(os.getenv("VERIFY_PING_MAX_STEP_S", "15"))
+    verify_allow_start_without_target: bool = os.getenv("VERIFY_ALLOW_START_WITHOUT_TARGET", "true").lower() == "true"
+    debug_verbose: bool = os.getenv("DEBUG_VERBOSE", "true").lower() == "true"
+    verify_time_window_lead_min: int = int(os.getenv("VERIFY_TIME_WINDOW_LEAD_MIN", "10"))
+    verify_time_window_tail_min: int = int(os.getenv("VERIFY_TIME_WINDOW_TAIL_MIN", "15"))
+    pool_reward_cap_cents: int = int(os.getenv("POOL_REWARD_CAP_CENTS", "150"))
+    
+    # Demo Mode (relaxes time window restrictions for testing)
+    demo_mode: bool = os.getenv("DEMO_MODE", "true").lower() == "true"
     
     class Config:
         env_file = ".env"

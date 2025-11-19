@@ -79,9 +79,10 @@ def award_verify_bonus(
                 "reason": "already_rewarded"
             }
         
-        # 2. Compute split
-        user_cut = (amount * 90) // 100
-        pool_cut = amount - user_cut
+        # 2. Compute split using configured pool pct
+        pool_pct = int(getattr(settings, 'verify_pool_pct', 10))
+        pool_cut = int((amount * pool_pct) // 100)
+        user_cut = amount - pool_cut
         
         log_reward_event(logger, "compute_split", session_id, user_id, True, {
             "user_cut": user_cut,
@@ -173,7 +174,21 @@ def award_verify_bonus(
             "new_balance": new_balance
         })
         
-        # 6. Upsert community_pool
+        # 6a. Record pool inflow in pool_ledger2 if available
+        try:
+            db.execute(text("""
+                INSERT INTO pool_ledger2 (city, source, amount_cents, related_event_id, created_at)
+                VALUES (:city, 'verify_pool', :amt, NULL, :created_at)
+            """), {
+                "city": getattr(settings, 'city_fallback', 'Austin'),
+                "amt": pool_cut,
+                "created_at": now
+            })
+            logger.info({"at": "verify", "step": "pool_inflow", "source": "verify_pool", "amount_cents": pool_cut})
+        except Exception as e:
+            logger.info({"at": "verify", "step": "pool_inflow", "err": str(e)})
+
+        # 6b. Upsert community_pool (legacy fallback)
         month_key = int(now.strftime("%Y%m"))
         pool_name = f"verify_{month_key}"
         

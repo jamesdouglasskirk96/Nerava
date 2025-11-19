@@ -9,6 +9,7 @@ import uuid
 from app.db import get_db
 from app.config import settings
 from app.security.tokens import create_verify_token
+from app.utils.names import normalize_merchant_name
 
 router = APIRouter(prefix="/v1/gpt", tags=["gpt"])
 
@@ -65,7 +66,7 @@ async def find_merchants(
                 offer_obj = {
                     "title": offer_row.title or "",
                     "window_start": str(offer_row.start_time) if offer_row.start_time else None,
-                    "end": str(offer_row.end_time) if offer_row.end_time else None,
+                    "window_end": str(offer_row.end_time) if offer_row.end_time else None,
                     "est_reward_cents": int(offer_row.reward_cents) if offer_row.reward_cents else 0
                 }
             
@@ -80,10 +81,32 @@ async def find_merchants(
                 "offer": offer_obj
             })
     
-    # Sort by distance
-    merchants.sort(key=lambda x: x["distance_m"])
+    # Deduplicate by (normalized_name, rounded_latlng)
+    # Key: (normalized_name, round(lat,5), round(lng,5))
+    dedup_map = {}
+    for merch in merchants:
+        normalized = normalize_merchant_name(merch["name"])
+        rounded_lat = round(merch["lat"], 5)
+        rounded_lng = round(merch["lng"], 5)
+        key = (normalized, rounded_lat, rounded_lng)
+        
+        # Keep the merchant with the smallest distance_m
+        if key not in dedup_map or merch["distance_m"] < dedup_map[key]["distance_m"]:
+            dedup_map[key] = merch
     
-    return merchants
+    # Convert back to list and sort by distance
+    unique_merchants = list(dedup_map.values())
+    unique_merchants.sort(key=lambda x: x["distance_m"])
+    
+    # Return with hints if empty
+    if not unique_merchants:
+        from app.utils.hints import build_empty_state_hint
+        return {
+            "items": [],
+            "hint": build_empty_state_hint("merchants", lat, lng, radius_m, category)
+        }
+    
+    return unique_merchants
 
 
 @router.get("/find_charger")
@@ -168,6 +191,14 @@ async def find_charger(
     
     # Sort by distance
     chargers.sort(key=lambda x: x["distance_m"])
+    
+    # Return with hints if empty
+    if not chargers:
+        from app.utils.hints import build_empty_state_hint
+        return {
+            "items": [],
+            "hint": build_empty_state_hint("chargers", lat, lng, radius_m)
+        }
     
     return chargers
 
@@ -303,6 +334,24 @@ def get_me(
     
     # month_pool_cents placeholder (for future allocations)
     month_pool_cents = 0
+
+    # Recent rewards (last 3)
+    recent = []
+    try:
+        rows = db.execute(text("""
+            SELECT source, gross_cents, net_cents, created_at
+            FROM reward_events
+            WHERE user_id = :uid
+            ORDER BY created_at DESC
+            LIMIT 3
+        """), {"uid": str(user_id)}).fetchall()
+        for r in rows:
+            source = r.source or "reward"
+            cents = int(r.gross_cents or 0)
+            when = r.created_at.isoformat() if hasattr(r.created_at, 'isoformat') and r.created_at else str(r.created_at)
+            recent.append({"when": when, "source": source, "cents": cents})
+    except Exception:
+        pass
     
     return {
         "handle": handle or f"user_{user_id}",
@@ -311,7 +360,8 @@ def get_me(
         "following": following,
         "wallet_cents": wallet_cents,
         "month_self_cents": month_self_cents,
-        "month_pool_cents": month_pool_cents
+        "month_pool_cents": month_pool_cents,
+        "recent_rewards": recent
     }
 
 @router.post("/follow")
