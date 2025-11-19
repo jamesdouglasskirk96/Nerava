@@ -2,6 +2,9 @@
 let _map, _routeLayer, _markers = [];
 const MAP_ID = 'map';
 
+// Import branded pin functions (will be loaded dynamically)
+let createChargerPinIcon, updatePinScale, animatePinTap;
+
 export function ensureMap(center=[30.4025,-97.7258], zoom=15){
   const el = document.getElementById(MAP_ID);
   if(!el) return null;
@@ -123,17 +126,60 @@ export function clearStations() {
   }
 }
 
-export function addStationDot(station, { onClick } = {}) {
+// Lazy load charger pin functions
+async function loadChargerPinFunctions() {
+  if (!createChargerPinIcon) {
+    const module = await import('./chargerPins.js');
+    createChargerPinIcon = module.createChargerPinIcon;
+    updatePinScale = module.updatePinScale;
+    animatePinTap = module.animatePinTap;
+  }
+}
+
+export async function addStationDot(station, { onClick } = {}) {
   const layer = getOrCreateStationLayer();
   if (!layer) return null;
-  const m = L.circleMarker([station.lat, station.lng], {
-    radius: 7,
-    color: '#16a34a',    // stroke
-    fillColor: '#16a34a',// fill
-    fillOpacity: 1,
-    weight: 2
-  });
-  if (onClick) m.on('click', () => onClick(station));
+  
+  // Load charger pin functions if not already loaded
+  await loadChargerPinFunctions();
+  
+  // Get network and status from station
+  const network = station.network || station.network_name || 'generic';
+  const status = station.status || 'available'; // available, in_use, broken, unknown
+  
+  // Get current zoom level
+  const zoom = _map ? _map.getZoom() : 15;
+  
+  // Create branded charger pin icon
+  const icon = createChargerPinIcon(network, status, zoom);
+  
+  // Create marker with branded pin
+  const m = L.marker([station.lat, station.lng], { icon });
+  
+  // Handle click with animation
+  if (onClick) {
+    m.on('click', () => {
+      animatePinTap(m);
+      onClick(station);
+    });
+  }
+  
+  // Update scale on zoom change (only attach once per map)
+  if (_map && !_map._pinZoomHandlerAttached) {
+    _map.on('zoomend', () => {
+      const currentZoom = _map.getZoom();
+      // Update all pins in the station layer
+      if (_stationLayer) {
+        _stationLayer.eachLayer((marker) => {
+          if (marker instanceof L.Marker) {
+            updatePinScale(marker, currentZoom);
+          }
+        });
+      }
+    });
+    _map._pinZoomHandlerAttached = true;
+  }
+  
   m.addTo(layer);
   return m;
 }

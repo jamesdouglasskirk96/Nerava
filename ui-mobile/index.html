@@ -16,8 +16,8 @@
   <link rel="apple-touch-icon" href="assets/icon-512.png">
   <meta name="theme-color" content="#1E40FF">
 
-  <link rel="stylesheet" href="css/tokens.css?v=20250123" />
-  <link rel="stylesheet" href="css/style.css?v=20250123" />
+  <link rel="stylesheet" href="css/tokens.css?v=20250131" />
+  <link rel="stylesheet" href="css/style.css?v=20250203" />
     <link rel="stylesheet" href="css/animations.css" />
     <link rel="stylesheet" href="css/appleish.css" />
     <link rel="stylesheet" href="css/demo.css" />
@@ -80,57 +80,67 @@
 
     <!-- Map is now contained within the Explore page card -->
 
-                    <!-- Explore page -->
-                    <section id="page-explore" class="page" aria-label="Explore">
-                      <!-- Map -->
-                      <section class="section">
-                        <div class="map-card">
-                          <div class="map-frame" style="height: 220px;">
-                            <div id="map" style="height: 100%;"></div>
-                          </div>
-                          <!-- Map info bar -->
-                          <div class="map-info-bar">
-                            <div class="map-info-left">
-                              <img src="https://logo.clearbit.com/tesla.com" alt="Tesla" class="tesla-logo">
-                            </div>
-                            <div class="map-info-right">
-                              <span id="driving-time" class="driving-time">5 min drive</span>
-                            </div>
-                          </div>
-                        </div>
-                      </section>
-
-                      <h2 class="section-title">Nearby perk</h2>
-                      <div class="ai-chip" id="ai-chip">
-                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>
-                        <span>Recommended by Nerava AI</span>
-                      </div>
-
-                      <article id="perkCard" class="perk-card">
-                        <div class="perk-card__body">
-                          <div class="perk-card__text">
-                            <h3 id="perk-title" class="perk-title">Starbucks</h3>
-                            <p id="perk-address" class="perk-address">310 E 5th St, Austin, TX</p>
-                            <p id="perk-sub" class="perk-sub">Free coffee 2–4pm • 3 min walk</p>
-                          </div>
-                          <div class="perk-card__media">
-                            <img id="perk-logo" class="perk-logo" src="https://logo.clearbit.com/starbucks.com" alt="Starbucks">
+                    <!-- Explore page - Apple Maps-style redesign -->
+                    <section id="page-explore" class="page page-explore-fullscreen" aria-label="Explore">
+                      <!-- Full-screen map background -->
+                      <div id="map" class="explore-map-fullscreen"></div>
+                      
+                      <!-- Top overlay: Search + Suggestions -->
+                      <div class="explore-top-overlay">
+                        <!-- Search bar -->
+                        <div class="explore-search-bar">
+                          <div class="search-bar-input">
+                            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                              <circle cx="11" cy="11" r="8"/>
+                              <path d="m21 21-4.35-4.35"/>
+                            </svg>
+                            <input 
+                              type="text" 
+                              id="explore-search-input" 
+                              placeholder="What to do, while you charge..." 
+                              autocomplete="off"
+                            />
+                            <button class="search-voice-btn" id="explore-voice-btn" aria-label="Voice search">
+                              <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                                <line x1="12" y1="19" x2="12" y2="23"/>
+                                <line x1="8" y1="23" x2="16" y2="23"/>
+                              </svg>
+                            </button>
                           </div>
                         </div>
-                        <button id="perk-cta" class="btn btn-primary btn-wide" type="button">Notify</button>
-                      </article>
-
-                      <!-- View more perks -->
-                      <div class="card action-card">
-                        <button class="btn btn-wide view-more" id="view-more">View more perks</button>
+                        
+                        <!-- Suggestions row (chips) -->
+                        <div class="explore-suggestions-row" id="explore-suggestions">
+                          <button class="suggestion-chip" data-category="coffee">Coffee</button>
+                          <button class="suggestion-chip" data-category="food">Food</button>
+                          <button class="suggestion-chip" data-category="groceries">Groceries</button>
+                          <button class="suggestion-chip" data-category="gym">Gym</button>
+                        </div>
                       </div>
-
-                      <!-- Next available charger (hidden per new UX) -->
-                      <div class="card action-card" style="display: none;">
-                        <button id="next-charger-btn" class="btn btn-wide btn-primary-outline" type="button" aria-label="Show next available charger" style="display: none;">
-                          <span class="btn__icon" aria-hidden="true">🔌</span>
-                          <span class="btn__text">Next charger</span>
-                        </button>
+                      
+                      <!-- Recommended Perks Container -->
+                      <div class="recommended-perks-container" id="recommended-perks-container" style="display: none;">
+                        <div class="recommended-perks-card">
+                          <div class="recommended-perks-title">Recommended perks</div>
+                          <div class="recommended-perks-row" id="recommended-perks-row">
+                            <!-- Compact perk cards will be populated here -->
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <!-- AirDrop-style merchant popover -->
+                      <div class="merchant-popover" id="merchant-popover" style="display: none;">
+                        <div class="popover-content">
+                          <img id="popover-merchant-logo" class="popover-logo" src="" alt="Merchant">
+                          <h3 id="popover-merchant-name" class="popover-name"></h3>
+                          <p id="popover-merchant-text" class="popover-text"></p>
+                          <div class="popover-actions">
+                            <button class="btn btn-primary" id="popover-start-session">Start session</button>
+                            <button class="btn btn-link" id="popover-more-details">More details</button>
+                          </div>
+                        </div>
                       </div>
                     </section>
 

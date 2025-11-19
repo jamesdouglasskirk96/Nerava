@@ -107,34 +107,445 @@ overflow:hidden;
   overflow: visible !important;
 }
 
-/* Ensure Explore page fits in viewport */
-#page-explore{
+/* ===== Explore Page - Apple Maps-style Redesign ===== */
+
+/* Full-screen Explore page */
+.page-explore-fullscreen {
+  position: relative;
   height: calc(100vh - var(--tabbar-height, 76px));
   overflow: hidden;
+  padding: 0;
+  background: #f6f7f9;
+}
+
+/* Full-screen map background */
+.explore-map-fullscreen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+.explore-map-fullscreen .leaflet-container {
+  height: 100% !important;
+  width: 100% !important;
+  background: #e5e7eb;
+}
+
+/* Top overlay: Search + Suggestions */
+.explore-top-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  padding: calc(env(safe-area-inset-top, 0) + 8px) 16px 0;
+  pointer-events: none;
+}
+
+.explore-top-overlay > * {
+  pointer-events: auto;
+}
+
+/* Search bar - Google Maps style (light) */
+.explore-search-bar {
+  margin: 8px 0 10px;
+}
+
+.search-bar-input {
+  display: flex;
+  align-items: center;
+  background: #FFFFFF !important;
+  border-radius: 22px !important;
+  border: none !important;
+  padding: 0 16px;
+  box-shadow: 0px 2px 6px rgba(0, 0, 0, 0.08) !important;
+  gap: 12px;
+  height: 48px;
+  backdrop-filter: none !important;
+}
+
+.search-icon {
+  width: 20px;
+  height: 20px;
+  color: #6E6E6E !important;
+  flex-shrink: 0;
+  stroke: #6E6E6E !important;
+}
+
+#explore-search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 16px;
+  color: #6E6E6E !important;
+  background: transparent;
+}
+
+#explore-search-input::placeholder {
+  color: #6E6E6E !important;
+}
+
+.search-voice-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: #6E6E6E !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: color 0.2s;
+}
+
+.search-voice-btn:hover {
+  color: #4A4A4A !important;
+}
+
+.search-voice-btn svg {
+  width: 20px;
+  height: 20px;
+  fill: #6E6E6E !important;
+}
+
+/* Suggestions row (chips) - Google Maps style (light) */
+.explore-suggestions-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 0 16px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  scroll-padding-left: 16px;
+  scroll-padding-right: 16px;
+}
+
+.explore-suggestions-row::-webkit-scrollbar {
+  display: none;
+}
+
+.suggestion-chip {
+  background: #FFFFFF;
+  border: 1px solid #E5E5E5;
+  border-radius: 18px;
+  padding: 6px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #4A4A4A;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: none;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.suggestion-chip:hover {
+  background: #F9F9F9;
+  border-color: #D5D5D5;
+}
+
+.suggestion-chip.active {
+  background: rgba(47, 107, 255, 0.12);
+  border: none;
+  color: #2F6BFF;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+/* Recommended Perks Container - Single card with 3 compact perks */
+/* Positioned above tab bar - accounts for tab bar height + safe area + gap */
+.recommended-perks-container {
+  position: fixed;
+  bottom: calc(var(--tabbar-height, 76px) + env(safe-area-inset-bottom, 0px) + 16px);
+  left: 16px;
+  right: 16px;
+  z-index: 1000; /* High enough to be visible above map */
+  pointer-events: none;
+  opacity: 0; /* Start hidden, will be animated in */
+}
+
+.recommended-perks-container.visible {
+  pointer-events: auto;
+  animation: recommendedPerksFadeIn 0.25s ease-out forwards;
+  opacity: 1;
+}
+
+@keyframes recommendedPerksFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.recommended-perks-card {
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 24px;
+  box-shadow: 0px 4px 16px rgba(0, 0, 0, 0.08);
+  padding: 10px 16px;
+  pointer-events: auto;
+}
+
+.recommended-perks-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #333333;
+  margin-bottom: 8px;
+  text-align: left;
+}
+
+.recommended-perks-row {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: stretch;
+  overflow: visible;
+}
+
+/* Compact Perk Card - variant for Recommended Perks */
+.perk-card-compact {
+  flex: 1;
+  min-width: 0;
+  height: 100px;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 6px 0;
+  background: transparent;
+  border: none;
 }
 
-/* Constrain Explore page content */
-#page-explore .section{
-  flex: 0 0 auto;
+.perk-card-compact:hover {
+  transform: translateY(-2px);
+}
+
+.perk-card-compact:active {
+  transform: translateY(0);
+}
+
+.perk-card-compact .perk-card-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #f4f5f7;
+  margin: 0 auto;
+}
+
+.perk-card-compact .perk-card-reward {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2F6BFF;
   margin: 0;
-  padding: 0;
+  text-align: center;
+  line-height: 1.3;
 }
 
-#page-explore .map-card{
-  flex: 0 0 auto;
-  margin: 16px;
+.perk-card-compact .perk-card-walk {
+  font-size: 11px;
+  color: #6B7280;
+  margin: 0;
+  text-align: center;
+  line-height: 1.3;
 }
 
-#page-explore .perk-card{
-  flex: 0 0 auto;
-  margin: 0 16px 8px;
+/* Branded Charger Pins */
+.charger-pin-marker {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
-#page-explore .action-card{
-  flex: 0 0 auto;
-  margin: 0 16px 4px;
+.leaflet-marker-icon.charger-pin-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.charger-pin {
+  position: relative;
+  display: inline-block;
+  cursor: pointer;
+  transform-origin: center bottom;
+  will-change: transform;
+  opacity: 0;
+  animation: pinBounceIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes pinBounceIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-20px) scale(var(--pin-scale, 1));
+  }
+  60% {
+    transform: translateY(2px) scale(var(--pin-scale, 1));
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(var(--pin-scale, 1));
+  }
+}
+
+.charger-pin-circle {
+  position: relative;
+  z-index: 1;
+}
+
+.charger-pin-circle img {
+  display: block;
+}
+
+.charger-pin-tail {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Pin hover effect */
+.charger-pin-marker:hover .charger-pin {
+  filter: brightness(1.1);
+}
+
+/* AirDrop-style popover */
+.merchant-popover {
+  position: absolute;
+  bottom: calc(var(--tabbar-height, 76px) + env(safe-area-inset-bottom, 0px) + 140px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2000;
+  pointer-events: auto;
+}
+
+.popover-content {
+  background: #fff;
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  min-width: 280px;
+  max-width: 320px;
+  text-align: center;
+  animation: popoverIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes popoverIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}
+
+.popover-logo {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin: 0 auto 12px;
+}
+
+.popover-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 8px;
+}
+
+.popover-text {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0 0 20px;
+  line-height: 1.5;
+}
+
+.popover-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.popover-actions .btn-primary {
+  background: #2F6BFF;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.popover-actions .btn-primary:hover {
+  background: #2563eb;
+}
+
+.popover-actions .btn-link {
+  background: none;
+  border: none;
+  color: #2F6BFF;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 8px;
+  text-decoration: underline;
+}
+
+/* Dark mode support (if system prefers dark) - Updated to match light design */
+@media (prefers-color-scheme: dark) {
+  .search-bar-input {
+    background: #FFFFFF !important;
+    border: none !important;
+    box-shadow: 0px 2px 6px rgba(0, 0, 0, 0.08) !important;
+  }
+  
+  .suggestion-chip {
+    background: #FFFFFF !important;
+    border: 1px solid #E5E5E5 !important;
+    color: #4A4A4A !important;
+  }
+  
+  .suggestion-chip:hover {
+    background: #F9F9F9 !important;
+    border-color: #D5D5D5 !important;
+  }
+  
+  .suggestion-chip.active {
+    background: rgba(47, 107, 255, 0.12) !important;
+    border: none !important;
+    color: #2F6BFF !important;
+    font-weight: 600 !important;
+  }
+  
+  .popover-content {
+    background: #1f2937;
+    color: #f9fafb;
+  }
+  
+  #explore-search-input {
+    color: #6E6E6E !important;
+  }
+  
+  #explore-search-input::placeholder {
+    color: #6E6E6E !important;
+  }
 }
 
 /* Flexible spacer to fill remaining space */
@@ -290,7 +701,7 @@ overflow:hidden;
 
 /* Header */
 .topbar{
-  height:64px; display:flex; align-items:center; justify-content:center;
+  height:52px; display:flex; align-items:center; justify-content:center;
   background:#fff; position:sticky; top:0; z-index:100;
   box-shadow:0 2px 8px rgba(0,0,0,.05);
 }
