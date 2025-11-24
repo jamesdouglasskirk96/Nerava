@@ -122,34 +122,43 @@ def shape_merchant(merchant: Dict[str, Any], user_lat: Optional[float] = None, u
     if "nova_reward" in merchant:
         result["nova_reward"] = normalize_number(merchant.get("nova_reward", 0))
     
-    # Logo URL - handle multiple sources:
-    # 1. Direct logo_url (if already a full URL)
-    # 2. photo_url (Google Places photo reference) - convert to full URL
-    # 3. icon (from Google Places icon)
+    # Logo URL - handle multiple sources (prioritize actual photos over generic icons):
+    # 1. photo_url (Google Places photo reference) - convert to full URL (best option)
+    # 2. Direct logo_url (if already a full URL, but prefer photo_url if both exist)
+    # 3. icon (from Google Places icon) - fallback
     logo_url = None
     
-    # Check logo_url first (might already be set)
-    if "logo_url" in merchant and merchant.get("logo_url"):
+    # Prioritize photo_url over logo_url (photos are better than generic icons)
+    if "photo_url" in merchant and merchant.get("photo_url"):
+        photo_ref = merchant.get("photo_url")
+        # If it's not already a full URL, convert it using Google Places photo API
+        if photo_ref and str(photo_ref).strip():
+            photo_ref_str = str(photo_ref).strip()
+            if not photo_ref_str.startswith("http"):
+                # Convert photo reference to full URL
+                logo_url = google_photo_url(photo_ref_str)
+            else:
+                # Already a full URL
+                logo_url = photo_ref_str
+    
+    # If no photo_url, try logo_url (might be a custom logo or icon)
+    if not logo_url and "logo_url" in merchant and merchant.get("logo_url"):
         logo_url_val = merchant.get("logo_url", "")
         # Only use if it's a valid URL (not just empty string or None)
         if logo_url_val and str(logo_url_val).strip():
-            logo_url = str(logo_url_val).strip()
+            logo_url_val_str = str(logo_url_val).strip()
+            # Skip generic Google Places icons (they're not very useful)
+            if "maps.gstatic.com/mapfiles/place_api/icons" not in logo_url_val_str:
+                logo_url = logo_url_val_str
     
-    # If no logo_url, try photo_url (Google Places photo reference)
-    if not logo_url and "photo_url" in merchant and merchant.get("photo_url"):
-        photo_ref = merchant.get("photo_url")
-        # If it's not already a full URL, convert it
-        if photo_ref and str(photo_ref).strip():
-            if not str(photo_ref).startswith("http"):
-                logo_url = google_photo_url(str(photo_ref).strip())
-            else:
-                logo_url = str(photo_ref).strip()
-    
-    # If still no logo, try icon (Google Places generic icon)
+    # If still no logo, try icon (Google Places generic icon) as last resort
     if not logo_url and "icon" in merchant and merchant.get("icon"):
         icon_val = merchant.get("icon", "")
         if icon_val and str(icon_val).strip():
-            logo_url = str(icon_val).strip()
+            icon_str = str(icon_val).strip()
+            # Skip generic icons - they're not very useful
+            if "maps.gstatic.com/mapfiles/place_api/icons" not in icon_str:
+                logo_url = icon_str
     
     # Only include logo_url if we have a valid URL
     if logo_url and logo_url.strip():
