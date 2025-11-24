@@ -695,6 +695,7 @@ async def get_domain_hub_view_async(db: Session) -> Dict:
                 "lng": merchant.lng,
                 "category": merchant.category,
                 "logo_url": merchant.logo_url,
+                "photo_url": merchant.photo_url,  # Include photo_url so shape_merchant can convert Google Places photo references
                 "address": merchant.address,
                 "nova_reward": perk.nova_reward if perk else 10,
                 "walk_minutes": int(link.walk_duration_s / 60) if link else None,
@@ -802,6 +803,7 @@ def _get_domain_hub_view_sync_only(db: Session) -> Dict:
                 "lng": merchant.lng,
                 "category": merchant.category,
                 "logo_url": merchant.logo_url,
+                "photo_url": merchant.photo_url,  # Include photo_url so shape_merchant can convert Google Places photo references
                 "address": merchant.address,
                 "nova_reward": perk.nova_reward if perk else 10,
                 "walk_minutes": int(link.walk_duration_s / 60) if link else None,
