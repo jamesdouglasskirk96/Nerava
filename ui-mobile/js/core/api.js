@@ -6,8 +6,14 @@ function getApiBase() {
   }
   
   // Check for Vite environment variable (if using Vite)
-  if (typeof import !== 'undefined' && import.meta && import.meta.env && import.meta.env.VITE_API_BASE_URL) {
-    return import.meta.env.VITE_API_BASE_URL;
+  try {
+    // eslint-disable-next-line no-undef
+    if (import.meta && import.meta.env && import.meta.env.VITE_API_BASE_URL) {
+      // eslint-disable-next-line no-undef
+      return import.meta.env.VITE_API_BASE_URL;
+    }
+  } catch (e) {
+    // import.meta not available (not in ES module context or browser doesn't support it)
   }
   
   // Detect production environment
