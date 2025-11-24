@@ -390,7 +390,11 @@ async def while_you_charge(
         # Use async version to properly handle merchant fetching
         hub_view = await get_domain_hub_view_async(db)
         
-        logger.info(f"[WhileYouCharge] Hub view: {len(hub_view.get('chargers', []))} chargers, {len(hub_view.get('merchants', []))} merchants")
+        raw_merchants = hub_view.get("merchants", [])
+        logger.info(f"[PilotRouter] Hub view: {len(hub_view.get('chargers', []))} chargers, {len(raw_merchants)} merchants")
+        
+        if not raw_merchants:
+            logger.warning(f"[PilotRouter] ⚠️ No merchants in hub_view! This might mean merchants weren't fetched or committed.")
         
         # Shape chargers for PWA
         shaped_chargers = []
@@ -403,8 +407,7 @@ async def while_you_charge(
             shaped_chargers.append(shaped)
         
         # Shape merchants for PWA
-        raw_merchants = hub_view.get("merchants", [])
-        logger.info(f"[WhileYouCharge] Raw merchants from hub_view: {len(raw_merchants)}")
+        logger.info(f"[PilotRouter] Raw merchants from hub_view: {len(raw_merchants)}")
         
         shaped_merchants = []
         for merchant in raw_merchants:
