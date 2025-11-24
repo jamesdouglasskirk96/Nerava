@@ -572,21 +572,59 @@ async def get_domain_hub_view_async(db: Session) -> Dict:
         merchant_ids = list(set([link.merchant_id for link in links]))
         logger.info(f"[DomainHub] Found {len(merchant_ids)} existing merchants in DB")
     
+    # If chargers aren't in DB, we need to create Charger objects from config for merchant fetching
+    # OR create them in DB first (better long-term)
+    chargers_for_fetching = list(chargers)  # Start with DB chargers
+    if not chargers_for_fetching:
+        logger.info(f"[DomainHub] No chargers in DB, creating Charger objects from config for merchant fetching...")
+        for charger_config in DOMAIN_CHARGERS:
+            # Try to get or create charger in DB
+            existing = db.query(Charger).filter(Charger.id == charger_config["id"]).first()
+            if existing:
+                chargers_for_fetching.append(existing)
+            else:
+                # Create charger from config
+                new_charger = Charger(
+                    id=charger_config["id"],
+                    external_id=charger_config.get("external_id"),
+                    name=charger_config["name"],
+                    network_name=charger_config["network_name"],
+                    lat=charger_config["lat"],
+                    lng=charger_config["lng"],
+                    address=charger_config.get("address"),
+                    city=charger_config.get("city"),
+                    state=charger_config.get("state"),
+                    zip_code=charger_config.get("zip_code"),
+                    connector_types=charger_config.get("connector_types", []),
+                    power_kw=charger_config.get("power_kw"),
+                    is_public=charger_config.get("is_public", True)
+                )
+                db.add(new_charger)
+                db.flush()  # Flush to get the object without committing yet
+                chargers_for_fetching.append(new_charger)
+                logger.info(f"[DomainHub] Created charger {new_charger.id} from config")
+        try:
+            db.commit()
+            logger.info(f"[DomainHub] Committed {len(chargers_for_fetching)} chargers to DB")
+        except Exception as e:
+            logger.error(f"[DomainHub] Failed to commit chargers: {e}", exc_info=True)
+            db.rollback()
+    
     # If no merchants found, automatically fetch and link them (ASYNC)
-    if not merchant_ids and chargers:
+    if not merchant_ids and chargers_for_fetching:
         logger.info(f"[DomainHub] 🔍 No merchants found in DB, starting auto-fetch from Google Places...")
-        logger.info(f"[DomainHub] 🔍 Have {len(chargers)} chargers to search around")
+        logger.info(f"[DomainHub] 🔍 Have {len(chargers_for_fetching)} chargers to search around")
         try:
             # Fetch merchants with multiple categories to get variety
             all_fetched_merchants = []
             categories_to_try = ["coffee", "food", "restaurant"]  # Start with 3 categories
             
             for category in categories_to_try:
-                logger.info(f"[DomainHub] 🔍 Fetching {category} merchants for {len(chargers)} chargers...")
+                logger.info(f"[DomainHub] 🔍 Fetching {category} merchants for {len(chargers_for_fetching)} chargers...")
                 try:
                     fetched_merchants = await find_and_link_merchants(
                         db=db,
-                        chargers=chargers[:2],  # Limit to first 2 chargers to avoid rate limits
+                        chargers=chargers_for_fetching[:2],  # Limit to first 2 chargers to avoid rate limits
                         category=category,
                         merchant_name=None,
                         max_walk_minutes=10
@@ -607,9 +645,9 @@ async def get_domain_hub_view_async(db: Session) -> Dict:
             
             # Refresh merchant_ids from newly created links
             logger.info(f"[DomainHub] 🔍 Refreshing merchant links from DB...")
-            charger_ids_in_db = [c.id for c in chargers]
+            charger_ids_for_lookup = [c.id for c in chargers_for_fetching]
             links = db.query(ChargerMerchant).filter(
-                ChargerMerchant.charger_id.in_(charger_ids_in_db)
+                ChargerMerchant.charger_id.in_(charger_ids_for_lookup)
             ).all()
             merchant_ids = list(set([link.merchant_id for link in links]))
             logger.info(f"[DomainHub] ✅ Total merchants after auto-fetch: {len(merchant_ids)}")
@@ -625,10 +663,10 @@ async def get_domain_hub_view_async(db: Session) -> Dict:
         merchants_query = db.query(Merchant).filter(Merchant.id.in_(merchant_ids)).all()
         
         # Get charger-merchant links for walk times
-        charger_ids_in_db = [c.id for c in chargers] if chargers else []
+        charger_ids_for_lookup = [c.id for c in chargers_for_fetching] if chargers_for_fetching else []
         links = db.query(ChargerMerchant).filter(
             ChargerMerchant.merchant_id.in_(merchant_ids),
-            ChargerMerchant.charger_id.in_(charger_ids_in_db)
+            ChargerMerchant.charger_id.in_(charger_ids_for_lookup)
         ).all()
         
         # Create map of merchant_id -> best link (shortest walk time)
