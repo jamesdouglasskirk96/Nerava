@@ -152,17 +152,21 @@ def shape_merchant(merchant: Dict[str, Any], user_lat: Optional[float] = None, u
                 logo_url = logo_url_val_str
     
     # If still no logo, try icon (Google Places generic icon) as last resort
+    # For now, include even generic icons so we can see what merchants have
+    # TODO: Once we confirm merchants have proper photos, we can filter generic icons
     if not logo_url and "icon" in merchant and merchant.get("icon"):
         icon_val = merchant.get("icon", "")
         if icon_val and str(icon_val).strip():
-            icon_str = str(icon_val).strip()
-            # Skip generic icons - they're not very useful
-            if "maps.gstatic.com/mapfiles/place_api/icons" not in icon_str:
-                logo_url = icon_str
+            logo_url = str(icon_val).strip()
     
-    # Only include logo_url if we have a valid URL
+    # Include logo_url if we have any URL (even generic icons for debugging)
     if logo_url and logo_url.strip():
         result["logo_url"] = logo_url.strip()
+    # Also check if logo_url was explicitly set to None/empty in original merchant
+    elif "logo_url" in merchant:
+        # Explicitly set to None if it was in the original but empty
+        # This helps frontend distinguish between "not present" and "explicitly empty"
+        pass  # Don't include it if it's empty
     
     # Distance if user location provided
     if user_lat is not None and user_lng is not None:

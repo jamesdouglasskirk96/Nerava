@@ -89,6 +89,10 @@ function toMapCharger(charger) {
 function toMapMerchant(merchant) {
   if (!merchant) return null;
   const walkTime = normalizeNumber(merchant.walk_time_s || merchant.walk_seconds || 0);
+  
+  // Preserve logo_url from API response (could be null, empty, or a URL)
+  const logoUrl = merchant.logo_url || merchant.logo || null;
+  
   return {
     id: merchant.id || merchant.merchant_id || `merchant_${Math.random().toString(36).slice(2)}`,
     name: merchant.name || 'Merchant',
@@ -98,7 +102,8 @@ function toMapMerchant(merchant) {
     distance_m: normalizeNumber(merchant.distance_m || 0),
     walk_time_s: walkTime,
     nova_reward: normalizeNumber(merchant.nova_reward || merchant.total_nova_awarded || 0),
-    logo: merchant.logo_url || merchant.logo || '',
+    logo: logoUrl, // Keep null if missing (don't use empty string)
+    logo_url: logoUrl, // Also preserve as logo_url for compatibility
     raw: merchant,
   };
 }
