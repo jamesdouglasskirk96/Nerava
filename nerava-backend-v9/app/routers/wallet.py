@@ -14,8 +14,13 @@ router = APIRouter(prefix="/v1", tags=["wallet"])
 
 # ---- helpers ----
 def _balance(db: Session, user_ref: str) -> int:
-    rows = db.query(CreditLedger).filter(CreditLedger.user_ref == user_ref).all()
-    return sum(r.cents for r in rows)
+    """Get wallet balance, returning 0 if credit_ledger table doesn't exist."""
+    try:
+        rows = db.query(CreditLedger).filter(CreditLedger.user_ref == user_ref).all()
+        return sum(r.cents for r in rows)
+    except Exception:
+        # Table might not exist yet - return 0 balance
+        return 0
 
 def _add_ledger(db: Session, user_ref: str, cents: int, reason: str, meta: Dict[str, Any] = None) -> int:
     row = CreditLedger(user_ref=user_ref, cents=cents, reason=reason, meta=meta or {})
@@ -26,7 +31,12 @@ def _add_ledger(db: Session, user_ref: str, cents: int, reason: str, meta: Dict[
 # ---- endpoints ----
 @router.get("/wallet")
 def get_wallet(user_id: str, db: Session = Depends(get_db)):
-    balance_cents = _balance(db, user_id)
+    """Get wallet balance - returns 0 if credit_ledger table doesn't exist."""
+    try:
+        balance_cents = _balance(db, user_id)
+    except Exception as e:
+        # Handle gracefully if table doesn't exist
+        balance_cents = 0
     return {
         "balance_cents": balance_cents,
         "nova_balance": cents_to_nova(balance_cents)
@@ -69,22 +79,27 @@ def wallet_history(
     limit: int = 50,
     db: Session = Depends(get_db),
 ):
-    q = (
-        db.query(CreditLedger)
-        .filter(CreditLedger.user_ref == user_id)
-        .order_by(CreditLedger.id.desc())
-        .limit(limit)
-    )
-    return [
-        {
-            "cents": r.cents,
-            "nova_delta": cents_to_nova(r.cents),
-            "reason": r.reason,
-            "meta": r.meta,
-            "ts": r.created_at.isoformat()
-        }
-        for r in q.all()
-    ]
+    """Get wallet history - returns empty list if credit_ledger table doesn't exist."""
+    try:
+        q = (
+            db.query(CreditLedger)
+            .filter(CreditLedger.user_ref == user_id)
+            .order_by(CreditLedger.id.desc())
+            .limit(limit)
+        )
+        return [
+            {
+                "cents": r.cents,
+                "nova_delta": cents_to_nova(r.cents),
+                "reason": r.reason,
+                "meta": r.meta,
+                "ts": r.created_at.isoformat()
+            }
+            for r in q.all()
+        ]
+    except Exception:
+        # Table might not exist yet - return empty history
+        return []
 
 @router.get("/wallet/summary")
 def wallet_summary(
@@ -92,24 +107,29 @@ def wallet_summary(
     db: Session = Depends(get_db),
 ):
     """Get wallet summary with balance and recent history"""
-    balance = _balance(db, user_id)
-    
-    # Get recent history
-    q = (
-        db.query(CreditLedger)
-        .filter(CreditLedger.user_ref == user_id)
-        .order_by(CreditLedger.id.desc())
-        .limit(10)
-    )
-    history = [
-        {
-            "cents": r.cents,
-            "reason": r.reason,
-            "meta": r.meta,
-            "ts": r.created_at.isoformat()
-        }
-        for r in q.all()
-    ]
+    try:
+        balance = _balance(db, user_id)
+        
+        # Get recent history
+        q = (
+            db.query(CreditLedger)
+            .filter(CreditLedger.user_ref == user_id)
+            .order_by(CreditLedger.id.desc())
+            .limit(10)
+        )
+        history = [
+            {
+                "cents": r.cents,
+                "reason": r.reason,
+                "meta": r.meta,
+                "ts": r.created_at.isoformat()
+            }
+            for r in q.all()
+        ]
+    except Exception:
+        # Table might not exist yet - return empty wallet
+        balance = 0
+        history = []
     
     return {
         "balance_cents": balance,

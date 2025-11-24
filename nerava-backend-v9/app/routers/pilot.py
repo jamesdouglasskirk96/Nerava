@@ -606,11 +606,17 @@ def verify_visit(
             SELECT user_id FROM sessions WHERE id = :session_id
         """), {"session_id": request.session_id}).first()
         
+        # Get wallet balance (handle case where credit_ledger table doesn't exist yet)
         wallet_balance_cents = 0
         if session_row:
-            from app.models_extra import CreditLedger
-            ledger_rows = db.query(CreditLedger).filter(CreditLedger.user_ref == str(session_row[0])).all()
-            wallet_balance_cents = sum(r.cents for r in ledger_rows) if ledger_rows else 0
+            try:
+                from app.models_extra import CreditLedger
+                ledger_rows = db.query(CreditLedger).filter(CreditLedger.user_ref == str(session_row[0])).all()
+                wallet_balance_cents = sum(r.cents for r in ledger_rows) if ledger_rows else 0
+            except Exception as ledger_err:
+                # Table might not exist yet - return 0 balance
+                logger.warning(f"Could not query wallet balance (table may not exist): {ledger_err}")
+                wallet_balance_cents = 0
         
         return {
             "verified": False,
