@@ -15,7 +15,7 @@ import uuid
 from app.db import get_db
 from app.domains.domain_hub import HUB_ID, HUB_NAME, DOMAIN_CHARGERS
 from app.services.verify_dwell import start_session as verify_start_session, ping as verify_ping
-from app.services.while_you_charge import get_domain_hub_view
+from app.services.while_you_charge import get_domain_hub_view, get_domain_hub_view_async
 from app.services.rewards import award_verify_bonus
 from app.services.nova import cents_to_nova
 from app.services.verify_dwell import haversine_m
@@ -374,7 +374,7 @@ def verify_ping_endpoint(
 # Endpoint 3: GET /v1/pilot/while_you_charge
 # ============================================
 @router.get("/while_you_charge")
-def while_you_charge(
+async def while_you_charge(
     session_id: Optional[str] = Query(None, description="Optional session ID"),
     user_lat: Optional[float] = Query(None, description="Optional user latitude for distance calculation"),
     user_lng: Optional[float] = Query(None, description="Optional user longitude for distance calculation"),
@@ -387,7 +387,10 @@ def while_you_charge(
     PWA-optimized: consistent object shapes, no nulls, integers only.
     """
     try:
-        hub_view = get_domain_hub_view(db)
+        # Use async version to properly handle merchant fetching
+        hub_view = await get_domain_hub_view_async(db)
+        
+        logger.info(f"[WhileYouCharge] Hub view: {len(hub_view.get('chargers', []))} chargers, {len(hub_view.get('merchants', []))} merchants")
         
         # Shape chargers for PWA
         shaped_chargers = []
@@ -400,8 +403,11 @@ def while_you_charge(
             shaped_chargers.append(shaped)
         
         # Shape merchants for PWA
+        raw_merchants = hub_view.get("merchants", [])
+        logger.info(f"[WhileYouCharge] Raw merchants from hub_view: {len(raw_merchants)}")
+        
         shaped_merchants = []
-        for merchant in hub_view.get("merchants", []):
+        for merchant in raw_merchants:
             # Convert walk_minutes to walk_time_s
             if "walk_minutes" in merchant:
                 merchant["walk_time_s"] = merchant["walk_minutes"] * 60
@@ -415,6 +421,8 @@ def while_you_charge(
                 shaped["walk_time_s"] = normalize_number(merchant["walk_minutes"] * 60)
             shaped_merchants.append(shaped)
         
+        logger.info(f"[WhileYouCharge] Returning {len(shaped_merchants)} shaped merchants")
+        
         return {
             "hub_id": hub_view.get("hub_id"),
             "hub_name": hub_view.get("hub_name"),
@@ -422,7 +430,7 @@ def while_you_charge(
             "recommended_merchants": shaped_merchants  # Renamed from "merchants" for clarity
         }
     except Exception as e:
-        logger.error(f"Failed to get Domain hub view: {str(e)}")
+        logger.error(f"Failed to get Domain hub view: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to load hub data: {str(e)}")
 
 

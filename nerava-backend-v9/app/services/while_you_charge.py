@@ -493,16 +493,47 @@ def rank_merchants(
 
 def get_domain_hub_view(db: Session) -> Dict:
     """
-    Get Domain hub view with chargers and recommended merchants.
+    Get Domain hub view with chargers and recommended merchants (sync version).
     
     Uses Domain hub configuration to fetch chargers and find linked merchants.
+    This is a sync wrapper - for async context use get_domain_hub_view_async.
+    
+    Returns:
+        Dict with hub_id, hub_name, chargers, and merchants
+    """
+    import asyncio
+    try:
+        # Try to get existing event loop
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # Can't use run_until_complete in async context, return basic view
+            logger.warning("[DomainHub] Called sync version from async context, skipping auto-fetch")
+            return _get_domain_hub_view_sync_only(db)
+        else:
+            return loop.run_until_complete(get_domain_hub_view_async(db))
+    except RuntimeError:
+        # No event loop, create one
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(get_domain_hub_view_async(db))
+        finally:
+            loop.close()
+
+
+async def get_domain_hub_view_async(db: Session) -> Dict:
+    """
+    Async version of get_domain_hub_view that properly handles async merchant fetching.
+    
+    Uses Domain hub configuration to fetch chargers and find linked merchants.
+    Automatically fetches merchants from Google Places if none exist.
     
     Returns:
         Dict with hub_id, hub_name, chargers, and merchants
     """
     from app.domains.domain_hub import DOMAIN_CHARGERS, HUB_ID, HUB_NAME
     
-    logger.info(f"[DomainHub] Fetching Domain hub view")
+    logger.info(f"[DomainHub] Fetching Domain hub view (async)")
     
     # Get charger IDs from config
     charger_ids = [ch["id"] for ch in DOMAIN_CHARGERS]
@@ -554,51 +585,45 @@ def get_domain_hub_view(db: Session) -> Dict:
         ).all()
         
         merchant_ids = list(set([link.merchant_id for link in links]))
+        logger.info(f"[DomainHub] Found {len(merchant_ids)} existing merchants in DB")
     
-    # If no merchants found, automatically fetch and link them
+    # If no merchants found, automatically fetch and link them (ASYNC)
     if not merchant_ids and chargers:
         logger.info(f"[DomainHub] No merchants found in DB, fetching from Google Places...")
         try:
-            import asyncio
-            # Try to get event loop, create new one if none exists
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            
             # Fetch merchants with multiple categories to get variety
-            # Do this per charger to get good coverage
             all_fetched_merchants = []
-            categories_to_try = ["coffee", "food", "restaurant", "shopping_mall", "supermarket"]
+            categories_to_try = ["coffee", "food", "restaurant"]  # Start with 3 categories
             
-            for category in categories_to_try[:3]:  # Limit to avoid too many API calls
-                fetched_merchants = loop.run_until_complete(
-                    find_and_link_merchants(
-                        db=db,
-                        chargers=chargers[:2],  # Limit to first 2 chargers to avoid rate limits
-                        category=category,
-                        merchant_name=None,
-                        max_walk_minutes=10
-                    )
+            for category in categories_to_try:
+                logger.info(f"[DomainHub] Fetching {category} merchants for {len(chargers)} chargers...")
+                fetched_merchants = await find_and_link_merchants(
+                    db=db,
+                    chargers=chargers[:2],  # Limit to first 2 chargers to avoid rate limits
+                    category=category,
+                    merchant_name=None,
+                    max_walk_minutes=10
                 )
                 all_fetched_merchants.extend(fetched_merchants)
+                logger.info(f"[DomainHub] Fetched {len(fetched_merchants)} {category} merchants")
+                
                 # Commit after each category to save progress
                 try:
                     db.commit()
-                except Exception:
+                    logger.info(f"[DomainHub] Committed {category} merchants to DB")
+                except Exception as commit_err:
+                    logger.error(f"[DomainHub] Failed to commit {category} merchants: {commit_err}")
                     db.rollback()
             
             # Refresh merchant_ids from newly created links
-            if all_fetched_merchants or True:  # Always refresh to check if any were saved
-                charger_ids_in_db = [c.id for c in chargers]
-                links = db.query(ChargerMerchant).filter(
-                    ChargerMerchant.charger_id.in_(charger_ids_in_db)
-                ).all()
-                merchant_ids = list(set([link.merchant_id for link in links]))
-                logger.info(f"[DomainHub] Fetched and linked {len(merchant_ids)} merchants")
+            charger_ids_in_db = [c.id for c in chargers]
+            links = db.query(ChargerMerchant).filter(
+                ChargerMerchant.charger_id.in_(charger_ids_in_db)
+            ).all()
+            merchant_ids = list(set([link.merchant_id for link in links]))
+            logger.info(f"[DomainHub] ✅ Fetched and linked {len(merchant_ids)} total merchants")
         except Exception as e:
-            logger.warning(f"[DomainHub] Failed to fetch merchants automatically: {e}", exc_info=True)
+            logger.error(f"[DomainHub] ❌ Failed to fetch merchants automatically: {e}", exc_info=True)
             db.rollback()
     
     # Fetch merchants
@@ -649,8 +674,112 @@ def get_domain_hub_view(db: Session) -> Dict:
         
         # Sort merchants by walk time (ascending)
         merchants.sort(key=lambda m: m.get("walk_minutes") or 999)
+    else:
+        logger.warning(f"[DomainHub] ⚠️ No merchants available (merchant_ids is empty)")
     
-    logger.info(f"[DomainHub] Found {len(charger_list)} chargers, {len(merchants)} merchants")
+    logger.info(f"[DomainHub] ✅ Final: {len(charger_list)} chargers, {len(merchants)} merchants")
+    
+    return {
+        "hub_id": HUB_ID,
+        "hub_name": HUB_NAME,
+        "chargers": charger_list,
+        "merchants": merchants
+    }
+
+
+def _get_domain_hub_view_sync_only(db: Session) -> Dict:
+    """Sync-only version without auto-fetch (used when called from async context)."""
+    from app.domains.domain_hub import DOMAIN_CHARGERS, HUB_ID, HUB_NAME
+    
+    logger.info(f"[DomainHub] Fetching Domain hub view (sync-only, no auto-fetch)")
+    
+    # Get charger IDs from config
+    charger_ids = [ch["id"] for ch in DOMAIN_CHARGERS]
+    
+    # Fetch chargers from DB
+    chargers = db.query(Charger).filter(Charger.id.in_(charger_ids)).all()
+    
+    # Build charger list
+    chargers_by_id = {c.id: c for c in chargers}
+    charger_list = []
+    for charger_config in DOMAIN_CHARGERS:
+        charger_id = charger_config["id"]
+        charger = chargers_by_id.get(charger_id)
+        
+        if charger:
+            charger_list.append({
+                "id": charger.id,
+                "name": charger.name,
+                "lat": charger.lat,
+                "lng": charger.lng,
+                "network_name": charger.network_name,
+                "logo_url": charger.logo_url,
+                "address": charger.address,
+                "radius_m": charger_config.get("radius_m", 1000)
+            })
+        else:
+            charger_list.append({
+                "id": charger_config["id"],
+                "name": charger_config["name"],
+                "lat": charger_config["lat"],
+                "lng": charger_config["lng"],
+                "network_name": charger_config["network_name"],
+                "logo_url": None,
+                "address": charger_config.get("address"),
+                "radius_m": charger_config.get("radius_m", 1000)
+            })
+    
+    # Find existing merchants only (no auto-fetch)
+    merchant_ids = []
+    if chargers:
+        charger_ids_in_db = [c.id for c in chargers]
+        links = db.query(ChargerMerchant).filter(
+            ChargerMerchant.charger_id.in_(charger_ids_in_db)
+        ).all()
+        merchant_ids = list(set([link.merchant_id for link in links]))
+    
+    # Fetch and shape merchants
+    merchants = []
+    if merchant_ids:
+        merchants_query = db.query(Merchant).filter(Merchant.id.in_(merchant_ids)).all()
+        charger_ids_in_db = [c.id for c in chargers] if chargers else []
+        links = db.query(ChargerMerchant).filter(
+            ChargerMerchant.merchant_id.in_(merchant_ids),
+            ChargerMerchant.charger_id.in_(charger_ids_in_db)
+        ).all()
+        
+        links_by_merchant = {}
+        for link in links:
+            merchant_id = link.merchant_id
+            if merchant_id not in links_by_merchant or link.walk_duration_s < links_by_merchant[merchant_id].walk_duration_s:
+                links_by_merchant[merchant_id] = link
+        
+        perks = db.query(MerchantPerk).filter(
+            MerchantPerk.merchant_id.in_(merchant_ids),
+            MerchantPerk.is_active == True
+        ).all()
+        perks_by_merchant = {p.merchant_id: p for p in perks}
+        
+        for merchant in merchants_query:
+            link = links_by_merchant.get(merchant.id)
+            perk = perks_by_merchant.get(merchant.id)
+            
+            merchant_data = {
+                "id": merchant.id,
+                "name": merchant.name,
+                "lat": merchant.lat,
+                "lng": merchant.lng,
+                "category": merchant.category,
+                "logo_url": merchant.logo_url,
+                "address": merchant.address,
+                "nova_reward": perk.nova_reward if perk else 10,
+                "walk_minutes": int(link.walk_duration_s / 60) if link else None,
+                "walk_distance_m": link.walk_distance_m if link else None,
+                "distance_m": link.distance_m if link else None
+            }
+            merchants.append(merchant_data)
+        
+        merchants.sort(key=lambda m: m.get("walk_minutes") or 999)
     
     return {
         "hub_id": HUB_ID,
