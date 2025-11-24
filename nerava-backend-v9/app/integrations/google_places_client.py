@@ -10,17 +10,8 @@ from typing import List, Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-# API key resolution: prefer explicit Places key, then Maps key, then generic Google key
-GOOGLE_PLACES_API_KEY = (
-    os.getenv("GOOGLE_PLACES_API_KEY")
-    or os.getenv("GOOGLE_MAPS_API_KEY")
-    or os.getenv("GOOGLE_API_KEY")
-)
-
-if not GOOGLE_PLACES_API_KEY:
-    logger.warning(
-        "[GooglePlaces] No API key configured. Set GOOGLE_PLACES_API_KEY or GOOGLE_MAPS_API_KEY or GOOGLE_API_KEY"
-    )
+# Hardcoded API key (no longer reads from environment variables)
+GOOGLE_PLACES_API_KEY = "AIzaSyAs0PVYXj3-ztRXCjdd0ztUGUSjQR73FFg"
 
 GOOGLE_PLACES_BASE_URL = "https://maps.googleapis.com/maps/api/place"
 
