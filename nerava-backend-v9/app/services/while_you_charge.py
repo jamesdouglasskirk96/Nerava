@@ -213,19 +213,22 @@ async def find_and_link_merchants(
             keyword=keyword
         )
         
-        logger.info(
-            "[WhileYouCharge] Charger %s (%s): Got %d places from Google, types=%s, keyword=%s",
+        logger.warning(
+            "[WhileYouCharge] Charger %s (%s): Got %d places from Google, types=%s, keyword=%s, location=(%s,%s)",
             charger.id,
             charger.name,
             len(places),
             place_types,
-            keyword
+            keyword,
+            charger.lat,
+            charger.lng
         )
         
         if not places:
-            logger.warning(
-                "[WhileYouCharge] No places returned for charger %s at (%s,%s)",
+            logger.error(
+                "[WhileYouCharge] ⚠️ No places returned for charger %s (%s) at (%s,%s) - check [PLACES] logs above",
                 charger.id,
+                charger.name,
                 charger.lat,
                 charger.lng
             )
@@ -331,9 +334,9 @@ async def find_and_link_merchants(
             seen.add(m.id)
             unique_merchants.append(m)
     
-    logger.info(
-        "[WhileYouCharge] Summary: %d unique merchants total (%d existing from DB, %d newly created/linked). "
-        "Check [PLACES] logs for Google API status and [WhileYouCharge] logs for filtering details.",
+    logger.warning(
+        "[WhileYouCharge] SUMMARY: %d unique merchants total (%d existing from DB, %d newly created/linked). "
+        "Check [PLACES] logs above for Google API status and [WhileYouCharge] logs for filtering details.",
         len(unique_merchants),
         len(existing_merchants),
         len(all_new_merchants)
