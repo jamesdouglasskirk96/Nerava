@@ -4,7 +4,7 @@ import logging
 
 from .db import Base, engine
 from .config import settings
-from .db.run_migrations import run_migrations
+from app.db.run_migrations import run_migrations
 
 logger = logging.getLogger(__name__)
 from .middleware.logging import LoggingMiddleware
