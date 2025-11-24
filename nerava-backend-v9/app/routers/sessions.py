@@ -455,9 +455,12 @@ async def locate_session(
     }
     
     if reward_result and reward_result["awarded"]:
+        from app.services.nova import cents_to_nova
         response.update({
             "reward_cents": settings.verify_reward_cents,
+            "nova_awarded": cents_to_nova(settings.verify_reward_cents),
             "wallet_delta_cents": reward_result["user_delta"],
+            "wallet_delta_nova": cents_to_nova(reward_result["user_delta"]),
             "pool_delta_cents": reward_result["pool_delta"]
         })
     elif reward_result and not reward_result["awarded"]:

@@ -1,6 +1,6 @@
 """Add merchant API keys and dashboard fields
 
-Revision ID: 010
+Revision ID: 010_merchant_keys
 Revises: 009
 Create Date: 2025-10-29 20:00:00.000000
 
@@ -9,8 +9,8 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision = '010'
-down_revision = '009'
+revision = "010_merchant_keys"
+down_revision = "009"
 branch_labels = None
 depends_on = None
 

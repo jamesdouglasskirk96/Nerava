@@ -45,6 +45,17 @@ Key environment variables (see `ENV.example` for full list):
   - Split: 90% to user wallet, 10% to community pool
   - Idempotent: one reward per session
 
+### Database Migrations
+
+To get the "While You Charge" feature working, run migrations:
+
+```bash
+cd nerava-backend-v9
+alembic upgrade head
+```
+
+This creates tables: `chargers`, `merchants`, `charger_merchants`, `merchant_perks`.
+
 ### Quick Start
 
 1. **Navigate to server directory:**

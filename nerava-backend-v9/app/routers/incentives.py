@@ -5,6 +5,7 @@ from typing import Dict, Optional
 from sqlalchemy.orm import Session
 from app.services.wallet import credit_wallet  # existing wallet service
 from app.services.rewards_engine import record_reward_event
+from app.services.nova import cents_to_nova
 from app.db import get_db
 
 router = APIRouter(prefix="/v1/incentives", tags=["incentives"])
@@ -57,7 +58,9 @@ def award(user_id: str = Query(...), cents: int = 100):
     return {
         "active": w["active"],
         "awarded_cents": awarded,
+        "nova_awarded": cents_to_nova(awarded),
         "balance_cents": balance,
+        "nova_balance": cents_to_nova(balance),
         "window": w,
     }
 
@@ -82,6 +85,7 @@ def award_with_community(
     
     return {
         "gross_cents": ev.gross_cents,
+        "nova_awarded": cents_to_nova(ev.net_cents),
         "net_cents": ev.net_cents, 
         "community_cents": ev.community_cents,
         "user_id": user_id,

@@ -9,6 +9,11 @@ branch_labels = None
 depends_on = None
 
 
+def _is_sqlite() -> bool:
+    bind = op.get_bind()
+    return bind.dialect.name == "sqlite"
+
+
 def _add_col_if_missing(table: str, col: sa.Column) -> None:
     bind = op.get_bind()
     insp = sa.inspect(bind)
@@ -99,7 +104,11 @@ def upgrade() -> None:
             sa.Column("joined_at", sa.DateTime, server_default=sa.text("CURRENT_TIMESTAMP")),
             sa.Column("verified_at", sa.DateTime),
         )
-        op.create_unique_constraint("ux_event_attendee2", "event_attendance2", ["event_id", "user_id"])
+        if _is_sqlite():
+            with op.batch_alter_table("event_attendance2") as batch_op:
+                batch_op.create_unique_constraint("ux_event_attendee2", ["event_id", "user_id"])
+        else:
+            op.create_unique_constraint("ux_event_attendee2", "event_attendance2", ["event_id", "user_id"])
 
     if not _has_table("verifications2"):
         op.create_table(

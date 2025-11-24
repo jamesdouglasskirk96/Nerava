@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models_extra import CreditLedger, IncentiveRule
 from app.services.incentives import calc_award_cents
+from app.services.nova import cents_to_nova
 
 router = APIRouter(prefix="/v1", tags=["wallet"])
 
@@ -25,7 +26,11 @@ def _add_ledger(db: Session, user_ref: str, cents: int, reason: str, meta: Dict[
 # ---- endpoints ----
 @router.get("/wallet")
 def get_wallet(user_id: str, db: Session = Depends(get_db)):
-    return {"balance_cents": _balance(db, user_id)}
+    balance_cents = _balance(db, user_id)
+    return {
+        "balance_cents": balance_cents,
+        "nova_balance": cents_to_nova(balance_cents)
+    }
 
 @router.post("/wallet/credit_qs")
 def wallet_credit_qs(
@@ -36,7 +41,10 @@ def wallet_credit_qs(
     if cents <= 0:
         raise HTTPException(status_code=400, detail="cents must be > 0")
     new_bal = _add_ledger(db, user_id, cents, "ADJUST", {"via": "credit_qs"})
-    return {"new_balance_cents": new_bal}
+    return {
+        "new_balance_cents": new_bal,
+        "nova_balance": cents_to_nova(new_bal)
+    }
 
 @router.post("/wallet/debit_qs")
 def wallet_debit_qs(
@@ -50,7 +58,10 @@ def wallet_debit_qs(
     if bal < cents:
         raise HTTPException(status_code=400, detail="insufficient_funds")
     new_bal = _add_ledger(db, user_id, -cents, "ADJUST", {"via": "debit_qs"})
-    return {"new_balance_cents": new_bal}
+    return {
+        "new_balance_cents": new_bal,
+        "nova_balance": cents_to_nova(new_bal)
+    }
 
 @router.get("/wallet/history")
 def wallet_history(
@@ -65,7 +76,13 @@ def wallet_history(
         .limit(limit)
     )
     return [
-        {"cents": r.cents, "reason": r.reason, "meta": r.meta, "ts": r.created_at.isoformat()}
+        {
+            "cents": r.cents,
+            "nova_delta": cents_to_nova(r.cents),
+            "reason": r.reason,
+            "meta": r.meta,
+            "ts": r.created_at.isoformat()
+        }
         for r in q.all()
     ]
 
@@ -96,8 +113,15 @@ def wallet_summary(
     
     return {
         "balance_cents": balance,
+        "nova_balance": cents_to_nova(balance),
         "balance_dollars": round(balance / 100, 2),
-        "history": history
+        "history": [
+            {
+                **entry,
+                "nova_delta": cents_to_nova(entry["cents"])
+            }
+            for entry in history
+        ]
     }
 
 class RedeemReq(BaseModel):
@@ -116,7 +140,13 @@ def wallet_redeem(req: RedeemReq, db: Session = Depends(get_db)):
     if bal < cents:
         raise HTTPException(status_code=400, detail="insufficient_funds")
     new_bal = _add_ledger(db, user_id, -cents, "REDEEM", {"perk": perk})
-    return {"new_balance_cents": new_bal, "redeemed": cents, "perk": perk}
+    return {
+        "new_balance_cents": new_bal,
+        "nova_balance": cents_to_nova(new_bal),
+        "redeemed": cents,
+        "redeemed_nova": cents_to_nova(cents),
+        "perk": perk
+    }
 
 @router.post("/incentives/award_off_peak")
 def award_off_peak(user_id: str, db: Session = Depends(get_db)):
@@ -132,5 +162,14 @@ def award_off_peak(user_id: str, db: Session = Depends(get_db)):
     amt = calc_award_cents(datetime.utcnow(), rules_dicts)
     if amt > 0:
         new_bal = _add_ledger(db, user_id, amt, "OFF_PEAK_AWARD", {"rule": "OFF_PEAK_BASE"})
-        return {"awarded_cents": amt, "new_balance_cents": new_bal}
-    return {"awarded_cents": 0, "message": "Not in off-peak window"}
+        return {
+            "awarded_cents": amt,
+            "nova_awarded": cents_to_nova(amt),
+            "new_balance_cents": new_bal,
+            "nova_balance": cents_to_nova(new_bal)
+        }
+    return {
+        "awarded_cents": 0,
+        "nova_awarded": 0,
+        "message": "Not in off-peak window"
+    }

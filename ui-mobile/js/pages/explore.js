@@ -18,7 +18,7 @@
  * - AirDrop-style popover: Merchant quick view on tap (shown on charger/merchant tap)
  */
 
-import { apiGet } from '../core/api.js';
+import { apiGet, apiPost } from '../core/api.js';
 import { ensureMap, clearStations, addStationDot, fitToStations, getMap } from '../core/map.js';
 import { setTab } from '../app.js';
 
@@ -103,29 +103,115 @@ function showToast(message) {
 }
 
 // === Search Bar ============================================================
+let _searchTimeout = null;
+
 function initSearchBar() {
   const searchInput = $('#explore-search-input');
   const voiceBtn = $('#explore-voice-btn');
   
   if (!searchInput) return;
   
-  // Text search (TODO: wire to actual search API)
+  // Text search - debounced API call
   searchInput.addEventListener('input', (e) => {
     const query = e.target.value.trim();
-    if (query.length > 0) {
-      console.log('Search query:', query);
-      // TODO: Filter merchants/chargers by query
-      // For now, just log
+    
+    // Clear previous timeout
+    if (_searchTimeout) {
+      clearTimeout(_searchTimeout);
+    }
+    
+    // If empty, reset to default "coffee" search
+    if (query.length === 0) {
+      if (_userLocation) {
+        performSearch(_userLocation.lat, _userLocation.lng, "coffee");
+      }
+      return;
+    }
+    
+    // Debounce: wait 500ms after user stops typing
+    _searchTimeout = setTimeout(async () => {
+      if (!_userLocation) {
+        console.warn('[WhileYouCharge] No user location for search');
+        showToast('Please enable location access');
+        return;
+      }
+      
+      console.log(`[WhileYouCharge] Search query: "${query}"`);
+      await performSearch(_userLocation.lat, _userLocation.lng, query);
+    }, 500);
+  });
+  
+  // Enter key triggers immediate search
+  searchInput.addEventListener('keydown', async (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (_searchTimeout) {
+        clearTimeout(_searchTimeout);
+      }
+      
+      const query = searchInput.value.trim();
+      if (query.length > 0 && _userLocation) {
+        await performSearch(_userLocation.lat, _userLocation.lng, query);
+      }
     }
   });
   
   // Voice search (TODO: implement voice recognition)
   if (voiceBtn) {
     voiceBtn.addEventListener('click', () => {
-      console.log('Voice search clicked');
-      // TODO: Implement voice search
+      console.log('[WhileYouCharge] Voice search clicked');
       showToast('Voice search coming soon');
     });
+  }
+}
+
+// Unified search function
+async function performSearch(lat, lng, query) {
+  console.log(`[WhileYouCharge] Performing search: lat=${lat}, lng=${lng}, query="${query}"`);
+  
+  // Show loading state
+  showLoadingState();
+  
+  try {
+    const results = await searchWhileYouCharge(lat, lng, query);
+    
+    // Update map with chargers
+    clearStations();
+    if (results.chargers && results.chargers.length > 0) {
+      results.chargers.forEach(ch => {
+        addStationDot({
+          id: ch.id,
+          name: ch.name,
+          lat: ch.lat,
+          lng: ch.lng,
+          network: ch.network_name
+        }, {
+          onClick: (station) => selectCharger(station)
+        });
+      });
+      
+      fitToStations(results.chargers);
+    }
+    
+    // Update perks
+    if (results.merchants && results.merchants.length > 0) {
+      console.log(`[WhileYouCharge] Rendering ${results.merchants.length} merchants`);
+      const perks = results.merchants.map(m => ({
+        id: m.id,
+        name: m.name,
+        logo: m.logo_url || `https://logo.clearbit.com/${m.name.toLowerCase().replace(/\s+/g, '')}.com`,
+        nova: m.nova_reward,
+        walk: `${m.walk_minutes} min walk`
+      }));
+      updateRecommendedPerks(perks);
+      hideLoadingState();
+    } else {
+      console.warn('[WhileYouCharge] No merchants returned');
+      showEmptyState('No perks found for this search');
+    }
+  } catch (e) {
+    console.error('[WhileYouCharge] Search error:', e);
+    showEmptyState('Search failed. Please try again.');
   }
 }
 
@@ -152,11 +238,23 @@ function initSuggestions() {
   });
 }
 
-function filterByCategory(category) {
+async function filterByCategory(category) {
   console.log('Filtering by category:', category);
-  // TODO: Implement actual filtering logic
-  // For now, just log the filter selection
-  // Future: Filter charger markers or merchant popovers based on category
+  
+  if (!_userLocation) {
+    console.warn('No user location available for filtering');
+    return;
+  }
+  
+  const categoryMap = {
+    'coffee': 'coffee',
+    'food': 'food',
+    'groceries': 'groceries',
+    'gym': 'gym'
+  };
+  const query = categoryMap[category] || category;
+  
+  await performSearch(_userLocation.lat, _userLocation.lng, query);
 }
 
 // === Merchant Popover ======================================================
@@ -219,23 +317,49 @@ function hideMerchantPopover() {
   _selectedMerchantId = null;
 }
 
-// === Recommended Perks Management ==================================================
-// Single container card with 3 compact perks side-by-side
-function renderRecommendedPerks(perks) {
+// === Loading & Empty States ==============================================
+function showLoadingState() {
   const container = $('#recommended-perks-container');
-  const row = $('#recommended-perks-row');
+  if (!container) return;
+  
+  const row = container.querySelector('.recommended-perks-row');
+  if (!row) return;
+  
+  row.innerHTML = '<div style="text-align: center; padding: 20px; color: #6B7280; font-size: 14px;">Loading perks...</div>';
+  container.style.display = 'block';
+  container.classList.add('visible');
+}
+
+function hideLoadingState() {
+  // Loading state is cleared when perks are rendered
+}
+
+function showEmptyState(message = 'No perks available') {
+  const container = $('#recommended-perks-container');
+  if (!container) return;
+  
+  const row = container.querySelector('.recommended-perks-row');
+  if (!row) return;
+  
+  row.innerHTML = `<div style="text-align: center; padding: 20px; color: #6B7280; font-size: 14px;">${message}</div>`;
+  container.style.display = 'block';
+  container.classList.add('visible');
+}
+
+// === Recommended Perks Management ==================================================
+function updateRecommendedPerks(perks) {
+  const container = $('#recommended-perks-container');
+  const row = container?.querySelector('.recommended-perks-row');
   
   if (!container || !row) return;
   
-  // Use provided perks or default recommended perks (exactly 3)
-  const perksToShow = (perks && perks.length > 0 ? perks : _recommendedPerks).slice(0, 3);
-  
   // Hide if no perks
-  if (perksToShow.length === 0) {
-    container.style.display = 'none';
-    container.classList.remove('visible');
+  if (!perks || perks.length === 0) {
+    showEmptyState('No perks found');
     return;
   }
+  
+  const perksToShow = perks.slice(0, 3);
   
   // Clear existing cards
   row.innerHTML = '';
@@ -255,7 +379,7 @@ function renderRecommendedPerks(perks) {
     
     // Handle card click
     card.addEventListener('click', () => {
-      console.log('Recommended perk clicked:', perk.name);
+      console.log('[WhileYouCharge] Recommended perk clicked:', perk.name);
       // TODO: Show merchant detail or start session
       showMerchantPopover({
         merchant: { name: perk.name, logo: perk.logo },
@@ -267,25 +391,53 @@ function renderRecommendedPerks(perks) {
     row.appendChild(card);
   });
   
-  // Show with animation
+  // Show container with animation
   container.style.display = 'block';
-  container.style.opacity = '0'; // Reset for animation
-  // Trigger animation on next frame
-  requestAnimationFrame(() => {
-    container.classList.add('visible');
-    // Force reflow to ensure animation triggers
-    void container.offsetHeight;
-  });
+  container.style.opacity = '0';
+  container.classList.add('visible');
+  void container.offsetHeight; // Force reflow
+  
+  console.log(`[WhileYouCharge] Rendered ${perksToShow.length} perk cards`);
 }
 
-function updateRecommendedPerks(perks) {
-  // Use provided perks or default recommended perks
-  const perksToShow = perks && perks.length > 0 ? perks : _recommendedPerks;
-  renderRecommendedPerks(perksToShow);
+// === Search While You Charge ============================================
+async function searchWhileYouCharge(userLat, userLng, query = "coffee") {
+  try {
+    console.log(`[WhileYouCharge] Searching: lat=${userLat}, lng=${userLng}, query="${query}"`);
+    
+    const response = await apiPost('/v1/while_you_charge/search', JSON.stringify({
+      user_lat: userLat,
+      user_lng: userLng,
+      query: query,
+      max_drive_minutes: 15,
+      max_walk_minutes: 10,
+      limit_merchants: 3
+    }), { 'Content-Type': 'application/json' });
+    
+    if (!response) {
+      console.warn('[WhileYouCharge] Search returned null/empty response');
+      return { chargers: [], merchants: [] };
+    }
+    
+    const chargers = response.chargers || [];
+    const merchants = response.recommended_merchants || [];
+    
+    console.log(`[WhileYouCharge] Results: ${chargers.length} chargers, ${merchants.length} merchants`);
+    
+    if (merchants.length === 0 && chargers.length === 0) {
+      console.warn('[WhileYouCharge] No results found - will use fallback data');
+    }
+    
+    return { chargers, merchants };
+  } catch (e) {
+    console.error('[WhileYouCharge] API error:', e);
+    console.warn('[WhileYouCharge] Falling back to dummy data');
+    return { chargers: [], merchants: [] };
+  }
 }
 
 // === Charger Selection =====================================================
-function selectCharger(charger) {
+async function selectCharger(charger) {
   _selectedChargerId = charger.id;
   
   console.log('Charger tapped:', charger.id, charger.name);
@@ -295,12 +447,12 @@ function selectCharger(charger) {
     _map.setView([charger.lat, charger.lng], 15);
   }
   
-  // Update perk rail with merchants for this charger
-  // For now, use dummy merchants; later replace with API call
-  updateRecommendedPerks(_recommendedPerks);
-  
-  // TODO: Show merchant popover or overlay when charger is tapped
-  // For now, just log the selection
+  // Search for merchants near this charger
+  if (_userLocation) {
+    await performSearch(_userLocation.lat, _userLocation.lng, _selectedCategory || "coffee");
+  } else {
+    showEmptyState('Location required');
+  }
 }
 
 // === Main Initialization ===================================================
@@ -421,10 +573,74 @@ export async function initExplore(){
   // Initialize UI components
   initSearchBar();
   initSuggestions();
+  
+  // Show empty state initially until location is available
+  if (!_userLocation) {
+    showEmptyState('Waiting for location...');
+  }
   initMerchantPopover();
   
-  // Initialize perk rail with dummy merchants
-  updateRecommendedPerks(_recommendedPerks);
+  // Get user location and perform initial search
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        _userLocation = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        };
+        
+        // Initial search with "coffee"
+        const results = await searchWhileYouCharge(
+          _userLocation.lat,
+          _userLocation.lng,
+          "coffee"
+        );
+        
+        // Add chargers to map
+        if (results.chargers && results.chargers.length > 0) {
+          results.chargers.forEach(ch => {
+            addStationDot({
+              id: ch.id,
+              name: ch.name,
+              lat: ch.lat,
+              lng: ch.lng,
+              network: ch.network_name
+            }, {
+              onClick: (station) => selectCharger(station)
+            });
+          });
+          
+          // Fit map to chargers
+          fitToStations(results.chargers);
+        }
+        
+        // Update perks with real data
+        if (results.merchants && results.merchants.length > 0) {
+          console.log(`[Explore] Using ${results.merchants.length} real merchants from API`);
+          const perks = results.merchants.map(m => ({
+            id: m.id,
+            name: m.name,
+            logo: m.logo_url || `https://logo.clearbit.com/${m.name.toLowerCase().replace(/\s+/g, '')}.com`,
+            nova: m.nova_reward,
+            walk: `${m.walk_minutes} min walk`
+          }));
+          updateRecommendedPerks(perks);
+        } else {
+          // Fallback to dummy data only if API returned empty
+          console.warn('[Explore] No merchants from API, using fallback dummy data');
+          updateRecommendedPerks(_recommendedPerks);
+        }
+      },
+      (error) => {
+        console.warn('Geolocation error:', error);
+        // Fallback to dummy data
+        updateRecommendedPerks(_recommendedPerks);
+      }
+    );
+  } else {
+    // No geolocation support, use dummy data
+    updateRecommendedPerks(_recommendedPerks);
+  }
   
   // Trigger map resize
   setTimeout(() => {

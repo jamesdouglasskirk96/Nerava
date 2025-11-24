@@ -90,6 +90,10 @@ class Settings(BaseSettings):
     # Demo Mode (relaxes time window restrictions for testing)
     demo_mode: bool = os.getenv("DEMO_MODE", "true").lower() == "true"
     
+    # Pilot Hub Configuration
+    pilot_mode: bool = os.getenv("PILOT_MODE", "true").lower() == "true"
+    pilot_hub: str = os.getenv("PILOT_HUB", "domain")  # e.g., "domain"
+    
     class Config:
         env_file = ".env"
         case_sensitive = False

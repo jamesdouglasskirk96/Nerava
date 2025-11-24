@@ -1,4 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from app.db import get_db
+from app.services.while_you_charge import get_domain_hub_view
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["hubs"])
 
@@ -26,3 +32,27 @@ def hubs_nearby():
             {"id": "stn-4", "name": "Rainey Street Hub", "lat": 30.2570, "lng": -97.7380, "network": "Flo", "eta_min": 11},
         ]
     }
+
+
+@router.get("/domain")
+def get_domain_hub(db: Session = Depends(get_db)):
+    """
+    Get Domain hub view with chargers and recommended merchants.
+    
+    Returns:
+        - hub_id: Domain hub identifier
+        - hub_name: Human-readable hub name
+        - chargers: List of chargers in the Domain hub
+        - merchants: List of recommended merchants near Domain chargers
+    
+    Example:
+        GET /v1/hubs/domain
+    """
+    try:
+        logger.info("[DomainHub] GET /v1/hubs/domain request")
+        hub_data = get_domain_hub_view(db)
+        logger.info(f"[DomainHub] Returning {len(hub_data['chargers'])} chargers, {len(hub_data['merchants'])} merchants")
+        return hub_data
+    except Exception as e:
+        logger.error(f"[DomainHub] Error fetching Domain hub: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch Domain hub: {str(e)}")

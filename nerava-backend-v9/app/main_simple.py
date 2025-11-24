@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from .db import Base, engine
@@ -74,6 +74,7 @@ from .routers import sessions_verify
 from .routers import debug_verify
 from .routers import debug_pool
 from .routers import discover_api, affiliate_api, insights_api
+from .routers import while_you_charge, pilot, pilot_debug, merchant_reports
 
 # Auth + JWT preferences
 from .routers.auth import router as auth_router
@@ -251,6 +252,46 @@ app.include_router(debug_pool.router)
 app.include_router(discover_api.router)
 app.include_router(affiliate_api.router)
 app.include_router(insights_api.router)
+app.include_router(while_you_charge.router)
+app.include_router(pilot.router)
+app.include_router(pilot_debug.router)
+app.include_router(merchant_reports.router)
+
+# Add PWA error normalization for pilot endpoints
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from app.utils.pwa_responses import shape_error
+
+@app.exception_handler(HTTPException)
+async def pilot_error_handler(request: Request, exc: HTTPException):
+    """Normalize errors for pilot/PWA endpoints."""
+    # Only apply to pilot endpoints
+    if request.url.path.startswith("/v1/pilot/"):
+        status_code_map = {
+            400: "BadRequest",
+            401: "Unauthorized",
+            403: "Unauthorized",
+            404: "NotFound",
+            500: "Internal"
+        }
+        error_type = status_code_map.get(exc.status_code, "Internal")
+        detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=shape_error(error_type, detail)
+        )
+    # For non-pilot endpoints, re-raise to use default FastAPI behavior
+    raise exc
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError):
+    """Normalize validation errors for pilot/PWA endpoints."""
+    if request.url.path.startswith("/v1/pilot/"):
+        return JSONResponse(
+            status_code=400,
+            content=shape_error("BadRequest", "Invalid request data")
+        )
+    raise exc
 
 # 20 Feature Scaffold Routers (all behind flags)
 app.include_router(merchant_intel.router)

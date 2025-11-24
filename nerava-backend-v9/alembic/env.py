@@ -8,6 +8,7 @@ from alembic import context
 # Import your models
 from app.db import Base
 from app.models import *  # Import all models
+from app.models_while_you_charge import *  # Import While You Charge models
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

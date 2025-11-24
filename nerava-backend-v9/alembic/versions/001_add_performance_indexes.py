@@ -16,15 +16,29 @@ branch_labels = None
 depends_on = None
 
 
+def _has_table(name: str) -> bool:
+    bind = op.get_bind()
+    insp = sa.inspect(bind)
+    return name in insp.get_table_names()
+
+
 def upgrade():
-    # Add indexes for performance
-    op.create_index('idx_sessions_user_id', 'charge_sessions', ['user_id'])
-    op.create_index('idx_sessions_active', 'charge_sessions', ['stopped_at'], 
-                   postgresql_where=sa.text('stopped_at IS NULL'))
-    op.create_index('idx_wallet_user_id', 'wallet_transactions', ['user_id'])
+    # Add indexes for performance (guarded for legacy DBs)
+    if _has_table('charge_sessions'):
+        op.create_index('idx_sessions_user_id', 'charge_sessions', ['user_id'])
+        op.create_index(
+            'idx_sessions_active',
+            'charge_sessions',
+            ['stopped_at'],
+            postgresql_where=sa.text('stopped_at IS NULL')
+        )
+    if _has_table('wallet_transactions'):
+        op.create_index('idx_wallet_user_id', 'wallet_transactions', ['user_id'])
 
 
 def downgrade():
-    op.drop_index('idx_wallet_user_id', 'wallet_transactions')
-    op.drop_index('idx_sessions_active', 'charge_sessions')
-    op.drop_index('idx_sessions_user_id', 'charge_sessions')
+    if _has_table('wallet_transactions'):
+        op.drop_index('idx_wallet_user_id', 'wallet_transactions')
+    if _has_table('charge_sessions'):
+        op.drop_index('idx_sessions_active', 'charge_sessions')
+        op.drop_index('idx_sessions_user_id', 'charge_sessions')
