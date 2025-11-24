@@ -94,7 +94,13 @@ async def search_while_you_charge(
         )
         
         if not merchants:
-            logger.warning(f"No merchants found for {len(chargers)} chargers (category={category}, name={merchant_name})")
+            logger.warning(
+                "No merchants found for %d chargers (category=%s, name=%s). "
+                "Check logs for: [PLACES] status and results count, [WhileYouCharge] filtering details",
+                len(chargers),
+                category,
+                merchant_name
+            )
             # Return chargers but no merchants
             charger_responses = [
                 ChargerResponse(

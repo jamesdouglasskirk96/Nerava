@@ -109,19 +109,41 @@ async def _nearby_search(
                 )
                 response.raise_for_status()
                 data = response.json()
-                logger.warning(f"[PLACES] Request params: {params}")
-                logger.warning(f"[PLACES] Response: {json.dumps(data)[:500]}")
-
+                
                 status = data.get("status")
                 raw_results = data.get("results", [])
+                
+                # Log status and results count prominently
                 logger.info(
-                    "[GooglePlaces][Nearby] status=%s results=%s",
+                    "[PLACES] Status: %s, results=%d, location=(%s,%s)",
                     status,
                     len(raw_results),
+                    lat,
+                    lng
                 )
+                
+                # Log first result details if available
+                if raw_results and len(raw_results) > 0:
+                    first_result = raw_results[0]
+                    logger.info(
+                        "[PLACES] First result: name=%s, place_id=%s, location=(%s,%s)",
+                        first_result.get("name", "N/A"),
+                        first_result.get("place_id", "N/A"),
+                        first_result.get("geometry", {}).get("location", {}).get("lat", "N/A"),
+                        first_result.get("geometry", {}).get("location", {}).get("lng", "N/A"),
+                    )
+                    
+                    # Log a few more if available
+                    if len(raw_results) > 1:
+                        result_names = [r.get("name", "N/A") for r in raw_results[:5]]
+                        logger.info("[PLACES] Sample results: %s", ", ".join(result_names))
+                else:
+                    logger.warning("[PLACES] No results in response (status=%s)", status)
+                    if status == "OK":
+                        logger.warning("[PLACES] Status is OK but no results - query may be too restrictive")
 
                 if status in {"REQUEST_DENIED", "ZERO_RESULTS"}:
-                    logger.error(f"[PLACES_ERROR] {data}")
+                    logger.error(f"[PLACES_ERROR] Status: {status}, Full response: {json.dumps(data)[:500]}")
 
                 if status != "OK":
                     logger.warning(
@@ -133,6 +155,7 @@ async def _nearby_search(
 
                 for place in raw_results[:limit]:
                     results.append(PlaceData(place))
+                    logger.debug("[PLACES] Added place: %s (lat=%s, lng=%s)", place.get("name"), place.get("geometry", {}).get("location", {}).get("lat"), place.get("geometry", {}).get("location", {}).get("lng"))
 
         except Exception as e:
             logger.error(
@@ -188,19 +211,33 @@ async def _text_search(
             )
             response.raise_for_status()
             data = response.json()
-            logger.warning(f"[PLACES] Request params: {params}")
-            logger.warning(f"[PLACES] Response: {json.dumps(data)[:500]}")
-
+            
             status = data.get("status")
             raw_results = data.get("results", [])
+            
+            # Log status and results count prominently
             logger.info(
-                "[GooglePlaces][Text] status=%s results=%s",
+                "[PLACES][Text] Status: %s, results=%d, query=%s, location=(%s,%s)",
                 status,
                 len(raw_results),
+                query_str,
+                lat,
+                lng
             )
+            
+            # Log first result details if available
+            if raw_results and len(raw_results) > 0:
+                first_result = raw_results[0]
+                logger.info(
+                    "[PLACES][Text] First result: name=%s, place_id=%s",
+                    first_result.get("name", "N/A"),
+                    first_result.get("place_id", "N/A"),
+                )
+            else:
+                logger.warning("[PLACES][Text] No results in response (status=%s)", status)
 
             if status in {"REQUEST_DENIED", "ZERO_RESULTS"}:
-                logger.error(f"[PLACES_ERROR] {data}")
+                logger.error(f"[PLACES_ERROR][Text] Status: {status}, Full response: {json.dumps(data)[:500]}")
 
             if status != "OK":
                 logger.warning(
@@ -213,6 +250,7 @@ async def _text_search(
             results: List[PlaceData] = []
             for place in raw_results[:limit]:
                 results.append(PlaceData(place))
+                logger.debug("[PLACES][Text] Added place: %s", place.get("name"))
 
             return results
 

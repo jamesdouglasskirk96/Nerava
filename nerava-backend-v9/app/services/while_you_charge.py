@@ -213,6 +213,24 @@ async def find_and_link_merchants(
             keyword=keyword
         )
         
+        logger.info(
+            "[WhileYouCharge] Charger %s (%s): Got %d places from Google, types=%s, keyword=%s",
+            charger.id,
+            charger.name,
+            len(places),
+            place_types,
+            keyword
+        )
+        
+        if not places:
+            logger.warning(
+                "[WhileYouCharge] No places returned for charger %s at (%s,%s)",
+                charger.id,
+                charger.lat,
+                charger.lng
+            )
+            continue
+        
         # Get walk times for all places
         origins = [(charger.lat, charger.lng)]
         destinations = [(p.lat, p.lng) for p in places]
@@ -220,11 +238,28 @@ async def find_and_link_merchants(
         if destinations:
             walk_times = await get_walk_times(origins, destinations)
             
+            places_filtered_by_walk = 0
             for place in places:
                 dest = (place.lat, place.lng)
                 walk_info = walk_times.get((origins[0], dest))
                 
-                if not walk_info or walk_info["duration_s"] > max_walk_minutes * 60:
+                if not walk_info:
+                    logger.debug(
+                        "[WhileYouCharge] Dropping place %s: no walk info from Distance Matrix",
+                        place.name
+                    )
+                    places_filtered_by_walk += 1
+                    continue
+                
+                walk_seconds = walk_info["duration_s"]
+                if walk_seconds > max_walk_minutes * 60:
+                    logger.debug(
+                        "[WhileYouCharge] Dropping place %s: walk_time=%ds (max=%ds)",
+                        place.name,
+                        walk_seconds,
+                        max_walk_minutes * 60
+                    )
+                    places_filtered_by_walk += 1
                     continue
                 
                 # Check if merchant already exists
