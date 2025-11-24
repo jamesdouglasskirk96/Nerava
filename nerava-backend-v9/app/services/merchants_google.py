@@ -5,7 +5,8 @@ import requests
 from contextlib import contextmanager
 from typing import List, Dict, Any
 
-API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "").strip() or "AIzaSyAs0PVYXj3-ztRXCjdd0ztUGUSjQR73FFg"
+# Hardcoded API key (no longer reads from environment variables)
+API_KEY = "AIzaSyAs0PVYXj3-ztRXCjdd0ztUGUSjQR73FFg"
 
 # ---------- Local SQLite (sidecar used by merchants_local) ----------
 DB_PATH = os.getenv(
