@@ -275,10 +275,17 @@ def verify_ping_endpoint(
         is_verified = result.get("verified", False)
         is_rewarded = is_verified and result.get("rewarded", False)
         
-        # Get wallet balance
-        from app.models_extra import CreditLedger
-        ledger_rows = db.query(CreditLedger).filter(CreditLedger.user_ref == str(user_id)).all()
-        wallet_balance_cents = sum(r.cents for r in ledger_rows) if ledger_rows else 0
+        # Get wallet balance (handle case where credit_ledger table doesn't exist yet)
+        wallet_balance_cents = 0
+        try:
+            from app.models_extra import CreditLedger
+            ledger_rows = db.query(CreditLedger).filter(CreditLedger.user_ref == str(user_id)).all()
+            wallet_balance_cents = sum(r.cents for r in ledger_rows) if ledger_rows else 0
+        except Exception as ledger_err:
+            # Table might not exist yet - return 0 balance
+            logger.warning(f"Could not query wallet balance (table may not exist): {ledger_err}")
+            print(f"[PilotRouter][verify_ping] Warning: Could not query wallet balance: {ledger_err}", flush=True)
+            wallet_balance_cents = 0
         
         # Get session merchant_id from meta if available
         merchant_id = None
@@ -639,9 +646,16 @@ def verify_visit(
     
     if existing_reward:
         # Return existing state (already rewarded)
-        from app.models_extra import CreditLedger
-        ledger_rows = db.query(CreditLedger).filter(CreditLedger.user_ref == str(user_id)).all()
-        wallet_balance_cents = sum(r.cents for r in ledger_rows) if ledger_rows else 0
+        # Get wallet balance (handle case where credit_ledger table doesn't exist yet)
+        wallet_balance_cents = 0
+        try:
+            from app.models_extra import CreditLedger
+            ledger_rows = db.query(CreditLedger).filter(CreditLedger.user_ref == str(user_id)).all()
+            wallet_balance_cents = sum(r.cents for r in ledger_rows) if ledger_rows else 0
+        except Exception as ledger_err:
+            # Table might not exist yet - return 0 balance
+            logger.warning(f"Could not query wallet balance (table may not exist): {ledger_err}")
+            wallet_balance_cents = 0
         return {
             "verified": True,
             "reward_earned": False,  # Not newly earned
@@ -905,9 +919,16 @@ def bootstrap(
         # Get Nova balance if user_id provided
         nova_balance = 0
         if user_id:
-            from app.models_extra import CreditLedger
-            ledger_rows = db.query(CreditLedger).filter(CreditLedger.user_ref == str(user_id)).all()
-            wallet_balance_cents = sum(r.cents for r in ledger_rows) if ledger_rows else 0
+            # Get wallet balance (handle case where credit_ledger table doesn't exist yet)
+            wallet_balance_cents = 0
+            try:
+                from app.models_extra import CreditLedger
+                ledger_rows = db.query(CreditLedger).filter(CreditLedger.user_ref == str(user_id)).all()
+                wallet_balance_cents = sum(r.cents for r in ledger_rows) if ledger_rows else 0
+            except Exception as ledger_err:
+                # Table might not exist yet - return 0 balance
+                logger.warning(f"Could not query wallet balance (table may not exist): {ledger_err}")
+                wallet_balance_cents = 0
             nova_balance = cents_to_nova(wallet_balance_cents)
         
         return {
