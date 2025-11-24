@@ -82,7 +82,7 @@ async def _nearby_search(
         params = {
             "key": GOOGLE_PLACES_API_KEY,
             "location": f"{lat},{lng}",
-            "rankby": "distance",
+            "radius": radius_m,  # Use radius instead of rankby=distance to limit search area
         }
         if place_type:
             params["type"] = place_type
@@ -92,6 +92,9 @@ async def _nearby_search(
             params["keyword"] = place_type
         else:
             params["keyword"] = "nearby"
+        
+        # Note: When using radius, results are ranked by prominence, not distance
+        # But we'll filter by walk time after getting results
 
         logger.info(
             "[GooglePlaces][Nearby] Searching: lat=%s lng=%s type=%s radius=%s keyword=%s",

@@ -208,8 +208,8 @@ async def find_and_link_merchants(
             lng=charger.lng,
             query=merchant_name,
             types=place_types if place_types else None,
-            radius_m=1000,  # 1km radius
-            limit=10,
+            radius_m=500,  # 500m radius (0.5km) - tighter radius for walkable distances
+            limit=20,  # Get more results to filter down by walk time
             keyword=keyword
         )
         
