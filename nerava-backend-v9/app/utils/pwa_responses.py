@@ -9,6 +9,31 @@ Helpers for normalizing API responses to be PWA-friendly:
 from typing import Dict, Any, List, Optional
 
 
+def google_photo_url(photo_reference: Optional[str], max_width: int = 160) -> Optional[str]:
+    """
+    Convert Google Places photo reference to a full photo URL.
+    
+    Args:
+        photo_reference: Google Places photo_reference string
+        max_width: Maximum width in pixels (default 160)
+    
+    Returns:
+        Full Google Places photo URL or None if photo_reference is missing
+    """
+    if not photo_reference:
+        return None
+    
+    # Hardcoded API key (matches other Google Places integrations)
+    API_KEY = "AIzaSyAs0PVYXj3-ztRXCjdd0ztUGUSjQR73FFg"
+    
+    return (
+        "https://maps.googleapis.com/maps/api/place/photo"
+        f"?maxwidth={max_width}"
+        f"&photoreference={photo_reference}"
+        f"&key={API_KEY}"
+    )
+
+
 def normalize_number(value: Any) -> int:
     """Convert any number-like value to integer."""
     if value is None:
@@ -97,9 +122,29 @@ def shape_merchant(merchant: Dict[str, Any], user_lat: Optional[float] = None, u
     if "nova_reward" in merchant:
         result["nova_reward"] = normalize_number(merchant.get("nova_reward", 0))
     
-    # Logo URL
-    if "logo_url" in merchant:
-        result["logo_url"] = str(merchant.get("logo_url", ""))
+    # Logo URL - handle multiple sources:
+    # 1. Direct logo_url (if already a full URL)
+    # 2. photo_url (Google Places photo reference) - convert to full URL
+    # 3. icon (from Google Places icon)
+    logo_url = None
+    
+    if "logo_url" in merchant and merchant.get("logo_url"):
+        logo_url = str(merchant.get("logo_url", ""))
+    elif "photo_url" in merchant and merchant.get("photo_url"):
+        # photo_url might be a Google Places photo reference
+        photo_ref = merchant.get("photo_url")
+        # If it's not already a full URL, convert it
+        if photo_ref and not photo_ref.startswith("http"):
+            logo_url = google_photo_url(photo_ref)
+        else:
+            logo_url = str(photo_ref) if photo_ref else None
+    elif "icon" in merchant and merchant.get("icon"):
+        # Google Places icon URL
+        logo_url = str(merchant.get("icon", ""))
+    
+    # Only include logo_url if it's a non-empty string
+    if logo_url and logo_url.strip():
+        result["logo_url"] = logo_url.strip()
     
     # Distance if user location provided
     if user_lat is not None and user_lng is not None:

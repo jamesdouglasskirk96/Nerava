@@ -109,10 +109,13 @@ function merchantToPerkCard(merchant) {
     : merchant.distance_m
     ? `${merchant.distance_m} m walk`
     : 'Walkable';
+  // Only use logo_url if it exists (no fallback - show no logo if missing)
+  const logo = merchant.logo || merchant.logo_url || null;
+  
   return {
     id: merchant.id,
     name: merchant.name,
-    logo: merchant.logo || merchant.logo_url || `https://logo.clearbit.com/${merchant.name?.toLowerCase().replace(/\s+/g, '') || 'merchant'}.com`,
+    logo: logo, // null or undefined if no logo - frontend will handle gracefully
     nova: normalizeNumber(merchant.nova_reward || merchant.nova || 0),
     nova_reward: normalizeNumber(merchant.nova_reward || merchant.nova || 0), // Keep both for compatibility
     walk: typeof walkMinutes === 'string' ? walkMinutes : `${walkMinutes} min walk`,
@@ -576,9 +579,13 @@ function updateRecommendedPerks(perks) {
     card.className = 'perk-card-compact';
     card.dataset.perkId = perk.id || '';
     
-    // Compact layout: Logo + "Earn X Nova" + "X min walk"
+    // Compact layout: Logo (only if exists) + "Earn X Nova" + "X min walk"
+    const logoHtml = (perk.logo && perk.logo.trim()) 
+      ? `<img class="perk-card-logo" src="${perk.logo}" alt="${perk.name || ''}">`
+      : '';
+    
     card.innerHTML = `
-      <img class="perk-card-logo" src="${perk.logo || ''}" alt="${perk.name || ''}" onerror="this.src='https://via.placeholder.com/48?text=${encodeURIComponent((perk.name || 'M')[0])}'">
+      ${logoHtml}
       <div class="perk-card-reward">Earn ${perk.nova || 0} Nova</div>
       <div class="perk-card-walk">${perk.walk || '0 min walk'}</div>
     `;
