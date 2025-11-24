@@ -52,9 +52,9 @@ self.addEventListener('fetch', (event) => {
     const { request } = event;
     const url = new URL(request.url);
     
-    // Skip chrome-extension:// and other unsupported schemes
+    // Skip chrome-extension:// and other unsupported schemes - do this FIRST
     if (url.protocol === 'chrome-extension:' || url.protocol === 'moz-extension:') {
-        return;
+        return; // Don't handle these requests at all
     }
     
     // Skip non-GET requests (always go to network)
@@ -68,6 +68,11 @@ self.addEventListener('fetch', (event) => {
         return;
     }
     
+    // Only process http/https requests
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        return;
+    }
+    
     event.respondWith(
         fetch(request)
             .then((response) => {
@@ -75,7 +80,7 @@ self.addEventListener('fetch', (event) => {
                 if (response.status === 200) {
                     const responseClone = response.clone();
                     caches.open(CACHE_NAME).then((cache) => {
-                        // Only cache http/https requests
+                        // Double-check protocol before caching
                         if (url.protocol === 'http:' || url.protocol === 'https:') {
                             cache.put(request, responseClone).catch(err => {
                                 console.warn('Service Worker: Failed to cache', request.url, err);

@@ -192,8 +192,11 @@ else:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https://.*\.vercel\.app|https://web-production-.*\.up\.railway\.app",
-    allow_origins=allowed_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app|https://web-production-.*\.up\.railway\.app|https://.*\.nerava\.network",
+    allow_origins=allowed_origins + [
+        "https://www.nerava.network",
+        "https://nerava.network",
+    ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS", "PUT", "DELETE"],
     allow_headers=["Content-Type", "Authorization", "X-Api-Key", "X-Merchant-Key"],

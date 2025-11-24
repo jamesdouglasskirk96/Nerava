@@ -12,16 +12,25 @@ function getApiBase() {
   
   // Detect production environment
   const hostname = window.location.hostname;
+  const protocol = window.location.protocol;
   const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.includes('192.168.') || hostname.includes('10.');
   const isVercel = hostname.includes('vercel.app');
+  const isNeravaNetwork = hostname.includes('nerava.network');
+  const isProduction = !isLocalhost && (protocol === 'https:' || isVercel || isNeravaNetwork);
+  
+  console.log('[API] Detected environment:', { hostname, protocol, isLocalhost, isVercel, isNeravaNetwork, isProduction });
   
   // Production: use Railway backend
-  if (isVercel || (!isLocalhost && window.location.protocol === 'https:')) {
-    return 'https://web-production-526f6.up.railway.app';
+  if (isProduction) {
+    const prodUrl = 'https://web-production-526f6.up.railway.app';
+    console.log('[API] Using production backend:', prodUrl);
+    return prodUrl;
   }
   
   // Development: use localhost
-  return 'http://127.0.0.1:8001';
+  const devUrl = 'http://127.0.0.1:8001';
+  console.log('[API] Using development backend:', devUrl);
+  return devUrl;
 }
 
 const BASE = getApiBase();
