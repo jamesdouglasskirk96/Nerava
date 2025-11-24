@@ -11,3 +11,4 @@ gunicorn==21.2.0
 alembic==1.12.1
 stripe>=6.0.0
 httpx>=0.24.0
+email-validator>=2.0.0
