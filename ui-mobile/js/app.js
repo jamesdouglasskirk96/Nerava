@@ -1,8 +1,6 @@
 // Main app controller
-// Set API base URL to backend server BEFORE any imports
-if (!localStorage.NERAVA_URL) {
-  localStorage.NERAVA_URL = 'http://127.0.0.1:8001';
-}
+// API base URL is now determined dynamically in api.js based on environment
+// No need to set localStorage.NERAVA_URL unless explicitly overriding
 
 import { loadDemoState } from './core/demo.js';
 import { ensureDemoBanner } from './components/demoBanner.js';
@@ -433,7 +431,28 @@ function triggerWalletToast(msg){
 // IMPORTANT: do not call L.map() anywhere else in this file.
 // Boot should call initExplore(); do NOT call another initMap().
 
+// Backend healthcheck and bootstrap verification
+async function checkBackend() {
+  try {
+    const { fetchPilotBootstrap } = await import('./core/api.js');
+    const res = await fetchPilotBootstrap();
+    console.log('[BOOTSTRAP OK]', res);
+    window.__BOOTSTRAP__ = res;
+    return true;
+  } catch (e) {
+    console.error('[BOOTSTRAP FAILED]', e);
+    // Don't show alert in production - just log it
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      console.warn('Backend is unreachable. Make sure the backend is running at http://127.0.0.1:8001');
+    }
+    return false;
+  }
+}
+
 window.addEventListener('load', async ()=>{
+  // Check backend connectivity
+  await checkBackend();
+  
   // Start with explore tab by default
   setTab('explore');
   // lazy import to avoid cyclic loads

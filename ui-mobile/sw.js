@@ -57,13 +57,14 @@ self.addEventListener('fetch', (event) => {
         return;
     }
     
-    // Skip non-GET requests
+    // Skip non-GET requests (always go to network)
     if (request.method !== 'GET') {
         return;
     }
     
-    // Skip API requests (always go to network)
+    // Skip API requests (always go to network, don't cache)
     if (request.url.includes('/v1/')) {
+        // Let the request pass through to network without service worker intervention
         return;
     }
     

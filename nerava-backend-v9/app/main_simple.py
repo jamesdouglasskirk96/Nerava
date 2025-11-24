@@ -177,6 +177,7 @@ app.add_middleware(DemoBannerMiddleware)
 allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "*")
 if allowed_origins_str == "*":
     # When using credentials, cannot use "*" - allow localhost/127.0.0.1 explicitly for dev
+    # Base list of allowed origins
     allowed_origins = [
         "http://localhost:8001",
         "http://127.0.0.1:8001",
@@ -184,15 +185,17 @@ if allowed_origins_str == "*":
         "http://localhost:8080",
         "http://localhost:5173",  # Vite default
     ]
+    # Note: Vercel domains will be handled by custom CORS middleware below
 else:
     # Split by comma and strip whitespace
     allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",")]
 
 app.add_middleware(
     CORSMiddleware,
+    allow_origin_regex=r"https://.*\.vercel\.app|https://web-production-.*\.up\.railway\.app",
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "OPTIONS", "PUT", "DELETE"],
     allow_headers=["Content-Type", "Authorization", "X-Api-Key", "X-Merchant-Key"],
 )
 

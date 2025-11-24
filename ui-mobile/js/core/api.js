@@ -1,4 +1,30 @@
-const BASE = localStorage.NERAVA_URL || location.origin;
+// Determine API base URL based on environment
+function getApiBase() {
+  // Check for explicit override in localStorage
+  if (localStorage.NERAVA_URL) {
+    return localStorage.NERAVA_URL;
+  }
+  
+  // Check for Vite environment variable (if using Vite)
+  if (typeof import !== 'undefined' && import.meta && import.meta.env && import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+  
+  // Detect production environment
+  const hostname = window.location.hostname;
+  const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.includes('192.168.') || hostname.includes('10.');
+  const isVercel = hostname.includes('vercel.app');
+  
+  // Production: use Railway backend
+  if (isVercel || (!isLocalhost && window.location.protocol === 'https:')) {
+    return 'https://web-production-526f6.up.railway.app';
+  }
+  
+  // Development: use localhost
+  return 'http://127.0.0.1:8001';
+}
+
+const BASE = getApiBase();
 
 async function _req(path, opts = {}) {
   const r = await fetch(BASE + path, {
