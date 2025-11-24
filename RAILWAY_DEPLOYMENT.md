@@ -14,7 +14,7 @@ Railway needs to be configured with:
 4. Under "Deploy" or "Start Command", ensure it's **EMPTY** (delete any custom command)
 5. Railway will automatically use `nerava-backend-v9/Procfile` which contains:
    ```
-   web: uvicorn app.main_simple:app --host 0.0.0.0 --port ${PORT:-8000}
+   web: python -m uvicorn app.main_simple:app --host 0.0.0.0 --port ${PORT:-8000}
    ```
 
 ## After First Deploy
