@@ -103,13 +103,16 @@ async def _nearby_search(
         )
 
         try:
+            logger.error("[PLACES] 🔍 Making request to Google Places API: %s", f"{GOOGLE_PLACES_BASE_URL}/nearbysearch/json")
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(
                     f"{GOOGLE_PLACES_BASE_URL}/nearbysearch/json",
                     params=params,
                 )
+                logger.error("[PLACES] 🔍 HTTP Response status: %d", response.status_code)
                 response.raise_for_status()
                 data = response.json()
+                logger.error("[PLACES] 🔍 Got JSON response, parsing...")
                 
                 status = data.get("status")
                 raw_results = data.get("results", [])
@@ -162,7 +165,12 @@ async def _nearby_search(
 
         except Exception as e:
             logger.error(
-                "[GooglePlaces][Nearby] error: %s", e, exc_info=True
+                "[PLACES] ❌ EXCEPTION in Nearby Search: %s, location=(%s,%s), type=%s", 
+                str(e), 
+                lat, 
+                lng, 
+                place_type,
+                exc_info=True
             )
 
     return results[:limit]
