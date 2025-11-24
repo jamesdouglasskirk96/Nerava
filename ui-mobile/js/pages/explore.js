@@ -186,9 +186,12 @@ async function loadPilotData() {
     }
 
     const whileYouCharge = await fetchPilotWhileYouCharge();
+    console.log('[Explore] While you charge response:', whileYouCharge);
     const merchantsRaw =
       whileYouCharge?.recommended_merchants || whileYouCharge?.merchants || [];
+    console.log('[Explore] Raw merchants from API:', merchantsRaw);
     _merchants = merchantsRaw.map(toMapMerchant).filter(Boolean);
+    console.log('[Explore] Mapped merchants:', _merchants.length, _merchants);
     
     // Sort merchants by nova_reward descending (Bakery Lorraine with 2 Nova should appear at top)
     _merchants.sort((a, b) => (b.nova_reward || 0) - (a.nova_reward || 0));
