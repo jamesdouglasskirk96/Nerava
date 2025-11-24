@@ -1,8 +1,12 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+import logging
 
 from .db import Base, engine
 from .config import settings
+from .db.run_migrations import run_migrations
+
+logger = logging.getLogger(__name__)
 from .middleware.logging import LoggingMiddleware
 from .middleware.metrics import MetricsMiddleware
 from .middleware.ratelimit import RateLimitMiddleware
@@ -160,8 +164,18 @@ STATIC_DIR = Path(__file__).parent / "static"
 if STATIC_DIR.exists() and STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR), html=False), name="static")
 
-# Create tables on startup (SQLite dev)
-Base.metadata.create_all(bind=engine)
+# Run Alembic migrations on startup (creates all tables including sessions)
+try:
+    logger.info("Running database migrations on startup...")
+    run_migrations()
+    logger.info("Database migrations completed successfully")
+except Exception as e:
+    logger.error(f"Failed to run migrations on startup: {e}", exc_info=True)
+    # Don't fail startup if migrations fail - let the app start and log the error
+    # This prevents the app from being completely broken if migrations have issues
+
+# Create tables on startup as fallback (SQLite dev only - migrations should handle this)
+# Base.metadata.create_all(bind=engine)
 
 # Add middleware
 app.add_middleware(LoggingMiddleware)
