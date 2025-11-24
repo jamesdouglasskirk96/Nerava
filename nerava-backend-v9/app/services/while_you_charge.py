@@ -495,30 +495,15 @@ def get_domain_hub_view(db: Session) -> Dict:
     """
     Get Domain hub view with chargers and recommended merchants (sync version).
     
-    Uses Domain hub configuration to fetch chargers and find linked merchants.
-    This is a sync wrapper - for async context use get_domain_hub_view_async.
+    NOTE: This sync version does NOT auto-fetch merchants (only reads from DB).
+    Use get_domain_hub_view_async() in async contexts to enable auto-fetch.
     
     Returns:
         Dict with hub_id, hub_name, chargers, and merchants
     """
-    import asyncio
-    try:
-        # Try to get existing event loop
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # Can't use run_until_complete in async context, return basic view
-            logger.warning("[DomainHub] Called sync version from async context, skipping auto-fetch")
-            return _get_domain_hub_view_sync_only(db)
-        else:
-            return loop.run_until_complete(get_domain_hub_view_async(db))
-    except RuntimeError:
-        # No event loop, create one
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            return loop.run_until_complete(get_domain_hub_view_async(db))
-        finally:
-            loop.close()
+    # Always use sync-only version - bootstrap endpoint should be fast
+    # Merchants will be fetched when while_you_charge endpoint is called (async)
+    return _get_domain_hub_view_sync_only(db)
 
 
 async def get_domain_hub_view_async(db: Session) -> Dict:
@@ -589,42 +574,50 @@ async def get_domain_hub_view_async(db: Session) -> Dict:
     
     # If no merchants found, automatically fetch and link them (ASYNC)
     if not merchant_ids and chargers:
-        logger.info(f"[DomainHub] No merchants found in DB, fetching from Google Places...")
+        logger.info(f"[DomainHub] 🔍 No merchants found in DB, starting auto-fetch from Google Places...")
+        logger.info(f"[DomainHub] 🔍 Have {len(chargers)} chargers to search around")
         try:
             # Fetch merchants with multiple categories to get variety
             all_fetched_merchants = []
             categories_to_try = ["coffee", "food", "restaurant"]  # Start with 3 categories
             
             for category in categories_to_try:
-                logger.info(f"[DomainHub] Fetching {category} merchants for {len(chargers)} chargers...")
-                fetched_merchants = await find_and_link_merchants(
-                    db=db,
-                    chargers=chargers[:2],  # Limit to first 2 chargers to avoid rate limits
-                    category=category,
-                    merchant_name=None,
-                    max_walk_minutes=10
-                )
-                all_fetched_merchants.extend(fetched_merchants)
-                logger.info(f"[DomainHub] Fetched {len(fetched_merchants)} {category} merchants")
-                
-                # Commit after each category to save progress
+                logger.info(f"[DomainHub] 🔍 Fetching {category} merchants for {len(chargers)} chargers...")
                 try:
-                    db.commit()
-                    logger.info(f"[DomainHub] Committed {category} merchants to DB")
-                except Exception as commit_err:
-                    logger.error(f"[DomainHub] Failed to commit {category} merchants: {commit_err}")
-                    db.rollback()
+                    fetched_merchants = await find_and_link_merchants(
+                        db=db,
+                        chargers=chargers[:2],  # Limit to first 2 chargers to avoid rate limits
+                        category=category,
+                        merchant_name=None,
+                        max_walk_minutes=10
+                    )
+                    logger.info(f"[DomainHub] ✅ Got {len(fetched_merchants)} {category} merchants from find_and_link_merchants")
+                    all_fetched_merchants.extend(fetched_merchants)
+                    
+                    # Commit after each category to save progress
+                    try:
+                        db.commit()
+                        logger.info(f"[DomainHub] ✅ Committed {category} merchants to DB")
+                    except Exception as commit_err:
+                        logger.error(f"[DomainHub] ❌ Failed to commit {category} merchants: {commit_err}", exc_info=True)
+                        db.rollback()
+                except Exception as fetch_err:
+                    logger.error(f"[DomainHub] ❌ Error fetching {category} merchants: {fetch_err}", exc_info=True)
+                    continue
             
             # Refresh merchant_ids from newly created links
+            logger.info(f"[DomainHub] 🔍 Refreshing merchant links from DB...")
             charger_ids_in_db = [c.id for c in chargers]
             links = db.query(ChargerMerchant).filter(
                 ChargerMerchant.charger_id.in_(charger_ids_in_db)
             ).all()
             merchant_ids = list(set([link.merchant_id for link in links]))
-            logger.info(f"[DomainHub] ✅ Fetched and linked {len(merchant_ids)} total merchants")
+            logger.info(f"[DomainHub] ✅ Total merchants after auto-fetch: {len(merchant_ids)}")
         except Exception as e:
             logger.error(f"[DomainHub] ❌ Failed to fetch merchants automatically: {e}", exc_info=True)
             db.rollback()
+    elif not chargers:
+        logger.warning(f"[DomainHub] ⚠️ No chargers available, cannot fetch merchants")
     
     # Fetch merchants
     merchants = []
