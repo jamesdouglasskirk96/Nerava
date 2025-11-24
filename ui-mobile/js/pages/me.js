@@ -37,6 +37,17 @@ export async function initMePage(rootEl) {
         </div>
       </div>
 
+      <!-- Merchant Dashboard Link (hidden unless ?merchant=xxx) -->
+      <div id="merchant-dashboard-link" style="background: #f8fafc; padding: 14px; border-radius: 10px; margin-bottom: 12px; display: none;">
+        <h2 style="color: #111827; font-size: 16px; margin-bottom: 10px;">Merchant Tools</h2>
+        <button 
+          id="btn-merchant-dashboard"
+          style="background: #3b5bfd; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-weight: 600; font-size: 14px; width: 100%;"
+        >
+          Open Dashboard
+        </button>
+      </div>
+
       <div style="background: #f8fafc; padding: 14px; border-radius: 10px;">
         <h2 style="color: #111827; font-size: 16px; margin-bottom: 10px;">Account</h2>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
@@ -69,6 +80,22 @@ export async function initMePage(rootEl) {
     }
   } catch (e) {
     console.error('Profile API error:', e);
+  }
+
+  // Check for merchant query param and show dashboard link
+  const urlParams = new URLSearchParams(location.search);
+  const merchantId = urlParams.get('merchant');
+  if (merchantId) {
+    const dashboardLink = document.querySelector('#merchant-dashboard-link');
+    if (dashboardLink) {
+      dashboardLink.style.display = 'block';
+      const btn = document.querySelector('#btn-merchant-dashboard');
+      if (btn) {
+        btn.addEventListener('click', () => {
+          location.hash = `#/merchant-dashboard?merchant_id=${encodeURIComponent(merchantId)}`;
+        });
+      }
+    }
   }
 
   // Wire handlers

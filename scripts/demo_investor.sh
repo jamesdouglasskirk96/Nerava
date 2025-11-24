@@ -68,6 +68,7 @@ if [ -d .venv ]; then
   source .venv/bin/activate
 fi
 
+# Local dev only. Production uses: python -m uvicorn app.main_simple:app --host 0.0.0.0 --port ${PORT:-8000}
 ( uvicorn app.main_simple:app --port "${PORT}" --log-level warning ) &
 S_PID=$!
 trap 'kill -9 $S_PID >/dev/null 2>&1 || true' EXIT

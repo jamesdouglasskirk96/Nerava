@@ -1,0 +1,5 @@
+# NOT USED FOR DEPLOYMENT.
+# Railway uses nerava-backend-v9/Procfile as the only production Procfile.
+# This file is for local development reference only.
+
+web: python -m uvicorn app.main_simple:app --host 0.0.0.0 --port ${PORT:-8000}

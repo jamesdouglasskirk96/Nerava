@@ -19,6 +19,7 @@ if lsof -ti tcp:8001 >/dev/null 2>&1; then
   kill -9 "$(lsof -ti tcp:8001)" || true
 fi
 
+# Local dev only. Production uses: python -m uvicorn app.main_simple:app --host 0.0.0.0 --port ${PORT:-8000}
 uvicorn app.main_simple:app --port 8001 --reload > /tmp/nerava_api.log 2>&1 &
 API_PID=$!
 echo "API process: $API_PID"

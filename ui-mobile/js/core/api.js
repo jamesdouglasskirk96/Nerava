@@ -43,12 +43,82 @@ export async function fetchPilotWhileYouCharge(sessionId) {
   return res.json();
 }
 
+export async function fetchMerchantOffer(merchantId, amountCents = 500) {
+  const res = await fetch(`${BASE}/v1/pilot/merchant_offer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({
+      merchant_id: merchantId,
+      amount_cents: amountCents
+    })
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to create merchant offer (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function pilotStartSession(userLat, userLng, chargerId = null, merchantId = null, userId = 123) {
+  const res = await fetch(`${BASE}/v1/pilot/start_session?user_id=${userId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({
+      user_lat: userLat,
+      user_lng: userLng,
+      charger_id: chargerId,
+      merchant_id: merchantId
+    })
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to start session (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function pilotVerifyPing(sessionId, userLat, userLng) {
+  const res = await fetch(`${BASE}/v1/pilot/verify_ping`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({
+      session_id: sessionId,
+      user_lat: userLat,
+      user_lng: userLng
+    })
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to verify ping (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function pilotVerifyVisit(sessionId, merchantId, userLat, userLng) {
+  const res = await fetch(`${BASE}/v1/pilot/verify_visit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({
+      session_id: sessionId,
+      merchant_id: merchantId,
+      user_lat: userLat,
+      user_lng: userLng
+    })
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to verify visit (${res.status})`);
+  }
+  return res.json();
+}
+
 if (typeof window !== 'undefined') {
   window.NeravaAPI = window.NeravaAPI || {};
   window.NeravaAPI.apiGet = apiGet;
   window.NeravaAPI.apiPost = apiPost;
   window.NeravaAPI.fetchPilotBootstrap = fetchPilotBootstrap;
   window.NeravaAPI.fetchPilotWhileYouCharge = fetchPilotWhileYouCharge;
+  window.NeravaAPI.fetchMerchantOffer = fetchMerchantOffer;
 }
 
 const Api = {
@@ -56,6 +126,10 @@ const Api = {
   apiPost,
   fetchPilotBootstrap,
   fetchPilotWhileYouCharge,
+  fetchMerchantOffer,
+  pilotStartSession,
+  pilotVerifyPing,
+  pilotVerifyVisit,
 };
 
 export default Api;

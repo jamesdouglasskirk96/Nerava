@@ -19,54 +19,73 @@ def km_distance(p1, p2):
 @router.get("/v1/intent")
 async def get_intent(db: Session = Depends(get_db)):
     """Get saved intents for the user"""
-    me = "demo-user-123"
-    
-    query = text("""
-        SELECT * FROM charge_intents 
-        WHERE user_id = :user_id
-        ORDER BY created_at DESC
-    """)
-    
-    result = db.execute(query, {'user_id': me})
-    intents = []
-    
-    for row in result:
-        # Helper to safely get datetime or string
-        def safe_datetime(idx):
-            if len(row) <= idx or row[idx] is None:
-                return None
-            val = row[idx]
-            # If it's already a string, return it
-            if isinstance(val, str):
-                return val
-            # If it's a datetime object, convert to ISO
-            if hasattr(val, 'isoformat'):
-                return val.isoformat()
-            return str(val)
+    try:
+        me = "demo-user-123"
         
-        intents.append({
-            'id': row[0] if len(row) > 0 else None,
-            'user_id': row[1] if len(row) > 1 else None,
-            'station_id': row[2] if len(row) > 2 else None,
-            'station_name': row[3] if len(row) > 3 else None,
-            'merchant_name': row[4] if len(row) > 4 else None,
-            'perk_title': row[5] if len(row) > 5 else None,
-            'address': row[6] if len(row) > 6 else None,
-            'eta_minutes': row[7] if len(row) > 7 else None,
-            'starts_at': safe_datetime(8),
-            'status': row[9] if len(row) > 9 else 'saved',
-            'merchant_lat': row[10] if len(row) > 10 else None,
-            'merchant_lng': row[11] if len(row) > 11 else None,
-            'station_lat': row[12] if len(row) > 12 else None,
-            'station_lng': row[13] if len(row) > 13 else None,
-            'merchant': row[16] if len(row) > 16 else None,  # New field
-            'perk_id': row[17] if len(row) > 17 else None,   # New field
-            'window_text': row[18] if len(row) > 18 else None,  # New field
-            'distance_text': row[19] if len(row) > 19 else None,  # New field
-            'created_at': safe_datetime(14)
-        })
-    
-    return intents
+        # Check if table exists first
+        check_table = text("""
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name='charge_intents'
+        """)
+        table_exists = db.execute(check_table).fetchone()
+        
+        if not table_exists:
+            # Table doesn't exist, return empty list
+            return []
+        
+        query = text("""
+            SELECT * FROM charge_intents 
+            WHERE user_id = :user_id
+            ORDER BY created_at DESC
+        """)
+        
+        result = db.execute(query, {'user_id': me})
+        intents = []
+        
+        for row in result:
+            # Helper to safely get datetime or string
+            def safe_datetime(idx):
+                if len(row) <= idx or row[idx] is None:
+                    return None
+                val = row[idx]
+                # If it's already a string, return it
+                if isinstance(val, str):
+                    return val
+                # If it's a datetime object, convert to ISO
+                if hasattr(val, 'isoformat'):
+                    return val.isoformat()
+                return str(val)
+            
+            intents.append({
+                'id': row[0] if len(row) > 0 else None,
+                'user_id': row[1] if len(row) > 1 else None,
+                'station_id': row[2] if len(row) > 2 else None,
+                'station_name': row[3] if len(row) > 3 else None,
+                'merchant_name': row[4] if len(row) > 4 else None,
+                'perk_title': row[5] if len(row) > 5 else None,
+                'address': row[6] if len(row) > 6 else None,
+                'eta_minutes': row[7] if len(row) > 7 else None,
+                'starts_at': safe_datetime(8),
+                'status': row[9] if len(row) > 9 else 'saved',
+                'merchant_lat': row[10] if len(row) > 10 else None,
+                'merchant_lng': row[11] if len(row) > 11 else None,
+                'station_lat': row[12] if len(row) > 12 else None,
+                'station_lng': row[13] if len(row) > 13 else None,
+                'merchant': row[16] if len(row) > 16 else None,  # New field
+                'perk_id': row[17] if len(row) > 17 else None,   # New field
+                'window_text': row[18] if len(row) > 18 else None,  # New field
+                'distance_text': row[19] if len(row) > 19 else None,  # New field
+                'created_at': safe_datetime(14)
+            })
+        
+        return intents
+    except Exception as e:
+        # Log error but return empty list instead of crashing
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Error fetching intents: {e}", exc_info=True)
+        # Return empty list so frontend doesn't crash
+        return []
 
 @router.post("/v1/intent")
 async def create_intent(payload: dict, db: Session = Depends(get_db)):

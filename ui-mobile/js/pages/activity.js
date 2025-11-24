@@ -57,13 +57,16 @@ export async function initActivityPage(rootEl) {
   `;
 
           try {
-            const data = await window.NeravaAPI.apiGet('/v1/activity');
+            // Use pilot activity endpoint instead of legacy endpoint
+            const userId = localStorage.NERAVA_USER_ID || '123';  // TODO: Get actual user_id
+            const data = await window.NeravaAPI.apiGet('/v1/pilot/activity', { user_id: userId, limit: 50 });
             if (!data) {
               throw new Error('No data returned from API');
             }
 
-    // Reputation
-    const { score, tier, streakDays } = data.reputation;
+    // Reputation (fallback if not in pilot response)
+    const reputation = data.reputation || { score: 0, tier: 'Bronze', streakDays: 0 };
+    const { score, tier, streakDays } = reputation;
     const repTierEl = rootEl.querySelector('#rep-tier');
     const repScoreEl = rootEl.querySelector('#rep-score');
     const repNextEl  = rootEl.querySelector('#rep-next');
@@ -92,12 +95,64 @@ export async function initActivityPage(rootEl) {
             `;
             rootEl.querySelector('.rep-stack').appendChild(repMeta);
 
-    // Earnings
-    const dollars = (data.totals.followCents/100).toFixed(2);
+    // Earnings (fallback if not in pilot response)
+    const followTotal = data.totals?.followCents || 0;
+    const dollars = (followTotal/100).toFixed(2);
     rootEl.querySelector('#follow-total').textContent = `$${dollars}`;
 
+    // Render pilot activities (sessions, rewards, merchant visits)
     const ul = rootEl.querySelector('#follow-list');
-    ul.innerHTML = data.followEarnings.map(item => {
+    if (data.activities && data.activities.length > 0) {
+      ul.innerHTML = data.activities.map(item => {
+        // Format activity based on type
+        if (item.type === 'session') {
+          const merchantName = item.merchant_name || 'No merchant selected';
+          const chargerName = item.charger_name || 'Unknown Charger';
+          const status = item.status === 'verified' ? 'Completed' : 'In Progress';
+          return `
+            <li class="intent">
+              <div class="intent__main">
+                <div class="title">Charged at ${chargerName}</div>
+                <div class="sub">${merchantName !== 'No merchant selected' ? `Visited ${merchantName}` : 'No merchant visit'}</div>
+                <div class="sub" style="font-size: 11px; color: #666; margin-top: 4px;">Status: ${status}</div>
+              </div>
+            </li>
+          `;
+        } else if (item.type === 'reward') {
+          const merchantName = item.merchant_name ? `, visited ${item.merchant_name}` : '';
+          const novaAmount = item.nova_awarded || 0;
+          return `
+            <li class="intent">
+              <div class="intent__main">
+                <div class="title">Earned ${novaAmount} Nova${merchantName}</div>
+                <div class="sub">${item.source === 'merchant_visit' ? 'Merchant Visit Reward' : 'Charging Reward'}</div>
+                <div class="sub" style="font-size: 11px; color: #666; margin-top: 4px;">${item.ts ? new Date(item.ts).toLocaleString() : ''}</div>
+              </div>
+            </li>
+          `;
+        } else if (item.type === 'wallet') {
+          const merchantName = item.meta?.merchant_id ? ` from merchant visit` : '';
+          const novaDelta = item.nova_delta || 0;
+          const sign = novaDelta >= 0 ? '+' : '';
+          return `
+            <li class="intent">
+              <div class="intent__main">
+                <div class="title">${sign}${novaDelta} Nova${merchantName}</div>
+                <div class="sub">${item.reason || 'Wallet Update'}</div>
+                <div class="sub" style="font-size: 11px; color: #666; margin-top: 4px;">${item.ts ? new Date(item.ts).toLocaleString() : ''}</div>
+              </div>
+            </li>
+          `;
+        }
+        return '';
+      }).filter(Boolean).join('');
+    } else {
+      ul.innerHTML = '<li class="intent"><div class="sub">No activity yet</div></li>';
+    }
+
+    // Legacy followEarnings rendering (fallback if needed)
+    if (data.followEarnings && data.followEarnings.length > 0) {
+      ul.innerHTML += data.followEarnings.map(item => {
       const earned = (item.amountCents/100).toFixed(2);
       const ctx = item.context ? item.context : 'charged nearby';
       return `

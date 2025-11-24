@@ -148,3 +148,60 @@ class MerchantPerk(Base):
     # Relationships
     merchant = relationship("Merchant", back_populates="perks")
 
+
+class MerchantBalance(Base):
+    """Merchant balance tracking for discount budgets"""
+    __tablename__ = "merchant_balance"
+    
+    id = Column(String, primary_key=True)  # UUID as string
+    merchant_id = Column(String, ForeignKey("merchants.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    balance_cents = Column(Integer, nullable=False, default=0)
+    
+    # Metadata
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    merchant = relationship("Merchant")
+
+
+class MerchantBalanceLedger(Base):
+    """Ledger of all balance transactions (credits/debits)"""
+    __tablename__ = "merchant_balance_ledger"
+    
+    id = Column(String, primary_key=True)  # UUID as string
+    merchant_id = Column(String, ForeignKey("merchants.id", ondelete="CASCADE"), nullable=False, index=True)
+    delta_cents = Column(Integer, nullable=False)  # Can be negative for debits
+    reason = Column(String, nullable=False)  # Description of the transaction
+    session_id = Column(String, nullable=True, index=True)  # Optional session reference
+    
+    # Metadata
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    
+    __table_args__ = (
+        Index('idx_merchant_balance_ledger_merchant_created', 'merchant_id', 'created_at'),
+    )
+
+
+class MerchantOfferCode(Base):
+    """Redemption codes for merchant discounts"""
+    __tablename__ = "merchant_offer_codes"
+    
+    id = Column(String, primary_key=True)  # UUID as string
+    merchant_id = Column(String, ForeignKey("merchants.id", ondelete="CASCADE"), nullable=False, index=True)
+    code = Column(String, unique=True, nullable=False, index=True)  # Unique redemption code (e.g., "DOM-SB-4821")
+    amount_cents = Column(Integer, nullable=False)  # Discount amount in cents
+    is_redeemed = Column(Boolean, default=False, nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=True, index=True)
+    
+    # Metadata
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    
+    # Relationships
+    merchant = relationship("Merchant")
+    
+    __table_args__ = (
+        Index('idx_merchant_offer_codes_merchant_created', 'merchant_id', 'created_at'),
+        Index('idx_merchant_offer_codes_code_redeemed', 'code', 'is_redeemed'),
+    )
+

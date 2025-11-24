@@ -74,7 +74,7 @@ from .routers import sessions_verify
 from .routers import debug_verify
 from .routers import debug_pool
 from .routers import discover_api, affiliate_api, insights_api
-from .routers import while_you_charge, pilot, pilot_debug, merchant_reports
+from .routers import while_you_charge, pilot, pilot_debug, merchant_reports, merchant_balance, pilot_redeem
 
 # Auth + JWT preferences
 from .routers.auth import router as auth_router
@@ -263,6 +263,8 @@ app.include_router(while_you_charge.router)
 app.include_router(pilot.router)
 app.include_router(pilot_debug.router)
 app.include_router(merchant_reports.router)
+app.include_router(merchant_balance.router)
+app.include_router(pilot_redeem.router)
 
 # Add PWA error normalization for pilot endpoints
 from fastapi.responses import JSONResponse
@@ -299,6 +301,30 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
             content=shape_error("BadRequest", "Invalid request data")
         )
     raise exc
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global exception handler to ensure CORS headers are always set."""
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    
+    # Re-raise HTTPException to use existing handlers
+    if isinstance(exc, HTTPException):
+        raise exc
+    
+    # For other exceptions, return a 500 with proper CORS headers
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+        headers={
+            "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Api-Key, X-Merchant-Key",
+        }
+    )
 
 # 20 Feature Scaffold Routers (all behind flags)
 app.include_router(merchant_intel.router)

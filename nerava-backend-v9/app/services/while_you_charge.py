@@ -555,15 +555,62 @@ def get_domain_hub_view(db: Session) -> Dict:
         
         merchant_ids = list(set([link.merchant_id for link in links]))
     
+    # If no merchants found, automatically fetch and link them
+    if not merchant_ids and chargers:
+        logger.info(f"[DomainHub] No merchants found in DB, fetching from Google Places...")
+        try:
+            import asyncio
+            # Try to get event loop, create new one if none exists
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            # Fetch merchants with multiple categories to get variety
+            # Do this per charger to get good coverage
+            all_fetched_merchants = []
+            categories_to_try = ["coffee", "food", "restaurant", "shopping_mall", "supermarket"]
+            
+            for category in categories_to_try[:3]:  # Limit to avoid too many API calls
+                fetched_merchants = loop.run_until_complete(
+                    find_and_link_merchants(
+                        db=db,
+                        chargers=chargers[:2],  # Limit to first 2 chargers to avoid rate limits
+                        category=category,
+                        merchant_name=None,
+                        max_walk_minutes=10
+                    )
+                )
+                all_fetched_merchants.extend(fetched_merchants)
+                # Commit after each category to save progress
+                try:
+                    db.commit()
+                except Exception:
+                    db.rollback()
+            
+            # Refresh merchant_ids from newly created links
+            if all_fetched_merchants or True:  # Always refresh to check if any were saved
+                charger_ids_in_db = [c.id for c in chargers]
+                links = db.query(ChargerMerchant).filter(
+                    ChargerMerchant.charger_id.in_(charger_ids_in_db)
+                ).all()
+                merchant_ids = list(set([link.merchant_id for link in links]))
+                logger.info(f"[DomainHub] Fetched and linked {len(merchant_ids)} merchants")
+        except Exception as e:
+            logger.warning(f"[DomainHub] Failed to fetch merchants automatically: {e}", exc_info=True)
+            db.rollback()
+    
     # Fetch merchants
     merchants = []
     if merchant_ids:
         merchants_query = db.query(Merchant).filter(Merchant.id.in_(merchant_ids)).all()
         
         # Get charger-merchant links for walk times
+        charger_ids_in_db = [c.id for c in chargers] if chargers else []
         links = db.query(ChargerMerchant).filter(
             ChargerMerchant.merchant_id.in_(merchant_ids),
-            ChargerMerchant.charger_id.in_(charger_ids)
+            ChargerMerchant.charger_id.in_(charger_ids_in_db)
         ).all()
         
         # Create map of merchant_id -> best link (shortest walk time)

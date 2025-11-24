@@ -15,6 +15,8 @@ self.addEventListener('install', (event) => {
                 './css/tokens.css',
                 './css/style.css',
                 './js/app.js',
+                './js/pages/showCode.js',
+                './js/pages/merchantDashboard.js',
                 './offline.html'
             ]).catch(err => {
                 console.warn('Service Worker: Some files failed to cache:', err);
@@ -50,6 +52,11 @@ self.addEventListener('fetch', (event) => {
     const { request } = event;
     const url = new URL(request.url);
     
+    // Skip chrome-extension:// and other unsupported schemes
+    if (url.protocol === 'chrome-extension:' || url.protocol === 'moz-extension:') {
+        return;
+    }
+    
     // Skip non-GET requests
     if (request.method !== 'GET') {
         return;
@@ -67,7 +74,12 @@ self.addEventListener('fetch', (event) => {
                 if (response.status === 200) {
                     const responseClone = response.clone();
                     caches.open(CACHE_NAME).then((cache) => {
-                        cache.put(request, responseClone);
+                        // Only cache http/https requests
+                        if (url.protocol === 'http:' || url.protocol === 'https:') {
+                            cache.put(request, responseClone).catch(err => {
+                                console.warn('Service Worker: Failed to cache', request.url, err);
+                            });
+                        }
                     });
                 }
                 return response;
