@@ -200,23 +200,32 @@ async function loadPilotData() {
     
     const merchantsRaw =
       whileYouCharge?.recommended_merchants || whileYouCharge?.merchants || [];
-    console.log('[Explore] Raw merchants from API:', merchantsRaw);
-    console.log('[Explore] Merchant keys in response:', Object.keys(whileYouCharge || {}));
+    console.log('[Explore] Raw merchants from API:', merchantsRaw.length, 'merchants');
     
     // Log first merchant's structure to debug logo_url
     if (merchantsRaw.length > 0) {
-      console.log('[Explore] First merchant object:', merchantsRaw[0]);
-      console.log('[Explore] First merchant keys:', Object.keys(merchantsRaw[0]));
-      console.log('[Explore] First merchant logo_url:', merchantsRaw[0].logo_url);
+      const firstMerchant = merchantsRaw[0];
+      console.log('[Explore] === FIRST MERCHANT DEBUG ===');
+      console.log('[Explore] Merchant name:', firstMerchant.name);
+      console.log('[Explore] Merchant ID:', firstMerchant.id);
+      console.log('[Explore] All merchant fields:', Object.keys(firstMerchant));
+      console.log('[Explore] logo_url value:', firstMerchant.logo_url);
+      console.log('[Explore] photo_url value:', firstMerchant.photo_url);
+      console.log('[Explore] Full merchant object:', JSON.stringify(firstMerchant, null, 2));
+      console.log('[Explore] === END FIRST MERCHANT DEBUG ===');
     }
     
     _merchants = merchantsRaw.map(toMapMerchant).filter(Boolean);
-    console.log('[Explore] Mapped merchants:', _merchants.length, _merchants);
+    console.log('[Explore] Mapped merchants:', _merchants.length, 'merchants');
     
     // Log first mapped merchant to see logo field
     if (_merchants.length > 0) {
-      console.log('[Explore] First mapped merchant:', _merchants[0]);
-      console.log('[Explore] First mapped merchant logo:', _merchants[0].logo, _merchants[0].logo_url);
+      const firstMapped = _merchants[0];
+      console.log('[Explore] === FIRST MAPPED MERCHANT DEBUG ===');
+      console.log('[Explore] Mapped merchant name:', firstMapped.name);
+      console.log('[Explore] Mapped merchant logo field:', firstMapped.logo);
+      console.log('[Explore] Mapped merchant logo_url field:', firstMapped.logo_url);
+      console.log('[Explore] === END FIRST MAPPED MERCHANT DEBUG ===');
     }
     
     // Sort merchants by nova_reward descending (Bakery Lorraine with 2 Nova should appear at top)
@@ -588,10 +597,21 @@ function updateRecommendedPerks(perks) {
   // Horizontal scrolling is handled by CSS, no need for overflow styles here
   
   // Render all perk cards in scrollable list
-  sortedPerks.forEach(perk => {
+  sortedPerks.forEach((perk, index) => {
     const card = document.createElement('div');
     card.className = 'perk-card-compact';
     card.dataset.perkId = perk.id || '';
+    
+    // Debug first perk logo
+    if (index === 0) {
+      console.log('[Explore] === FIRST PERK CARD DEBUG ===');
+      console.log('[Explore] Perk name:', perk.name);
+      console.log('[Explore] Perk logo value:', perk.logo);
+      console.log('[Explore] Perk logo type:', typeof perk.logo);
+      console.log('[Explore] Perk logo truthy?', !!perk.logo);
+      console.log('[Explore] Perk logo trimmed?', perk.logo && perk.logo.trim());
+      console.log('[Explore] === END FIRST PERK CARD DEBUG ===');
+    }
     
     // Compact layout: Logo (only if exists) + "Earn X Nova" + "X min walk"
     const logoHtml = (perk.logo && perk.logo.trim()) 
