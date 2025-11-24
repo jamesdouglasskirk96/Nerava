@@ -115,20 +115,21 @@ async def _nearby_search(
                 raw_results = data.get("results", [])
                 
                 # Log status and results count prominently (WARNING level so it shows up)
-                logger.warning(
-                    "[PLACES] Status: %s, results=%d, location=(%s,%s), params=%s",
+                logger.error(
+                    "[PLACES] 🔍 Status: %s, results=%d, location=(%s,%s), type=%s, keyword=%s",
                     status,
                     len(raw_results),
                     lat,
                     lng,
-                    params
+                    place_type,
+                    keyword or "none"
                 )
                 
                 # Log first result details if available
                 if raw_results and len(raw_results) > 0:
                     first_result = raw_results[0]
-                    logger.warning(
-                        "[PLACES] First result: name=%s, place_id=%s, location=(%s,%s)",
+                    logger.error(
+                        "[PLACES] ✅ First result: name='%s', place_id=%s, location=(%s,%s)",
                         first_result.get("name", "N/A"),
                         first_result.get("place_id", "N/A"),
                         first_result.get("geometry", {}).get("location", {}).get("lat", "N/A"),
@@ -138,11 +139,11 @@ async def _nearby_search(
                     # Log a few more if available
                     if len(raw_results) > 1:
                         result_names = [r.get("name", "N/A") for r in raw_results[:5]]
-                        logger.warning("[PLACES] Sample results: %s", ", ".join(result_names))
+                        logger.error("[PLACES] Sample results: %s", ", ".join(result_names))
                 else:
-                    logger.error("[PLACES] ⚠️ No results in response (status=%s). Response: %s", status, json.dumps(data)[:300])
+                    logger.error("[PLACES] ❌ NO RESULTS (status=%s). Full response: %s", status, json.dumps(data)[:500])
                     if status == "OK":
-                        logger.error("[PLACES] ⚠️ Status is OK but no results - query may be too restrictive")
+                        logger.error("[PLACES] ❌ Status is OK but no results - check query params")
 
                 if status in {"REQUEST_DENIED", "ZERO_RESULTS"}:
                     logger.error(f"[PLACES_ERROR] Status: {status}, Full response: {json.dumps(data)[:500]}")
