@@ -331,7 +331,13 @@ async def find_and_link_merchants(
             seen.add(m.id)
             unique_merchants.append(m)
     
-    logger.info(f"[WhileYouCharge] Total unique merchants: {len(unique_merchants)} ({len(existing_merchants)} existing, {len(all_new_merchants)} new)")
+    logger.info(
+        "[WhileYouCharge] Summary: %d unique merchants total (%d existing from DB, %d newly created/linked). "
+        "Check [PLACES] logs for Google API status and [WhileYouCharge] logs for filtering details.",
+        len(unique_merchants),
+        len(existing_merchants),
+        len(all_new_merchants)
+    )
     return unique_merchants
 
 
