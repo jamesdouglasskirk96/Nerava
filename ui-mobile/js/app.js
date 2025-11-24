@@ -105,6 +105,83 @@ const inited = {};
 // Handle hash routing
 function handleHashRoute() {
   const hash = location.hash;
+  
+  // Handle show code page
+  if (hash.startsWith('#/code')) {
+    const params = new URLSearchParams(hash.split('?')[1] || '');
+    const merchantId = params.get('merchant_id');
+    
+    if (merchantId) {
+      document.querySelectorAll('.page').forEach(p => {
+        p.classList.remove('active');
+        p.style.display = 'none';
+      });
+      
+      const showCodePage = document.getElementById('page-show-code');
+      if (showCodePage) {
+        showCodePage.style.display = 'block';
+        showCodePage.classList.add('active');
+        
+        import('./pages/showCode.js').then(module => {
+          module.initShowCode({ merchant_id: merchantId });
+        });
+      }
+      return;
+    }
+  }
+  
+  // Handle Earn page
+  if (hash.startsWith('#/earn')) {
+    const params = new URLSearchParams(hash.split('?')[1] || '');
+    
+    document.querySelectorAll('.page').forEach(p => {
+      p.classList.remove('active');
+      p.style.display = 'none';
+    });
+    
+    const earnPage = document.getElementById('page-earn');
+    if (earnPage) {
+      earnPage.style.display = 'block';
+      earnPage.classList.add('active');
+      
+      // Force reinit to get new params
+      earnPage.dataset.initialized = 'false';
+      
+      import('./pages/earn.js').then(module => {
+        module.initEarn({
+          session_id: params.get('session_id'),
+          merchant_id: params.get('merchant_id'),
+          charger_id: params.get('charger_id')
+        });
+      });
+    }
+    return;
+  }
+  
+  // Handle merchant dashboard
+  if (hash.startsWith('#/merchant-dashboard')) {
+    const params = new URLSearchParams(hash.split('?')[1] || '');
+    const merchantId = params.get('merchant_id');
+    
+    if (merchantId) {
+      document.querySelectorAll('.page').forEach(p => {
+        p.classList.remove('active');
+        p.style.display = 'none';
+      });
+      
+      const dashboardPage = document.getElementById('page-merchant-dashboard');
+      if (dashboardPage) {
+        dashboardPage.style.display = 'block';
+        dashboardPage.classList.add('active');
+        
+        import('./pages/merchantDashboard.js').then(module => {
+          module.initMerchantDashboard({ merchant_id: merchantId });
+        });
+      }
+      return;
+    }
+  }
+  
   if (hash === '#/dev') {
     // Show dev page
     document.getElementById('pageDev')?.classList.remove('hidden');
@@ -174,10 +251,12 @@ async function initApp() {
   
   // Handle hash routing
   window.addEventListener('hashchange', handleHashRoute);
-  handleHashRoute();
+  handleHashRoute();  // Handle initial hash if present
   
-  // Set initial tab
-  setTab('explore');
+  // Only set default tab if no hash route
+  if (!location.hash || location.hash === '#') {
+    setTab('explore');
+  }
   
   // Add bottom padding to all pages
   const pages = document.querySelectorAll('.page, #pageExplore, #pageCharge, #pageWallet, #pageMe, #pageClaim');
@@ -384,10 +463,26 @@ async function initActivity() {
 // Initialize earn page when tab is switched
 async function initEarn() {
   const earnEl = document.getElementById('page-earn');
-  if (earnEl && !earnEl.dataset.initialized) {
-    const { initEarnPage } = await import(`./pages/earn.js?v=${Date.now()}`);
-    await initEarnPage(earnEl);
-    earnEl.dataset.initialized = 'true';
+  if (earnEl) {
+    // Clear initialization flag when starting new session (hash params indicate new session)
+    const hash = window.location.hash;
+    if (hash.includes('merchant_id=') && hash.includes('charger_id=')) {
+      earnEl.dataset.initialized = 'false';  // Force reinit with new params
+    }
+    
+    // Get params from URL if available
+    const urlParams = new URLSearchParams(hash.split('?')[1] || '');
+    const params = {
+      session_id: urlParams.get('session_id'),
+      merchant_id: urlParams.get('merchant_id'),
+      charger_id: urlParams.get('charger_id')
+    };
+    
+    if (!earnEl.dataset.initialized || earnEl.dataset.initialized === 'false') {
+      const { initEarn } = await import(`./pages/earn.js?v=${Date.now()}`);
+      await initEarn(params);  // Pass params to initEarn
+      earnEl.dataset.initialized = 'true';
+    }
   }
 }
 

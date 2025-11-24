@@ -1,62 +1,28 @@
-export async function initEarnPage(rootEl) {
-  rootEl.innerHTML = `
-    <section class="card card--pad">
-      <div class="eyebrow">Soon to be claimed perks</div>
-      <ul id="intent-list" class="list list--intents"></ul>
-    </section>`;
+/**
+ * Earn Page - Pilot Session Flow
+ * 
+ * Full end-to-end experience:
+ * 1. Start session with charger + merchant
+ * 2. Track distance to charger
+ * 3. Monitor dwell progress
+ * 4. Navigate to charger/merchant
+ * 5. Auto-switch to code when in merchant radius
+ */
 
-  const ul = rootEl.querySelector('#intent-list');
+import Api from '../core/api.js';
+import { setTab } from '../app.js';
 
-  async function load() {
-    try {
-      const items = await window.NeravaAPI.apiGet('/v1/intent') || [];
-      
-      if (items.length === 0) {
-        ul.innerHTML = '<li class="intent"><div class="sub">No saved intents yet. Tap "Notify" on a perk to save it!</div></li>';
-        return;
-      }
-      
-      ul.innerHTML = items.map(it => `
-        <li class="intent">
-          <div class="intent__main">
-            <div class="title">${it.merchant || it.merchant_name || 'Unknown Merchant'}</div>
-            <div class="sub">${it.window_text || ''} • ${it.distance_text || ''}</div>
-            <div class="sub" style="font-size: 11px; color: #666; margin-top: 4px;">${it.station_name || ''}</div>
-          </div>
-          <div class="intent__cta">
-            <button data-activate="${it.id}" class="btn btn-blue">Activate</button>
-          </div>
-        </li>`).join('');
-      bind();
-    } catch (e) {
-      console.error('Failed to load intents:', e);
-      ul.innerHTML = '<li class="intent"><div class="sub">No saved intents yet</div></li>';
-    }
-  }
+const $ = (s, r = document) => r.querySelector(s);
 
-  function bind() {
-    ul.querySelectorAll('[data-activate]').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        const id = e.currentTarget.getAttribute('data-activate');
-        try {
-          // Placeholder for activation flow
-          // In the future, this could start a session or open navigation
-          showToast('Activation flow coming soon!');
-          console.log('Activate intent:', id);
-          
-          // Optional: remove the intent after activation
-          // await window.NeravaAPI.apiPost(`/v1/intent/${id}/start`, '');
-          // load();
-        } catch (e) {
-          console.error('Activation failed:', e);
-          showToast('Activation failed');
-        }
-      });
-    });
-  }
-
-  load();
-}
+// Session state
+let _sessionId = null;
+let _charger = null;
+let _merchant = null;
+let _userLocation = null;
+let _watchId = null;
+let _pingInterval = null;
+let _sessionState = 'starting'; // starting, charging, ready, at_merchant
+let _geolocationErrorLogged = false; // Flag to prevent error spam
 
 // Toast helper
 function showToast(message) {
@@ -65,4 +31,435 @@ function showToast(message) {
   toast.textContent = message;
   document.body.appendChild(toast);
   setTimeout(() => toast.remove(), 3000);
+}
+
+function normalizeNumber(n) {
+  const parsed = Number(n);
+  return Number.isNaN(parsed) ? 0 : Math.round(parsed);
+}
+
+function formatDistance(meters) {
+  if (meters < 1000) return `${meters}m`;
+  return `${(meters / 1000).toFixed(1)}km`;
+}
+
+function formatTime(seconds) {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (mins > 0) return `${mins}m ${secs}s`;
+  return `${secs}s`;
+}
+
+/**
+ * Initialize Earn Page from URL params or session state
+ */
+export async function initEarn(params = {}) {
+  const rootEl = document.getElementById('page-earn');
+  if (!rootEl) {
+    console.error('Earn page element not found');
+    return;
+  }
+
+  // Try to get session from global state first (preferred)
+  let sessionState = null;
+  if (typeof window !== 'undefined' && window.pilotSession) {
+    sessionState = window.pilotSession;
+  } else if (typeof sessionStorage !== 'undefined') {
+    const stored = sessionStorage.getItem('pilot_session');
+    if (stored) {
+      try {
+        sessionState = JSON.parse(stored);
+        window.pilotSession = sessionState; // Cache in window for immediate access
+      } catch (e) {
+        console.warn('Failed to parse stored session:', e);
+      }
+    }
+  }
+
+  // Get params from URL hash or passed params (fallback)
+  const urlParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
+  const sessionId = sessionState?.session_id || params.session_id || urlParams.get('session_id');
+  const merchantId = sessionState?.merchant?.id || params.merchant_id || urlParams.get('merchant_id');
+  const chargerId = sessionState?.charger?.id || params.charger_id || urlParams.get('charger_id');
+
+  if (!merchantId || !chargerId) {
+    renderError(rootEl, 'Missing merchant or charger ID. Please start a session from the Explore page.');
+    return;
+  }
+
+  // Get user location first
+  try {
+    const position = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+    });
+    _userLocation = {
+      lat: position.coords.latitude,
+      lng: position.coords.longitude
+    };
+  } catch (e) {
+    console.warn('Could not get user location:', e);
+    _userLocation = { lat: 30.4021, lng: -97.7266 }; // Domain default
+  }
+
+  // Use session from state if available, otherwise start new session
+  // sessionState was already declared above, just reuse it
+  
+  if (sessionState && sessionState.session_id === sessionId) {
+    // Session already started, use existing data
+    _sessionId = sessionState.session_id;
+    _charger = sessionState.charger;
+    _merchant = sessionState.merchant;
+    
+    if (_charger && _merchant) {
+      renderSessionView(rootEl);
+      startLocationTracking();
+      startPingLoop();
+      return;
+    }
+  }
+  
+  // Start new session or refresh data
+  await startSession(rootEl, chargerId, merchantId, sessionId);
+}
+
+async function startSession(rootEl, chargerId, merchantId, existingSessionId = null) {
+  renderLoading(rootEl);
+
+  try {
+    // Fetch merchant/charger info from bootstrap/while_you_charge
+    const bootstrap = await Api.fetchPilotBootstrap();
+    const whileYouCharge = await Api.fetchPilotWhileYouCharge();
+    
+    _charger = bootstrap.chargers.find(c => c.id === chargerId);
+    _merchant = whileYouCharge.recommended_merchants.find(m => m.id === merchantId);
+
+    if (!_charger || !_merchant) {
+      renderError(rootEl, 'Charger or merchant not found');
+      return;
+    }
+
+    // Start pilot session if we don't have an existing one
+    let sessionData;
+    if (existingSessionId) {
+      // Use existing session ID, but verify we have merchant/charger data
+      sessionData = {
+        session_id: existingSessionId,
+        charger: _charger,
+        merchant: _merchant
+      };
+    } else {
+      // Start new session
+      sessionData = await Api.pilotStartSession(
+        _userLocation.lat,
+        _userLocation.lng,
+        chargerId,
+        merchantId,
+        123 // TODO: Get actual user_id
+      );
+    }
+
+    _sessionId = sessionData.session_id;
+    _charger = sessionData.charger || _charger;
+    _merchant = sessionData.merchant || _merchant;
+
+    // Render session UI
+    renderSessionView(rootEl);
+    
+    // Start GPS tracking and ping loop
+    startLocationTracking();
+    startPingLoop();
+
+  } catch (e) {
+    console.error('Failed to start session:', e);
+    renderError(rootEl, `Failed to start session: ${e.message}`);
+  }
+}
+
+function renderLoading(rootEl) {
+  rootEl.innerHTML = `
+    <div style="padding: 20px; text-align: center;">
+      <div style="font-size: 24px; margin-bottom: 10px;">⚡</div>
+      <div>Starting session...</div>
+    </div>
+  `;
+}
+
+function renderError(rootEl, message) {
+  rootEl.innerHTML = `
+    <div style="padding: 20px; text-align: center;">
+      <div style="color: #ef4444; margin-bottom: 10px;">❌</div>
+      <div>${message}</div>
+      <button onclick="location.hash='#/explore'" style="margin-top: 20px; padding: 10px 20px; background: #22c55e; color: white; border: none; border-radius: 8px; cursor: pointer;">
+        Back to Explore
+      </button>
+    </div>
+  `;
+}
+
+function renderSessionView(rootEl) {
+  const rewardNova = normalizeNumber(_merchant?.nova_reward || 0);
+  const rewardText = rewardNova > 0 ? `Earn ${rewardNova} Nova` : 'Earn rewards';
+  
+  rootEl.innerHTML = `
+    <div id="earn-session-view" style="padding: 16px; max-width: 600px; margin: 0 auto;">
+      <!-- Session Header -->
+      <div style="background: #f8fafc; padding: 16px; border-radius: 12px; margin-bottom: 16px;">
+        <div style="font-size: 14px; color: #64748b; margin-bottom: 4px;">Active Session</div>
+        <div style="font-size: 18px; font-weight: 600; margin-bottom: 4px;">${_charger.name}</div>
+        <div style="font-size: 14px; color: #64748b;">${_merchant.name} • ${rewardText}</div>
+      </div>
+
+      <!-- Distance to Charger -->
+      <div id="charger-distance-block" style="background: white; padding: 16px; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+        <div style="font-size: 14px; color: #64748b; margin-bottom: 8px;">Distance to Charger</div>
+        <div id="distance-to-charger" style="font-size: 32px; font-weight: 700; color: #22c55e; margin-bottom: 4px;">-</div>
+        <div style="font-size: 12px; color: #94a3b8;">Stay within <span id="charger-radius">60m</span> of the charger</div>
+      </div>
+
+      <!-- Dwell Progress -->
+      <div id="dwell-progress-block" style="background: white; padding: 16px; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+        <div style="font-size: 14px; color: #64748b; margin-bottom: 8px;">Charging Progress</div>
+        <div style="margin-bottom: 8px;">
+          <div style="background: #e5e7eb; height: 8px; border-radius: 4px; overflow: hidden;">
+            <div id="dwell-progress-bar" style="background: #22c55e; height: 100%; width: 0%; transition: width 0.3s;"></div>
+          </div>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 12px; color: #64748b;">
+          <span id="dwell-current">0s</span>
+          <span id="dwell-required">3m</span>
+        </div>
+        <div style="margin-top: 8px; font-size: 14px;">
+          <span id="dwell-status">Charge for at least 3 minutes</span>
+        </div>
+      </div>
+
+      <!-- Navigate Button -->
+      <button id="navigate-to-charger-btn" style="width: 100%; padding: 14px; background: #22c55e; color: white; border: none; border-radius: 12px; font-weight: 600; font-size: 16px; cursor: pointer; margin-bottom: 16px;">
+        Navigate to Charger
+      </button>
+
+      <!-- Ready to Claim Card (hidden initially) -->
+      <div id="ready-to-claim-card" style="display: none; background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); padding: 20px; border-radius: 12px; color: white; margin-bottom: 16px;">
+        <div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">✅ Ready to Claim!</div>
+        <div style="font-size: 14px; margin-bottom: 16px; opacity: 0.9;">Your reward is ready. Visit ${_merchant.name} to claim it.</div>
+        <button id="navigate-to-merchant-btn" style="width: 100%; padding: 12px; background: white; color: #22c55e; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+          Navigate to ${_merchant.name}
+        </button>
+      </div>
+
+      <!-- Merchant Distance (shown after ready to claim) -->
+      <div id="merchant-distance-block" style="display: none; background: white; padding: 16px; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+        <div style="font-size: 14px; color: #64748b; margin-bottom: 8px;">Distance to ${_merchant.name}</div>
+        <div id="distance-to-merchant" style="font-size: 24px; font-weight: 700; color: #3b82f6;">-</div>
+        <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">You'll see your code when you're inside the merchant area.</div>
+      </div>
+
+      <!-- Code View (shown when in merchant radius) -->
+      <div id="code-view" style="display: none; background: white; padding: 24px; border-radius: 12px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+        <div style="font-size: 20px; font-weight: 600; margin-bottom: 16px;">Your Discount Code</div>
+        <div id="merchant-code" style="font-size: 48px; font-weight: 700; letter-spacing: 4px; color: #22c55e; margin-bottom: 8px; font-family: monospace;">-</div>
+        <div style="font-size: 14px; color: #64748b; margin-bottom: 16px;">Show this to the cashier for your Nerava reward</div>
+        <button id="copy-code-btn" style="padding: 10px 20px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 8px; cursor: pointer; font-size: 14px;">
+          Copy Code
+        </button>
+      </div>
+    </div>
+  `;
+
+  // Bind event handlers
+  $('#navigate-to-charger-btn')?.addEventListener('click', () => navigateToCharger());
+  $('#navigate-to-merchant-btn')?.addEventListener('click', () => navigateToMerchant());
+  $('#copy-code-btn')?.addEventListener('click', () => copyCode());
+}
+
+function navigateToCharger() {
+  if (!_charger) return;
+  const url = `https://www.google.com/maps/dir/?api=1&destination=${_charger.lat},${_charger.lng}`;
+  window.open(url, '_blank');
+}
+
+function navigateToMerchant() {
+  if (!_merchant) return;
+  const url = `https://www.google.com/maps/dir/?api=1&destination=${_merchant.lat},${_merchant.lng}`;
+  window.open(url, '_blank');
+}
+
+function copyCode() {
+  const codeEl = $('#merchant-code');
+  if (!codeEl) return;
+  const code = codeEl.textContent.trim();
+  if (code && code !== '-') {
+    navigator.clipboard.writeText(code).then(() => {
+      showToast('Code copied!');
+    }).catch(() => {
+      showToast('Failed to copy');
+    });
+  }
+}
+
+function startLocationTracking() {
+  if (!navigator.geolocation) {
+    console.warn('Geolocation not supported, using default location');
+    // Use default Domain location as fallback
+    if (!_userLocation) {
+      _userLocation = { lat: 30.4021, lng: -97.7266 };
+    }
+    return;
+  }
+
+  // Set fallback location in case geolocation fails
+  if (!_userLocation) {
+    _userLocation = { lat: 30.4021, lng: -97.7266 }; // Domain default
+  }
+
+  _watchId = navigator.geolocation.watchPosition(
+    (position) => {
+      _userLocation = {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude
+      };
+    },
+    (error) => {
+      // Don't spam console with errors - just log once
+      if (!_geolocationErrorLogged) {
+        console.warn('Geolocation unavailable (using fallback location):', error.message || 'Position unavailable');
+        _geolocationErrorLogged = true;
+      }
+      // Keep using existing _userLocation or default
+      if (!_userLocation) {
+        _userLocation = { lat: 30.4021, lng: -97.7266 };
+      }
+    },
+    { enableHighAccuracy: false, timeout: 5000, maximumAge: 10000 } // Less strict settings
+  );
+}
+
+function startPingLoop() {
+  // Ping every 5 seconds
+  _pingInterval = setInterval(async () => {
+    if (!_sessionId || !_userLocation) return;
+
+    try {
+      const pingResult = await Api.pilotVerifyPing(_sessionId, _userLocation.lat, _userLocation.lng);
+      updateSessionUI(pingResult);
+    } catch (e) {
+      console.error('Ping failed:', e);
+    }
+  }, 5000);
+
+  // Immediate first ping
+  if (_sessionId && _userLocation) {
+    Api.pilotVerifyPing(_sessionId, _userLocation.lat, _userLocation.lng)
+      .then(updateSessionUI)
+      .catch(console.error);
+  }
+}
+
+function updateSessionUI(pingResult) {
+  // Update distance to charger
+  const distanceEl = $('#distance-to-charger');
+  const radiusEl = $('#charger-radius');
+  if (distanceEl) {
+    const distance = normalizeNumber(pingResult.distance_to_charger_m || 0);
+    distanceEl.textContent = formatDistance(distance);
+    distanceEl.style.color = distance <= (pingResult.charger_radius_m || 60) ? '#22c55e' : '#ef4444';
+  }
+  if (radiusEl && pingResult.charger_radius_m) {
+    radiusEl.textContent = `${normalizeNumber(pingResult.charger_radius_m)}m`;
+  }
+
+  // Update dwell progress
+  const dwellEl = $('#dwell-current');
+  const requiredEl = $('#dwell-required');
+  const progressBar = $('#dwell-progress-bar');
+  const statusEl = $('#dwell-status');
+  const dwellSecs = normalizeNumber(pingResult.dwell_seconds || 0);
+  const requiredSecs = normalizeNumber(pingResult.needed_seconds || 180) + dwellSecs;
+  
+  if (dwellEl) dwellEl.textContent = formatTime(dwellSecs);
+  if (requiredEl) requiredEl.textContent = formatTime(requiredSecs);
+  if (progressBar) {
+    const percent = Math.min(100, (dwellSecs / requiredSecs) * 100);
+    progressBar.style.width = `${percent}%`;
+  }
+  if (statusEl) {
+    if (pingResult.ready_to_claim || pingResult.verified) {
+      statusEl.textContent = '✅ Ready to claim!';
+      statusEl.style.color = '#22c55e';
+    } else {
+      const remaining = Math.max(0, requiredSecs - dwellSecs);
+      statusEl.textContent = `${formatTime(remaining)} remaining`;
+      statusEl.style.color = '#64748b';
+    }
+  }
+
+  // Show ready to claim card
+  if (pingResult.ready_to_claim || pingResult.verified) {
+    _sessionState = 'ready';
+    const readyCard = $('#ready-to-claim-card');
+    if (readyCard) readyCard.style.display = 'block';
+  }
+
+  // Update merchant distance if ready to claim
+  if (_sessionState === 'ready' || _sessionState === 'at_merchant') {
+    const merchantDistanceEl = $('#distance-to-merchant');
+    const merchantBlock = $('#merchant-distance-block');
+    const distance = normalizeNumber(pingResult.distance_to_merchant_m || 0);
+    
+    if (merchantDistanceEl) {
+      merchantDistanceEl.textContent = `${formatDistance(distance)} away`;
+    }
+    if (merchantBlock) {
+      merchantBlock.style.display = 'block';
+    }
+
+    // Check if within merchant radius
+    if (pingResult.within_merchant_radius) {
+      _sessionState = 'at_merchant';
+      // Verify visit and get code
+      verifyVisitAndShowCode();
+    }
+  }
+}
+
+async function verifyVisitAndShowCode() {
+  if (!_sessionId || !_merchant || !_userLocation) return;
+
+  try {
+    const visitResult = await Api.pilotVerifyVisit(
+      _sessionId,
+      _merchant.id,
+      _userLocation.lat,
+      _userLocation.lng
+    );
+
+    if (visitResult.visit_verified && visitResult.merchant_code) {
+      // Show code view
+      const codeView = $('#code-view');
+      const codeEl = $('#merchant-code');
+      if (codeView) codeView.style.display = 'block';
+      if (codeEl) codeEl.textContent = visitResult.merchant_code;
+
+      // Hide other blocks
+      const readyCard = $('#ready-to-claim-card');
+      const merchantBlock = $('#merchant-distance-block');
+      if (readyCard) readyCard.style.display = 'none';
+      if (merchantBlock) merchantBlock.style.display = 'none';
+
+      showToast(`Earned ${visitResult.nova_awarded || 0} Nova!`);
+    }
+  } catch (e) {
+    console.error('Failed to verify visit:', e);
+  }
+}
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+  if (_watchId) navigator.geolocation.clearWatch(_watchId);
+  if (_pingInterval) clearInterval(_pingInterval);
+});
+
+// Export for app.js routing
+export async function initEarnPage(rootEl) {
+  await initEarn();
 }

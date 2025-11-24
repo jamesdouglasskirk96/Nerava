@@ -76,6 +76,8 @@ def shape_merchant(merchant: Dict[str, Any], user_lat: Optional[float] = None, u
         "lat": float,
         "lng": float,
         "category": str (optional),
+        "nova_reward": int (optional),
+        "logo_url": str (optional),
         "distance_m": int (if user_lat/lng provided),
         "walk_time_s": int (if user_lat/lng provided)
     }
@@ -91,6 +93,14 @@ def shape_merchant(merchant: Dict[str, Any], user_lat: Optional[float] = None, u
     if "category" in merchant:
         result["category"] = str(merchant.get("category", ""))
     
+    # Nova reward (important for perk display)
+    if "nova_reward" in merchant:
+        result["nova_reward"] = normalize_number(merchant.get("nova_reward", 0))
+    
+    # Logo URL
+    if "logo_url" in merchant:
+        result["logo_url"] = str(merchant.get("logo_url", ""))
+    
     # Distance if user location provided
     if user_lat is not None and user_lng is not None:
         from app.services.verify_dwell import haversine_m
@@ -105,6 +115,9 @@ def shape_merchant(merchant: Dict[str, Any], user_lat: Optional[float] = None, u
         result["walk_time_s"] = normalize_number(merchant.get("walk_time_s"))
     elif "walk_duration_s" in merchant:
         result["walk_time_s"] = normalize_number(merchant.get("walk_duration_s"))
+    elif "walk_minutes" in merchant:
+        # Convert walk_minutes to walk_time_s
+        result["walk_time_s"] = normalize_number(merchant.get("walk_minutes", 0) * 60)
     
     return result
 

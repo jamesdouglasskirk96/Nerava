@@ -18,7 +18,7 @@
  * - AirDrop-style popover: Merchant quick view on tap (shown on charger/merchant tap)
  */
 
-import { fetchPilotBootstrap, fetchPilotWhileYouCharge } from '../core/api.js';
+import Api, { fetchPilotBootstrap, fetchPilotWhileYouCharge } from '../core/api.js';
 import { ensureMap, clearStations, addStationDot, fitToStations, getMap } from '../core/map.js';
 import { setTab } from '../app.js';
 
@@ -113,7 +113,8 @@ function merchantToPerkCard(merchant) {
     id: merchant.id,
     name: merchant.name,
     logo: merchant.logo || merchant.logo_url || `https://logo.clearbit.com/${merchant.name?.toLowerCase().replace(/\s+/g, '') || 'merchant'}.com`,
-    nova: merchant.nova_reward || 0,
+    nova: normalizeNumber(merchant.nova_reward || merchant.nova || 0),
+    nova_reward: normalizeNumber(merchant.nova_reward || merchant.nova || 0), // Keep both for compatibility
     walk: typeof walkMinutes === 'string' ? walkMinutes : `${walkMinutes} min walk`,
   };
 }
@@ -131,6 +132,8 @@ let _chargers = [];
 let _merchants = [];
 let _selectedChargerId = null;
 let _selectedMerchantId = null;
+let _selectedMerchant = null; // Store full merchant object
+let _selectedCharger = null; // Store selected charger object
 let _selectedCategory = null;
 let _userLocation = null;
 let _map = null;
@@ -181,6 +184,9 @@ async function loadPilotData() {
     const merchantsRaw =
       whileYouCharge?.recommended_merchants || whileYouCharge?.merchants || [];
     _merchants = merchantsRaw.map(toMapMerchant).filter(Boolean);
+    
+    // Sort merchants by nova_reward descending (Bakery Lorraine with 2 Nova should appear at top)
+    _merchants.sort((a, b) => (b.nova_reward || 0) - (a.nova_reward || 0));
 
     if (_merchants.length) {
       applyMerchantFilter('');
@@ -332,13 +338,17 @@ async function filterByCategory(category) {
 function initMerchantPopover() {
   const popover = $('#merchant-popover');
   const startBtn = $('#popover-start-session');
+  const cancelBtn = $('#popover-cancel');
   const moreBtn = $('#popover-more-details');
   
   if (startBtn) {
-    startBtn.addEventListener('click', () => {
-      console.log('Start session clicked');
-      // TODO: Implement session start
-      showToast('Starting session...');
+    startBtn.addEventListener('click', async () => {
+      await handleStartSession();
+    });
+  }
+  
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => {
       hideMerchantPopover();
     });
   }
@@ -369,15 +379,28 @@ function showMerchantPopover(merchant, charger = null) {
   
   if (!popover) return;
   
-  const chargerName = charger?.name || 'charger';
-  const perkText = merchant.perk || merchant.blurb || 'Get perks while you charge';
+  // Use provided charger or default to first charger
+  const displayCharger = charger || _chargers[0] || null;
+  const chargerName = displayCharger?.name || 'charger';
   
-  if (logoEl) logoEl.src = merchant.merchant?.logo || merchant.logo || '';
-  if (nameEl) nameEl.textContent = merchant.merchant?.name || merchant.name || 'Merchant';
-  if (textEl) textEl.textContent = `Get ${perkText} while you charge at ${chargerName}`;
+  // Get reward text
+  const novaReward = merchant.nova_reward || merchant.nova || 0;
+  const rewardText = novaReward > 0 ? `Earn ${novaReward} Nova` : 'Get perks while you charge';
+  
+  // Get merchant display info
+  const merchantLogo = merchant.logo || merchant.logo_url || '';
+  const merchantName = merchant.name || 'Merchant';
+  
+  if (logoEl) logoEl.src = merchantLogo;
+  if (nameEl) nameEl.textContent = merchantName;
+  if (textEl) textEl.textContent = `${rewardText} when you charge at ${chargerName} and visit ${merchantName}`;
+  
+  // Store full merchant and charger objects for session start
+  _selectedMerchant = merchant;
+  _selectedMerchantId = merchant.id;
+  _selectedCharger = displayCharger;
   
   popover.style.display = 'block';
-  _selectedMerchantId = merchant.id;
 }
 
 function hideMerchantPopover() {
@@ -386,6 +409,99 @@ function hideMerchantPopover() {
     popover.style.display = 'none';
   }
   _selectedMerchantId = null;
+  _selectedMerchant = null;
+  _selectedCharger = null;
+}
+
+// === Start Session Handler ==================================================
+async function handleStartSession() {
+  const merchant = _selectedMerchant;
+  const charger = _selectedCharger || _chargers[0];
+  
+  if (!merchant || !charger) {
+    showToast('Missing merchant or charger info');
+    return;
+  }
+  
+  const merchantId = merchant.id;
+  const chargerId = charger.id;
+  
+  if (!merchantId || !chargerId) {
+    showToast('Invalid merchant or charger ID');
+    return;
+  }
+  
+  // Get user location
+  let userLat = 30.4021; // Domain default
+  let userLng = -97.7266;
+  
+  try {
+    if (navigator.geolocation && _userLocation) {
+      userLat = _userLocation.lat;
+      userLng = _userLocation.lng;
+    } else {
+      // Try to get current location
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000 });
+      });
+      userLat = position.coords.latitude;
+      userLng = position.coords.longitude;
+    }
+  } catch (e) {
+    console.warn('Could not get user location, using defaults:', e);
+  }
+  
+  // Show loading state
+  showToast('Starting session...');
+  
+  try {
+    // Call pilot API to start session
+    const sessionData = await Api.pilotStartSession(
+      userLat,
+      userLng,
+      chargerId,
+      merchantId,
+      123 // TODO: Get actual user_id from auth state
+    );
+    
+    // Store session in global state (sessionStorage for persistence)
+    const sessionState = {
+      session_id: sessionData.session_id,
+      charger: sessionData.charger || charger,
+      merchant: sessionData.merchant || merchant,
+      hub_id: sessionData.hub_id,
+      hub_name: sessionData.hub_name
+    };
+    
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem('pilot_session', JSON.stringify(sessionState));
+    }
+    
+    // Also store in window for immediate access
+    window.pilotSession = sessionState;
+    
+    console.log('[Explore] Session started:', sessionData.session_id);
+    
+    // Navigate to Earn page with all necessary params
+    location.hash = `#/earn?session_id=${encodeURIComponent(sessionData.session_id)}&merchant_id=${encodeURIComponent(merchantId)}&charger_id=${encodeURIComponent(chargerId)}`;
+    
+    hideMerchantPopover();
+    
+  } catch (e) {
+    console.error('[Explore] Failed to start session:', e);
+    showToast(`Failed to start session: ${e.message || 'Unknown error'}`);
+  }
+}
+
+// === Show Discount Code ====================================================
+async function showDiscountCode(merchantId, merchantName) {
+  // Navigate to show code page using hash route
+  location.hash = `#/code?merchant_id=${encodeURIComponent(merchantId)}`;
+  
+  // Also store merchant name in sessionStorage for the page to access
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.setItem(`merchant_name_${merchantId}`, merchantName);
+  }
 }
 
 // === Loading & Empty States ==============================================
@@ -430,13 +546,15 @@ function updateRecommendedPerks(perks) {
     return;
   }
   
-  const perksToShow = perks.slice(0, 3);
+  // Sort perks by nova_reward descending (already sorted, but ensure)
+  const sortedPerks = [...perks].sort((a, b) => (b.nova || b.nova_reward || 0) - (a.nova || a.nova_reward || 0));
   
   // Clear existing cards
   row.innerHTML = '';
+  // Horizontal scrolling is handled by CSS, no need for overflow styles here
   
-  // Render exactly 3 compact perk cards
-  perksToShow.forEach(perk => {
+  // Render all perk cards in scrollable list
+  sortedPerks.forEach(perk => {
     const card = document.createElement('div');
     card.className = 'perk-card-compact';
     card.dataset.perkId = perk.id || '';
@@ -451,12 +569,17 @@ function updateRecommendedPerks(perks) {
     // Handle card click
     card.addEventListener('click', () => {
       console.log('[WhileYouCharge] Recommended perk clicked:', perk.name);
-      // TODO: Show merchant detail or start session
-      showMerchantPopover({
-        merchant: { name: perk.name, logo: perk.logo },
-        perk: `Earn ${perk.nova} Nova`,
-        blurb: perk.walk
-      });
+      // Find the full merchant object from _merchants
+      const fullMerchant = _merchants.find(m => m.id === perk.id);
+      // Get current selected charger or default to first
+      let currentCharger = null;
+      if (_selectedChargerId) {
+        currentCharger = _chargers.find(c => c.id === _selectedChargerId);
+      }
+      if (!currentCharger && _chargers.length > 0) {
+        currentCharger = _chargers[0];
+      }
+      showMerchantPopover(fullMerchant || perk, currentCharger);
     });
     
     row.appendChild(card);
@@ -468,7 +591,7 @@ function updateRecommendedPerks(perks) {
   container.classList.add('visible');
   void container.offsetHeight; // Force reflow
   
-  console.log(`[WhileYouCharge] Rendered ${perksToShow.length} perk cards`);
+  console.log(`[WhileYouCharge] Rendered ${sortedPerks.length} perk cards`);
 }
 
 // === Charger Selection =====================================================

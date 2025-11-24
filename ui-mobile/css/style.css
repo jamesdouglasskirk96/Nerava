@@ -307,16 +307,32 @@ overflow:hidden;
 
 .recommended-perks-row {
   display: flex;
+  flex-direction: row; /* Horizontal layout */
   gap: 12px;
-  justify-content: space-between;
   align-items: stretch;
-  overflow: visible;
+  overflow-x: auto; /* Enable horizontal scrolling */
+  overflow-y: hidden; /* Prevent vertical scrolling */
+  scroll-snap-type: x proximity; /* Smooth scrolling between cards */
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+  scrollbar-width: thin; /* Thin scrollbar on Firefox */
+  padding-bottom: 4px; /* Space for scrollbar */
+  /* Prevent wrapping */
+  flex-wrap: nowrap;
+  /* Hide scrollbar for cleaner look (optional) */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+.recommended-perks-row::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
 }
 
 /* Compact Perk Card - variant for Recommended Perks */
 .perk-card-compact {
-  flex: 1;
-  min-width: 0;
+  flex: 0 0 auto; /* Don't shrink or grow, use fixed width */
+  min-width: 140px; /* Fixed minimum width for horizontal scrolling */
+  max-width: 180px; /* Optional: max width for larger screens */
+  width: 140px; /* Fixed width for consistent card size */
   height: 100px;
   display: flex;
   flex-direction: column;
@@ -325,9 +341,12 @@ overflow:hidden;
   gap: 6px;
   cursor: pointer;
   transition: all 0.2s;
-  padding: 6px 0;
-  background: transparent;
-  border: none;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  scroll-snap-align: start; /* Snap to card when scrolling */
 }
 
 .perk-card-compact:hover {
