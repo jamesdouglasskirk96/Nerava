@@ -20,7 +20,19 @@ load_dotenv()
 app = FastAPI(title="Nerava API")
 
 # CORS configuration from environment
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+# When using credentials, cannot use "*" - allow localhost/127.0.0.1 explicitly for dev
+allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "*")
+if allowed_origins_str == "*":
+    ALLOWED_ORIGINS = [
+        "http://localhost:8001",
+        "http://127.0.0.1:8001",
+        "http://localhost:3000",
+        "http://localhost:8080",
+        "http://localhost:5173",  # Vite default
+    ]
+else:
+    ALLOWED_ORIGINS = [origin.strip() for origin in allowed_origins_str.split(",")]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,

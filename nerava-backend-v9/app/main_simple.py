@@ -176,7 +176,14 @@ app.add_middleware(DemoBannerMiddleware)
 # Parse ALLOWED_ORIGINS from env or use defaults
 allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "*")
 if allowed_origins_str == "*":
-    allowed_origins = ["*"]
+    # When using credentials, cannot use "*" - allow localhost/127.0.0.1 explicitly for dev
+    allowed_origins = [
+        "http://localhost:8001",
+        "http://127.0.0.1:8001",
+        "http://localhost:3000",
+        "http://localhost:8080",
+        "http://localhost:5173",  # Vite default
+    ]
 else:
     # Split by comma and strip whitespace
     allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",")]
