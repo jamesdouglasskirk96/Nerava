@@ -164,13 +164,18 @@ async function loadPilotData() {
   showLoadingState();
   try {
     const bootstrap = await fetchPilotBootstrap();
+    console.log('[Explore] Bootstrap response:', bootstrap);
     _pilotBootstrap = bootstrap || FALLBACK_HUB;
     _pilotMode = _pilotBootstrap?.pilot_mode !== false;
+    
+    console.log('[Explore] Pilot mode:', _pilotMode, 'Hub:', _pilotBootstrap?.hub_name || _pilotBootstrap?.hub_id);
     updateHubHeader(_pilotBootstrap);
 
     const chargers = (_pilotBootstrap.chargers || [])
       .map(toMapCharger)
       .filter(Boolean);
+    
+    console.log('[Explore] Loaded chargers from bootstrap:', chargers.length, chargers);
 
     if (chargers.length) {
       _chargers = chargers;
