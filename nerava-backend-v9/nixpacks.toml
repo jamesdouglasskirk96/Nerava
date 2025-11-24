@@ -1,13 +1,17 @@
 # Nixpacks configuration for Railway
 # This ensures Python dependencies are installed during build
+# Railway will use this file to build the Python application
+
+[variables]
+PYTHON_VERSION = "3.9.18"
 
 [phases.setup]
-nixPkgs = ["python39", "pip"]
+nixPkgs = ["python39", "pip", "pip3"]
 
 [phases.install]
 cmds = [
-  "pip install --upgrade pip",
-  "pip install -r requirements.txt"
+  "python -m pip install --upgrade pip",
+  "python -m pip install --no-cache-dir -r requirements.txt"
 ]
 
 [phases.build]

@@ -28,7 +28,7 @@ alembic upgrade head
 ## Important Notes
 
 - **Root-level Procfile** (`/Procfile.localdev`): This is for local/reference only and is **not used by Railway**. Railway only uses `nerava-backend-v9/Procfile`.
-- **Dockerfile**: The Dockerfile in `nerava-backend-v9/` is **not used by Railway**. Railway uses Railpack + Procfile. The Dockerfile is for other container-based workflows (e.g., Docker Compose, manual Docker builds).
+- **Dockerfile**: The Dockerfile has been renamed to `Dockerfile.localdev` so Railway doesn't try to use it. Railway uses Nixpacks + Procfile. The Dockerfile is for other container-based workflows (e.g., Docker Compose, manual Docker builds).
 - **Start Command**: Do not set a custom Start Command in the Railway UI. Railway will automatically use the `web:` process from the Procfile.
 
 ## Verification
