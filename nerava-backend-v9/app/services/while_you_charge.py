@@ -254,18 +254,35 @@ async def find_and_link_merchants(
             )
             
             places_filtered_by_walk = 0
+            places_filtered_by_straight_distance = 0
             for place in places:
+                # First, check straight-line distance (cheap check before walk time API call)
+                straight_distance_m = haversine_distance(
+                    charger.lat, charger.lng,
+                    place.lat, place.lng
+                )
+                # Filter out places more than 1.5km straight-line (walk distance will be longer)
+                if straight_distance_m > 1500:
+                    logger.error(
+                        "[WhileYouCharge] ❌ Dropping place '%s': too far (straight-line distance=%dm, max=1500m)",
+                        place.name,
+                        int(straight_distance_m)
+                    )
+                    places_filtered_by_straight_distance += 1
+                    continue
+                
                 dest = (place.lat, place.lng)
                 walk_info = walk_times.get((origins[0], dest))
                 
                 if not walk_info:
                     logger.error(
-                        "[WhileYouCharge] ❌ Dropping place '%s': no walk info from Distance Matrix. Place location=(%s,%s), charger=(%s,%s)",
+                        "[WhileYouCharge] ❌ Dropping place '%s': no walk info from Distance Matrix. Place location=(%s,%s), charger=(%s,%s), straight_distance=%dm",
                         place.name,
                         place.lat,
                         place.lng,
                         charger.lat,
-                        charger.lng
+                        charger.lng,
+                        int(straight_distance_m)
                     )
                     places_filtered_by_walk += 1
                     continue
@@ -273,11 +290,12 @@ async def find_and_link_merchants(
                 walk_seconds = walk_info["duration_s"]
                 if walk_seconds > max_walk_minutes * 60:
                     logger.error(
-                        "[WhileYouCharge] ❌ Dropping place '%s': walk_time=%ds (max=%ds). Distance: %dm",
+                        "[WhileYouCharge] ❌ Dropping place '%s': walk_time=%ds (max=%ds). Walk distance: %dm, straight distance: %dm",
                         place.name,
                         walk_seconds,
                         max_walk_minutes * 60,
-                        walk_info.get("distance_m", 0)
+                        walk_info.get("distance_m", 0),
+                        int(straight_distance_m)
                     )
                     places_filtered_by_walk += 1
                     continue
