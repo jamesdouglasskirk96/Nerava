@@ -565,12 +565,14 @@ async def get_domain_hub_view_async(db: Session) -> Dict:
     merchant_ids = []
     if chargers:
         charger_ids_in_db = [c.id for c in chargers]
+        print(f"[DomainHub] Looking for merchants linked to chargers: {charger_ids_in_db}", flush=True)
         links = db.query(ChargerMerchant).filter(
             ChargerMerchant.charger_id.in_(charger_ids_in_db)
         ).all()
         
         merchant_ids = list(set([link.merchant_id for link in links]))
-        logger.info(f"[DomainHub] Found {len(merchant_ids)} existing merchants in DB")
+        print(f"[DomainHub] Found {len(merchant_ids)} existing merchants in DB (from {len(links)} links)", flush=True)
+        logger.info(f"[DomainHub] Found {len(merchant_ids)} existing merchants in DB (from {len(links)} links)")
     
     # If chargers aren't in DB, we need to create Charger objects from config for merchant fetching
     # OR create them in DB first (better long-term)
@@ -612,6 +614,8 @@ async def get_domain_hub_view_async(db: Session) -> Dict:
     
     # If no merchants found, automatically fetch and link them (ASYNC)
     if not merchant_ids and chargers_for_fetching:
+        print(f"[DomainHub] 🔍🔍🔍 NO MERCHANTS FOUND! Starting auto-fetch from Google Places...", flush=True)
+        print(f"[DomainHub] 🔍 Have {len(chargers_for_fetching)} chargers to search around: {[c.id for c in chargers_for_fetching]}", flush=True)
         logger.info(f"[DomainHub] 🔍 No merchants found in DB, starting auto-fetch from Google Places...")
         logger.info(f"[DomainHub] 🔍 Have {len(chargers_for_fetching)} chargers to search around")
         try:
@@ -756,9 +760,13 @@ async def get_domain_hub_view_async(db: Session) -> Dict:
         
         # Attach merchants to each charger in charger_list
         merchants_by_id = {m["id"]: m for m in merchants}
+        print(f"[DomainHub] Attaching merchants to {len(charger_list)} chargers...", flush=True)
+        
         for charger_data in charger_list:
             charger_id = charger_data.get("id")
             charger_links = links_by_charger.get(charger_id, [])
+            print(f"[DomainHub] Charger {charger_id} has {len(charger_links)} links", flush=True)
+            
             charger_merchants = []
             for link in charger_links:
                 merchant_id = link.merchant_id
@@ -769,7 +777,11 @@ async def get_domain_hub_view_async(db: Session) -> Dict:
                     merchant["walk_minutes"] = int(link.walk_duration_s / 60)
                     merchant["walk_distance_meters"] = link.walk_distance_m or link.distance_m
                     charger_merchants.append(merchant)
+                else:
+                    print(f"[DomainHub] ⚠️ Merchant {merchant_id} not found in merchants_by_id (has {len(merchants_by_id)} merchants)", flush=True)
+            
             charger_data["merchants"] = charger_merchants
+            print(f"[DomainHub] ✅ Attached {len(charger_merchants)} merchants to charger {charger_id}", flush=True)
             logger.info(f"[DomainHub] ✅ Attached {len(charger_merchants)} merchants to charger {charger_id}")
     else:
         logger.warning(f"[DomainHub] ⚠️ No merchants available (merchant_ids is empty)")
@@ -777,7 +789,13 @@ async def get_domain_hub_view_async(db: Session) -> Dict:
         for charger_data in charger_list:
             charger_data["merchants"] = []
     
+    print(f"[DomainHub] ✅✅✅ FINAL: {len(charger_list)} chargers, {len(merchants)} merchants", flush=True)
     logger.info(f"[DomainHub] ✅ Final: {len(charger_list)} chargers, {len(merchants)} merchants")
+    
+    # Log each charger's merchant count
+    for ch in charger_list:
+        merchant_count = len(ch.get("merchants", []))
+        print(f"[DomainHub] Charger {ch.get('id')} has {merchant_count} merchants in response", flush=True)
     
     return {
         "hub_id": HUB_ID,

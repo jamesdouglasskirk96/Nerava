@@ -386,21 +386,45 @@ async def while_you_charge(
     Returns chargers and merchants for the Domain hub.
     PWA-optimized: consistent object shapes, no nulls, integers only.
     """
+    # Explicit logging that will definitely show up (print goes to stderr which Railway captures)
+    print("[WhileYouCharge][API] ====== ENDPOINT CALLED ======", flush=True)
+    logger.info("[WhileYouCharge][API] ====== ENDPOINT CALLED ======")
+    
     try:
+        print(f"[WhileYouCharge][API] About to call get_domain_hub_view_async...", flush=True)
+        logger.info("[WhileYouCharge][API] About to call get_domain_hub_view_async...")
+        
         # Use async version to properly handle merchant fetching
         hub_view = await get_domain_hub_view_async(db)
         
-        raw_merchants = hub_view.get("merchants", [])
-        logger.info(f"[PilotRouter] Hub view: {len(hub_view.get('chargers', []))} chargers, {len(raw_merchants)} merchants")
+        print(f"[WhileYouCharge][API] Got hub_view: {hub_view.get('hub_id')} with {len(hub_view.get('chargers', []))} chargers", flush=True)
         
-        if not raw_merchants:
-            logger.warning(f"[PilotRouter] ⚠️ No merchants in hub_view! This might mean merchants weren't fetched or committed.")
+        raw_merchants = hub_view.get("merchants", [])
+        chargers_in_view = hub_view.get("chargers", [])
+        
+        print(f"[WhileYouCharge][API] Hub view: {len(chargers_in_view)} chargers, {len(raw_merchants)} raw merchants", flush=True)
+        logger.info(f"[WhileYouCharge][API] Hub view: {len(chargers_in_view)} chargers, {len(raw_merchants)} raw merchants")
+        
+        # Check if chargers have merchants attached
+        total_merchants_in_chargers = sum(len(ch.get("merchants", [])) for ch in chargers_in_view)
+        print(f"[WhileYouCharge][API] Total merchants attached to chargers: {total_merchants_in_chargers}", flush=True)
+        logger.info(f"[WhileYouCharge][API] Total merchants attached to chargers: {total_merchants_in_chargers}")
+        
+        if not raw_merchants and total_merchants_in_chargers == 0:
+            print(f"[WhileYouCharge][API] ⚠️ WARNING: No merchants found! Raw merchants: {len(raw_merchants)}, In chargers: {total_merchants_in_chargers}", flush=True)
+            logger.warning(f"[WhileYouCharge][API] ⚠️ No merchants in hub_view! Raw: {len(raw_merchants)}, In chargers: {total_merchants_in_chargers}")
         
         # Shape chargers for PWA (merchants are already attached in hub_view)
         shaped_chargers = []
-        for charger in hub_view.get("chargers", []):
+        print(f"[WhileYouCharge][API] Shaping {len(chargers_in_view)} chargers...", flush=True)
+        
+        for charger in chargers_in_view:
+            charger_id = charger.get("id", "unknown")
             # Get merchants array from charger (if attached)
             charger_merchants = charger.get("merchants", [])
+            
+            print(f"[WhileYouCharge][API] Charger {charger_id} has {len(charger_merchants)} merchants attached", flush=True)
+            
             shaped = shape_charger(
                 charger,
                 user_lat=user_lat,
@@ -440,6 +464,7 @@ async def while_you_charge(
         hub_id = hub_view.get("hub_id")
         hub_name = hub_view.get("hub_name")
         
+        print(f"[WhileYouCharge][API] Building recommended_merchants for hub_id={hub_id} from {len(shaped_chargers)} chargers", flush=True)
         logger.info(
             "[WhileYouCharge][API] Building recommended_merchants for hub_id=%s from %d chargers",
             hub_id,
@@ -449,11 +474,18 @@ async def while_you_charge(
         from app.services.while_you_charge import build_recommended_merchants_from_chargers
         recommended_merchants = build_recommended_merchants_from_chargers(shaped_chargers, limit=20)
         
+        print(f"[WhileYouCharge][API] FINAL: chargers={len(shaped_chargers)}, recommended_merchants={len(recommended_merchants)}", flush=True)
         logger.info(
             "[WhileYouCharge][API] WhileYouCharge response: chargers=%d, recommended_merchants=%d",
             len(shaped_chargers),
             len(recommended_merchants),
         )
+        
+        if len(recommended_merchants) == 0:
+            print(f"[WhileYouCharge][API] ⚠️⚠️⚠️ WARNING: returning 0 recommended_merchants!", flush=True)
+            # Log each charger's merchant count
+            for ch in shaped_chargers:
+                print(f"[WhileYouCharge][API] Charger {ch.get('id')} has {len(ch.get('merchants', []))} merchants", flush=True)
         
         return {
             "hub_id": hub_id,
