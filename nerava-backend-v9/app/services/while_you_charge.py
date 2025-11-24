@@ -645,14 +645,23 @@ async def get_domain_hub_view_async(db: Session) -> Dict:
             
             # Refresh merchant_ids from newly created links
             logger.info(f"[DomainHub] 🔍 Refreshing merchant links from DB...")
+            # Expire all objects to force fresh DB query after commits
+            db.expire_all()
             charger_ids_for_lookup = [c.id for c in chargers_for_fetching]
             links = db.query(ChargerMerchant).filter(
                 ChargerMerchant.charger_id.in_(charger_ids_for_lookup)
             ).all()
             merchant_ids = list(set([link.merchant_id for link in links]))
             logger.info(f"[DomainHub] ✅ Total merchants after auto-fetch: {len(merchant_ids)}")
+            
+            # Verify merchants exist in DB
+            if merchant_ids:
+                merchant_count = db.query(Merchant).filter(Merchant.id.in_(merchant_ids)).count()
+                logger.info(f"[DomainHub] ✅ Verified {merchant_count} merchants exist in DB (expected {len(merchant_ids)})")
         except Exception as e:
             logger.error(f"[DomainHub] ❌ Failed to fetch merchants automatically: {e}", exc_info=True)
+            import traceback
+            logger.error(f"[DomainHub] ❌ Traceback: {traceback.format_exc()}")
             db.rollback()
     elif not chargers:
         logger.warning(f"[DomainHub] ⚠️ No chargers available, cannot fetch merchants")
