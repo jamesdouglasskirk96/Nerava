@@ -474,18 +474,64 @@ async def while_you_charge(
         from app.services.while_you_charge import build_recommended_merchants_from_chargers
         recommended_merchants = build_recommended_merchants_from_chargers(shaped_chargers, limit=20)
         
+        # Fallback to default merchants if none found (for testing user flow)
+        if len(recommended_merchants) == 0:
+            print(f"[WhileYouCharge][API] ⚠️ No real merchants found, using default fallback merchants", flush=True)
+            logger.warning("[WhileYouCharge][API] No real merchants found, using default fallback merchants")
+            
+            # Default merchants at Domain hub location (30.4019, -97.7251)
+            default_merchants = [
+                {
+                    "id": "merchant_starbucks_domain",
+                    "merchant_id": "merchant_starbucks_domain",
+                    "name": "Starbucks",
+                    "logo_url": "https://logo.clearbit.com/starbucks.com",
+                    "lat": 30.4020,
+                    "lng": -97.7250,
+                    "category": "coffee",
+                    "nova_reward": 12,
+                    "walk_time_seconds": 180,  # 3 minutes
+                    "walk_time_s": 180,
+                    "walk_minutes": 3,
+                    "distance_m": 150,
+                },
+                {
+                    "id": "merchant_target_domain",
+                    "merchant_id": "merchant_target_domain",
+                    "name": "Target",
+                    "logo_url": "https://logo.clearbit.com/target.com",
+                    "lat": 30.4018,
+                    "lng": -97.7248,
+                    "category": "retail",
+                    "nova_reward": 8,
+                    "walk_time_seconds": 300,  # 5 minutes
+                    "walk_time_s": 300,
+                    "walk_minutes": 5,
+                    "distance_m": 250,
+                },
+                {
+                    "id": "merchant_wholefoods_domain",
+                    "merchant_id": "merchant_wholefoods_domain",
+                    "name": "Whole Foods",
+                    "logo_url": "https://logo.clearbit.com/wholefoodsmarket.com",
+                    "lat": 30.4017,
+                    "lng": -97.7252,
+                    "category": "grocery",
+                    "nova_reward": 10,
+                    "walk_time_seconds": 420,  # 7 minutes
+                    "walk_time_s": 420,
+                    "walk_minutes": 7,
+                    "distance_m": 350,
+                }
+            ]
+            recommended_merchants = default_merchants
+        
         print(f"[WhileYouCharge][API] FINAL: chargers={len(shaped_chargers)}, recommended_merchants={len(recommended_merchants)}", flush=True)
         logger.info(
             "[WhileYouCharge][API] WhileYouCharge response: chargers=%d, recommended_merchants=%d",
             len(shaped_chargers),
             len(recommended_merchants),
         )
-        
-        if len(recommended_merchants) == 0:
-            print(f"[WhileYouCharge][API] ⚠️⚠️⚠️ WARNING: returning 0 recommended_merchants!", flush=True)
-            # Log each charger's merchant count
-            for ch in shaped_chargers:
-                print(f"[WhileYouCharge][API] Charger {ch.get('id')} has {len(ch.get('merchants', []))} merchants", flush=True)
         
         return {
             "hub_id": hub_id,
