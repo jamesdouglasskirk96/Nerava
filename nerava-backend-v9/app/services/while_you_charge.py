@@ -337,7 +337,7 @@ async def find_and_link_merchants(
                         price_level=place.price_level or (details.get("price_level") if details else None),
                         place_types=place.types,
                         logo_url=place.icon,
-                        photo_url=details.get("photos", [{}])[0].get("photo_reference") if details and details.get("photos") else None,
+                        photo_url=details.get("photos", [{}])[0].get("photo_reference") if details and details.get("photos") and len(details.get("photos", [])) > 0 else None,
                         phone=details.get("formatted_phone_number") if details else None,
                         website=details.get("website") if details else None
                     )

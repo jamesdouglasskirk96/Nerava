@@ -128,21 +128,30 @@ def shape_merchant(merchant: Dict[str, Any], user_lat: Optional[float] = None, u
     # 3. icon (from Google Places icon)
     logo_url = None
     
+    # Check logo_url first (might already be set)
     if "logo_url" in merchant and merchant.get("logo_url"):
-        logo_url = str(merchant.get("logo_url", ""))
-    elif "photo_url" in merchant and merchant.get("photo_url"):
-        # photo_url might be a Google Places photo reference
+        logo_url_val = merchant.get("logo_url", "")
+        # Only use if it's a valid URL (not just empty string or None)
+        if logo_url_val and str(logo_url_val).strip():
+            logo_url = str(logo_url_val).strip()
+    
+    # If no logo_url, try photo_url (Google Places photo reference)
+    if not logo_url and "photo_url" in merchant and merchant.get("photo_url"):
         photo_ref = merchant.get("photo_url")
         # If it's not already a full URL, convert it
-        if photo_ref and not photo_ref.startswith("http"):
-            logo_url = google_photo_url(photo_ref)
-        else:
-            logo_url = str(photo_ref) if photo_ref else None
-    elif "icon" in merchant and merchant.get("icon"):
-        # Google Places icon URL
-        logo_url = str(merchant.get("icon", ""))
+        if photo_ref and str(photo_ref).strip():
+            if not str(photo_ref).startswith("http"):
+                logo_url = google_photo_url(str(photo_ref).strip())
+            else:
+                logo_url = str(photo_ref).strip()
     
-    # Only include logo_url if it's a non-empty string
+    # If still no logo, try icon (Google Places generic icon)
+    if not logo_url and "icon" in merchant and merchant.get("icon"):
+        icon_val = merchant.get("icon", "")
+        if icon_val and str(icon_val).strip():
+            logo_url = str(icon_val).strip()
+    
+    # Only include logo_url if we have a valid URL
     if logo_url and logo_url.strip():
         result["logo_url"] = logo_url.strip()
     
