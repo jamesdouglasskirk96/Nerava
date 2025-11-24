@@ -617,10 +617,10 @@ function updateRecommendedPerks(perks) {
       console.log('[Explore] === END FIRST PERK CARD DEBUG ===');
     }
     
-    // Compact layout: Logo (only if exists) + "Earn X Nova" + "X min walk"
-    const logoHtml = (perk.logo && perk.logo.trim()) 
-      ? `<img class="perk-card-logo" src="${perk.logo}" alt="${perk.name || ''}">`
-      : '';
+          // Compact layout: Logo (only if exists) + "Earn X Nova" + "X min walk"
+          const logoHtml = (perk.logo && perk.logo.trim() && perk.logo !== 'null') 
+            ? `<img class="perk-card-logo" src="${perk.logo}" alt="${perk.name || ''}" onerror="this.classList.add('hidden')">`
+            : '';
     
     card.innerHTML = `
       ${logoHtml}
