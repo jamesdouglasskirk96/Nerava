@@ -21,10 +21,10 @@ def run_migrations() -> None:
     This should be safe to call on startup; Alembic will be a no-op if already at head.
     """
     # Resolve alembic.ini relative to project root
-    # This file is at: nerava-backend-v9/app/db/run_migrations.py
+    # This file is at: nerava-backend-v9/app/run_migrations.py
     # alembic.ini is at: nerava-backend-v9/alembic.ini
     # So we need to go up 2 levels from this file
-    project_root = Path(__file__).resolve().parents[2]
+    project_root = Path(__file__).resolve().parents[1]
     alembic_ini = project_root / "alembic.ini"
 
     if not alembic_ini.exists():
