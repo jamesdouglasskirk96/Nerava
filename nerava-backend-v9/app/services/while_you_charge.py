@@ -682,12 +682,23 @@ async def get_domain_hub_view_async(db: Session) -> Dict:
         ).all()
         logger.info(f"[DomainHub] ✅ Found {len(links)} charger-merchant links")
         
-        # Create map of merchant_id -> best link (shortest walk time)
+        # Create maps:
+        # 1. merchant_id -> best link (shortest walk time) for overall merchant data
+        # 2. charger_id -> list of links for that charger (to attach merchants to chargers)
         links_by_merchant = {}
+        links_by_charger = {}
         for link in links:
             merchant_id = link.merchant_id
+            charger_id = link.charger_id
+            
+            # Track best link per merchant (shortest walk time)
             if merchant_id not in links_by_merchant or link.walk_duration_s < links_by_merchant[merchant_id].walk_duration_s:
                 links_by_merchant[merchant_id] = link
+            
+            # Group links by charger
+            if charger_id not in links_by_charger:
+                links_by_charger[charger_id] = []
+            links_by_charger[charger_id].append(link)
         
         # Get active perks (or create default perks if none exist)
         perks = db.query(MerchantPerk).filter(
@@ -742,8 +753,29 @@ async def get_domain_hub_view_async(db: Session) -> Dict:
         # Sort merchants by walk time (ascending)
         merchants.sort(key=lambda m: m.get("walk_minutes") or 999)
         logger.info(f"[DomainHub] ✅ Built {len(merchants)} merchant data objects")
+        
+        # Attach merchants to each charger in charger_list
+        merchants_by_id = {m["id"]: m for m in merchants}
+        for charger_data in charger_list:
+            charger_id = charger_data.get("id")
+            charger_links = links_by_charger.get(charger_id, [])
+            charger_merchants = []
+            for link in charger_links:
+                merchant_id = link.merchant_id
+                if merchant_id in merchants_by_id:
+                    merchant = dict(merchants_by_id[merchant_id])  # Copy to avoid mutation
+                    # Add charger-specific walk time
+                    merchant["walk_time_seconds"] = link.walk_duration_s
+                    merchant["walk_minutes"] = int(link.walk_duration_s / 60)
+                    merchant["walk_distance_meters"] = link.walk_distance_m or link.distance_m
+                    charger_merchants.append(merchant)
+            charger_data["merchants"] = charger_merchants
+            logger.info(f"[DomainHub] ✅ Attached {len(charger_merchants)} merchants to charger {charger_id}")
     else:
         logger.warning(f"[DomainHub] ⚠️ No merchants available (merchant_ids is empty)")
+        # Ensure all chargers have empty merchants array
+        for charger_data in charger_list:
+            charger_data["merchants"] = []
     
     logger.info(f"[DomainHub] ✅ Final: {len(charger_list)} chargers, {len(merchants)} merchants")
     
@@ -755,9 +787,107 @@ async def get_domain_hub_view_async(db: Session) -> Dict:
     }
 
 
+def build_recommended_merchants_from_chargers(chargers: List[Dict], limit: int = 20) -> List[Dict]:
+    """
+    Given the PWA-shaped chargers list (each with .merchants),
+    aggregate a unique list of merchants, apply simple pilot-time heuristics,
+    and return a sorted list for `recommended_merchants`.
+    
+    Args:
+        chargers: List of charger dicts, each potentially having a "merchants" array
+        limit: Maximum number of merchants to return
+    
+    Returns:
+        Deduplicated and sorted list of recommended merchants
+    """
+    all_merchants = []
+    for ch in chargers:
+        charger_id = ch.get("id") or ch.get("charger_id")
+        merchants = ch.get("merchants") or []
+        logger.info(
+            "[WhileYouCharge][Agg] Charger %s has %d merchants",
+            charger_id,
+            len(merchants),
+        )
+        for m in merchants:
+            # Make sure merchant_id exists
+            mid = m.get("merchant_id") or m.get("id")
+            if not mid:
+                logger.warning("[WhileYouCharge][Agg] Merchant missing ID, skipping: %s", m.get("name", "unknown"))
+                continue
+            # Copy to avoid mutating original
+            m_copy = dict(m)
+            m_copy["merchant_id"] = mid
+
+            # Ensure nova_reward exists; for pilot default to 200 if missing
+            if "nova_reward" not in m_copy or m_copy["nova_reward"] is None:
+                m_copy["nova_reward"] = 200
+
+            # Ensure we have walk_time and distance defaults
+            # Try walk_time_s first, then walk_time_seconds, then walk_minutes * 60
+            if "walk_time_seconds" not in m_copy:
+                if "walk_time_s" in m_copy:
+                    m_copy["walk_time_seconds"] = m_copy["walk_time_s"]
+                elif "walk_minutes" in m_copy:
+                    m_copy["walk_time_seconds"] = (m_copy.get("walk_minutes") or 0) * 60
+                else:
+                    m_copy["walk_time_seconds"] = m_copy.get("walk_time", 0) or 0
+            if "walk_distance_meters" not in m_copy:
+                m_copy["walk_distance_meters"] = m_copy.get("walk_distance_m") or m_copy.get("distance_meters", 0) or 0
+
+            all_merchants.append(m_copy)
+
+    logger.info(
+        "[WhileYouCharge][Agg] Collected %d raw merchants from %d chargers",
+        len(all_merchants),
+        len(chargers),
+    )
+
+    # Deduplicate by merchant_id, prefer higher nova_reward then lower walk_time
+    dedup = {}
+    for m in all_merchants:
+        mid = m["merchant_id"]
+        existing = dedup.get(mid)
+        if existing is None:
+            dedup[mid] = m
+        else:
+            # Keep the one with higher nova_reward, then lower walk_time
+            if (
+                m.get("nova_reward", 0) > existing.get("nova_reward", 0)
+                or (
+                    m.get("nova_reward", 0) == existing.get("nova_reward", 0)
+                    and m.get("walk_time_seconds", 9999)
+                    < existing.get("walk_time_seconds", 9999)
+                )
+            ):
+                dedup[mid] = m
+
+    merchants = list(dedup.values())
+    logger.info(
+        "[WhileYouCharge][Agg] After dedupe: %d unique merchants", len(merchants)
+    )
+
+    # Sort by highest nova_reward, then shortest walk_time
+    merchants.sort(
+        key=lambda m: (
+            -m.get("nova_reward", 0),
+            m.get("walk_time_seconds", 9999),
+        )
+    )
+
+    # Limit to something reasonable for PWA
+    result = merchants[:limit]
+    logger.info(
+        "[WhileYouCharge][Agg] Returning %d merchants for recommended_merchants",
+        len(result),
+    )
+    return result
+
+
 def build_recommended_merchants(merchants: List[Dict], limit: int = 20) -> List[Dict]:
     """
     Build recommended merchants list by deduplicating and sorting.
+    DEPRECATED: Use build_recommended_merchants_from_chargers instead.
     
     Args:
         merchants: List of merchant dicts (may contain duplicates)

@@ -396,47 +396,68 @@ async def while_you_charge(
         if not raw_merchants:
             logger.warning(f"[PilotRouter] ⚠️ No merchants in hub_view! This might mean merchants weren't fetched or committed.")
         
-        # Shape chargers for PWA
+        # Shape chargers for PWA (merchants are already attached in hub_view)
         shaped_chargers = []
         for charger in hub_view.get("chargers", []):
+            # Get merchants array from charger (if attached)
+            charger_merchants = charger.get("merchants", [])
             shaped = shape_charger(
                 charger,
                 user_lat=user_lat,
                 user_lng=user_lng
             )
+            # Shape merchants attached to this charger
+            shaped_merchants_for_charger = []
+            for merchant in charger_merchants:
+                # Convert walk_minutes to walk_time_s if needed
+                if "walk_minutes" in merchant and "walk_time_s" not in merchant:
+                    merchant["walk_time_s"] = merchant["walk_minutes"] * 60
+                shaped_merchant = shape_merchant(
+                    merchant,
+                    user_lat=user_lat,
+                    user_lng=user_lng
+                )
+                # Ensure walk_time_seconds for aggregation
+                if "walk_time_s" in shaped_merchant:
+                    shaped_merchant["walk_time_seconds"] = shaped_merchant["walk_time_s"]
+                elif "walk_minutes" in merchant:
+                    shaped_merchant["walk_time_seconds"] = normalize_number(merchant["walk_minutes"] * 60)
+                # Ensure merchant_id for aggregation
+                if "id" in shaped_merchant and "merchant_id" not in shaped_merchant:
+                    shaped_merchant["merchant_id"] = shaped_merchant["id"]
+                shaped_merchants_for_charger.append(shaped_merchant)
+            
+            # Attach shaped merchants to charger
+            shaped["merchants"] = shaped_merchants_for_charger
             shaped_chargers.append(shaped)
-        
-        # Shape merchants for PWA and build recommended list
-        logger.info(f"[PilotRouter] Raw merchants from hub_view: {len(raw_merchants)}")
-        
-        # First, shape all merchants
-        shaped_merchants = []
-        for merchant in raw_merchants:
-            # Convert walk_minutes to walk_time_s
-            if "walk_minutes" in merchant:
-                merchant["walk_time_s"] = merchant["walk_minutes"] * 60
-            shaped = shape_merchant(
-                merchant,
-                user_lat=user_lat,
-                user_lng=user_lng
+            logger.info(
+                "[WhileYouCharge][API] Charger %s shaped with %d merchants",
+                shaped.get("id"),
+                len(shaped_merchants_for_charger),
             )
-            # Ensure walk_time_s is present if it was in original
-            if "walk_minutes" in merchant:
-                shaped["walk_time_s"] = normalize_number(merchant["walk_minutes"] * 60)
-            # Also preserve walk_minutes for sorting
-            if "walk_minutes" in merchant:
-                shaped["walk_minutes"] = merchant["walk_minutes"]
-            shaped_merchants.append(shaped)
         
-        # Build recommended merchants list (deduplicated and sorted)
-        from app.services.while_you_charge import build_recommended_merchants
-        recommended_merchants = build_recommended_merchants(shaped_merchants, limit=20)
+        # Build recommended_merchants from charger merchants
+        hub_id = hub_view.get("hub_id")
+        hub_name = hub_view.get("hub_name")
         
-        logger.info(f"[PilotRouter] Returning {len(shaped_merchants)} total merchants, {len(recommended_merchants)} recommended")
+        logger.info(
+            "[WhileYouCharge][API] Building recommended_merchants for hub_id=%s from %d chargers",
+            hub_id,
+            len(shaped_chargers),
+        )
+        
+        from app.services.while_you_charge import build_recommended_merchants_from_chargers
+        recommended_merchants = build_recommended_merchants_from_chargers(shaped_chargers, limit=20)
+        
+        logger.info(
+            "[WhileYouCharge][API] WhileYouCharge response: chargers=%d, recommended_merchants=%d",
+            len(shaped_chargers),
+            len(recommended_merchants),
+        )
         
         return {
-            "hub_id": hub_view.get("hub_id"),
-            "hub_name": hub_view.get("hub_name"),
+            "hub_id": hub_id,
+            "hub_name": hub_name,
             "chargers": shaped_chargers,
             "recommended_merchants": recommended_merchants
         }

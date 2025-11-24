@@ -46,9 +46,15 @@ def normalize_number(value: Any) -> int:
         return 0
 
 
-def shape_charger(charger: Dict[str, Any], user_lat: Optional[float] = None, user_lng: Optional[float] = None) -> Dict[str, Any]:
+def shape_charger(charger: Dict[str, Any], user_lat: Optional[float] = None, user_lng: Optional[float] = None, merchants: Optional[List[Dict]] = None) -> Dict[str, Any]:
     """
     Shape charger object for PWA consumption.
+    
+    Args:
+        charger: Charger dict to shape
+        user_lat: Optional user latitude for distance calculation
+        user_lng: Optional user longitude for distance calculation
+        merchants: Optional list of merchants to attach to this charger
     
     Returns consistent shape:
     {
@@ -58,7 +64,8 @@ def shape_charger(charger: Dict[str, Any], user_lat: Optional[float] = None, use
         "lng": float,
         "network_name": str (optional),
         "distance_m": int (if user_lat/lng provided),
-        "walk_time_s": int (if user_lat/lng provided)
+        "walk_time_s": int (if user_lat/lng provided),
+        "merchants": List[Dict] (if merchants provided)
     }
     """
     result = {
@@ -86,6 +93,13 @@ def shape_charger(charger: Dict[str, Any], user_lat: Optional[float] = None, use
         result["walk_time_s"] = normalize_number(charger.get("walk_time_s"))
     elif "walk_duration_s" in charger:
         result["walk_time_s"] = normalize_number(charger.get("walk_duration_s"))
+    
+    # Attach merchants if provided (merchants should already be shaped separately)
+    if merchants is not None:
+        result["merchants"] = merchants
+    elif "merchants" in charger:
+        # Keep existing merchants array if already present
+        result["merchants"] = charger["merchants"]
     
     return result
 
