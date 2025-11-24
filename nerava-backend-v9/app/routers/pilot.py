@@ -246,6 +246,7 @@ def verify_ping_endpoint(
     If verification threshold met, triggers reward issuance.
     PWA-optimized: includes reward_earned flag, integers only.
     """
+    print(f"[PilotRouter][verify_ping] Endpoint called: session_id={request.session_id}, lat={request.user_lat}, lng={request.user_lng}", flush=True)
     try:
         result = verify_ping(
             db=db,
@@ -255,8 +256,12 @@ def verify_ping_endpoint(
             accuracy_m=50.0  # Default accuracy for pilot
         )
         
+        print(f"[PilotRouter][verify_ping] verify_ping result: {result}", flush=True)
+        
         if not result.get("ok"):
-            raise HTTPException(status_code=400, detail=result.get("reason", "Verification failed"))
+            reason = result.get("reason", "Verification failed")
+            print(f"[PilotRouter][verify_ping] Verification failed: {reason}", flush=True)
+            raise HTTPException(status_code=400, detail=reason)
         
         # Get session info to retrieve user_id and wallet balance
         session_row = db.execute(text("""
@@ -302,17 +307,25 @@ def verify_ping_endpoint(
         distance_to_merchant_m = None
         within_merchant_radius = False
         if merchant_id:
-            merchant_row = db.execute(text("""
-                SELECT lat, lng FROM merchants WHERE id = :merchant_id
-            """), {"merchant_id": merchant_id}).first()
-            if merchant_row:
-                merchant_lat = float(merchant_row[0])
-                merchant_lng = float(merchant_row[1])
-                distance_to_merchant_m = normalize_number(haversine_m(
-                    request.user_lat, request.user_lng,
-                    merchant_lat, merchant_lng
-                ))
-                within_merchant_radius = distance_to_merchant_m <= 100  # 100m default radius
+            try:
+                merchant_row = db.execute(text("""
+                    SELECT lat, lng FROM merchants WHERE id = :merchant_id
+                """), {"merchant_id": merchant_id}).first()
+                if merchant_row:
+                    merchant_lat = float(merchant_row[0])
+                    merchant_lng = float(merchant_row[1])
+                    distance_to_merchant_m = normalize_number(haversine_m(
+                        request.user_lat, request.user_lng,
+                        merchant_lat, merchant_lng
+                    ))
+                    within_merchant_radius = distance_to_merchant_m <= 100  # 100m default radius
+                else:
+                    # Merchant not found in DB (might be a fallback merchant) - skip distance calculation
+                    logger.debug(f"Merchant {merchant_id} not found in DB, skipping distance calculation")
+            except Exception as merchant_err:
+                # If merchants table doesn't exist or query fails, skip merchant distance calculation
+                logger.warning(f"Failed to query merchant distance: {merchant_err}")
+                # Continue without merchant distance - not critical for verification
         
         # PWA-optimized response: clean shape, integers only, reward_earned flag
         response = {
@@ -366,7 +379,11 @@ def verify_ping_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to verify ping: {str(e)}")
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"Failed to verify ping: {str(e)}\n{error_trace}")
+        print(f"[PilotRouter][ERROR] verify_ping failed: {str(e)}", flush=True)
+        print(f"[PilotRouter][ERROR] Traceback: {error_trace}", flush=True)
         raise HTTPException(status_code=500, detail=f"Verification failed: {str(e)}")
 
 
