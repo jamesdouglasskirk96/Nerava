@@ -11,9 +11,10 @@ python -m uvicorn app.main_simple:app --host 0.0.0.0 --port ${PORT:-8000}
 - **Project root**: `nerava-backend-v9`
 - **Procfile**: `nerava-backend-v9/Procfile`
 - **Start Command**: Leave empty in Railway UI (Railway will use the Procfile)
-- **Buildpack**: Railway auto-detects Python from `requirements.txt` and `runtime.txt`
-- **Build Command**: Railway will automatically run `pip install -r requirements.txt` during build. If auto-detection fails, Railway will use `build.sh` if present.
-- **Build Script**: `build.sh` is included as a fallback to ensure dependencies are installed
+- **Buildpack**: Railway uses Nixpacks which auto-detects Python from `requirements.txt` and `runtime.txt`
+- **Nixpacks Config**: `nixpacks.toml` explicitly defines the build process to ensure dependencies are installed
+- **Build Script**: `build.sh` is included as an additional fallback to ensure dependencies are installed
+- **Build Command**: Railway will use Nixpacks config first, then fall back to auto-detection or build.sh
 
 ## Database Migrations
 
