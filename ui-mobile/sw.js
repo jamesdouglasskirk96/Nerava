@@ -1,5 +1,5 @@
 // Service Worker for Nerava PWA
-const CACHE_VERSION = 'v1.0.2';
+const CACHE_VERSION = 'v1.0.3';
 const CACHE_NAME = `nerava-${CACHE_VERSION}`;
 const OFFLINE_URL = './offline.html';
 
@@ -9,14 +9,13 @@ self.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
             console.log('Service Worker: Caching essential files');
+            // Don't cache JS files - always fetch fresh to avoid stale code
             return cache.addAll([
                 './',
                 './index.html',
                 './css/tokens.css',
                 './css/style.css',
-                './js/app.js',
-                './js/pages/showCode.js',
-                './js/pages/merchantDashboard.js',
+                // JS files are NOT cached - always fetch from network
                 './offline.html'
             ]).catch(err => {
                 console.warn('Service Worker: Some files failed to cache:', err);
@@ -68,6 +67,12 @@ self.addEventListener('fetch', (event) => {
         return;
     }
     
+    // Skip JavaScript files - always fetch fresh to avoid stale code
+    if (request.url.endsWith('.js') || request.url.includes('/js/')) {
+        // Don't cache JS files - always go to network
+        return;
+    }
+    
     // Only process http/https requests
     if (url.protocol !== 'http:' && url.protocol !== 'https:') {
         return;
@@ -76,8 +81,8 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
         fetch(request)
             .then((response) => {
-                // Cache successful responses
-                if (response.status === 200) {
+                // Cache successful responses (but not JS files)
+                if (response.status === 200 && !request.url.endsWith('.js') && !request.url.includes('/js/')) {
                     const responseClone = response.clone();
                     caches.open(CACHE_NAME).then((cache) => {
                         // Double-check protocol before caching
