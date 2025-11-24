@@ -666,10 +666,13 @@ async def get_domain_hub_view_async(db: Session) -> Dict:
     elif not chargers:
         logger.warning(f"[DomainHub] ⚠️ No chargers available, cannot fetch merchants")
     
-    # Fetch merchants
+    # Fetch merchants - expire session to ensure we see newly committed data
+    db.expire_all()
     merchants = []
     if merchant_ids:
+        logger.info(f"[DomainHub] 🔍 Querying {len(merchant_ids)} merchants from DB...")
         merchants_query = db.query(Merchant).filter(Merchant.id.in_(merchant_ids)).all()
+        logger.info(f"[DomainHub] ✅ Found {len(merchants_query)} merchants in DB query")
         
         # Get charger-merchant links for walk times
         charger_ids_for_lookup = [c.id for c in chargers_for_fetching] if chargers_for_fetching else []
@@ -677,6 +680,7 @@ async def get_domain_hub_view_async(db: Session) -> Dict:
             ChargerMerchant.merchant_id.in_(merchant_ids),
             ChargerMerchant.charger_id.in_(charger_ids_for_lookup)
         ).all()
+        logger.info(f"[DomainHub] ✅ Found {len(links)} charger-merchant links")
         
         # Create map of merchant_id -> best link (shortest walk time)
         links_by_merchant = {}
@@ -685,7 +689,7 @@ async def get_domain_hub_view_async(db: Session) -> Dict:
             if merchant_id not in links_by_merchant or link.walk_duration_s < links_by_merchant[merchant_id].walk_duration_s:
                 links_by_merchant[merchant_id] = link
         
-        # Get active perks
+        # Get active perks (or create default perks if none exist)
         perks = db.query(MerchantPerk).filter(
             MerchantPerk.merchant_id.in_(merchant_ids),
             MerchantPerk.is_active == True
@@ -696,6 +700,19 @@ async def get_domain_hub_view_async(db: Session) -> Dict:
         for merchant in merchants_query:
             link = links_by_merchant.get(merchant.id)
             perk = perks_by_merchant.get(merchant.id)
+            
+            # Create default perk if none exists (so merchants always have a reward)
+            if not perk:
+                logger.info(f"[DomainHub] No perk for merchant {merchant.id} ({merchant.name}), creating default...")
+                from app.models_while_you_charge import MerchantPerk
+                default_perk = MerchantPerk(
+                    merchant_id=merchant.id,
+                    nova_reward=10,  # Default 10 Nova
+                    is_active=True
+                )
+                db.add(default_perk)
+                perk = default_perk
+                perks_by_merchant[merchant.id] = perk
             
             merchant_data = {
                 "id": merchant.id,
@@ -713,8 +730,18 @@ async def get_domain_hub_view_async(db: Session) -> Dict:
             }
             merchants.append(merchant_data)
         
+        # Commit default perks if we created any
+        if len(perks) < len(merchants):
+            try:
+                db.commit()
+                logger.info(f"[DomainHub] ✅ Committed {len(merchants) - len(perks)} default perks")
+            except Exception as e:
+                logger.warning(f"[DomainHub] Failed to commit default perks: {e}")
+                db.rollback()
+        
         # Sort merchants by walk time (ascending)
         merchants.sort(key=lambda m: m.get("walk_minutes") or 999)
+        logger.info(f"[DomainHub] ✅ Built {len(merchants)} merchant data objects")
     else:
         logger.warning(f"[DomainHub] ⚠️ No merchants available (merchant_ids is empty)")
     
