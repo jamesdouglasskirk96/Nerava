@@ -77,11 +77,22 @@ export async function fetchPilotWhileYouCharge(sessionId) {
   if (sessionId) {
     url.searchParams.set('session_id', sessionId);
   }
-  const res = await fetch(url.toString(), { credentials: 'include' });
-  if (!res.ok) {
-    throw new Error(`Pilot while-you-charge failed (${res.status})`);
+  console.log('[API] Fetching while_you_charge from:', url.toString());
+  try {
+    const res = await fetch(url.toString(), { credentials: 'include' });
+    console.log('[API] While you charge response status:', res.status, res.statusText);
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('[API] While you charge error response:', errorText);
+      throw new Error(`Pilot while-you-charge failed (${res.status}): ${errorText}`);
+    }
+    const data = await res.json();
+    console.log('[API] While you charge data:', data);
+    return data;
+  } catch (err) {
+    console.error('[API] While you charge fetch error:', err);
+    throw err;
   }
-  return res.json();
 }
 
 export async function fetchMerchantOffer(merchantId, amountCents = 500) {

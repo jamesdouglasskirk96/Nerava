@@ -185,11 +185,20 @@ async function loadPilotData() {
       renderChargerPins(_chargers);
     }
 
-    const whileYouCharge = await fetchPilotWhileYouCharge();
-    console.log('[Explore] While you charge response:', whileYouCharge);
+    console.log('[Explore] About to fetch while_you_charge...');
+    let whileYouCharge;
+    try {
+      whileYouCharge = await fetchPilotWhileYouCharge();
+      console.log('[Explore] While you charge response:', whileYouCharge);
+    } catch (err) {
+      console.error('[Explore] Error fetching while_you_charge:', err);
+      throw err; // Re-throw to be caught by outer catch
+    }
+    
     const merchantsRaw =
       whileYouCharge?.recommended_merchants || whileYouCharge?.merchants || [];
     console.log('[Explore] Raw merchants from API:', merchantsRaw);
+    console.log('[Explore] Merchant keys in response:', Object.keys(whileYouCharge || {}));
     _merchants = merchantsRaw.map(toMapMerchant).filter(Boolean);
     console.log('[Explore] Mapped merchants:', _merchants.length, _merchants);
     
