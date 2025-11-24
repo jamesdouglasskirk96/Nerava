@@ -55,7 +55,7 @@ Both files now include:
 **Files**: `Procfile`, `nerava-backend-v9/requirements.txt`, `nerava-backend-v9/runtime.txt`
 
 **Changes**:
-- Updated Procfile to run migrations on boot: `python -m alembic upgrade head`
+- Updated Procfile to remove migrations from boot (run manually via shell instead)
 - Added `pydantic-settings` and `alembic` to requirements.txt
 - Created `runtime.txt` with Python 3.9.18
 - Procfile now properly handles PORT and WEB_CONCURRENCY environment variables
