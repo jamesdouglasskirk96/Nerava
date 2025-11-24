@@ -818,10 +818,12 @@ def build_recommended_merchants_from_chargers(chargers: List[Dict], limit: int =
     Returns:
         Deduplicated and sorted list of recommended merchants
     """
+    print(f"[WhileYouCharge][Agg] Starting aggregation for {len(chargers)} chargers", flush=True)
     all_merchants = []
     for ch in chargers:
         charger_id = ch.get("id") or ch.get("charger_id")
         merchants = ch.get("merchants") or []
+        print(f"[WhileYouCharge][Agg] Charger {charger_id} has {len(merchants)} merchants", flush=True)
         logger.info(
             "[WhileYouCharge][Agg] Charger %s has %d merchants",
             charger_id,
@@ -855,6 +857,7 @@ def build_recommended_merchants_from_chargers(chargers: List[Dict], limit: int =
 
             all_merchants.append(m_copy)
 
+    print(f"[WhileYouCharge][Agg] Collected {len(all_merchants)} raw merchants from {len(chargers)} chargers", flush=True)
     logger.info(
         "[WhileYouCharge][Agg] Collected %d raw merchants from %d chargers",
         len(all_merchants),
@@ -881,6 +884,7 @@ def build_recommended_merchants_from_chargers(chargers: List[Dict], limit: int =
                 dedup[mid] = m
 
     merchants = list(dedup.values())
+    print(f"[WhileYouCharge][Agg] After dedupe: {len(merchants)} unique merchants", flush=True)
     logger.info(
         "[WhileYouCharge][Agg] After dedupe: %d unique merchants", len(merchants)
     )
@@ -895,10 +899,15 @@ def build_recommended_merchants_from_chargers(chargers: List[Dict], limit: int =
 
     # Limit to something reasonable for PWA
     result = merchants[:limit]
+    print(f"[WhileYouCharge][Agg] Returning {len(result)} merchants for recommended_merchants (limit={limit})", flush=True)
     logger.info(
         "[WhileYouCharge][Agg] Returning %d merchants for recommended_merchants",
         len(result),
     )
+    
+    if len(result) == 0:
+        print(f"[WhileYouCharge][Agg] ⚠️⚠️⚠️ WARNING: Returning 0 merchants! Check if chargers have merchants attached.", flush=True)
+    
     return result
 
 
