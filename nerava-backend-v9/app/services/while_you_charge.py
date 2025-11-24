@@ -755,6 +755,58 @@ async def get_domain_hub_view_async(db: Session) -> Dict:
     }
 
 
+def build_recommended_merchants(merchants: List[Dict], limit: int = 20) -> List[Dict]:
+    """
+    Build recommended merchants list by deduplicating and sorting.
+    
+    Args:
+        merchants: List of merchant dicts (may contain duplicates)
+        limit: Maximum number of merchants to return
+    
+    Returns:
+        Deduplicated and sorted list of recommended merchants
+    """
+    if not merchants:
+        logger.warning("[RecommendedMerchants] No merchants provided")
+        return []
+    
+    # Deduplicate by merchant ID, keeping the one with higher nova_reward
+    seen = {}
+    for merchant in merchants:
+        mid = merchant.get("id")
+        if not mid:
+            continue
+            
+        if mid not in seen:
+            seen[mid] = merchant
+        else:
+            # Keep the "better" one (higher nova_reward, or same reward but shorter walk time)
+            current_reward = seen[mid].get("nova_reward", 0)
+            new_reward = merchant.get("nova_reward", 0)
+            current_walk = seen[mid].get("walk_minutes") or 9999
+            new_walk = merchant.get("walk_minutes") or 9999
+            
+            if new_reward > current_reward or (new_reward == current_reward and new_walk < current_walk):
+                seen[mid] = merchant
+    
+    # Convert to list and sort
+    merchant_list = list(seen.values())
+    
+    # Sort by: 1) highest nova_reward (descending), 2) lowest walk_time (ascending)
+    merchant_list.sort(
+        key=lambda m: (
+            -m.get("nova_reward", 0),  # Negative for descending
+            m.get("walk_minutes") or 9999  # Ascending
+        )
+    )
+    
+    # Take top N
+    recommended = merchant_list[:limit]
+    logger.info(f"[RecommendedMerchants] Built {len(recommended)} recommended merchants from {len(merchants)} total (deduplicated from {len(seen)} unique)")
+    
+    return recommended
+
+
 def _get_domain_hub_view_sync_only(db: Session) -> Dict:
     """Sync-only version without auto-fetch (used when called from async context)."""
     from app.domains.domain_hub import DOMAIN_CHARGERS, HUB_ID, HUB_NAME

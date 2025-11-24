@@ -406,9 +406,10 @@ async def while_you_charge(
             )
             shaped_chargers.append(shaped)
         
-        # Shape merchants for PWA
+        # Shape merchants for PWA and build recommended list
         logger.info(f"[PilotRouter] Raw merchants from hub_view: {len(raw_merchants)}")
         
+        # First, shape all merchants
         shaped_merchants = []
         for merchant in raw_merchants:
             # Convert walk_minutes to walk_time_s
@@ -422,15 +423,22 @@ async def while_you_charge(
             # Ensure walk_time_s is present if it was in original
             if "walk_minutes" in merchant:
                 shaped["walk_time_s"] = normalize_number(merchant["walk_minutes"] * 60)
+            # Also preserve walk_minutes for sorting
+            if "walk_minutes" in merchant:
+                shaped["walk_minutes"] = merchant["walk_minutes"]
             shaped_merchants.append(shaped)
         
-        logger.info(f"[WhileYouCharge] Returning {len(shaped_merchants)} shaped merchants")
+        # Build recommended merchants list (deduplicated and sorted)
+        from app.services.while_you_charge import build_recommended_merchants
+        recommended_merchants = build_recommended_merchants(shaped_merchants, limit=20)
+        
+        logger.info(f"[PilotRouter] Returning {len(shaped_merchants)} total merchants, {len(recommended_merchants)} recommended")
         
         return {
             "hub_id": hub_view.get("hub_id"),
             "hub_name": hub_view.get("hub_name"),
             "chargers": shaped_chargers,
-            "recommended_merchants": shaped_merchants  # Renamed from "merchants" for clarity
+            "recommended_merchants": recommended_merchants
         }
     except Exception as e:
         logger.error(f"Failed to get Domain hub view: {str(e)}", exc_info=True)

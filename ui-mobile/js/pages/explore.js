@@ -203,9 +203,8 @@ async function loadPilotData() {
       throw err; // Re-throw to be caught by outer catch
     }
     
-    const merchantsRaw =
-      whileYouCharge?.recommended_merchants || whileYouCharge?.merchants || [];
-    console.log('[Explore] Raw merchants from API:', merchantsRaw.length, 'merchants');
+    const merchantsRaw = whileYouCharge?.recommended_merchants || [];
+    console.log('[Explore] Raw merchants from API:', merchantsRaw.length, merchantsRaw);
     
     // Log first merchant's structure to debug logo_url
     if (merchantsRaw.length > 0) {
