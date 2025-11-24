@@ -583,16 +583,33 @@ def verify_visit(
     and updates wallet.
     PWA-optimized: includes reward_earned flag, integers only.
     """
-    # Get merchant info
-    merchant = db.execute(text("""
-        SELECT id, name, lat, lng FROM merchants WHERE id = :merchant_id
-    """), {"merchant_id": request.merchant_id}).first()
+    # Get merchant info (handle fallback merchants that may not be in DB)
+    merchant = None
+    merchant_lat = None
+    merchant_lng = None
     
-    if not merchant:
-        raise HTTPException(status_code=404, detail="Merchant not found")
-    
-    merchant_lat = float(merchant[2])
-    merchant_lng = float(merchant[3])
+    try:
+        merchant = db.execute(text("""
+            SELECT id, name, lat, lng FROM merchants WHERE id = :merchant_id
+        """), {"merchant_id": request.merchant_id}).first()
+        
+        if merchant:
+            merchant_lat = float(merchant[2])
+            merchant_lng = float(merchant[3])
+        else:
+            # Merchant not in DB - might be a fallback merchant
+            # Use default coordinates near Domain hub (30.4019, -97.7251)
+            # Fallback merchants are positioned around Domain hub
+            print(f"[PilotRouter][verify_visit] Merchant {request.merchant_id} not found in DB, using fallback coordinates", flush=True)
+            logger.warning(f"Merchant {request.merchant_id} not found in DB, using fallback coordinates")
+            merchant_lat = 30.4020  # Near Domain hub
+            merchant_lng = -97.7250
+    except Exception as merchant_err:
+        # If merchants table doesn't exist or query fails, use fallback coordinates
+        logger.warning(f"Could not query merchant (table may not exist): {merchant_err}")
+        print(f"[PilotRouter][verify_visit] Could not query merchant, using fallback coordinates: {merchant_err}", flush=True)
+        merchant_lat = 30.4020
+        merchant_lng = -97.7250
     
     # Check distance (within 100m radius)
     distance_m = haversine_m(
@@ -711,17 +728,23 @@ def verify_visit(
         
         db.commit()
         
-        # Generate/fetch merchant code for discount
+        # Generate/fetch merchant code for discount (skip if merchant doesn't exist in DB)
         merchant_code = None
         try:
             from app.services.codes import generate_code, store_code, fetch_code
             from app.models_while_you_charge import MerchantOfferCode
             
-            # Try to fetch existing valid code for this merchant
-            existing_code = db.query(MerchantOfferCode).filter(
-                MerchantOfferCode.merchant_id == request.merchant_id,
-                MerchantOfferCode.is_redeemed == False,
-                MerchantOfferCode.expires_at > datetime.utcnow()
+            # For fallback merchants, generate a simple code without DB lookup
+            if not merchant:
+                # Fallback merchant - generate a simple code
+                merchant_code = f"DOM-{request.merchant_id[-4:].upper()}"
+                print(f"[PilotRouter][verify_visit] Generated fallback code for merchant {request.merchant_id}: {merchant_code}", flush=True)
+            else:
+                # Try to fetch existing valid code for this merchant
+                existing_code = db.query(MerchantOfferCode).filter(
+                    MerchantOfferCode.merchant_id == request.merchant_id,
+                    MerchantOfferCode.is_redeemed == False,
+                    MerchantOfferCode.expires_at > datetime.utcnow()
             ).first()
             
             if existing_code:
