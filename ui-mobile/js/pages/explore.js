@@ -202,8 +202,22 @@ async function loadPilotData() {
       whileYouCharge?.recommended_merchants || whileYouCharge?.merchants || [];
     console.log('[Explore] Raw merchants from API:', merchantsRaw);
     console.log('[Explore] Merchant keys in response:', Object.keys(whileYouCharge || {}));
+    
+    // Log first merchant's structure to debug logo_url
+    if (merchantsRaw.length > 0) {
+      console.log('[Explore] First merchant object:', merchantsRaw[0]);
+      console.log('[Explore] First merchant keys:', Object.keys(merchantsRaw[0]));
+      console.log('[Explore] First merchant logo_url:', merchantsRaw[0].logo_url);
+    }
+    
     _merchants = merchantsRaw.map(toMapMerchant).filter(Boolean);
     console.log('[Explore] Mapped merchants:', _merchants.length, _merchants);
+    
+    // Log first mapped merchant to see logo field
+    if (_merchants.length > 0) {
+      console.log('[Explore] First mapped merchant:', _merchants[0]);
+      console.log('[Explore] First mapped merchant logo:', _merchants[0].logo, _merchants[0].logo_url);
+    }
     
     // Sort merchants by nova_reward descending (Bakery Lorraine with 2 Nova should appear at top)
     _merchants.sort((a, b) => (b.nova_reward || 0) - (a.nova_reward || 0));
