@@ -239,7 +239,19 @@ async def find_and_link_merchants(
         destinations = [(p.lat, p.lng) for p in places]
         
         if destinations:
+            logger.error(
+                "[WhileYouCharge] 📍 Getting walk times for %d places from charger %s at (%s,%s)",
+                len(destinations),
+                charger.id,
+                charger.lat,
+                charger.lng
+            )
             walk_times = await get_walk_times(origins, destinations)
+            logger.error(
+                "[WhileYouCharge] 📍 Walk times received: %d/%d places have walk info",
+                len([k for k in walk_times.keys() if walk_times[k].get("status") == "OK"]),
+                len(destinations)
+            )
             
             places_filtered_by_walk = 0
             for place in places:
@@ -247,23 +259,37 @@ async def find_and_link_merchants(
                 walk_info = walk_times.get((origins[0], dest))
                 
                 if not walk_info:
-                    logger.debug(
-                        "[WhileYouCharge] Dropping place %s: no walk info from Distance Matrix",
-                        place.name
+                    logger.error(
+                        "[WhileYouCharge] ❌ Dropping place '%s': no walk info from Distance Matrix. Place location=(%s,%s), charger=(%s,%s)",
+                        place.name,
+                        place.lat,
+                        place.lng,
+                        charger.lat,
+                        charger.lng
                     )
                     places_filtered_by_walk += 1
                     continue
                 
                 walk_seconds = walk_info["duration_s"]
                 if walk_seconds > max_walk_minutes * 60:
-                    logger.debug(
-                        "[WhileYouCharge] Dropping place %s: walk_time=%ds (max=%ds)",
+                    logger.error(
+                        "[WhileYouCharge] ❌ Dropping place '%s': walk_time=%ds (max=%ds). Distance: %dm",
                         place.name,
                         walk_seconds,
-                        max_walk_minutes * 60
+                        max_walk_minutes * 60,
+                        walk_info.get("distance_m", 0)
                     )
                     places_filtered_by_walk += 1
                     continue
+                
+                logger.error(
+                    "[WhileYouCharge] ✅ Keeping place '%s': walk_time=%ds, distance=%dm, location=(%s,%s)",
+                    place.name,
+                    walk_seconds,
+                    walk_info.get("distance_m", 0),
+                    place.lat,
+                    place.lng
+                )
                 
                 # Check if merchant already exists
                 existing = db.query(Merchant).filter(
@@ -321,7 +347,17 @@ async def find_and_link_merchants(
                     db.add(link)
                 
                 all_new_merchants.append(merchant)
+                logger.error(
+                    "[WhileYouCharge] ✅ Added merchant '%s' (id=%s) for charger %s",
+                    merchant.name,
+                    merchant.id,
+                    charger.id
+                )
     
+    logger.error(
+        "[WhileYouCharge] 📊 Before commit: %d merchants in all_new_merchants list",
+        len(all_new_merchants)
+    )
     db.commit()
     
     # Combine existing and new
