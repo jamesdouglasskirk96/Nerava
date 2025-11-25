@@ -296,6 +296,65 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   await loadPrefs();
 });
 
+// Fullscreen functionality - must be called after user interaction on some browsers
+function requestFullscreen() {
+  // Check if already in fullscreen or standalone mode
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
+                       (window.navigator.standalone === true) ||
+                       document.referrer.includes('android-app://');
+  
+  if (isStandalone) {
+    console.log('[Fullscreen] App is already in standalone/fullscreen mode');
+    return;
+  }
+  
+  // Try Fullscreen API (works on desktop and some mobile browsers)
+  const elem = document.documentElement;
+  
+  try {
+    if (elem.requestFullscreen) {
+      elem.requestFullscreen().catch(err => {
+        console.log('[Fullscreen] Fullscreen API failed (may require user gesture):', err);
+      });
+    } else if (elem.webkitRequestFullscreen) {
+      // Safari
+      elem.webkitRequestFullscreen();
+    } else if (elem.webkitEnterFullscreen) {
+      // iOS Safari
+      elem.webkitEnterFullscreen();
+    } else if (elem.mozRequestFullScreen) {
+      // Firefox
+      elem.mozRequestFullScreen();
+    } else if (elem.msRequestFullscreen) {
+      // IE/Edge
+      elem.msRequestFullscreen();
+    }
+    console.log('[Fullscreen] Fullscreen requested');
+  } catch (err) {
+    console.log('[Fullscreen] Fullscreen request failed:', err);
+  }
+}
+
+// Export for use elsewhere and call on first user interaction
+if (typeof window !== 'undefined') {
+  window.requestFullscreen = requestFullscreen;
+  
+  // Request fullscreen on first user interaction (required by browsers)
+  ['click', 'touchstart', 'keydown'].forEach(eventType => {
+    document.addEventListener(eventType, () => {
+      requestFullscreen();
+      // Only try once per event type
+    }, { once: true, passive: true });
+  });
+  
+  // Also try on page load (may not work on all browsers)
+  if (document.readyState === 'complete') {
+    requestFullscreen();
+  } else {
+    window.addEventListener('load', requestFullscreen, { once: true });
+  }
+}
+
 // Demo autorun keyboard shortcut (Shift+R)
 window.addEventListener('keydown', (e)=>{
   if((e.key==='R' || e.key==='r') && e.shiftKey && window.NeravaDemoRunner){
@@ -462,11 +521,8 @@ window.addEventListener('load', async ()=>{
   await loadWallet();
   await loadPrefs();
   
-  // PWA Fullscreen functionality
-  if (window.navigator.standalone === false) {
-    // Try to request fullscreen when not in standalone mode
-    document.documentElement.requestFullscreen?.();
-  }
+  // Request fullscreen (already defined above)
+  requestFullscreen();
 });
 
 // Initialize activity page when tab is switched
