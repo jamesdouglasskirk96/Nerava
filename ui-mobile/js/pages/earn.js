@@ -178,7 +178,7 @@ async function startSession(rootEl, chargerId, merchantId, existingSessionId = n
       sessionStorage.setItem('pilot_session', JSON.stringify(sessionState));
     }
     window.pilotSession = sessionState;
-    
+
     // Render session UI
     renderSessionView(rootEl);
     
@@ -283,26 +283,22 @@ function renderSessionView(rootEl) {
             <div id="dwell-progress-bar" style="background: #22c55e; height: 100%; width: 0%; transition: width 0.5s ease;"></div>
           </div>
         </div>
-        <div style="display: flex; justify-content: space-between; font-size: 12px; color: #64748b;">
-          <span id="dwell-current">0s</span>
-          <span id="dwell-required">3m</span>
-        </div>
         <div style="margin-top: 8px; font-size: 14px;">
           <span id="dwell-status">Starting session...</span>
         </div>
       </div>
 
-      <!-- Navigate Button -->
+      <!-- Navigate Button (hidden when ready to claim) -->
       <button id="navigate-to-charger-btn" style="width: 100%; padding: 14px; background: #22c55e; color: white; border: none; border-radius: 12px; font-weight: 600; font-size: 16px; cursor: pointer; margin-bottom: 16px;">
         Navigate to Charger
       </button>
 
-      <!-- Ready to Claim Card (hidden initially) -->
+      <!-- Ready to Claim Card (hidden initially, only shown when ready_to_claim is true) -->
       <div id="ready-to-claim-card" style="display: none; background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); padding: 20px; border-radius: 12px; color: white; margin-bottom: 16px;">
         <div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">✅ Ready to Claim!</div>
-        <div style="font-size: 14px; margin-bottom: 16px; opacity: 0.9;">Your reward is ready. Visit ${_merchant.name} to claim it.</div>
+        <div style="font-size: 14px; margin-bottom: 16px; opacity: 0.9;">Your reward is ready. Visit ${_merchant?.name || 'the merchant'} to claim it.</div>
         <button id="navigate-to-merchant-btn" style="width: 100%; padding: 12px; background: white; color: #22c55e; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
-          Navigate to ${_merchant.name}
+          Navigate to ${_merchant?.name || 'Merchant'}
         </button>
       </div>
 
@@ -321,7 +317,21 @@ function renderSessionView(rootEl) {
 
   // Bind event handlers
   $('#navigate-to-charger-btn')?.addEventListener('click', () => navigateToCharger());
-  $('#navigate-to-merchant-btn')?.addEventListener('click', () => navigateToMerchant());
+  
+  // Navigate to Merchant button (in Ready to Claim card) will be wired up in updateSessionUI
+  // when the card is shown, so we can access the current ping result
+  const navigateToMerchantBtn = $('#navigate-to-merchant-btn');
+  if (navigateToMerchantBtn) {
+    navigateToMerchantBtn.addEventListener('click', () => {
+      // Switch to showing merchant distance
+      _showingMerchantDistance = true;
+      // Navigate to merchant
+      if (_merchant) {
+        navigateToMerchant();
+      }
+    });
+  }
+  
   $('#copy-code-btn')?.addEventListener('click', () => copyCode());
 }
 
@@ -352,7 +362,7 @@ function copyCode() {
 
 function startLocationTracking() {
   console.log('[Earn] Starting location tracking...');
-  
+
   // Set fallback location in case geolocation fails
   if (!_userLocation) {
     _userLocation = { lat: 30.4021, lng: -97.7266 }; // Domain default
@@ -535,49 +545,74 @@ function updateSessionUI(pingResult) {
   if (radiusEl && pingResult.charger_radius_m) {
     radiusEl.textContent = `${radius}m`;
   }
-  
-  // Update dwell progress
-  const dwellEl = $('#dwell-current');
-  const requiredEl = $('#dwell-required');
+
+  // Update dwell progress - show as percentage
   const progressBar = $('#dwell-progress-bar');
   const statusEl = $('#dwell-status');
   
-  if (dwellEl) {
-    dwellEl.textContent = formatTime(dwell);
+  // Calculate progress percentage
+  // Backend provides: dwell_seconds (time already elapsed) and needed_seconds (time still needed)
+  // Total required = dwell + needed_seconds
+  // Percent = (dwell / total_required) * 100
+  let percent = 0;
+  let totalRequired = dwell + remaining; // Total time needed (elapsed + still needed)
+  
+  // Handle edge cases
+  if (pingResult.reward_earned || pingResult.nova_awarded > 0) {
+    percent = 100;
+  } else if (totalRequired > 0) {
+    percent = Math.min(100, Math.round((dwell / totalRequired) * 100));
+  } else if (remaining <= 0 && state === 'ready_to_claim') {
+    percent = 100; // Ready to claim means we're done
+  } else if (remaining === 0 && dwell === 0) {
+    // No time elapsed yet, backend might not have needed_seconds
+    percent = 0;
   }
   
-  if (requiredEl) {
-    requiredEl.textContent = formatTime(totalRequired || 180);
+  // Defensive logging for debugging if values seem wrong
+  if ((percent === 0 && dwell > 0) || (remaining > 0 && percent >= 100)) {
+    console.warn('[Earn] Progress calculation warning:', {
+      dwell,
+      remaining,
+      totalRequired,
+      percent,
+      state,
+      reward_earned: pingResult.reward_earned,
+      ready_to_claim: pingResult.ready_to_claim
+    });
   }
   
+  // Update progress bar
   if (progressBar) {
-    const percent = totalRequired > 0 
-      ? Math.min(100, (dwell / totalRequired) * 100)
-      : 0;
     progressBar.style.width = `${percent}%`;
     progressBar.style.transition = 'width 0.5s ease';
   }
   
+  // Update status text based on state and percentage
   if (statusEl) {
     switch (state) {
       case 'earned':
-        statusEl.textContent = `✅ You earned ${pingResult.nova_awarded || 0} Nova!`;
+        statusEl.textContent = `Done! You've earned ${pingResult.nova_awarded || 0} Nova.`;
         statusEl.style.color = '#22c55e';
         break;
       case 'ready_to_claim':
         const rewardNova = _merchant?.nova_reward || pingResult.nova_awarded || 0;
-        statusEl.textContent = `✅ Done! You've earned ${rewardNova} Nova.`;
-        statusEl.style.color = '#22c55e';
+        statusEl.textContent = `Done! You've earned ${rewardNova} Nova.`;
+      statusEl.style.color = '#22c55e';
         break;
       case 'verifying':
-        const remainingText = remaining > 0 ? formatTime(remaining) : '0s';
-        statusEl.textContent = `${remainingText} remaining`;
+        // Show percentage with optional remaining time
+        if (remaining > 0) {
+          statusEl.textContent = `${percent}% complete • ${formatTime(remaining)} remaining`;
+    } else {
+          statusEl.textContent = `${percent}% complete`;
+        }
         statusEl.style.color = '#64748b';
         break;
       case 'navigate_to_charger':
       default:
         statusEl.textContent = 'Arrive at the charger to start earning.';
-        statusEl.style.color = '#64748b';
+      statusEl.style.color = '#64748b';
         break;
     }
   }
@@ -585,7 +620,7 @@ function updateSessionUI(pingResult) {
   // Update CTA button based on state
   const navigateBtn = $('#navigate-to-charger-btn');
   const readyCard = $('#ready-to-claim-card');
-  const merchantDistanceBlock = $('#merchant-distance-block');
+  const navigateToMerchantBtn = $('#navigate-to-merchant-btn');
   const codeView = $('#code-view');
   
   if (navigateBtn) {
@@ -593,27 +628,18 @@ function updateSessionUI(pingResult) {
       case 'earned':
         navigateBtn.textContent = 'View Wallet';
         navigateBtn.style.background = '#3b82f6';
+        navigateBtn.style.display = 'block';
+        navigateBtn.style.opacity = '1';
+        navigateBtn.style.cursor = 'pointer';
         navigateBtn.onclick = () => setTab('Wallet');
         break;
       case 'ready_to_claim':
-        const rewardNova = _merchant?.nova_reward || pingResult.nova_awarded || 0;
-        const merchantName = _merchant?.name || 'merchant';
-        navigateBtn.textContent = `Navigate to ${merchantName}`;
-        navigateBtn.style.background = '#22c55e';
-        navigateBtn.style.opacity = '1';
-        navigateBtn.style.cursor = 'pointer';
-        navigateBtn.onclick = () => {
-          // Switch to showing merchant distance
-          _showingMerchantDistance = true;
-          // Navigate to merchant
-          if (_merchant) {
-            navigateToMerchant();
-          }
-          // Update UI immediately to show merchant distance
-          updateSessionUI(pingResult);
-        };
+        // In ready_to_claim state, hide the main navigate button
+        // Merchant navigation will be in the Ready to Claim card only
+        navigateBtn.style.display = 'none';
         break;
       case 'verifying':
+        navigateBtn.style.display = 'block';
         navigateBtn.textContent = 'Keep Charging';
         navigateBtn.style.background = '#64748b';
         navigateBtn.style.opacity = '0.6';
@@ -622,6 +648,7 @@ function updateSessionUI(pingResult) {
         break;
       case 'navigate_to_charger':
       default:
+        navigateBtn.style.display = 'block'; // Show button
         navigateBtn.textContent = 'Navigate to Charger';
         navigateBtn.style.background = '#22c55e';
         navigateBtn.style.opacity = '1';
@@ -630,6 +657,9 @@ function updateSessionUI(pingResult) {
         break;
     }
   }
+  
+  // Navigate to Merchant button is already wired up in renderSessionView
+  // Just ensure it's visible when ready
   
   // Show/hide ready to claim card
   if (readyCard) {

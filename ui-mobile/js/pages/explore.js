@@ -22,6 +22,9 @@ import Api, { fetchPilotBootstrap, fetchPilotWhileYouCharge } from '../core/api.
 import { ensureMap, clearStations, addStationDot, fitToStations, getMap } from '../core/map.js';
 import { setTab } from '../app.js';
 
+// Leaflet reference (assumes L is global from Leaflet script)
+const L = window.L;
+
 const $ = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
 
@@ -132,7 +135,26 @@ function renderChargerPins(chargers) {
   chargers.forEach(ch => {
     addStationDot(ch, { onClick: () => selectCharger(ch) });
   });
-  fitToStations(chargers);
+  
+  // Fit map to show all chargers with padding for perk cards
+  if (_map && chargers.length > 0 && typeof L !== 'undefined') {
+    // Calculate bounds from all charger positions
+    const chargerPositions = chargers.map(c => [c.lat, c.lng]);
+    
+    // Estimate perk card height (approximately 260px including padding)
+    const perksPanelHeight = 260;
+    
+    // Use Leaflet fitBounds with padding
+    const bounds = L.latLngBounds(chargerPositions);
+    _map.fitBounds(bounds, {
+      paddingTopLeft: [16, 16],
+      paddingBottomRight: [16, perksPanelHeight + 32], // Extra padding for perk cards
+      maxZoom: 17 // Prevent excessive zoom
+    });
+  } else {
+    // Fallback to fitToStations if map not ready or Leaflet not available
+    fitToStations(chargers);
+  }
 }
 
 // === State Management ======================================================
@@ -400,13 +422,6 @@ function initMerchantPopover() {
     });
   }
   
-  if (moreBtn) {
-    moreBtn.addEventListener('click', () => {
-      console.log('More details clicked');
-      // TODO: Navigate to merchant detail page
-      hideMerchantPopover();
-    });
-  }
   
   // Click outside to close
   if (popover) {
@@ -460,7 +475,104 @@ function hideMerchantPopover() {
   _selectedCharger = null;
 }
 
-// === Start Session Handler ==================================================
+// === Perk Card Start Session Handler ======================================
+// New handler for perk cards that navigates directly to Earn page
+async function handlePerkCardStartSession(perk) {
+  // Find the full merchant object from _merchants
+  const fullMerchant = _merchants.find(m => m.id === perk.id) || perk;
+  
+  // Get current selected charger or default to first
+  let currentCharger = null;
+  if (_selectedChargerId) {
+    currentCharger = _chargers.find(c => c.id === _selectedChargerId);
+  }
+  if (!currentCharger && _chargers.length > 0) {
+    currentCharger = _chargers[0];
+  }
+  
+  if (!currentCharger) {
+    showToast('No charger available');
+    return;
+  }
+  
+  const merchantId = fullMerchant.id;
+  const chargerId = currentCharger.id;
+  
+  // Get user location
+  let userLat = 30.4021; // Domain default
+  let userLng = -97.7266;
+  
+  try {
+    if (navigator.geolocation && _userLocation) {
+      userLat = _userLocation.lat;
+      userLng = _userLocation.lng;
+    } else {
+      // Try to get current location
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000 });
+      });
+      userLat = position.coords.latitude;
+      userLng = position.coords.longitude;
+    }
+  } catch (e) {
+    console.warn('Could not get user location, using defaults:', e);
+  }
+  
+  // Show loading state
+  showToast('Starting session...');
+  
+  try {
+    // Call pilot API to start session
+    const sessionData = await Api.pilotStartSession(
+      userLat,
+      userLng,
+      chargerId,
+      merchantId,
+      123 // TODO: Get actual user_id from auth state
+    );
+    
+    // Store session in global state
+    const sessionState = {
+      session_id: sessionData.session_id,
+      charger: sessionData.charger || currentCharger,
+      merchant: sessionData.merchant || fullMerchant,
+      hub_id: sessionData.hub_id,
+      hub_name: sessionData.hub_name
+    };
+    
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem('pilot_session', JSON.stringify(sessionState));
+    }
+    
+    window.pilotSession = sessionState;
+    
+    console.log('[Explore] Session started:', sessionData.session_id);
+    
+    // Navigate directly to Earn page - single navigation, no double calls
+    navigateToEarn(sessionData.session_id, merchantId, chargerId);
+    
+  } catch (e) {
+    console.error('[Explore] Failed to start session:', e);
+    showToast(`Failed to start session: ${e.message || 'Unknown error'}`);
+  }
+}
+
+// === Navigate to Earn Helper ==============================================
+// Centralized navigation to Earn page - prevents double navigation
+function navigateToEarn(sessionId, merchantId, chargerId) {
+  if (!sessionId || !merchantId || !chargerId) {
+    console.error('[Explore] Cannot navigate - missing required IDs', { sessionId, merchantId, chargerId });
+    return;
+  }
+  
+  // Single navigation call with all params
+  location.hash = `#/earn?session_id=${encodeURIComponent(sessionId)}&merchant_id=${encodeURIComponent(merchantId)}&charger_id=${encodeURIComponent(chargerId)}`;
+  
+  // Set tab to Earn (app.js will handle the route)
+  setTab('earn');
+}
+
+// === Start Session Handler (for popover) ===================================
 async function handleStartSession() {
   const merchant = _selectedMerchant;
   const charger = _selectedCharger || _chargers[0];
@@ -529,8 +641,8 @@ async function handleStartSession() {
     
     console.log('[Explore] Session started:', sessionData.session_id);
     
-    // Navigate to Earn page with all necessary params
-    location.hash = `#/earn?session_id=${encodeURIComponent(sessionData.session_id)}&merchant_id=${encodeURIComponent(merchantId)}&charger_id=${encodeURIComponent(chargerId)}`;
+    // Navigate to Earn page using centralized helper
+    navigateToEarn(sessionData.session_id, merchantId, chargerId);
     
     hideMerchantPopover();
     
@@ -617,7 +729,7 @@ function updateRecommendedPerks(perks) {
       console.log('[Explore] === END FIRST PERK CARD DEBUG ===');
     }
     
-          // Compact layout: Logo (only if exists) + "Earn X Nova" + "X min walk"
+          // Compact layout: Logo (only if exists) + "Earn X Nova" + "X min walk" + buttons
           const logoHtml = (perk.logo && perk.logo.trim() && perk.logo !== 'null') 
             ? `<img class="perk-card-logo" src="${perk.logo}" alt="${perk.name || ''}" onerror="this.classList.add('hidden')">`
             : '';
@@ -626,23 +738,30 @@ function updateRecommendedPerks(perks) {
       ${logoHtml}
       <div class="perk-card-reward">Earn ${perk.nova || 0} Nova</div>
       <div class="perk-card-walk">${perk.walk || '0 min walk'}</div>
+      <div class="perk-card-actions" style="display: flex; gap: 8px; margin-top: 8px;">
+        <button class="perk-card-btn-start" data-perk-id="${perk.id}" style="flex: 1; padding: 8px; background: #22c55e; color: white; border: none; border-radius: 6px; font-weight: 600; font-size: 14px; cursor: pointer;">Start session</button>
+        <button class="perk-card-btn-cancel" data-perk-id="${perk.id}" style="flex: 0 0 auto; padding: 8px 12px; background: #f1f5f9; color: #64748b; border: none; border-radius: 6px; font-weight: 500; font-size: 14px; cursor: pointer;">Cancel</button>
+      </div>
     `;
     
-    // Handle card click
-    card.addEventListener('click', () => {
-      console.log('[WhileYouCharge] Recommended perk clicked:', perk.name);
-      // Find the full merchant object from _merchants
-      const fullMerchant = _merchants.find(m => m.id === perk.id);
-      // Get current selected charger or default to first
-      let currentCharger = null;
-      if (_selectedChargerId) {
-        currentCharger = _chargers.find(c => c.id === _selectedChargerId);
-      }
-      if (!currentCharger && _chargers.length > 0) {
-        currentCharger = _chargers[0];
-      }
-      showMerchantPopover(fullMerchant || perk, currentCharger);
-    });
+    // Handle Start session button click - navigate directly to Earn page
+    const startBtn = card.querySelector('.perk-card-btn-start');
+    if (startBtn) {
+      startBtn.addEventListener('click', async (e) => {
+        e.stopPropagation(); // Prevent card click from firing
+        console.log('[Explore] Start session clicked for perk:', perk.name);
+        await handlePerkCardStartSession(perk);
+      });
+    }
+    
+    // Handle Cancel button click - just stop event propagation (does nothing)
+    const cancelBtn = card.querySelector('.perk-card-btn-cancel');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent card click from firing
+        // Cancel does nothing - just stops the event
+      });
+    }
     
     row.appendChild(card);
   });
