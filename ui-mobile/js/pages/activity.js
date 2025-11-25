@@ -56,13 +56,13 @@ export async function initActivityPage(rootEl) {
     </section>
   `;
 
-          try {
-            // Use pilot activity endpoint instead of legacy endpoint
-            const userId = localStorage.NERAVA_USER_ID || '123';  // TODO: Get actual user_id
-            const data = await window.NeravaAPI.apiGet('/v1/pilot/activity', { user_id: userId, limit: 50 });
-            if (!data) {
-              throw new Error('No data returned from API');
-            }
+  try {
+    // Use pilot activity endpoint instead of legacy endpoint
+    const userId = localStorage.NERAVA_USER_ID || '123';  // TODO: Get actual user_id
+    const data = await window.NeravaAPI.apiGet('/v1/pilot/activity', { user_id: userId, limit: 50 });
+    if (!data) {
+      throw new Error('No data returned from API');
+    }
 
     // Reputation (fallback if not in pilot response)
     const reputation = data.reputation || { score: 0, tier: 'Bronze', streakDays: 0 };
@@ -80,20 +80,20 @@ export async function initActivityPage(rootEl) {
       repStreak.textContent = `🔋 ${streakDays}-day streak`;
     }
 
-            const ni = nextTierInfo(score);
-            repFillEl.style.width = ni.pct + '%';
-            repNextEl.textContent = ni.next
-              ? `${ni.toNext} pts to ${ni.next.name}`
-              : 'Top tier reached';
+    const ni = nextTierInfo(score);
+    repFillEl.style.width = ni.pct + '%';
+    repNextEl.textContent = ni.next
+      ? `${ni.toNext} pts to ${ni.next.name}`
+      : 'Top tier reached';
 
-            // Add follower/following counts
-            const repMeta = document.createElement('div');
-            repMeta.className = 'rep-meta';
-            repMeta.innerHTML = `
-              <div class="rep-pill"><strong>${data.reputation.followers_count || 12}</strong> Followers</div>
-              <div class="rep-pill"><strong>${data.reputation.following_count || 8}</strong> Following</div>
-            `;
-            rootEl.querySelector('.rep-stack').appendChild(repMeta);
+    // Add follower/following counts
+    const repMeta = document.createElement('div');
+    repMeta.className = 'rep-meta';
+    repMeta.innerHTML = `
+      <div class="rep-pill"><strong>${data.reputation?.followers_count || 12}</strong> Followers</div>
+      <div class="rep-pill"><strong>${data.reputation?.following_count || 8}</strong> Following</div>
+    `;
+    rootEl.querySelector('.rep-stack').appendChild(repMeta);
 
     // Earnings (fallback if not in pilot response)
     const followTotal = data.totals?.followCents || 0;
@@ -153,20 +153,21 @@ export async function initActivityPage(rootEl) {
     // Legacy followEarnings rendering (fallback if needed)
     if (data.followEarnings && data.followEarnings.length > 0) {
       ul.innerHTML += data.followEarnings.map(item => {
-      const earned = (item.amountCents/100).toFixed(2);
-      const ctx = item.context ? item.context : 'charged nearby';
-      return `
-        <li class="list-item list-item--tight">
-          <div class="avatar">${(item.handle||'m')[0].toUpperCase()}</div>
-          <div class="col">
-            <div class="title dark">@${item.handle}</div>
-            <div class="sub dark-70">${ctx}</div>
-            <div class="sub dark-90">You earned <b>$${earned}</b></div>
-          </div>
-          <span class="badge badge--tier badge--${(item.tier||'Bronze').toLowerCase()}">${item.tier||'Bronze'}</span>
-        </li>
-      `;
-    }).join('');
+        const earned = (item.amountCents/100).toFixed(2);
+        const ctx = item.context ? item.context : 'charged nearby';
+        return `
+          <li class="list-item list-item--tight">
+            <div class="avatar">${(item.handle||'m')[0].toUpperCase()}</div>
+            <div class="col">
+              <div class="title dark">@${item.handle}</div>
+              <div class="sub dark-70">${ctx}</div>
+              <div class="sub dark-90">You earned <b>$${earned}</b></div>
+            </div>
+            <span class="badge badge--tier badge--${(item.tier||'Bronze').toLowerCase()}">${item.tier||'Bronze'}</span>
+          </li>
+        `;
+      }).join('');
+    }
   } catch (e) {
     console.error('activity error', e);
     // Show fallback content with demo data

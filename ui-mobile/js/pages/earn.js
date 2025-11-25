@@ -162,12 +162,37 @@ async function startSession(rootEl, chargerId, merchantId, existingSessionId = n
     _charger = sessionData.charger || _charger;
     _merchant = sessionData.merchant || _merchant;
 
+    // Store session state for persistence
+    const sessionState = {
+      session_id: _sessionId,
+      charger: _charger,
+      merchant: _merchant
+    };
+    
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem('pilot_session', JSON.stringify(sessionState));
+    }
+    window.pilotSession = sessionState;
+    
     // Render session UI
     renderSessionView(rootEl);
     
     // Start GPS tracking and ping loop
     startLocationTracking();
     startPingLoop();
+    
+    // Send immediate first ping to populate UI
+    if (_sessionId && _userLocation) {
+      console.log('[Earn] Sending immediate ping on session start...');
+      Api.pilotVerifyPing(_sessionId, _userLocation.lat, _userLocation.lng)
+        .then((result) => {
+          console.log('[Earn] Initial ping result:', result);
+          updateSessionUI(result);
+        })
+        .catch((err) => {
+          console.error('[Earn] Initial ping failed:', err);
+        });
+    }
 
   } catch (e) {
     console.error('Failed to start session:', e);
@@ -212,8 +237,9 @@ function renderSessionView(rootEl) {
       <!-- Distance to Charger -->
       <div id="charger-distance-block" style="background: white; padding: 16px; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
         <div style="font-size: 14px; color: #64748b; margin-bottom: 8px;">Distance to Charger</div>
-        <div id="distance-to-charger" style="font-size: 32px; font-weight: 700; color: #22c55e; margin-bottom: 4px;">-</div>
-        <div style="font-size: 12px; color: #94a3b8;">Stay within <span id="charger-radius">60m</span> of the charger</div>
+        <div id="distance-to-charger" style="font-size: 32px; font-weight: 700; color: #22c55e; margin-bottom: 4px;">Loading...</div>
+        <div style="font-size: 12px; color: #94a3b8; margin-bottom: 8px;">Stay within <span id="charger-radius">60m</span> of the charger</div>
+        <div id="user-location-display" style="font-size: 10px; color: #cbd5e1; font-family: monospace;">Location: -</div>
       </div>
 
       <!-- Dwell Progress -->
@@ -298,18 +324,27 @@ function copyCode() {
 }
 
 function startLocationTracking() {
-  if (!navigator.geolocation) {
-    console.warn('Geolocation not supported, using default location');
-    // Use default Domain location as fallback
-    if (!_userLocation) {
-      _userLocation = { lat: 30.4021, lng: -97.7266 };
-    }
-    return;
-  }
-
+  console.log('[Earn] Starting location tracking...');
+  
   // Set fallback location in case geolocation fails
   if (!_userLocation) {
     _userLocation = { lat: 30.4021, lng: -97.7266 }; // Domain default
+    console.log('[Earn] Using fallback location:', _userLocation);
+  } else {
+    console.log('[Earn] Starting with existing location:', _userLocation);
+  }
+  
+  // Update UI immediately with current location
+  updateLocationDisplay();
+  
+  if (!navigator.geolocation) {
+    console.warn('[Earn] Geolocation not supported, using default location');
+    return;
+  }
+
+  // Clear any existing watch
+  if (_watchId !== null) {
+    navigator.geolocation.clearWatch(_watchId);
   }
 
   _watchId = navigator.geolocation.watchPosition(
@@ -318,44 +353,62 @@ function startLocationTracking() {
         lat: position.coords.latitude,
         lng: position.coords.longitude
       };
+      console.log('[Earn] Location updated:', _userLocation);
+      updateLocationDisplay();
     },
     (error) => {
       // Don't spam console with errors - just log once
       if (!_geolocationErrorLogged) {
-        console.warn('Geolocation unavailable (using fallback location):', error.message || 'Position unavailable');
+        console.warn('[Earn] Geolocation unavailable (using fallback location):', error.message || 'Position unavailable');
         _geolocationErrorLogged = true;
       }
       // Keep using existing _userLocation or default
       if (!_userLocation) {
         _userLocation = { lat: 30.4021, lng: -97.7266 };
+        updateLocationDisplay();
       }
     },
     { enableHighAccuracy: false, timeout: 5000, maximumAge: 10000 } // Less strict settings
   );
 }
 
-function startPingLoop() {
-  // Ping every 5 seconds
-  _pingInterval = setInterval(async () => {
-    if (!_sessionId || !_userLocation) return;
-
-    try {
-      const pingResult = await Api.pilotVerifyPing(_sessionId, _userLocation.lat, _userLocation.lng);
-      updateSessionUI(pingResult);
-    } catch (e) {
-      console.error('Ping failed:', e);
-    }
-  }, 5000);
-
-  // Immediate first ping
-  if (_sessionId && _userLocation) {
-    Api.pilotVerifyPing(_sessionId, _userLocation.lat, _userLocation.lng)
-      .then(updateSessionUI)
-      .catch(console.error);
+function updateLocationDisplay() {
+  // Update location display if elements exist
+  const locationDisplay = document.getElementById('user-location-display');
+  if (locationDisplay && _userLocation) {
+    locationDisplay.textContent = `${_userLocation.lat.toFixed(6)}, ${_userLocation.lng.toFixed(6)}`;
   }
 }
 
+function startPingLoop() {
+  console.log('[Earn] Starting ping loop...');
+  
+  // Clear any existing interval
+  if (_pingInterval !== null) {
+    clearInterval(_pingInterval);
+  }
+  
+  // Ping every 5 seconds
+  _pingInterval = setInterval(async () => {
+    if (!_sessionId || !_userLocation) {
+      console.warn('[Earn] Ping skipped - missing sessionId or location', { sessionId: _sessionId, location: _userLocation });
+      return;
+    }
+
+    try {
+      console.log('[Earn] Sending ping...', { sessionId: _sessionId, location: _userLocation });
+      const pingResult = await Api.pilotVerifyPing(_sessionId, _userLocation.lat, _userLocation.lng);
+      console.log('[Earn] Ping result:', pingResult);
+      updateSessionUI(pingResult);
+    } catch (e) {
+      console.error('[Earn] Ping failed:', e);
+    }
+  }, 5000);
+}
+
 function updateSessionUI(pingResult) {
+  console.log('[Earn] Updating session UI with:', pingResult);
+  
   // Update distance to charger
   const distanceEl = $('#distance-to-charger');
   const radiusEl = $('#charger-radius');
@@ -367,6 +420,9 @@ function updateSessionUI(pingResult) {
   if (radiusEl && pingResult.charger_radius_m) {
     radiusEl.textContent = `${normalizeNumber(pingResult.charger_radius_m)}m`;
   }
+  
+  // Update location display
+  updateLocationDisplay();
 
   // Update dwell progress
   const dwellEl = $('#dwell-current');
