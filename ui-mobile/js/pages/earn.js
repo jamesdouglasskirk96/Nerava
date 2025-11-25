@@ -54,11 +54,15 @@ function formatTime(seconds) {
  * Initialize Earn Page from URL params or session state
  */
 export async function initEarn(params = {}) {
+  console.log('[Earn] ====== INIT EARN CALLED ======', params);
+  
   const rootEl = document.getElementById('page-earn');
   if (!rootEl) {
-    console.error('Earn page element not found');
+    console.error('[Earn] ❌ Earn page element not found');
     return;
   }
+  
+  console.log('[Earn] ✅ Earn page element found');
 
   // Try to get session from global state first (preferred)
   let sessionState = null;

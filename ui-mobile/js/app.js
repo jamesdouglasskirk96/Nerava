@@ -145,12 +145,23 @@ function handleHashRoute() {
       // Force reinit to get new params
       earnPage.dataset.initialized = 'false';
       
+      console.log('[App] Loading Earn page with params:', {
+        session_id: params.get('session_id'),
+        merchant_id: params.get('merchant_id'),
+        charger_id: params.get('charger_id')
+      });
+      
       import('./pages/earn.js').then(module => {
+        console.log('[App] Earn module loaded, initializing...');
         module.initEarn({
           session_id: params.get('session_id'),
           merchant_id: params.get('merchant_id'),
           charger_id: params.get('charger_id')
+        }).catch(err => {
+          console.error('[App] Error initializing Earn page:', err);
         });
+      }).catch(err => {
+        console.error('[App] Error loading Earn module:', err);
       });
     }
     return;
