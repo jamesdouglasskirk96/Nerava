@@ -24,6 +24,7 @@ let _pingInterval = null;
 let _sessionState = 'starting'; // starting, charging, ready, at_merchant
 let _geolocationErrorLogged = false; // Flag to prevent error spam
 let _showingMerchantDistance = false; // Track if we're showing merchant distance instead of charger distance
+let _hasNavigatedToMerchant = false; // Track if user has clicked Navigate to Merchant
 
 // Toast helper
 function showToast(message) {
@@ -78,6 +79,9 @@ export function cleanupEarnSession() {
 export async function initEarn(params = {}) {
   // Clean up any existing session before starting new one
   cleanupEarnSession();
+  
+  // Reset navigation state for new session
+  _hasNavigatedToMerchant = false;
   
   const rootEl = document.getElementById('page-earn');
   if (!rootEl) {
@@ -321,8 +325,11 @@ function renderSessionView(rootEl) {
       <div id="ready-to-claim-card" style="display: none; background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); padding: 20px; border-radius: 12px; color: white; margin-bottom: 16px;">
         <div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">✅ Ready to Claim!</div>
         <div style="font-size: 14px; margin-bottom: 16px; opacity: 0.9;">Your reward is ready. Visit ${_merchant?.name || 'the merchant'} to claim it.</div>
-        <button id="navigate-to-merchant-btn" style="width: 100%; padding: 12px; background: white; color: #22c55e; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+        <button id="navigate-to-merchant-btn" style="width: 100%; padding: 12px; background: white; color: #22c55e; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; margin-bottom: 12px;">
           Navigate to ${_merchant?.name || 'Merchant'}
+        </button>
+        <button id="earn-redeem-qr-btn" style="display: none; width: 100%; padding: 12px; background: rgba(255,255,255,0.2); color: white; border: 2px solid white; border-radius: 8px; font-weight: 600; cursor: pointer;">
+          Show QR to Redeem
         </button>
       </div>
 
@@ -351,14 +358,34 @@ function renderSessionView(rootEl) {
     navigateToMerchantBtn.addEventListener('click', () => {
       // Switch to showing merchant distance
       _showingMerchantDistance = true;
+      // Mark that user has navigated
+      _hasNavigatedToMerchant = true;
       // Navigate to merchant
       if (_merchant) {
         navigateToMerchant();
       }
+      // Show QR redeem button after navigation
+      updateRedeemButtonVisibility();
     });
   }
   
+  // QR Redeem button - shows merchant code/QR
+  const redeemQrBtn = $('#earn-redeem-qr-btn');
+  if (redeemQrBtn) {
+    redeemQrBtn.addEventListener('click', () => {
+      if (_sessionId && _merchant) {
+        // Route to showCode page with session and merchant info
+        location.hash = `#/code?session_id=${encodeURIComponent(_sessionId)}&merchant_id=${encodeURIComponent(_merchant.id)}`;
+      }
+    });
+    // Initially hidden
+    redeemQrBtn.style.display = 'none';
+  }
+  
   $('#copy-code-btn')?.addEventListener('click', () => copyCode());
+  
+  // Update QR button visibility based on current state
+  updateRedeemButtonVisibility();
 }
 
 function navigateToCharger() {
@@ -371,6 +398,24 @@ function navigateToMerchant() {
   if (!_merchant) return;
   const url = `https://www.google.com/maps/dir/?api=1&destination=${_merchant.lat},${_merchant.lng}`;
   window.open(url, '_blank');
+  // Mark that user has navigated (if not already set)
+  _hasNavigatedToMerchant = true;
+  updateRedeemButtonVisibility();
+}
+
+/**
+ * Update QR Redeem button visibility based on navigation state
+ */
+function updateRedeemButtonVisibility() {
+  const redeemQrBtn = $('#earn-redeem-qr-btn');
+  if (!redeemQrBtn) return;
+  
+  // Show QR button if user has navigated to merchant
+  if (_hasNavigatedToMerchant && _sessionId && _merchant) {
+    redeemQrBtn.style.display = 'block';
+  } else {
+    redeemQrBtn.style.display = 'none';
+  }
 }
 
 function copyCode() {
@@ -698,6 +743,8 @@ function updateSessionUI(pingResult) {
     if (state === 'ready_to_claim' || state === 'earned') {
       readyCard.style.display = 'block';
       _sessionState = 'ready';
+      // Update QR button visibility when card is shown
+      updateRedeemButtonVisibility();
     } else {
       readyCard.style.display = 'none';
     }
