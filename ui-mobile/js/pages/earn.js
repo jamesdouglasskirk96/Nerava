@@ -490,14 +490,19 @@ function updateSessionUI(pingResult) {
   const radiusEl = $('#charger-radius');
   
   // Determine what to show: merchant distance if showing merchant, otherwise charger distance
-  if (_showingMerchantDistance && merchantDist > 0) {
+  if (_showingMerchantDistance) {
     // Show merchant distance
     if (distanceTitleEl) {
       distanceTitleEl.textContent = `Distance to ${_merchant?.name || 'Merchant'}`;
     }
     if (distanceValueEl) {
-      distanceValueEl.textContent = formatDistance(merchantDist);
-      distanceValueEl.style.color = pingResult.within_merchant_radius ? '#22c55e' : '#3b82f6';
+      if (merchantDist > 0) {
+        distanceValueEl.textContent = formatDistance(merchantDist);
+        distanceValueEl.style.color = pingResult.within_merchant_radius ? '#22c55e' : '#3b82f6';
+      } else {
+        distanceValueEl.textContent = 'Calculating...';
+        distanceValueEl.style.color = '#64748b';
+      }
     }
     if (distanceSubtitleEl) {
       distanceSubtitleEl.textContent = pingResult.within_merchant_radius 
@@ -595,15 +600,17 @@ function updateSessionUI(pingResult) {
         const merchantName = _merchant?.name || 'merchant';
         navigateBtn.textContent = `Navigate to ${merchantName}`;
         navigateBtn.style.background = '#22c55e';
+        navigateBtn.style.opacity = '1';
+        navigateBtn.style.cursor = 'pointer';
         navigateBtn.onclick = () => {
           // Switch to showing merchant distance
           _showingMerchantDistance = true;
-          // Update UI immediately to show merchant distance
-          updateSessionUI(pingResult);
           // Navigate to merchant
           if (_merchant) {
             navigateToMerchant();
           }
+          // Update UI immediately to show merchant distance
+          updateSessionUI(pingResult);
         };
         break;
       case 'verifying':
