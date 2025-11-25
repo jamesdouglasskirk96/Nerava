@@ -177,22 +177,50 @@ async function startSession(rootEl, chargerId, merchantId, existingSessionId = n
     // Render session UI
     renderSessionView(rootEl);
     
-    // Start GPS tracking and ping loop
+    // Start GPS tracking first (async, but we don't wait)
     startLocationTracking();
+    
+    // Start ping loop (will wait for location)
     startPingLoop();
     
-    // Send immediate first ping to populate UI
-    if (_sessionId && _userLocation) {
-      console.log('[Earn] Sending immediate ping on session start...');
-      Api.pilotVerifyPing(_sessionId, _userLocation.lat, _userLocation.lng)
-        .then((result) => {
-          console.log('[Earn] Initial ping result:', result);
-          updateSessionUI(result);
-        })
-        .catch((err) => {
-          console.error('[Earn] Initial ping failed:', err);
+    // Send immediate first ping after a short delay to ensure UI is rendered and location is available
+    setTimeout(() => {
+      if (_sessionId && _userLocation) {
+        console.log('[Earn] Sending immediate ping on session start...', {
+          sessionId: _sessionId,
+          location: _userLocation
         });
-    }
+        Api.pilotVerifyPing(_sessionId, _userLocation.lat, _userLocation.lng)
+          .then((result) => {
+            console.log('[Earn] Initial ping result:', result);
+            updateSessionUI(result);
+          })
+          .catch((err) => {
+            console.error('[Earn] Initial ping failed:', err);
+            // Still update UI with default values
+            updateSessionUI({
+              distance_to_charger_m: null,
+              dwell_seconds: 0,
+              needed_seconds: 180,
+              verified: false,
+              ready_to_claim: false
+            });
+          });
+      } else {
+        console.warn('[Earn] Cannot send initial ping - missing sessionId or location', {
+          sessionId: _sessionId,
+          location: _userLocation
+        });
+        // Update UI with placeholder values
+        updateSessionUI({
+          distance_to_charger_m: null,
+          dwell_seconds: 0,
+          needed_seconds: 180,
+          verified: false,
+          ready_to_claim: false
+        });
+      }
+    }, 500); // Small delay to ensure UI is fully rendered
 
   } catch (e) {
     console.error('Failed to start session:', e);
@@ -247,7 +275,7 @@ function renderSessionView(rootEl) {
         <div style="font-size: 14px; color: #64748b; margin-bottom: 8px;">Charging Progress</div>
         <div style="margin-bottom: 8px;">
           <div style="background: #e5e7eb; height: 8px; border-radius: 4px; overflow: hidden;">
-            <div id="dwell-progress-bar" style="background: #22c55e; height: 100%; width: 0%; transition: width 0.3s;"></div>
+            <div id="dwell-progress-bar" style="background: #22c55e; height: 100%; width: 0%; transition: width 0.5s ease;"></div>
           </div>
         </div>
         <div style="display: flex; justify-content: space-between; font-size: 12px; color: #64748b;">
@@ -255,7 +283,7 @@ function renderSessionView(rootEl) {
           <span id="dwell-required">3m</span>
         </div>
         <div style="margin-top: 8px; font-size: 14px;">
-          <span id="dwell-status">Charge for at least 3 minutes</span>
+          <span id="dwell-status">Starting session...</span>
         </div>
       </div>
 
@@ -378,18 +406,26 @@ function updateLocationDisplay() {
   if (locationDisplay && _userLocation) {
     locationDisplay.textContent = `${_userLocation.lat.toFixed(6)}, ${_userLocation.lng.toFixed(6)}`;
   }
+  
+  // Also trigger a ping if we have session ID and location
+  if (_sessionId && _userLocation && _pingInterval === null) {
+    // Ping loop not started yet, trigger immediate update
+    Api.pilotVerifyPing(_sessionId, _userLocation.lat, _userLocation.lng)
+      .then(updateSessionUI)
+      .catch(err => console.error('[Earn] Location update ping failed:', err));
+  }
 }
 
 function startPingLoop() {
-  console.log('[Earn] Starting ping loop...');
+  console.log('[Earn] Starting ping loop...', { sessionId: _sessionId, location: _userLocation });
   
   // Clear any existing interval
   if (_pingInterval !== null) {
     clearInterval(_pingInterval);
   }
   
-  // Ping every 5 seconds
-  _pingInterval = setInterval(async () => {
+  // Function to send a ping
+  const sendPing = async () => {
     if (!_sessionId || !_userLocation) {
       console.warn('[Earn] Ping skipped - missing sessionId or location', { sessionId: _sessionId, location: _userLocation });
       return;
@@ -402,8 +438,22 @@ function startPingLoop() {
       updateSessionUI(pingResult);
     } catch (e) {
       console.error('[Earn] Ping failed:', e);
+      // Update UI with placeholder on error
+      updateSessionUI({
+        distance_to_charger_m: null,
+        dwell_seconds: 0,
+        needed_seconds: 180,
+        verified: false,
+        ready_to_claim: false
+      });
     }
-  }, 5000);
+  };
+  
+  // Send immediate first ping
+  sendPing();
+  
+  // Then ping every 5 seconds
+  _pingInterval = setInterval(sendPing, 5000);
 }
 
 function updateSessionUI(pingResult) {
@@ -412,13 +462,25 @@ function updateSessionUI(pingResult) {
   // Update distance to charger
   const distanceEl = $('#distance-to-charger');
   const radiusEl = $('#charger-radius');
+  
   if (distanceEl) {
-    const distance = normalizeNumber(pingResult.distance_to_charger_m || 0);
-    distanceEl.textContent = formatDistance(distance);
-    distanceEl.style.color = distance <= (pingResult.charger_radius_m || 60) ? '#22c55e' : '#ef4444';
+    const distance = normalizeNumber(pingResult.distance_to_charger_m);
+    if (distance > 0) {
+      distanceEl.textContent = formatDistance(distance);
+      distanceEl.style.color = distance <= (pingResult.charger_radius_m || 60) ? '#22c55e' : '#ef4444';
+    } else if (pingResult.distance_to_charger_m === null || pingResult.distance_to_charger_m === undefined) {
+      distanceEl.textContent = 'Calculating...';
+      distanceEl.style.color = '#64748b';
+    } else {
+      distanceEl.textContent = formatDistance(0);
+      distanceEl.style.color = '#64748b';
+    }
   }
-  if (radiusEl && pingResult.charger_radius_m) {
-    radiusEl.textContent = `${normalizeNumber(pingResult.charger_radius_m)}m`;
+  
+  if (radiusEl) {
+    if (pingResult.charger_radius_m) {
+      radiusEl.textContent = `${normalizeNumber(pingResult.charger_radius_m)}m`;
+    }
   }
   
   // Update location display
@@ -430,21 +492,28 @@ function updateSessionUI(pingResult) {
   const progressBar = $('#dwell-progress-bar');
   const statusEl = $('#dwell-status');
   const dwellSecs = normalizeNumber(pingResult.dwell_seconds || 0);
-  const requiredSecs = normalizeNumber(pingResult.needed_seconds || 180) + dwellSecs;
+  const neededSecs = normalizeNumber(pingResult.needed_seconds || 180);
+  const requiredSecs = neededSecs; // Total time needed (not including already elapsed)
   
-  if (dwellEl) dwellEl.textContent = formatTime(dwellSecs);
-  if (requiredEl) requiredEl.textContent = formatTime(requiredSecs);
+  if (dwellEl) {
+    dwellEl.textContent = formatTime(dwellSecs);
+  }
+  if (requiredEl) {
+    requiredEl.textContent = formatTime(requiredSecs);
+  }
   if (progressBar) {
-    const percent = Math.min(100, (dwellSecs / requiredSecs) * 100);
+    const totalRequired = neededSecs || 180; // 3 minutes default
+    const percent = Math.min(100, (dwellSecs / totalRequired) * 100);
     progressBar.style.width = `${percent}%`;
+    progressBar.style.transition = 'width 0.5s ease';
   }
   if (statusEl) {
     if (pingResult.ready_to_claim || pingResult.verified) {
       statusEl.textContent = '✅ Ready to claim!';
       statusEl.style.color = '#22c55e';
     } else {
-      const remaining = Math.max(0, requiredSecs - dwellSecs);
-      statusEl.textContent = `${formatTime(remaining)} remaining`;
+      const remaining = Math.max(0, neededSecs - dwellSecs);
+      statusEl.textContent = remaining > 0 ? `${formatTime(remaining)} remaining` : 'Charge for at least 3 minutes';
       statusEl.style.color = '#64748b';
     }
   }
