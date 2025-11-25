@@ -204,19 +204,32 @@ function handleHashRoute() {
   }
 }
 
+// Track active tab for cleanup
+let _activeTab = 'explore';
+
 export async function setTab(tab){
-  console.log('setTab called with:', tab);
+  // Clean up Earn session if leaving Earn tab
+  if (_activeTab === 'earn' && tab !== 'earn') {
+    // Import cleanup function dynamically to avoid circular dependencies
+    import('./pages/earn.js').then(module => {
+      if (module.cleanupEarnSession) {
+        module.cleanupEarnSession();
+      }
+    }).catch(() => {
+      // Ignore import errors
+    });
+  }
+  
+  _activeTab = tab;
   document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active', p.id==='page-'+tab));
   document.querySelectorAll('.tabbar .tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===tab));
   if(tab==='explore') ensureMap();
   if(tab==='activity') await initActivity();
   if(tab==='earn') await initEarn();
   if(tab==='wallet') {
-    console.log('Calling initWallet...');
     await initWallet();
   }
   if(tab==='profile') {
-    console.log('Calling initMe...');
     await initMe();
   }
 }

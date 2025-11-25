@@ -186,6 +186,22 @@ export async function pilotVerifyVisit(sessionId, merchantId, userLat, userLng) 
   return res.json();
 }
 
+export async function pilotCancelSession(sessionId) {
+  const res = await fetch(`${BASE}/v1/pilot/session/cancel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({
+      session_id: sessionId
+    })
+  });
+  // Return result even if not 200 - idempotent endpoint
+  if (!res.ok) {
+    console.warn(`[API] Cancel session returned ${res.status}`);
+  }
+  return res.json().catch(() => ({ ok: true })); // Return safe default if JSON parse fails
+}
+
 if (typeof window !== 'undefined') {
   window.NeravaAPI = window.NeravaAPI || {};
   window.NeravaAPI.apiGet = apiGet;
@@ -204,6 +220,7 @@ const Api = {
   pilotStartSession,
   pilotVerifyPing,
   pilotVerifyVisit,
+  pilotCancelSession,
 };
 
 export default Api;

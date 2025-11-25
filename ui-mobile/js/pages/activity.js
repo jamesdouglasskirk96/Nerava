@@ -59,9 +59,20 @@ export async function initActivityPage(rootEl) {
   try {
     // Use pilot activity endpoint instead of legacy endpoint
     const userId = localStorage.NERAVA_USER_ID || '123';  // TODO: Get actual user_id
-    const data = await window.NeravaAPI.apiGet('/v1/pilot/activity', { user_id: userId, limit: 50 });
-    if (!data) {
-      throw new Error('No data returned from API');
+    let data;
+    try {
+      data = await window.NeravaAPI.apiGet('/v1/pilot/activity', { user_id: userId, limit: 50 });
+    } catch (apiError) {
+      // Handle API errors gracefully - show empty state
+      console.warn(`[Activity] Failed to load activity: ${apiError.message || 'Unknown error'}`);
+      rootEl.querySelector('#follow-list').innerHTML = '<li class="intent"><div class="sub">No activity yet</div></li>';
+      return; // Exit early with empty state
+    }
+    
+    if (!data || !data.activities) {
+      // Empty response - show empty state
+      rootEl.querySelector('#follow-list').innerHTML = '<li class="intent"><div class="sub">No activity yet</div></li>';
+      return;
     }
 
     // Reputation (fallback if not in pilot response)
@@ -169,7 +180,8 @@ export async function initActivityPage(rootEl) {
       }).join('');
     }
   } catch (e) {
-    console.error('activity error', e);
+    // Log concise error without stack trace
+    console.warn(`[Activity] Error loading activity: ${e.message || 'Unknown error'}`);
     // Show fallback content with demo data
     rootEl.querySelector('#rep-tier').textContent = 'Silver';
     rootEl.querySelector('#rep-score').textContent = '180';

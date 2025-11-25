@@ -51,6 +51,10 @@ class VerifyVisitRequest(BaseModel):
     user_lng: float
 
 
+class CancelSessionRequest(BaseModel):
+    session_id: str
+
+
 # Error handling will be done at the app level via middleware
 
 
@@ -780,6 +784,61 @@ def verify_visit(
 
 
 # ============================================
+# ============================================
+# Endpoint 4.5: POST /v1/pilot/session/cancel
+# ============================================
+@router.post("/session/cancel")
+def cancel_session(
+    request: CancelSessionRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Cancel a pilot earn session.
+    
+    Marks the session as cancelled and prevents it from being eligible for rewards.
+    Idempotent: safe to call multiple times.
+    """
+    session_id = request.session_id
+    
+    try:
+        # Check if session exists and get its status
+        session_row = db.execute(text("""
+            SELECT status, user_id FROM sessions WHERE id = :session_id
+        """), {"session_id": session_id}).first()
+        
+        if not session_row:
+            # Session not found - return success anyway (idempotent)
+            return {"ok": True, "message": "Session not found or already cancelled"}
+        
+        status = session_row[0]
+        
+        # If already cancelled or completed, return success (idempotent)
+        if status in ("cancelled", "completed", "verified"):
+            return {"ok": True, "message": f"Session already {status}"}
+        
+        # Update session status to cancelled
+        db.execute(text("""
+            UPDATE sessions
+            SET status = 'cancelled',
+                cancelled_at = :now
+            WHERE id = :session_id
+        """), {
+            "session_id": session_id,
+            "now": datetime.utcnow()
+        })
+        db.commit()
+        
+        logger.info(f"[PilotRouter][cancel] Session {session_id} cancelled")
+        
+        return {"ok": True, "message": "Session cancelled"}
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"[PilotRouter][cancel] Failed to cancel session {session_id}: {e}", exc_info=True)
+        # Return success anyway to avoid blocking UI cleanup
+        return {"ok": True, "message": "Cancellation processed"}
+
+
 # Endpoint 5: GET /v1/pilot/activity
 # ============================================
 @router.get("/activity")
@@ -796,14 +855,26 @@ def get_activity(
     """
     activities = []
     
-    # Get wallet ledger entries
-    ledger_entries = db.execute(text("""
-        SELECT cents, reason, meta, created_at
-        FROM credit_ledger
-        WHERE user_ref = :user_id
-        ORDER BY id DESC
-        LIMIT :limit
-    """), {"user_id": user_id, "limit": limit}).fetchall()
+    try:
+        # Check if credit_ledger table exists before querying
+        table_check = db.execute(text("""
+            SELECT name FROM sqlite_master WHERE type='table' AND name='credit_ledger'
+        """)).first()
+        
+        if table_check:
+            # Get wallet ledger entries
+            ledger_entries = db.execute(text("""
+                SELECT cents, reason, meta, created_at
+                FROM credit_ledger
+                WHERE user_ref = :user_id
+                ORDER BY id DESC
+                LIMIT :limit
+            """), {"user_id": user_id, "limit": limit}).fetchall()
+        else:
+            ledger_entries = []
+    except Exception as e:
+        logger.warning(f"[PilotRouter][activity] Credit ledger query failed: {e}")
+        ledger_entries = []
     
     for entry in ledger_entries:
         # Shape for PWA: remove internal IDs, normalize numbers
@@ -826,14 +897,25 @@ def get_activity(
             "ts": entry[3].isoformat() if isinstance(entry[3], datetime) else str(entry[3])
         })
     
-    # Get reward events
-    reward_events = db.execute(text("""
-        SELECT source, gross_cents, meta, created_at
-        FROM reward_events
-        WHERE user_id = :user_id
-        ORDER BY id DESC
-        LIMIT :limit
-    """), {"user_id": user_id, "limit": limit}).fetchall()
+    # Get reward events (if table exists)
+    try:
+        table_check = db.execute(text("""
+            SELECT name FROM sqlite_master WHERE type='table' AND name='reward_events'
+        """)).first()
+        
+        if table_check:
+            reward_events = db.execute(text("""
+                SELECT source, gross_cents, meta, created_at
+                FROM reward_events
+                WHERE user_id = :user_id
+                ORDER BY id DESC
+                LIMIT :limit
+            """), {"user_id": user_id, "limit": limit}).fetchall()
+        else:
+            reward_events = []
+    except Exception as e:
+        logger.warning(f"[PilotRouter][activity] Reward events query failed: {e}")
+        reward_events = []
     
     for event in reward_events:
         # Shape for PWA: remove internal IDs
@@ -865,17 +947,28 @@ def get_activity(
         activities.append(reward_activity)
     
     # Get sessions with merchant info (simplified for PWA)
-    sessions = db.execute(text("""
-        SELECT s.id, s.status, s.target_id, s.meta,
-               c.name as charger_name,
-               m.name as merchant_name
-        FROM sessions s
-        LEFT JOIN chargers c ON c.id = s.target_id
-        LEFT JOIN merchants m ON json_extract(s.meta, '$.merchant_id') = m.id
-        WHERE s.user_id = :user_id
-        ORDER BY s.id DESC
-        LIMIT :limit
-    """), {"user_id": int(user_id) if user_id.isdigit() else 0, "limit": min(limit, 10)}).fetchall()
+    try:
+        table_check = db.execute(text("""
+            SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'
+        """)).first()
+        
+        if table_check:
+            sessions = db.execute(text("""
+                SELECT s.id, s.status, s.target_id, s.meta,
+                       c.name as charger_name,
+                       m.name as merchant_name
+                FROM sessions s
+                LEFT JOIN chargers c ON c.id = s.target_id
+                LEFT JOIN merchants m ON json_extract(s.meta, '$.merchant_id') = m.id
+                WHERE s.user_id = :user_id
+                ORDER BY s.id DESC
+                LIMIT :limit
+            """), {"user_id": int(user_id) if user_id.isdigit() else 0, "limit": min(limit, 10)}).fetchall()
+        else:
+            sessions = []
+    except Exception as e:
+        logger.warning(f"[PilotRouter][activity] Sessions query failed: {e}")
+        sessions = []
     
     for session in sessions:
         session_activity = {

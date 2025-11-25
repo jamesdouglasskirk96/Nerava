@@ -14,7 +14,7 @@ import { setTab } from '../app.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 
-// Session state
+// Session state - single source of truth for timers
 let _sessionId = null;
 let _charger = null;
 let _merchant = null;
@@ -55,15 +55,13 @@ function formatTime(seconds) {
  * Initialize Earn Page from URL params or session state
  */
 export async function initEarn(params = {}) {
-  console.log('[Earn] ====== INIT EARN CALLED ======', params);
+  // Clean up any existing session before starting new one
+  cleanupEarnSession();
   
   const rootEl = document.getElementById('page-earn');
   if (!rootEl) {
-    console.error('[Earn] ❌ Earn page element not found');
     return;
   }
-  
-  console.log('[Earn] ✅ Earn page element found');
 
   // Try to get session from global state first (preferred)
   let sessionState = null;
@@ -76,7 +74,7 @@ export async function initEarn(params = {}) {
         sessionState = JSON.parse(stored);
         window.pilotSession = sessionState; // Cache in window for immediate access
       } catch (e) {
-        console.warn('Failed to parse stored session:', e);
+        // Silently ignore parse errors
       }
     }
   }
@@ -289,8 +287,13 @@ function renderSessionView(rootEl) {
       </div>
 
       <!-- Navigate Button (hidden when ready to claim) -->
-      <button id="navigate-to-charger-btn" style="width: 100%; padding: 14px; background: #22c55e; color: white; border: none; border-radius: 12px; font-weight: 600; font-size: 16px; cursor: pointer; margin-bottom: 16px;">
+      <button id="navigate-to-charger-btn" style="width: 100%; padding: 14px; background: #22c55e; color: white; border: none; border-radius: 12px; font-weight: 600; font-size: 16px; cursor: pointer; margin-bottom: 12px;">
         Navigate to Charger
+      </button>
+
+      <!-- Cancel Session Button -->
+      <button id="cancel-session-btn" style="width: 100%; padding: 12px; background: #f1f5f9; color: #64748b; border: none; border-radius: 12px; font-weight: 500; font-size: 14px; cursor: pointer; margin-bottom: 16px;">
+        Cancel Session
       </button>
 
       <!-- Ready to Claim Card (hidden initially, only shown when ready_to_claim is true) -->
@@ -317,6 +320,9 @@ function renderSessionView(rootEl) {
 
   // Bind event handlers
   $('#navigate-to-charger-btn')?.addEventListener('click', () => navigateToCharger());
+  
+  // Cancel Session button
+  $('#cancel-session-btn')?.addEventListener('click', () => cancelCurrentSession());
   
   // Navigate to Merchant button (in Ready to Claim card) - switches distance card to merchant
   const navigateToMerchantBtn = $('#navigate-to-merchant-btn');
@@ -360,27 +366,22 @@ function copyCode() {
 }
 
 function startLocationTracking() {
-  console.log('[Earn] Starting location tracking...');
-
+  // Clear any existing watch before starting new one
+  if (_watchId !== null && navigator.geolocation && navigator.geolocation.clearWatch) {
+    navigator.geolocation.clearWatch(_watchId);
+    _watchId = null;
+  }
+  
   // Set fallback location in case geolocation fails
   if (!_userLocation) {
     _userLocation = { lat: 30.4021, lng: -97.7266 }; // Domain default
-    console.log('[Earn] Using fallback location:', _userLocation);
-  } else {
-    console.log('[Earn] Starting with existing location:', _userLocation);
   }
   
   // Update UI immediately with current location
   updateLocationDisplay();
   
   if (!navigator.geolocation) {
-    console.warn('[Earn] Geolocation not supported, using default location');
-    return;
-  }
-
-  // Clear any existing watch
-  if (_watchId !== null) {
-    navigator.geolocation.clearWatch(_watchId);
+    return; // Geolocation not supported, use fallback
   }
 
   _watchId = navigator.geolocation.watchPosition(
@@ -389,13 +390,12 @@ function startLocationTracking() {
         lat: position.coords.latitude,
         lng: position.coords.longitude
       };
-      console.log('[Earn] Location updated:', _userLocation);
       updateLocationDisplay();
     },
     (error) => {
-      // Don't spam console with errors - just log once
+      // Log geolocation errors only once
       if (!_geolocationErrorLogged) {
-        console.warn('[Earn] Geolocation unavailable (using fallback location):', error.message || 'Position unavailable');
+        console.warn(`[Earn] Geolocation error: ${error.message || 'Unavailable'}`);
         _geolocationErrorLogged = true;
       }
       // Keep using existing _userLocation or default
@@ -404,7 +404,7 @@ function startLocationTracking() {
         updateLocationDisplay();
       }
     },
-    { enableHighAccuracy: false, timeout: 5000, maximumAge: 10000 } // Less strict settings
+    { enableHighAccuracy: false, timeout: 5000, maximumAge: 10000 }
   );
 }
 
@@ -425,34 +425,55 @@ function updateLocationDisplay() {
 }
 
 function startPingLoop() {
-  console.log('[Earn] Starting ping loop...', { sessionId: _sessionId, location: _userLocation });
-  
-  // Clear any existing interval
+  // Clear any existing interval before starting new one
   if (_pingInterval !== null) {
     clearInterval(_pingInterval);
+    _pingInterval = null;
+  }
+  
+  if (!_sessionId) {
+    return; // No session, don't start loop
   }
   
   // Function to send a ping
   const sendPing = async () => {
-    if (!_sessionId || !_userLocation) {
-      console.warn('[Earn] Ping skipped - missing sessionId or location', { sessionId: _sessionId, location: _userLocation });
-      return;
+    // Check if session still exists (might have been cancelled)
+    if (!_sessionId || !_userLocation || _pingInterval === null) {
+      return; // Cleanup happened, stop pinging
     }
 
     try {
-      console.log('[Earn] Sending ping...', { sessionId: _sessionId, location: _userLocation });
       const pingResult = await Api.pilotVerifyPing(_sessionId, _userLocation.lat, _userLocation.lng);
-      console.log('[Earn] Ping result:', pingResult);
+      
+      // Only log if state changed or there's an important update
+      if (pingResult.ready_to_claim || pingResult.reward_earned) {
+        console.log('[Earn] Session update:', { ready_to_claim: pingResult.ready_to_claim, reward_earned: pingResult.reward_earned });
+      }
+      
       updateSessionUI(pingResult);
+      
+      // If session is completed/cancelled, stop pinging
+      if (pingResult.reward_earned || pingResult.status === 'completed' || pingResult.status === 'cancelled') {
+        cleanupEarnSession();
+      }
     } catch (e) {
-      console.error('[Earn] Ping failed:', e);
-      // Update UI with placeholder on error
+      // Only log errors, don't spam - update UI with placeholder
+      if (e.message && !e.message.includes('404')) {
+        console.warn(`[Earn] Ping failed: ${e.message}`);
+      }
+      // Update UI with placeholder on error (silent fail for 404s - session might be cancelled)
       updateSessionUI({
         distance_to_charger_m: null,
         dwell_seconds: 0,
         needed_seconds: 180,
         verified: false,
-        ready_to_claim: false
+        ready_to_claim: false,
+        nova_awarded: 0,
+        wallet_balance_nova: 0,
+        wallet_balance: 0,
+        charger_radius_m: 60,
+        within_merchant_radius: false,
+        reward_earned: false
       });
     }
   };
@@ -480,8 +501,6 @@ function deriveSessionState(data) {
 }
 
 function updateSessionUI(pingResult) {
-  console.log('[Earn] Updating session UI with:', pingResult);
-  
   // Derive state from ping response
   const state = deriveSessionState(pingResult);
   const chargerDist = normalizeNumber(pingResult.distance_to_charger_m ?? 0);
@@ -568,18 +587,11 @@ function updateSessionUI(pingResult) {
     percent = 0;
   }
   
-  // Defensive logging for debugging if values seem wrong
-  if ((percent === 0 && dwell > 0) || (remaining > 0 && percent >= 100)) {
-    console.warn('[Earn] Progress calculation warning:', {
-      dwell,
-      remaining,
-      totalRequired,
-      percent,
-      state,
-      reward_earned: pingResult.reward_earned,
-      ready_to_claim: pingResult.ready_to_claim
-    });
-  }
+  // Defensive logging for debugging (only log if values seem wrong)
+  // Commented out to reduce noise - uncomment if debugging progress issues
+  // if ((percent === 0 && dwell > 0) || (remaining > 0 && percent >= 100)) {
+  //   console.warn('[Earn] Progress calculation warning:', { dwell, remaining, totalRequired, percent, state });
+  // }
   
   // Update progress bar
   if (progressBar) {
@@ -723,10 +735,67 @@ async function verifyVisitAndShowCode() {
   }
 }
 
+/**
+ * Central cleanup function - stops ping loop and geolocation watcher
+ * Called when: session cancelled, session completed, or navigating away
+ */
+export function cleanupEarnSession() {
+  if (_pingInterval !== null) {
+    clearInterval(_pingInterval);
+    _pingInterval = null;
+  }
+  
+  if (_watchId !== null && navigator.geolocation && navigator.geolocation.clearWatch) {
+    navigator.geolocation.clearWatch(_watchId);
+    _watchId = null;
+  }
+  
+  // Reset error flag for next session
+  _geolocationErrorLogged = false;
+  
+  // Don't clear _sessionId here - let it be cleared by cancel/complete handlers
+}
+
+/**
+ * Cancel current session - calls backend and cleans up UI
+ */
+async function cancelCurrentSession() {
+  if (!_sessionId) {
+    // No active session, just clean up and navigate away
+    cleanupEarnSession();
+    setTab('explore');
+    return;
+  }
+  
+  const sessionIdToCancel = _sessionId;
+  
+  try {
+    // Call backend to cancel session
+    await Api.pilotCancelSession(sessionIdToCancel);
+  } catch (e) {
+    // Log but don't block - UI cleanup should happen anyway
+    console.warn(`[Earn] Cancel API call failed: ${e.message || 'Unknown error'}`);
+  }
+  
+  // Clean up UI regardless of API result
+  cleanupEarnSession();
+  
+  // Clear session state
+  _sessionId = null;
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.removeItem('pilot_session');
+  }
+  if (window.pilotSession) {
+    delete window.pilotSession;
+  }
+  
+  // Navigate back to Explore
+  setTab('explore');
+}
+
 // Cleanup on page unload
 window.addEventListener('beforeunload', () => {
-  if (_watchId) navigator.geolocation.clearWatch(_watchId);
-  if (_pingInterval) clearInterval(_pingInterval);
+  cleanupEarnSession();
 });
 
 // Export for app.js routing
