@@ -11,6 +11,7 @@
 
 import Api from '../core/api.js';
 import { setTab } from '../app.js';
+import { saveDemoRedemption } from '../core/demo-state.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 
@@ -82,6 +83,7 @@ export async function initEarn(params = {}) {
   
   // Reset navigation state for new session
   _hasNavigatedToMerchant = false;
+  _showingMerchantDistance = false;
   
   const rootEl = document.getElementById('page-earn');
   if (!rootEl) {
@@ -369,11 +371,35 @@ function renderSessionView(rootEl) {
     });
   }
   
-  // QR Redeem button - shows merchant code/QR
+  // QR Redeem button - shows merchant code/QR and saves demo state
   const redeemQrBtn = $('#earn-redeem-qr-btn');
   if (redeemQrBtn) {
     redeemQrBtn.addEventListener('click', () => {
       if (_sessionId && _merchant) {
+        // Save demo redemption state for Wallet and Activity pages
+        const demoState = saveDemoRedemption({
+          session_id: _sessionId,
+          merchant_id: _merchant.id,
+          merchant_name: _merchant.name || 'Merchant',
+          charger_id: _charger?.id || null,
+          nova_awarded: _merchant.nova_reward || _merchant.nova || 12,
+          redeemed_at: new Date().toISOString()
+        });
+        
+        // Show confirmation notice in Ready to Claim card
+        const readyCard = $('#ready-to-claim-card');
+        if (readyCard) {
+          // Remove any existing notice
+          const existingNotice = readyCard.querySelector('.earn-demo-notice');
+          if (existingNotice) existingNotice.remove();
+          
+          const notice = document.createElement('div');
+          notice.className = 'earn-demo-notice';
+          notice.style.cssText = 'margin-top: 12px; padding: 8px; background: rgba(255,255,255,0.2); border-radius: 6px; font-size: 12px; text-align: center;';
+          notice.textContent = `Demo: ${demoState.nova_awarded} Nova redeemed! Check Wallet and Activity.`;
+          readyCard.appendChild(notice);
+        }
+        
         // Route to showCode page with session and merchant info
         location.hash = `#/code?session_id=${encodeURIComponent(_sessionId)}&merchant_id=${encodeURIComponent(_merchant.id)}`;
       }

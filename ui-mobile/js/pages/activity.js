@@ -16,6 +16,8 @@ function nextTierInfo(score) {
   return { current, next, toNext: next ? (next.min - score) : 0, pct: next ? Math.max(0, Math.min(100, (score - current.min) / (next.min - current.min) * 100)) : 100 };
 }
 
+import { loadDemoRedemption } from '../core/demo-state.js';
+
 export async function initActivityPage(rootEl) {
   rootEl.innerHTML = `
     <section class="card card--pad rep-card--centered">
@@ -106,15 +108,50 @@ export async function initActivityPage(rootEl) {
     `;
     rootEl.querySelector('.rep-stack').appendChild(repMeta);
 
-    // Earnings (fallback if not in pilot response)
-    const followTotal = data.totals?.followCents || 0;
+    // Earnings - use demo state if available
+    let followTotal = data.totals?.followCents || 0;
+    if (demo && demo.nova_awarded) {
+      // Convert demo Nova to dollars ($0.10 per Nova for demo)
+      const demoDollars = (demo.nova_awarded * 0.10);
+      followTotal = Math.max(followTotal, Math.round(demoDollars * 100));
+    }
     const dollars = (followTotal/100).toFixed(2);
     rootEl.querySelector('#follow-total').textContent = `$${dollars}`;
 
+    // Apply demo redemption state for reputation
+    const demo = loadDemoRedemption();
+    if (demo) {
+      // Update reputation score from demo state
+      const demoScore = demo.reputation_score || 10;
+      const demoStreak = demo.streak_days || 1;
+      
+      if (repScoreEl) repScoreEl.textContent = String(demoScore);
+      if (repStreak) {
+        repStreak.hidden = false;
+        repStreak.textContent = `🔋 ${demoStreak}-day streak`;
+      }
+      
+      // Update tier based on demo score
+      const demoTier = demoScore >= 100 ? 'Gold' : demoScore >= 50 ? 'Silver' : 'Bronze';
+      if (repTierEl) repTierEl.textContent = demoTier;
+      
+      // Update progress bar
+      const ni = nextTierInfo(demoScore);
+      if (repFillEl) repFillEl.style.width = ni.pct + '%';
+      if (repNextEl) {
+        repNextEl.textContent = ni.next
+          ? `${ni.toNext} pts to ${ni.next.name}`
+          : 'Top tier reached';
+      }
+    }
+
     // Render pilot activities (sessions, rewards, merchant visits)
     const ul = rootEl.querySelector('#follow-list');
+    let hasActivities = false;
+    
     if (data.activities && data.activities.length > 0) {
       ul.innerHTML = data.activities.map(item => {
+        hasActivities = true;
         // Format activity based on type
         if (item.type === 'session') {
           const merchantName = item.merchant_name || 'No merchant selected';
@@ -157,7 +194,36 @@ export async function initActivityPage(rootEl) {
         }
         return '';
       }).filter(Boolean).join('');
-    } else {
+    }
+    
+    // Add demo redemption activity if available
+    if (demo && demo.redeemed_at) {
+      hasActivities = true;
+      const when = new Date(demo.redeemed_at);
+      const whenLabel = when.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      const merchantName = demo.merchant_name || 'Merchant';
+      const novaAmount = demo.nova_awarded || 0;
+      
+      // Prepend demo redemption to activity list
+      const demoRow = `
+        <li class="intent">
+          <div class="intent__main">
+            <div class="title">Redeemed at ${merchantName}</div>
+            <div class="sub">${whenLabel} • In-store redemption</div>
+            <div class="sub" style="font-size: 11px; color: #666; margin-top: 4px;">+${novaAmount} Nova</div>
+          </div>
+        </li>
+      `;
+      
+      if (ul.innerHTML) {
+        ul.innerHTML = demoRow + ul.innerHTML;
+      } else {
+        ul.innerHTML = demoRow;
+      }
+    }
+    
+    // Show empty state only if no activities at all
+    if (!hasActivities) {
       ul.innerHTML = '<li class="intent"><div class="sub">No activity yet</div></li>';
     }
 
