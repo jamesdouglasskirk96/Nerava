@@ -729,7 +729,7 @@ function updateRecommendedPerks(perks) {
       console.log('[Explore] === END FIRST PERK CARD DEBUG ===');
     }
     
-          // Compact layout: Logo (only if exists) + "Earn X Nova" + "X min walk" + buttons
+          // Compact layout: Logo (only if exists) + "Earn X Nova" + "X min walk"
           const logoHtml = (perk.logo && perk.logo.trim() && perk.logo !== 'null') 
             ? `<img class="perk-card-logo" src="${perk.logo}" alt="${perk.name || ''}" onerror="this.classList.add('hidden')">`
             : '';
@@ -738,30 +738,13 @@ function updateRecommendedPerks(perks) {
       ${logoHtml}
       <div class="perk-card-reward">Earn ${perk.nova || 0} Nova</div>
       <div class="perk-card-walk">${perk.walk || '0 min walk'}</div>
-      <div class="perk-card-actions" style="display: flex; gap: 8px; margin-top: 8px;">
-        <button class="perk-card-btn-start" data-perk-id="${perk.id}" style="flex: 1; padding: 8px; background: #22c55e; color: white; border: none; border-radius: 6px; font-weight: 600; font-size: 14px; cursor: pointer;">Start session</button>
-        <button class="perk-card-btn-cancel" data-perk-id="${perk.id}" style="flex: 0 0 auto; padding: 8px 12px; background: #f1f5f9; color: #64748b; border: none; border-radius: 6px; font-weight: 500; font-size: 14px; cursor: pointer;">Cancel</button>
-      </div>
     `;
     
-    // Handle Start session button click - navigate directly to Earn page
-    const startBtn = card.querySelector('.perk-card-btn-start');
-    if (startBtn) {
-      startBtn.addEventListener('click', async (e) => {
-        e.stopPropagation(); // Prevent card click from firing
-        console.log('[Explore] Start session clicked for perk:', perk.name);
-        await handlePerkCardStartSession(perk);
-      });
-    }
-    
-    // Handle Cancel button click - just stop event propagation (does nothing)
-    const cancelBtn = card.querySelector('.perk-card-btn-cancel');
-    if (cancelBtn) {
-      cancelBtn.addEventListener('click', (e) => {
-        e.stopPropagation(); // Prevent card click from firing
-        // Cancel does nothing - just stops the event
-      });
-    }
+    // Handle card click - navigate directly to Earn page
+    card.addEventListener('click', () => {
+      console.log('[Explore] Perk card clicked:', perk.name);
+      handlePerkCardStartSession(perk);
+    });
     
     row.appendChild(card);
   });
