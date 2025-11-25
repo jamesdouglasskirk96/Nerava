@@ -52,6 +52,27 @@ function formatTime(seconds) {
 }
 
 /**
+ * Central cleanup function - stops ping loop and geolocation watcher
+ * Called when: session cancelled, session completed, or navigating away
+ */
+export function cleanupEarnSession() {
+  if (_pingInterval !== null) {
+    clearInterval(_pingInterval);
+    _pingInterval = null;
+  }
+  
+  if (_watchId !== null && navigator.geolocation && navigator.geolocation.clearWatch) {
+    navigator.geolocation.clearWatch(_watchId);
+    _watchId = null;
+  }
+  
+  // Reset error flag for next session
+  _geolocationErrorLogged = false;
+  
+  // Don't clear _sessionId here - let it be cleared by cancel/complete handlers
+}
+
+/**
  * Initialize Earn Page from URL params or session state
  */
 export async function initEarn(params = {}) {
@@ -733,27 +754,6 @@ async function verifyVisitAndShowCode() {
   } catch (e) {
     console.error('Failed to verify visit:', e);
   }
-}
-
-/**
- * Central cleanup function - stops ping loop and geolocation watcher
- * Called when: session cancelled, session completed, or navigating away
- */
-export function cleanupEarnSession() {
-  if (_pingInterval !== null) {
-    clearInterval(_pingInterval);
-    _pingInterval = null;
-  }
-  
-  if (_watchId !== null && navigator.geolocation && navigator.geolocation.clearWatch) {
-    navigator.geolocation.clearWatch(_watchId);
-    _watchId = null;
-  }
-  
-  // Reset error flag for next session
-  _geolocationErrorLogged = false;
-  
-  // Don't clear _sessionId here - let it be cleared by cancel/complete handlers
 }
 
 /**
