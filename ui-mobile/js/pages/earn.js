@@ -23,6 +23,7 @@ let _watchId = null;
 let _pingInterval = null;
 let _sessionState = 'starting'; // starting, charging, ready, at_merchant
 let _geolocationErrorLogged = false; // Flag to prevent error spam
+let _showingMerchantDistance = false; // Track if we're showing merchant distance instead of charger distance
 
 // Toast helper
 function showToast(message) {
@@ -266,11 +267,11 @@ function renderSessionView(rootEl) {
         <div style="font-size: 14px; color: #64748b;">${_merchant.name} • ${rewardText}</div>
       </div>
 
-      <!-- Distance to Charger -->
-      <div id="charger-distance-block" style="background: white; padding: 16px; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-        <div style="font-size: 14px; color: #64748b; margin-bottom: 8px;">Distance to Charger</div>
-        <div id="distance-to-charger" style="font-size: 32px; font-weight: 700; color: #22c55e; margin-bottom: 4px;">Loading...</div>
-        <div style="font-size: 12px; color: #94a3b8; margin-bottom: 8px;">Stay within <span id="charger-radius">60m</span> of the charger</div>
+      <!-- Distance Card (shows charger or merchant distance) -->
+      <div id="distance-card" style="background: white; padding: 16px; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+        <div id="distance-title" style="font-size: 14px; color: #64748b; margin-bottom: 8px;">Distance to Charger</div>
+        <div id="distance-value" style="font-size: 32px; font-weight: 700; color: #22c55e; margin-bottom: 4px;">Loading...</div>
+        <div id="distance-subtitle" style="font-size: 12px; color: #94a3b8; margin-bottom: 8px;">Stay within <span id="charger-radius">60m</span> of the charger</div>
         <div id="user-location-display" style="font-size: 10px; color: #cbd5e1; font-family: monospace;">Location: -</div>
       </div>
 
@@ -305,12 +306,6 @@ function renderSessionView(rootEl) {
         </button>
       </div>
 
-      <!-- Merchant Distance (shown after ready to claim) -->
-      <div id="merchant-distance-block" style="display: none; background: white; padding: 16px; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-        <div style="font-size: 14px; color: #64748b; margin-bottom: 8px;">Distance to ${_merchant.name}</div>
-        <div id="distance-to-merchant" style="font-size: 24px; font-weight: 700; color: #3b82f6;">-</div>
-        <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">You'll see your code when you're inside the merchant area.</div>
-      </div>
 
       <!-- Code View (shown when in merchant radius) -->
       <div id="code-view" style="display: none; background: white; padding: 24px; border-radius: 12px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
@@ -480,42 +475,60 @@ function updateSessionUI(pingResult) {
   
   // Derive state from ping response
   const state = deriveSessionState(pingResult);
-  const dist = normalizeNumber(pingResult.distance_to_charger_m ?? 0);
+  const chargerDist = normalizeNumber(pingResult.distance_to_charger_m ?? 0);
+  const merchantDist = normalizeNumber(pingResult.distance_to_merchant_m ?? 0);
   const radius = normalizeNumber(pingResult.charger_radius_m ?? 60);
   const dwell = normalizeNumber(pingResult.dwell_seconds ?? 0);
   const remaining = normalizeNumber(pingResult.needed_seconds ?? 180);
   const totalRequired = dwell + remaining; // Total time needed (elapsed + remaining)
   
-  // Update distance to charger
-  const distanceEl = $('#distance-to-charger');
-  const distanceSubtitleEl = document.querySelector('#charger-distance-block .text-sm');
+  // Update distance card (switches between charger and merchant)
+  const distanceCard = $('#distance-card');
+  const distanceTitleEl = $('#distance-title');
+  const distanceValueEl = $('#distance-value');
+  const distanceSubtitleEl = $('#distance-subtitle');
   const radiusEl = $('#charger-radius');
   
-  if (distanceEl) {
-    if (dist > 0) {
-      distanceEl.textContent = formatDistance(dist);
-      distanceEl.style.color = dist <= radius ? '#22c55e' : '#ef4444';
-    } else {
-      distanceEl.textContent = dist === 0 && state !== 'navigate_to_charger' ? '0m' : 'Calculating...';
-      distanceEl.style.color = state === 'navigate_to_charger' ? '#ef4444' : '#22c55e';
+  // Determine what to show: merchant distance if showing merchant, otherwise charger distance
+  if (_showingMerchantDistance && merchantDist > 0) {
+    // Show merchant distance
+    if (distanceTitleEl) {
+      distanceTitleEl.textContent = `Distance to ${_merchant?.name || 'Merchant'}`;
+    }
+    if (distanceValueEl) {
+      distanceValueEl.textContent = formatDistance(merchantDist);
+      distanceValueEl.style.color = pingResult.within_merchant_radius ? '#22c55e' : '#3b82f6';
+    }
+    if (distanceSubtitleEl) {
+      distanceSubtitleEl.textContent = pingResult.within_merchant_radius 
+        ? "You're here! Your code is below." 
+        : "You'll see your code when you're inside the merchant area.";
+    }
+  } else {
+    // Show charger distance (default)
+    if (distanceTitleEl) {
+      distanceTitleEl.textContent = 'Distance to Charger';
+    }
+    if (distanceValueEl) {
+      if (chargerDist > 0) {
+        distanceValueEl.textContent = formatDistance(chargerDist);
+        distanceValueEl.style.color = chargerDist <= radius ? '#22c55e' : '#ef4444';
+      } else {
+        distanceValueEl.textContent = chargerDist === 0 && state !== 'navigate_to_charger' ? '0m' : 'Calculating...';
+        distanceValueEl.style.color = state === 'navigate_to_charger' ? '#ef4444' : '#22c55e';
+      }
+    }
+    if (distanceSubtitleEl) {
+      if (state === 'navigate_to_charger') {
+        distanceSubtitleEl.textContent = `Arrive at the charger to start earning.`;
+      } else {
+        distanceSubtitleEl.innerHTML = `Stay within <span id="charger-radius">${radius}m</span> of the charger.`;
+      }
     }
   }
   
   if (radiusEl && pingResult.charger_radius_m) {
     radiusEl.textContent = `${radius}m`;
-  }
-  
-  // Update distance subtitle based on state
-  const chargerDistanceBlock = $('#charger-distance-block');
-  if (chargerDistanceBlock) {
-    const subtitle = chargerDistanceBlock.querySelector('div[style*="font-size: 12px"]');
-    if (subtitle) {
-      if (state === 'navigate_to_charger') {
-        subtitle.textContent = `Arrive at the charger to start earning.`;
-      } else {
-        subtitle.textContent = `Stay within ${radius}m of the charger.`;
-      }
-    }
   }
   
   // Update dwell progress
@@ -580,16 +593,16 @@ function updateSessionUI(pingResult) {
       case 'ready_to_claim':
         const rewardNova = _merchant?.nova_reward || pingResult.nova_awarded || 0;
         const merchantName = _merchant?.name || 'merchant';
-        navigateBtn.textContent = `Claim ${rewardNova} Nova at ${merchantName}`;
+        navigateBtn.textContent = `Navigate to ${merchantName}`;
         navigateBtn.style.background = '#22c55e';
         navigateBtn.onclick = () => {
-          // Navigate to merchant to claim
+          // Switch to showing merchant distance
+          _showingMerchantDistance = true;
+          // Update UI immediately to show merchant distance
+          updateSessionUI(pingResult);
+          // Navigate to merchant
           if (_merchant) {
             navigateToMerchant();
-            // Auto-verify visit when close enough
-            if (pingResult.within_merchant_radius) {
-              verifyVisitAndShowCode();
-            }
           }
         };
         break;
@@ -621,31 +634,22 @@ function updateSessionUI(pingResult) {
     }
   }
   
-  // Update merchant distance if ready to claim or earned
+  // Check if within merchant radius - show code
   if (state === 'ready_to_claim' || state === 'earned') {
-    const merchantDistanceEl = $('#distance-to-merchant');
-    const distance = normalizeNumber(pingResult.distance_to_merchant_m ?? 0);
-    
-    if (merchantDistanceEl && distance > 0) {
-      merchantDistanceEl.textContent = `${formatDistance(distance)} away`;
-    }
-    if (merchantDistanceBlock) {
-      merchantDistanceBlock.style.display = 'block';
-    }
-
-    // Check if within merchant radius - show code
     if (pingResult.within_merchant_radius) {
       _sessionState = 'at_merchant';
-      if (codeView) {
-        codeView.style.display = 'none'; // Will be shown by verifyVisitAndShowCode
-      }
+      _showingMerchantDistance = true; // Keep showing merchant distance
       verifyVisitAndShowCode();
-    } else if (codeView) {
+    }
+  }
+  
+  // Show/hide code view based on state
+  if (codeView) {
+    if (state === 'earned' || (state === 'ready_to_claim' && pingResult.within_merchant_radius)) {
+      // Code view will be shown by verifyVisitAndShowCode if we have a code
+    } else {
       codeView.style.display = 'none';
     }
-  } else {
-    if (merchantDistanceBlock) merchantDistanceBlock.style.display = 'none';
-    if (codeView) codeView.style.display = 'none';
   }
   
   // Update location display
