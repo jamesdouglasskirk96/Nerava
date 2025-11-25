@@ -817,15 +817,28 @@ def cancel_session(
             return {"ok": True, "message": f"Session already {status}"}
         
         # Update session status to cancelled
-        db.execute(text("""
-            UPDATE sessions
-            SET status = 'cancelled',
-                cancelled_at = :now
-            WHERE id = :session_id
-        """), {
-            "session_id": session_id,
-            "now": datetime.utcnow()
-        })
+        # Handle case where cancelled_at column may not exist
+        try:
+            db.execute(text("""
+                UPDATE sessions
+                SET status = 'cancelled',
+                    cancelled_at = :now
+                WHERE id = :session_id
+            """), {
+                "session_id": session_id,
+                "now": datetime.utcnow()
+            })
+        except Exception as col_err:
+            # Fallback if cancelled_at column doesn't exist yet
+            logger.warning(f"[PilotRouter][cancel] cancelled_at column may not exist: {col_err}")
+            db.execute(text("""
+                UPDATE sessions
+                SET status = 'cancelled'
+                WHERE id = :session_id
+            """), {
+                "session_id": session_id
+            })
+        
         db.commit()
         
         logger.info(f"[PilotRouter][cancel] Session {session_id} cancelled")
