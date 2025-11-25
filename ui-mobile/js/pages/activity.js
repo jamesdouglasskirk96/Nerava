@@ -58,6 +58,39 @@ export async function initActivityPage(rootEl) {
     </section>
   `;
 
+  // Get DOM references for reputation display
+  const repTierEl = rootEl.querySelector('#rep-tier');
+  const repScoreEl = rootEl.querySelector('#rep-score');
+  const repNextEl  = rootEl.querySelector('#rep-next');
+  const repFillEl  = rootEl.querySelector('#rep-fill');
+  const repStreak  = rootEl.querySelector('#rep-streak');
+
+  // Load demo state first (to apply even if API fails)
+  const demo = loadDemoRedemption();
+
+  // Apply demo redemption state for reputation
+  if (demo) {
+    const demoScore = demo.reputation_score || 10;
+    const demoStreak = demo.streak_days || 1;
+    const demoTier = demoScore >= 100 ? 'Gold' : demoScore >= 50 ? 'Silver' : 'Bronze';
+    
+    if (repScoreEl) repScoreEl.textContent = String(demoScore);
+    if (repStreak) {
+      repStreak.hidden = false;
+      repStreak.textContent = `🔋 ${demoStreak}-day streak`;
+    }
+    if (repTierEl) repTierEl.textContent = demoTier;
+    
+    // Update progress bar
+    const ni = nextTierInfo(demoScore);
+    if (repFillEl) repFillEl.style.width = ni.pct + '%';
+    if (repNextEl) {
+      repNextEl.textContent = ni.next
+        ? `${ni.toNext} pts to ${ni.next.name}`
+        : 'Top tier reached';
+    }
+  }
+
   try {
     // Use pilot activity endpoint instead of legacy endpoint
     const userId = localStorage.NERAVA_USER_ID || '123';  // TODO: Get actual user_id
@@ -65,51 +98,57 @@ export async function initActivityPage(rootEl) {
     try {
       data = await window.NeravaAPI.apiGet('/v1/pilot/activity', { user_id: userId, limit: 50 });
     } catch (apiError) {
-      // Handle API errors gracefully - show empty state
+      // Handle API errors gracefully - still show demo state
       console.warn(`[Activity] Failed to load activity: ${apiError.message || 'Unknown error'}`);
-      rootEl.querySelector('#follow-list').innerHTML = '<li class="intent"><div class="sub">No activity yet</div></li>';
-      return; // Exit early with empty state
+      data = null; // Will fall through to demo-only rendering
     }
     
-    if (!data || !data.activities) {
-      // Empty response - show empty state
-      rootEl.querySelector('#follow-list').innerHTML = '<li class="intent"><div class="sub">No activity yet</div></li>';
-      return;
+    // If we have API data, merge it with demo state for reputation
+    if (data && data.reputation) {
+      const reputation = data.reputation;
+      const apiScore = reputation.score || 0;
+      const apiTier = reputation.tier || 'Bronze';
+      const apiStreakDays = reputation.streakDays || 0;
+      
+      // Use demo state if it's higher/more recent, otherwise use API
+      const finalScore = (demo && demo.reputation_score) ? Math.max(demo.reputation_score, apiScore) : apiScore;
+      const finalTier = (demo && demo.reputation_score >= 50) ? (demo.reputation_score >= 100 ? 'Gold' : 'Silver') : apiTier;
+      const finalStreak = (demo && demo.streak_days) ? Math.max(demo.streak_days, apiStreakDays) : apiStreakDays;
+      
+      if (repTierEl) repTierEl.textContent = finalTier;
+      if (repScoreEl) repScoreEl.textContent = String(finalScore);
+      if (finalStreak > 0 && repStreak) {
+        repStreak.hidden = false;
+        repStreak.textContent = `🔋 ${finalStreak}-day streak`;
+      }
+      
+      const ni = nextTierInfo(finalScore);
+      if (repFillEl) repFillEl.style.width = ni.pct + '%';
+      if (repNextEl) {
+        repNextEl.textContent = ni.next
+          ? `${ni.toNext} pts to ${ni.next.name}`
+          : 'Top tier reached';
+      }
+
+      // Add follower/following counts from API
+      const repMeta = document.createElement('div');
+      repMeta.className = 'rep-meta';
+      repMeta.innerHTML = `
+        <div class="rep-pill"><strong>${reputation.followers_count || 12}</strong> Followers</div>
+        <div class="rep-pill"><strong>${reputation.following_count || 8}</strong> Following</div>
+      `;
+      rootEl.querySelector('.rep-stack').appendChild(repMeta);
+    } else if (!demo) {
+      // No API data and no demo - show defaults
+      if (repTierEl) repTierEl.textContent = 'Bronze';
+      if (repScoreEl) repScoreEl.textContent = '0';
+      if (repStreak) repStreak.hidden = true;
+      if (repFillEl) repFillEl.style.width = '0%';
+      if (repNextEl) repNextEl.textContent = '—';
     }
-
-    // Reputation (fallback if not in pilot response)
-    const reputation = data.reputation || { score: 0, tier: 'Bronze', streakDays: 0 };
-    const { score, tier, streakDays } = reputation;
-    const repTierEl = rootEl.querySelector('#rep-tier');
-    const repScoreEl = rootEl.querySelector('#rep-score');
-    const repNextEl  = rootEl.querySelector('#rep-next');
-    const repFillEl  = rootEl.querySelector('#rep-fill');
-    const repStreak  = rootEl.querySelector('#rep-streak');
-
-    repTierEl.textContent = tier;
-    repScoreEl.textContent = score;
-    if (streakDays > 0) {
-      repStreak.hidden = false;
-      repStreak.textContent = `🔋 ${streakDays}-day streak`;
-    }
-
-    const ni = nextTierInfo(score);
-    repFillEl.style.width = ni.pct + '%';
-    repNextEl.textContent = ni.next
-      ? `${ni.toNext} pts to ${ni.next.name}`
-      : 'Top tier reached';
-
-    // Add follower/following counts
-    const repMeta = document.createElement('div');
-    repMeta.className = 'rep-meta';
-    repMeta.innerHTML = `
-      <div class="rep-pill"><strong>${data.reputation?.followers_count || 12}</strong> Followers</div>
-      <div class="rep-pill"><strong>${data.reputation?.following_count || 8}</strong> Following</div>
-    `;
-    rootEl.querySelector('.rep-stack').appendChild(repMeta);
 
     // Earnings - use demo state if available
-    let followTotal = data.totals?.followCents || 0;
+    let followTotal = data?.totals?.followCents || 0;
     if (demo && demo.nova_awarded) {
       // Convert demo Nova to dollars ($0.10 per Nova for demo)
       const demoDollars = (demo.nova_awarded * 0.10);
@@ -118,38 +157,11 @@ export async function initActivityPage(rootEl) {
     const dollars = (followTotal/100).toFixed(2);
     rootEl.querySelector('#follow-total').textContent = `$${dollars}`;
 
-    // Apply demo redemption state for reputation
-    const demo = loadDemoRedemption();
-    if (demo) {
-      // Update reputation score from demo state
-      const demoScore = demo.reputation_score || 10;
-      const demoStreak = demo.streak_days || 1;
-      
-      if (repScoreEl) repScoreEl.textContent = String(demoScore);
-      if (repStreak) {
-        repStreak.hidden = false;
-        repStreak.textContent = `🔋 ${demoStreak}-day streak`;
-      }
-      
-      // Update tier based on demo score
-      const demoTier = demoScore >= 100 ? 'Gold' : demoScore >= 50 ? 'Silver' : 'Bronze';
-      if (repTierEl) repTierEl.textContent = demoTier;
-      
-      // Update progress bar
-      const ni = nextTierInfo(demoScore);
-      if (repFillEl) repFillEl.style.width = ni.pct + '%';
-      if (repNextEl) {
-        repNextEl.textContent = ni.next
-          ? `${ni.toNext} pts to ${ni.next.name}`
-          : 'Top tier reached';
-      }
-    }
-
     // Render pilot activities (sessions, rewards, merchant visits)
     const ul = rootEl.querySelector('#follow-list');
     let hasActivities = false;
     
-    if (data.activities && data.activities.length > 0) {
+    if (data && data.activities && data.activities.length > 0) {
       ul.innerHTML = data.activities.map(item => {
         hasActivities = true;
         // Format activity based on type
