@@ -187,19 +187,25 @@ export async function pilotVerifyVisit(sessionId, merchantId, userLat, userLng) 
 }
 
 export async function pilotCancelSession(sessionId) {
-  const res = await fetch(`${BASE}/v1/pilot/session/cancel`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({
-      session_id: sessionId
-    })
-  });
-  // Return result even if not 200 - idempotent endpoint
-  if (!res.ok) {
-    console.warn(`[API] Cancel session returned ${res.status}`);
+  try {
+    const res = await fetch(`${BASE}/v1/pilot/session/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        session_id: sessionId
+      })
+    });
+    // Return result even if not 200 - idempotent endpoint
+    // 404 means endpoint not deployed yet - that's OK, cleanup still happens
+    if (!res.ok && res.status !== 404) {
+      console.warn(`[API] Cancel session returned ${res.status}`);
+    }
+    return res.json().catch(() => ({ ok: true })); // Return safe default if JSON parse fails
+  } catch (e) {
+    // Network errors or 404 (endpoint not deployed) - return success to allow cleanup
+    return { ok: true };
   }
-  return res.json().catch(() => ({ ok: true })); // Return safe default if JSON parse fails
 }
 
 if (typeof window !== 'undefined') {
