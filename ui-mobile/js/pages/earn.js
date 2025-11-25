@@ -318,8 +318,7 @@ function renderSessionView(rootEl) {
   // Bind event handlers
   $('#navigate-to-charger-btn')?.addEventListener('click', () => navigateToCharger());
   
-  // Navigate to Merchant button (in Ready to Claim card) will be wired up in updateSessionUI
-  // when the card is shown, so we can access the current ping result
+  // Navigate to Merchant button (in Ready to Claim card) - switches distance card to merchant
   const navigateToMerchantBtn = $('#navigate-to-merchant-btn');
   if (navigateToMerchantBtn) {
     navigateToMerchantBtn.addEventListener('click', () => {
