@@ -536,8 +536,8 @@ window.addEventListener('load', async ()=>{
   await loadWallet();
   await loadPrefs();
   
-  // Request fullscreen (already defined above)
-  requestFullscreen();
+  // Request fullscreen (user gesture required, so this will be triggered by button clicks)
+  // Fullscreen is handled by tryEnterFullscreen() on user interaction
 });
 
 // Initialize activity page when tab is switched

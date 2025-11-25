@@ -551,10 +551,10 @@ function updateSessionUI(pingResult) {
   
   // Calculate progress percentage
   // Backend provides: dwell_seconds (time already elapsed) and needed_seconds (time still needed)
-  // Total required = dwell + needed_seconds
+  // Total required = dwell + needed_seconds (already calculated above)
   // Percent = (dwell / total_required) * 100
   let percent = 0;
-  let totalRequired = dwell + remaining; // Total time needed (elapsed + still needed)
+  // Note: totalRequired is already declared above at line 492
   
   // Handle edge cases
   if (pingResult.reward_earned || pingResult.nova_awarded > 0) {
