@@ -460,95 +460,196 @@ function startPingLoop() {
   _pingInterval = setInterval(sendPing, 5000);
 }
 
+// State machine: derive session state from ping response
+function deriveSessionState(data) {
+  const dist = normalizeNumber(data.distance_to_charger_m ?? data.distance_m ?? 0);
+  const radius = normalizeNumber(data.charger_radius_m ?? 60);
+  const dwell = normalizeNumber(data.dwell_seconds ?? 0);
+  const remaining = normalizeNumber(data.needed_seconds ?? 180);
+  
+  const insideRadius = dist <= radius;
+  
+  if (data.reward_earned || data.nova_awarded > 0) return "earned";
+  if (data.ready_to_claim || (remaining <= 0 && insideRadius)) return "ready_to_claim";
+  if (insideRadius) return "verifying";
+  return "navigate_to_charger";
+}
+
 function updateSessionUI(pingResult) {
   console.log('[Earn] Updating session UI with:', pingResult);
   
+  // Derive state from ping response
+  const state = deriveSessionState(pingResult);
+  const dist = normalizeNumber(pingResult.distance_to_charger_m ?? 0);
+  const radius = normalizeNumber(pingResult.charger_radius_m ?? 60);
+  const dwell = normalizeNumber(pingResult.dwell_seconds ?? 0);
+  const remaining = normalizeNumber(pingResult.needed_seconds ?? 180);
+  const totalRequired = dwell + remaining; // Total time needed (elapsed + remaining)
+  
   // Update distance to charger
   const distanceEl = $('#distance-to-charger');
+  const distanceSubtitleEl = document.querySelector('#charger-distance-block .text-sm');
   const radiusEl = $('#charger-radius');
   
   if (distanceEl) {
-    const distance = normalizeNumber(pingResult.distance_to_charger_m);
-    if (distance > 0) {
-      distanceEl.textContent = formatDistance(distance);
-      distanceEl.style.color = distance <= (pingResult.charger_radius_m || 60) ? '#22c55e' : '#ef4444';
-    } else if (pingResult.distance_to_charger_m === null || pingResult.distance_to_charger_m === undefined) {
-      distanceEl.textContent = 'Calculating...';
-      distanceEl.style.color = '#64748b';
+    if (dist > 0) {
+      distanceEl.textContent = formatDistance(dist);
+      distanceEl.style.color = dist <= radius ? '#22c55e' : '#ef4444';
     } else {
-      distanceEl.textContent = formatDistance(0);
-      distanceEl.style.color = '#64748b';
+      distanceEl.textContent = dist === 0 && state !== 'navigate_to_charger' ? '0m' : 'Calculating...';
+      distanceEl.style.color = state === 'navigate_to_charger' ? '#ef4444' : '#22c55e';
     }
   }
   
-  if (radiusEl) {
-    if (pingResult.charger_radius_m) {
-      radiusEl.textContent = `${normalizeNumber(pingResult.charger_radius_m)}m`;
+  if (radiusEl && pingResult.charger_radius_m) {
+    radiusEl.textContent = `${radius}m`;
+  }
+  
+  // Update distance subtitle based on state
+  const chargerDistanceBlock = $('#charger-distance-block');
+  if (chargerDistanceBlock) {
+    const subtitle = chargerDistanceBlock.querySelector('div[style*="font-size: 12px"]');
+    if (subtitle) {
+      if (state === 'navigate_to_charger') {
+        subtitle.textContent = `Arrive at the charger to start earning.`;
+      } else {
+        subtitle.textContent = `Stay within ${radius}m of the charger.`;
+      }
     }
   }
   
-  // Update location display
-  updateLocationDisplay();
-
   // Update dwell progress
   const dwellEl = $('#dwell-current');
   const requiredEl = $('#dwell-required');
   const progressBar = $('#dwell-progress-bar');
   const statusEl = $('#dwell-status');
-  const dwellSecs = normalizeNumber(pingResult.dwell_seconds || 0);
-  const neededSecs = normalizeNumber(pingResult.needed_seconds || 180);
-  const requiredSecs = neededSecs; // Total time needed (not including already elapsed)
   
   if (dwellEl) {
-    dwellEl.textContent = formatTime(dwellSecs);
+    dwellEl.textContent = formatTime(dwell);
   }
+  
   if (requiredEl) {
-    requiredEl.textContent = formatTime(requiredSecs);
+    requiredEl.textContent = formatTime(totalRequired || 180);
   }
+  
   if (progressBar) {
-    const totalRequired = neededSecs || 180; // 3 minutes default
-    const percent = Math.min(100, (dwellSecs / totalRequired) * 100);
+    const percent = totalRequired > 0 
+      ? Math.min(100, (dwell / totalRequired) * 100)
+      : 0;
     progressBar.style.width = `${percent}%`;
     progressBar.style.transition = 'width 0.5s ease';
   }
+  
   if (statusEl) {
-    if (pingResult.ready_to_claim || pingResult.verified) {
-      statusEl.textContent = '✅ Ready to claim!';
-      statusEl.style.color = '#22c55e';
-    } else {
-      const remaining = Math.max(0, neededSecs - dwellSecs);
-      statusEl.textContent = remaining > 0 ? `${formatTime(remaining)} remaining` : 'Charge for at least 3 minutes';
-      statusEl.style.color = '#64748b';
+    switch (state) {
+      case 'earned':
+        statusEl.textContent = `✅ You earned ${pingResult.nova_awarded || 0} Nova!`;
+        statusEl.style.color = '#22c55e';
+        break;
+      case 'ready_to_claim':
+        const rewardNova = _merchant?.nova_reward || pingResult.nova_awarded || 0;
+        statusEl.textContent = `✅ Done! You've earned ${rewardNova} Nova.`;
+        statusEl.style.color = '#22c55e';
+        break;
+      case 'verifying':
+        const remainingText = remaining > 0 ? formatTime(remaining) : '0s';
+        statusEl.textContent = `${remainingText} remaining`;
+        statusEl.style.color = '#64748b';
+        break;
+      case 'navigate_to_charger':
+      default:
+        statusEl.textContent = 'Arrive at the charger to start earning.';
+        statusEl.style.color = '#64748b';
+        break;
     }
   }
 
-  // Show ready to claim card
-  if (pingResult.ready_to_claim || pingResult.verified) {
-    _sessionState = 'ready';
-    const readyCard = $('#ready-to-claim-card');
-    if (readyCard) readyCard.style.display = 'block';
+  // Update CTA button based on state
+  const navigateBtn = $('#navigate-to-charger-btn');
+  const readyCard = $('#ready-to-claim-card');
+  const merchantDistanceBlock = $('#merchant-distance-block');
+  const codeView = $('#code-view');
+  
+  if (navigateBtn) {
+    switch (state) {
+      case 'earned':
+        navigateBtn.textContent = 'View Wallet';
+        navigateBtn.style.background = '#3b82f6';
+        navigateBtn.onclick = () => setTab('Wallet');
+        break;
+      case 'ready_to_claim':
+        const rewardNova = _merchant?.nova_reward || pingResult.nova_awarded || 0;
+        const merchantName = _merchant?.name || 'merchant';
+        navigateBtn.textContent = `Claim ${rewardNova} Nova at ${merchantName}`;
+        navigateBtn.style.background = '#22c55e';
+        navigateBtn.onclick = () => {
+          // Navigate to merchant to claim
+          if (_merchant) {
+            navigateToMerchant();
+            // Auto-verify visit when close enough
+            if (pingResult.within_merchant_radius) {
+              verifyVisitAndShowCode();
+            }
+          }
+        };
+        break;
+      case 'verifying':
+        navigateBtn.textContent = 'Keep Charging';
+        navigateBtn.style.background = '#64748b';
+        navigateBtn.style.opacity = '0.6';
+        navigateBtn.style.cursor = 'not-allowed';
+        navigateBtn.onclick = null;
+        break;
+      case 'navigate_to_charger':
+      default:
+        navigateBtn.textContent = 'Navigate to Charger';
+        navigateBtn.style.background = '#22c55e';
+        navigateBtn.style.opacity = '1';
+        navigateBtn.style.cursor = 'pointer';
+        navigateBtn.onclick = () => navigateToCharger();
+        break;
+    }
   }
-
-  // Update merchant distance if ready to claim
-  if (_sessionState === 'ready' || _sessionState === 'at_merchant') {
+  
+  // Show/hide ready to claim card
+  if (readyCard) {
+    if (state === 'ready_to_claim' || state === 'earned') {
+      readyCard.style.display = 'block';
+      _sessionState = 'ready';
+    } else {
+      readyCard.style.display = 'none';
+    }
+  }
+  
+  // Update merchant distance if ready to claim or earned
+  if (state === 'ready_to_claim' || state === 'earned') {
     const merchantDistanceEl = $('#distance-to-merchant');
-    const merchantBlock = $('#merchant-distance-block');
-    const distance = normalizeNumber(pingResult.distance_to_merchant_m || 0);
+    const distance = normalizeNumber(pingResult.distance_to_merchant_m ?? 0);
     
-    if (merchantDistanceEl) {
+    if (merchantDistanceEl && distance > 0) {
       merchantDistanceEl.textContent = `${formatDistance(distance)} away`;
     }
-    if (merchantBlock) {
-      merchantBlock.style.display = 'block';
+    if (merchantDistanceBlock) {
+      merchantDistanceBlock.style.display = 'block';
     }
 
-    // Check if within merchant radius
+    // Check if within merchant radius - show code
     if (pingResult.within_merchant_radius) {
       _sessionState = 'at_merchant';
-      // Verify visit and get code
+      if (codeView) {
+        codeView.style.display = 'none'; // Will be shown by verifyVisitAndShowCode
+      }
       verifyVisitAndShowCode();
+    } else if (codeView) {
+      codeView.style.display = 'none';
     }
+  } else {
+    if (merchantDistanceBlock) merchantDistanceBlock.style.display = 'none';
+    if (codeView) codeView.style.display = 'none';
   }
+  
+  // Update location display
+  updateLocationDisplay();
 }
 
 async function verifyVisitAndShowCode() {

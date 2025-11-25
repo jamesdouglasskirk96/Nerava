@@ -307,16 +307,23 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   await loadPrefs();
 });
 
-// Fullscreen functionality - must be called after user interaction on some browsers
-function requestFullscreen() {
+// Fullscreen functionality - only called from user gestures to avoid errors
+function tryEnterFullscreen() {
   // Check if already in fullscreen or standalone mode
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
                        (window.navigator.standalone === true) ||
                        document.referrer.includes('android-app://');
   
   if (isStandalone) {
-    console.log('[Fullscreen] App is already in standalone/fullscreen mode');
-    return;
+    return; // Already in standalone mode, no need for fullscreen
+  }
+  
+  // Check if already in fullscreen
+  if (document.fullscreenElement || 
+      document.webkitFullscreenElement || 
+      document.mozFullScreenElement || 
+      document.msFullscreenElement) {
+    return; // Already fullscreen
   }
   
   // Try Fullscreen API (works on desktop and some mobile browsers)
@@ -324,46 +331,43 @@ function requestFullscreen() {
   
   try {
     if (elem.requestFullscreen) {
-      elem.requestFullscreen().catch(err => {
-        console.log('[Fullscreen] Fullscreen API failed (may require user gesture):', err);
+      elem.requestFullscreen().catch(() => {
+        // Silently fail - fullscreen requires user gesture and may not always be available
       });
     } else if (elem.webkitRequestFullscreen) {
-      // Safari
       elem.webkitRequestFullscreen();
     } else if (elem.webkitEnterFullscreen) {
-      // iOS Safari
       elem.webkitEnterFullscreen();
     } else if (elem.mozRequestFullScreen) {
-      // Firefox
       elem.mozRequestFullScreen();
     } else if (elem.msRequestFullscreen) {
-      // IE/Edge
       elem.msRequestFullscreen();
     }
-    console.log('[Fullscreen] Fullscreen requested');
   } catch (err) {
-    console.log('[Fullscreen] Fullscreen request failed:', err);
+    // Silently fail - fullscreen may not be supported or require user gesture
   }
 }
 
-// Export for use elsewhere and call on first user interaction
+// Export for use elsewhere - only call from explicit user interactions
 if (typeof window !== 'undefined') {
-  window.requestFullscreen = requestFullscreen;
+  window.tryEnterFullscreen = tryEnterFullscreen;
   
-  // Request fullscreen on first user interaction (required by browsers)
-  ['click', 'touchstart', 'keydown'].forEach(eventType => {
-    document.addEventListener(eventType, () => {
-      requestFullscreen();
-      // Only try once per event type
-    }, { once: true, passive: true });
-  });
+  // Only attempt fullscreen on first explicit user interaction (button clicks, etc.)
+  // Don't spam on every touch/click, just provide the function for buttons to call
+  let fullscreenAttempted = false;
   
-  // Also try on page load (may not work on all browsers)
-  if (document.readyState === 'complete') {
-    requestFullscreen();
-  } else {
-    window.addEventListener('load', requestFullscreen, { once: true });
-  }
+  // Add a subtle fullscreen button or trigger on first meaningful interaction
+  document.addEventListener('click', (e) => {
+    // Only try once, and only on button clicks or navigation actions
+    if (!fullscreenAttempted && (
+      e.target.tagName === 'BUTTON' || 
+      e.target.closest('button') ||
+      e.target.closest('[role="button"]')
+    )) {
+      fullscreenAttempted = true;
+      tryEnterFullscreen();
+    }
+  }, { once: true, passive: true });
 }
 
 // Demo autorun keyboard shortcut (Shift+R)

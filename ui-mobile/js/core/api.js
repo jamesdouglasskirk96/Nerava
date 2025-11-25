@@ -143,7 +143,29 @@ export async function pilotVerifyPing(sessionId, userLat, userLng) {
   if (!res.ok) {
     throw new Error(`Failed to verify ping (${res.status})`);
   }
-  return res.json();
+  const rawData = await res.json();
+  
+  // Normalize response to ensure consistent field names
+  // Backend returns: distance_to_charger_m, dwell_seconds, needed_seconds (only if not verified), etc.
+  return {
+    session_id: sessionId,
+    verified: rawData.verified || false,
+    verified_at_charger: rawData.verified_at_charger || false,
+    reward_earned: rawData.reward_earned || false,
+    ready_to_claim: rawData.ready_to_claim || false,
+    charger_radius_m: rawData.charger_radius_m || 60,
+    distance_to_charger_m: rawData.distance_to_charger_m ?? rawData.distance_m ?? 0,
+    dwell_seconds: rawData.dwell_seconds || 0,
+    needed_seconds: rawData.needed_seconds ?? (rawData.dwell_required_s ? rawData.dwell_required_s - (rawData.dwell_seconds || 0) : 180),
+    nova_awarded: rawData.nova_awarded || 0,
+    wallet_balance: rawData.wallet_balance || 0,
+    wallet_balance_nova: rawData.wallet_balance_nova || 0,
+    distance_to_merchant_m: rawData.distance_to_merchant_m,
+    within_merchant_radius: rawData.within_merchant_radius || false,
+    verification_score: rawData.verification_score || 0,
+    // Pass through any other fields
+    ...rawData
+  };
 }
 
 export async function pilotVerifyVisit(sessionId, merchantId, userLat, userLng) {
