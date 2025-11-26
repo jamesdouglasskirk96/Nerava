@@ -160,13 +160,20 @@ async function startSession(rootEl, chargerId, merchantId, existingSessionId = n
   renderLoading(rootEl);
 
   try {
-    // Use charger/merchant from session state or URL params
-    // They should already be set from explore.js navigation
-    if (!_charger || !_merchant) {
-      // Fallback: create minimal objects from IDs if not in state
-      _charger = { id: chargerId, name: 'Charger' };
-      _merchant = { id: merchantId, name: 'Merchant' };
-    }
+  // Use charger/merchant from session state or URL params
+  // They should already be set from explore.js navigation
+  if (!_charger || !_merchant) {
+    // Fallback: create minimal objects from IDs if not in state
+    _charger = { id: chargerId, name: 'Charger' };
+    _merchant = { id: merchantId, name: 'Merchant' };
+  }
+  
+  // Expose session ID for demo runner
+  window.__neravaCurrentSessionId = sessionId;
+  const pageEl = document.getElementById('page-earn');
+  if (pageEl) {
+    pageEl.dataset.sessionId = sessionId;
+  }
 
     if (!_charger || !_merchant) {
       renderError(rootEl, 'Charger or merchant not found');

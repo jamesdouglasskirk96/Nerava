@@ -23,22 +23,6 @@ export async function initWalletPage(rootEl) {
           <button style="background: #f1f5f9; color: #0f172a; border: none; padding: 12px 20px; border-radius: 8px; font-weight: 600;" id="w-withdraw">Withdraw</button>
         </div>
       </div>
-      
-      <div style="background: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
-        <h2 style="color: #111827; font-size: 18px; margin-bottom: 16px;">Ways you earned</h2>
-        <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e2e8f0;">
-          <span style="color: #374151;">Starbucks co-fund</span>
-          <span style="color: #111827; font-weight: 600;">+$0.75</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e2e8f0;">
-          <span style="color: #374151;">Off-peak award</span>
-          <span style="color: #111827; font-weight: 600;">-$0.50</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; padding: 8px 0;">
-          <span style="color: #374151;">Green Hour savings</span>
-          <span style="color: #111827; font-weight: 600;">+$3.73</span>
-        </div>
-      </div>
     </div>
   `;
 

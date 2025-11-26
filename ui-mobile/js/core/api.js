@@ -431,7 +431,8 @@ export async function apiDriverActivity({ limit = 50 } = {}) {
     console.log('[API][Drivers] Activity (v1):', res);
     
     // Backend returns array directly, or wrap if needed
-    return Array.isArray(res) ? res : (res.events || res.transactions || []);
+    const events = Array.isArray(res) ? res : (res.events || res.transactions || []);
+    return events;
   } catch (e) {
     console.warn('[API][Drivers] Failed to get activity:', e.message);
     return [];
@@ -442,11 +443,18 @@ export async function apiDriverActivity({ limit = 50 } = {}) {
  * Session ping (update session location)
  * Canonical v1 endpoint - /v1/drivers/sessions/{id}/ping
  */
-export async function apiSessionPing({ sessionId, lat, lng }) {
+export async function apiSessionPing({ sessionId, lat, lng, location }) {
+  // Support both { lat, lng } and { location: { lat, lng } } formats
+  const finalLat = lat ?? location?.lat;
+  const finalLng = lng ?? location?.lng;
+  
+  if (finalLat === undefined || finalLng === undefined) {
+    throw new Error('apiSessionPing requires lat and lng');
+  }
   try {
     const res = await _req(`/v1/drivers/sessions/${encodeURIComponent(sessionId)}/ping`, {
       method: 'POST',
-      body: JSON.stringify({ lat, lng }),
+      body: JSON.stringify({ lat: finalLat, lng: finalLng }),
     });
     console.log('[API][Drivers] Session ping (v1):', res);
     

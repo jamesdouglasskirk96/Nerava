@@ -257,14 +257,52 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// Global demo mode flag
+const DEMO_MODE =
+  new URLSearchParams(window.location.search).get('demo') === '1' ||
+  localStorage.getItem('nerava_demo') === '1';
+
+// Expose to window for console access
+window.__neravaSetDemo = (on) => {
+  if (on) {
+    localStorage.setItem('nerava_demo', '1');
+    window.NERAVA_DEMO_MODE = true;
+  } else {
+    localStorage.removeItem('nerava_demo');
+    window.NERAVA_DEMO_MODE = false;
+  }
+  console.log('[DEMO] Demo mode now', on ? 'ON' : 'OFF', '– reload to apply');
+};
+
+// Set global flag
+window.NERAVA_DEMO_MODE = DEMO_MODE;
+if (DEMO_MODE) {
+  console.log('[DEMO] Demo mode enabled via URL param or localStorage');
+}
+
 // Initialize app
 // Initialize user on app load
 async function initAuth() {
   try {
-    const { apiMe } = await import('./core/api.js');
+    const { apiMe, getCurrentUser } = await import('./core/api.js');
     const user = await apiMe();
     if (user) {
-      console.log('[BOOT] Authenticated user:', user.email);
+      console.log('[BOOT] Authenticated user:', user.email || user.id);
+      window.NERAVA_USER = user;
+      
+      // Run demo flow if demo mode is enabled
+      if (DEMO_MODE) {
+        console.log('[DEMO] User authenticated, starting demo flow...');
+        // Delay to let UI stabilize
+        setTimeout(async () => {
+          try {
+            const { runDemoFlow } = await import('./core/demo-runner.js');
+            await runDemoFlow();
+          } catch (e) {
+            console.error('[DEMO] Failed to start demo flow:', e);
+          }
+        }, 2000);
+      }
     } else {
       console.log('[BOOT] No authenticated user - will prompt for login');
     }

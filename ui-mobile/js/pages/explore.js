@@ -561,7 +561,24 @@ async function handlePerkCardStartSession(perk) {
     
     window.pilotSession = sessionState;
     
+    // Expose session data for demo runner
+    window.__neravaCurrentSessionId = sessionId;
+    window.__neravaDemoChargerLocation = {
+      lat: currentCharger.lat || 30.37665,
+      lng: currentCharger.lng || -97.65168,
+    };
+    window.__neravaDemoMerchantLocation = {
+      lat: fullMerchant.lat || 30.4021,
+      lng: fullMerchant.lng || -97.7266,
+    };
+    window.__neravaDemoMerchantId = merchantId;
+    
     console.log('[Explore] Session started (v1):', session);
+    console.log('[Explore] Demo data exposed:', {
+      sessionId: window.__neravaCurrentSessionId,
+      chargerLocation: window.__neravaDemoChargerLocation,
+      merchantLocation: window.__neravaDemoMerchantLocation,
+    });
     
     // Navigate directly to Earn page
     navigateToEarn(sessionId, merchantId, chargerId);
