@@ -80,6 +80,7 @@ app.include_router(analytics.router)
 app.include_router(health.router, prefix="/v1", tags=["health"])
 
 # Auth + JWT prefs
+# LEGACY: auth_router kept for backward compatibility, but auth_domain is canonical
 app.include_router(auth_router)
 app.include_router(prefs_router)
 
@@ -99,5 +100,23 @@ app.include_router(incentives.router)
 app.include_router(energyhub.router)
 app.include_router(social.router)
 app.include_router(activity.router)
+
+# Canonical v1 API routers (promoted from Domain Charge Party MVP)
+from .routers import (
+    auth_domain,
+    drivers_domain,
+    merchants_domain,
+    stripe_domain,
+    admin_domain,
+    nova_domain
+)
+
+# These are now the canonical /v1/* endpoints (no /domain/ prefix)
+app.include_router(auth_domain.router)  # /v1/auth/*
+app.include_router(drivers_domain.router)  # /v1/drivers/*
+app.include_router(merchants_domain.router)  # /v1/merchants/*
+app.include_router(stripe_domain.router)  # /v1/stripe/*
+app.include_router(admin_domain.router)  # /v1/admin/*
+app.include_router(nova_domain.router)  # /v1/nova/*
 
 # Lifespan events are now handled in lifespan.py

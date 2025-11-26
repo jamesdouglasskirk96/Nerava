@@ -17,6 +17,13 @@ class User(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     preferences = relationship("UserPreferences", uselist=False, back_populates="user", cascade="all, delete")
+    
+    # Domain Charge Party MVP fields
+    display_name = Column(String, nullable=True)
+    role_flags = Column(String, nullable=True, default="driver")  # comma-separated: "driver,merchant_admin,admin"
+    auth_provider = Column(String, nullable=False, default="local")  # local, google, apple
+    oauth_sub = Column(String, nullable=True)  # OAuth subject ID
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=True)
 
 class UserPreferences(Base):
     __tablename__ = "user_preferences"

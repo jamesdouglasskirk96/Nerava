@@ -10,6 +10,13 @@ class Settings(BaseModel):
     ALGORITHM: str = "HS256"
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./nerava.db")
     
+    # Stripe configuration
+    STRIPE_SECRET_KEY: str = os.getenv("STRIPE_SECRET_KEY", "")
+    STRIPE_WEBHOOK_SECRET: str = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+    
+    # Frontend URL for redirects
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    
     # Demo Mode Settings
     DEMO_MODE: bool = os.getenv("DEMO_MODE", "false").lower() == "true"
     

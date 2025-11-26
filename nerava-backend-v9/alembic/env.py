@@ -9,6 +9,7 @@ from alembic import context
 from app.db import Base
 from app.models import *  # Import all models
 from app.models_while_you_charge import *  # Import While You Charge models
+from app.models_domain import *  # Import Domain Charge Party MVP models (now canonical v1)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
