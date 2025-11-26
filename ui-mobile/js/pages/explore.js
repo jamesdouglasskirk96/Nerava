@@ -541,6 +541,8 @@ async function handlePerkCardStartSession(perk) {
       eventSlug: EVENT_SLUG,
       chargerId,
       merchantId,
+      userLat,
+      userLng,
     });
     
     const sessionId = session.session_id;
@@ -627,11 +629,32 @@ async function handleStartSession() {
   showToast('Starting session...');
   
   try {
-    // Call pilot API to start session
+    // Get user location for verify_dwell initialization
+    let userLat = 30.4021; // Domain default
+    let userLng = -97.7266;
+    
+    try {
+      if (navigator.geolocation && _userLocation) {
+        userLat = _userLocation.lat;
+        userLng = _userLocation.lng;
+      } else {
+        const position = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000 });
+        });
+        userLat = position.coords.latitude;
+        userLng = position.coords.longitude;
+      }
+    } catch (e) {
+      console.warn('[Explore] Could not get user location, using defaults:', e);
+    }
+    
+    // Call v1 API to join charge event
     const session = await apiJoinChargeEvent({
       eventSlug: EVENT_SLUG,
       chargerId: charger.id,
       merchantId: merchant.id,
+      userLat,
+      userLng,
     });
     
     const sessionId = session.session_id;

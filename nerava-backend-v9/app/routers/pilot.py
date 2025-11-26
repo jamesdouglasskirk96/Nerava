@@ -60,8 +60,9 @@ class CancelSessionRequest(BaseModel):
 
 # ============================================
 # Endpoint 1: POST /v1/pilot/start_session
+# DEPRECATED: Use /v1/drivers/charge_events/{event_slug}/join instead
 # ============================================
-@router.post("/start_session")
+@router.post("/start_session", deprecated=True)
 def start_session(
     request: StartSessionRequest,
     user_id: int = Query(..., description="User ID"),
@@ -237,8 +238,9 @@ def start_session(
 
 # ============================================
 # Endpoint 2: POST /v1/pilot/verify_ping
+# DEPRECATED: Use /v1/drivers/sessions/{id}/ping instead
 # ============================================
-@router.post("/verify_ping")
+@router.post("/verify_ping", deprecated=True)
 def verify_ping_endpoint(
     request: VerifyPingRequest,
     db: Session = Depends(get_db)
@@ -400,8 +402,9 @@ def verify_ping_endpoint(
 
 # ============================================
 # Endpoint 3: GET /v1/pilot/while_you_charge
+# DEPRECATED: Use /v1/drivers/merchants/nearby instead
 # ============================================
-@router.get("/while_you_charge")
+@router.get("/while_you_charge", deprecated=True)
 async def while_you_charge(
     session_id: Optional[str] = Query(None, description="Optional session ID"),
     user_lat: Optional[float] = Query(None, description="Optional user latitude for distance calculation"),
@@ -784,10 +787,10 @@ def verify_visit(
 
 
 # ============================================
-# ============================================
 # Endpoint 4.5: POST /v1/pilot/session/cancel
+# DEPRECATED: Use /v1/drivers/sessions/{id}/cancel instead
 # ============================================
-@router.post("/session/cancel")
+@router.post("/session/cancel", deprecated=True)
 def cancel_session(
     request: CancelSessionRequest,
     db: Session = Depends(get_db)
@@ -853,8 +856,9 @@ def cancel_session(
 
 
 # Endpoint 5: GET /v1/pilot/activity
+# DEPRECATED: Use /v1/drivers/activity instead
 # ============================================
-@router.get("/activity")
+@router.get("/activity", deprecated=True)
 def get_activity(
     user_id: str = Query(..., description="User ID"),
     limit: int = Query(50, ge=1, le=100, description="Number of activities to return"),

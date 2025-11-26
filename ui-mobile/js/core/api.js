@@ -365,18 +365,20 @@ export async function pilotCancelSession(sessionId) {
 /**
  * Join a charge party event
  */
-export async function apiJoinChargeEvent({ eventSlug, chargerId = null, merchantId = null }) {
+export async function apiJoinChargeEvent({ eventSlug, chargerId = null, merchantId = null, userLat = null, userLng = null }) {
   try {
     const body = {};
     if (chargerId) body.charger_id = chargerId;
     if (merchantId) body.merchant_id = merchantId;
+    if (userLat !== null) body.user_lat = userLat;
+    if (userLng !== null) body.user_lng = userLng;
     
-    const res = await _req(`/v1/drivers/charge_events/${eventSlug}/join`, {
+    const res = await _req(`/v1/drivers/charge_events/${encodeURIComponent(eventSlug)}/join`, {
       method: 'POST',
       body: JSON.stringify(body),
     });
     
-    console.log('[API][Drivers] Joined charge event:', eventSlug, res);
+    console.log('[API][Drivers] Joined charge event (v1):', eventSlug, res);
     return res;
   } catch (e) {
     console.error('[API][Drivers] Failed to join charge event:', e.message);
@@ -424,10 +426,12 @@ export async function apiDriverWallet() {
  */
 export async function apiDriverActivity({ limit = 50 } = {}) {
   try {
-    // If backend has /v1/drivers/activity, use it. Otherwise use transactions.
-    // For now, we'll use wallet endpoint which may include transaction history
-    const wallet = await apiDriverWallet();
-    return wallet.transactions || [];
+    const params = new URLSearchParams({ limit: String(limit) });
+    const res = await _req(`/v1/drivers/activity?${params.toString()}`);
+    console.log('[API][Drivers] Activity (v1):', res);
+    
+    // Backend returns array directly, or wrap if needed
+    return Array.isArray(res) ? res : (res.events || res.transactions || []);
   } catch (e) {
     console.warn('[API][Drivers] Failed to get activity:', e.message);
     return [];
@@ -436,23 +440,72 @@ export async function apiDriverActivity({ limit = 50 } = {}) {
 
 /**
  * Session ping (update session location)
- * Note: Backend doesn't have a v1 session ping endpoint yet, using pilot endpoint temporarily
- * TODO: Backend should expose /v1/drivers/sessions/{id}/ping
+ * Canonical v1 endpoint - /v1/drivers/sessions/{id}/ping
  */
 export async function apiSessionPing({ sessionId, lat, lng }) {
-  // For now, use pilot endpoint until backend exposes v1 endpoint
-  // The response shape should be compatible
-  return pilotVerifyPing(sessionId, lat, lng);
+  try {
+    const res = await _req(`/v1/drivers/sessions/${encodeURIComponent(sessionId)}/ping`, {
+      method: 'POST',
+      body: JSON.stringify({ lat, lng }),
+    });
+    console.log('[API][Drivers] Session ping (v1):', res);
+    
+    // Normalize response to match expected shape
+    return {
+      session_id: sessionId,
+      verified: res.verified || false,
+      verified_at_charger: res.verified_at_charger || false,
+      reward_earned: res.reward_earned || false,
+      ready_to_claim: res.ready_to_claim || false,
+      charger_radius_m: res.charger_radius_m || 60,
+      distance_to_charger_m: res.distance_to_charger_m ?? 0,
+      dwell_seconds: res.dwell_seconds || 0,
+      needed_seconds: res.needed_seconds ?? 0,
+      nova_awarded: res.nova_awarded || 0,
+      wallet_balance: 0,
+      wallet_balance_nova: res.wallet_balance_nova || 0,
+      distance_to_merchant_m: res.distance_to_merchant_m,
+      within_merchant_radius: res.within_merchant_radius || false,
+      verification_score: res.verification_score || 0,
+      ...res
+    };
+  } catch (e) {
+    console.error('[API][Drivers] Session ping (v1) failed:', e.message);
+    throw e;
+  }
 }
 
 /**
  * Cancel session
- * Note: Backend doesn't have a v1 cancel endpoint yet, using pilot endpoint temporarily
- * TODO: Backend should expose /v1/drivers/sessions/{id}/cancel
+ * Canonical v1 endpoint - /v1/drivers/sessions/{id}/cancel
  */
 export async function apiCancelSession(sessionId) {
-  // For now, use pilot endpoint until backend exposes v1 endpoint
-  return pilotCancelSession(sessionId);
+  try {
+    const res = await fetch(`${BASE}/v1/drivers/sessions/${encodeURIComponent(sessionId)}/cancel`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    
+    // 204 No Content is success
+    if (res.status === 204 || res.ok) {
+      console.log('[API][Drivers] Session cancelled (v1):', sessionId);
+      return { ok: true };
+    }
+    
+    // Handle errors
+    if (res.status === 404) {
+      // Session not found - return success anyway (idempotent)
+      console.log('[API][Drivers] Session not found (v1) - treating as cancelled:', sessionId);
+      return { ok: true };
+    }
+    
+    const errorText = await res.text().catch(() => 'Unknown error');
+    throw new Error(`Cancel session failed (${res.status}): ${errorText}`);
+  } catch (e) {
+    console.warn('[API][Drivers] Cancel session (v1) failed:', e.message);
+    // Return success anyway - idempotent operation
+    return { ok: true };
+  }
 }
 
 // ============================================

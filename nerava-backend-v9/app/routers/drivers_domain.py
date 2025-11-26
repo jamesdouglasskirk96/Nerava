@@ -23,6 +23,9 @@ router = APIRouter(prefix="/v1/drivers", tags=["drivers"])
 # Request/Response Models
 class JoinChargePartyRequest(BaseModel):
     charger_id: Optional[str] = None  # event_slug comes from path parameter
+    merchant_id: Optional[str] = None  # Optional merchant for the session
+    user_lat: Optional[float] = None  # Optional user location for verify_dwell initialization
+    user_lng: Optional[float] = None
 
 
 class JoinChargePartyResponse(BaseModel):
@@ -94,6 +97,19 @@ def join_charge_party(
     db.add(session)
     db.commit()
     db.refresh(session)
+    
+    # Initialize old sessions table entry for verify_dwell bridge
+    # TODO: Migrate verify_dwell to work directly with DomainChargingSession
+    from app.services.session_service import SessionService
+    SessionService.initialize_verify_dwell_session(
+        db=db,
+        session_id=session_id,
+        driver_user_id=user.id,
+        charger_id=request.charger_id,
+        merchant_id=request.merchant_id,
+        user_lat=request.user_lat,
+        user_lng=request.user_lng
+    )
     
     return JoinChargePartyResponse(
         session_id=session_id,
@@ -199,4 +215,74 @@ def get_driver_wallet(
         "nova_balance": wallet.nova_balance,
         "energy_reputation_score": wallet.energy_reputation_score
     }
+
+
+# Session ping/cancel endpoints
+class SessionPingRequest(BaseModel):
+    lat: float
+    lng: float
+
+
+class SessionPingResponse(BaseModel):
+    verified: bool
+    reward_earned: bool
+    verified_at_charger: bool
+    ready_to_claim: bool
+    nova_awarded: int = 0
+    wallet_balance_nova: int = 0
+    distance_to_charger_m: int = 0
+    dwell_seconds: int = 0
+    needed_seconds: Optional[int] = None
+    charger_radius_m: Optional[int] = None
+    distance_to_merchant_m: Optional[int] = None
+    within_merchant_radius: Optional[bool] = None
+    verification_score: Optional[int] = None
+
+
+@router.post("/sessions/{session_id}/ping", response_model=SessionPingResponse)
+def ping_session_v1(
+    session_id: str,
+    payload: SessionPingRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_driver),
+):
+    """
+    Ping a session to update location and verification status.
+    
+    Canonical v1 endpoint - replaces /v1/pilot/verify_ping
+    """
+    from app.services.session_service import SessionService
+    
+    result = SessionService.ping_session(
+        db=db,
+        session_id=session_id,
+        driver_user_id=current_user.id,
+        lat=payload.lat,
+        lng=payload.lng,
+        accuracy_m=50.0  # Default accuracy
+    )
+    
+    return SessionPingResponse(**result)
+
+
+@router.post("/sessions/{session_id}/cancel", status_code=status.HTTP_204_NO_CONTENT)
+def cancel_session_v1(
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_driver),
+):
+    """
+    Cancel a charging session.
+    
+    Canonical v1 endpoint - replaces /v1/pilot/session/cancel
+    """
+    from app.services.session_service import SessionService
+    
+    SessionService.cancel_session(
+        db=db,
+        session_id=session_id,
+        driver_user_id=current_user.id
+    )
+    
+    return None  # 204 No Content
 
