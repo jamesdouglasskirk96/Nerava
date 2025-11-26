@@ -1,4 +1,5 @@
 import { loadDemoRedemption } from '../core/demo-state.js';
+import { apiDriverWallet } from '../core/api.js';
 
 export async function initWalletPage(rootEl) {
   rootEl.innerHTML = `
@@ -33,21 +34,27 @@ export async function initWalletPage(rootEl) {
     walletData.balance_cents = Math.round(demo.wallet_nova_balance * 10);
   }
   
-  // Try to load from API (may fail in demo)
+  // Try to load from v1 API
   try {
-    const data = await window.NeravaAPI.apiGet('/v1/wallet/summary');
-    if (data && data.balanceCents !== undefined) {
-      // Merge API data, but keep demo nova balance if higher
-      walletData.balance_dollars = (data.balanceCents / 100).toFixed(2);
-      walletData.balance_cents = data.balanceCents;
-      // If demo state has nova, prioritize that
-      if (demo && demo.wallet_nova_balance > 0) {
+    const wallet = await apiDriverWallet();
+    console.log('[Wallet] Wallet (v1) data:', wallet);
+    
+    if (wallet && typeof wallet.nova_balance === 'number') {
+      walletData.nova_balance = wallet.nova_balance;
+      // Demo conversion: $0.10 per Nova
+      walletData.balance_dollars = (wallet.nova_balance * 0.10).toFixed(2);
+      walletData.balance_cents = Math.round(wallet.nova_balance * 10);
+      
+      // Merge with demo state if demo has higher balance
+      if (demo && demo.wallet_nova_balance > wallet.nova_balance) {
+        walletData.nova_balance = demo.wallet_nova_balance;
         walletData.balance_dollars = (demo.wallet_nova_balance * 0.10).toFixed(2);
         walletData.balance_cents = Math.round(demo.wallet_nova_balance * 10);
       }
     }
   } catch (e) {
-    // API failed - use demo state only
+    console.warn('[Wallet] Failed to load wallet (v1):', e.message);
+    // Use demo state only if API fails
   }
   
   // Update balance display

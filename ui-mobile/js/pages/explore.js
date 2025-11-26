@@ -7,8 +7,7 @@
  * - Map Core: ui-mobile/js/core/map.js (Leaflet-based map utilities)
  * 
  * DATA SOURCES:
- * - Pilot Bootstrap: /v1/pilot/app/bootstrap (fallback to CHARGER_FALLBACK)
- * - Merchants/Perks: /v1/pilot/while_you_charge (fallback to _recommendedPerks)
+ * - Merchants/Perks: /v1/drivers/merchants/nearby (v1 API, zone-scoped)
  * - User location: navigator.geolocation API
  * 
  * NEW STRUCTURE (Apple Maps-style):
@@ -18,7 +17,13 @@
  * - AirDrop-style popover: Merchant quick view on tap (shown on charger/merchant tap)
  */
 
-import Api, { fetchPilotBootstrap, fetchPilotWhileYouCharge } from '../core/api.js';
+import Api, { 
+  apiNearbyMerchants, 
+  apiJoinChargeEvent, 
+  getCurrentUser,
+  EVENT_SLUG,
+  ZONE_SLUG,
+} from '../core/api.js';
 import { ensureMap, clearStations, addStationDot, fitToStations, getMap } from '../core/map.js';
 import { setTab } from '../app.js';
 
@@ -193,39 +198,34 @@ function updateHubHeader(bootstrap) {
 async function loadPilotData() {
   showLoadingState();
   try {
-    const bootstrap = await fetchPilotBootstrap();
-    console.log('[Explore] Bootstrap response:', bootstrap);
-    _pilotBootstrap = bootstrap || FALLBACK_HUB;
-    _pilotMode = _pilotBootstrap?.pilot_mode !== false;
+    // Get user location for nearby merchants query
+    let userLat = 30.4021; // Domain default
+    let userLng = -97.7266;
     
-    console.log('[Explore] Pilot mode:', _pilotMode, 'Hub:', _pilotBootstrap?.hub_name || _pilotBootstrap?.hub_id);
-    updateHubHeader(_pilotBootstrap);
-
-    const chargers = (_pilotBootstrap.chargers || [])
-      .map(toMapCharger)
-      .filter(Boolean);
-    
-    console.log('[Explore] Loaded chargers from bootstrap:', chargers.length, chargers);
-
-    if (chargers.length) {
-      _chargers = chargers;
-      renderChargerPins(chargers);
-    } else {
-      _chargers = fallbackChargers();
-      renderChargerPins(_chargers);
+    if (_userLocation) {
+      userLat = _userLocation.lat;
+      userLng = _userLocation.lng;
     }
-
-    console.log('[Explore] About to fetch while_you_charge...');
-    let whileYouCharge;
+    
+    // Load chargers - use fallback for now (can be migrated to v1 endpoint later)
+    _chargers = fallbackChargers();
+    renderChargerPins(_chargers);
+    
+    // Load nearby merchants using v1 API
+    console.log('[Explore] Fetching nearby merchants (v1)...');
+    let merchantsRaw;
     try {
-      whileYouCharge = await fetchPilotWhileYouCharge();
-      console.log('[Explore] While you charge response:', whileYouCharge);
+      const merchantsRes = await apiNearbyMerchants({
+        zoneSlug: ZONE_SLUG,
+        lat: userLat,
+        lng: userLng,
+      });
+      console.log('[Explore] Nearby merchants (v1) response:', merchantsRes);
+      merchantsRaw = Array.isArray(merchantsRes) ? merchantsRes : [];
     } catch (err) {
-      console.error('[Explore] Error fetching while_you_charge:', err);
-      throw err; // Re-throw to be caught by outer catch
+      console.error('[Explore] Error fetching nearby merchants:', err);
+      merchantsRaw = []; // Fallback to empty array
     }
-    
-    const merchantsRaw = whileYouCharge?.recommended_merchants || [];
     console.log('[Explore] Raw merchants from API:', merchantsRaw.length, merchantsRaw);
     
     // Log first merchant's structure to debug logo_url
@@ -260,20 +260,34 @@ async function loadPilotData() {
     if (_merchants.length) {
       applyMerchantFilter('');
     } else {
-      showEmptyState('No pilot merchants yet');
+      // Fallback to default perks if no merchants found
+      _merchants = _recommendedPerks.map(perk => ({
+        id: perk.id,
+        name: perk.name,
+        logo_url: perk.logo,
+        nova_reward: perk.nova,
+        walk_time_s: 0,
+      }));
+      updateRecommendedPerks(_recommendedPerks);
+      showEmptyState('No merchants found – showing default perks');
     }
 
     if (_chargers.length) {
       selectCharger(_chargers[0]);
     }
   } catch (err) {
-    console.error('[Explore] Pilot data error:', err);
-    _pilotBootstrap = FALLBACK_HUB;
+    console.error('[Explore] Failed to load merchants (v1):', err);
     _chargers = fallbackChargers();
     renderChargerPins(_chargers);
-    _merchants = [];
+    _merchants = _recommendedPerks.map(perk => ({
+      id: perk.id,
+      name: perk.name,
+      logo_url: perk.logo,
+      nova_reward: perk.nova,
+      walk_time_s: 0,
+    }));
     updateRecommendedPerks(_recommendedPerks);
-    showEmptyState('Pilot data unavailable – please try again.');
+    showEmptyState('Failed to load merchants – please try again.');
 
     if (_chargers.length) {
       selectCharger(_chargers[0]);
@@ -522,22 +536,21 @@ async function handlePerkCardStartSession(perk) {
   showToast('Starting session...');
   
   try {
-    // Call pilot API to start session
-    const sessionData = await Api.pilotStartSession(
-      userLat,
-      userLng,
+    // Call v1 API to join charge event and start session
+    const session = await apiJoinChargeEvent({
+      eventSlug: EVENT_SLUG,
       chargerId,
       merchantId,
-      123 // TODO: Get actual user_id from auth state
-    );
+    });
+    
+    const sessionId = session.session_id;
     
     // Store session in global state
     const sessionState = {
-      session_id: sessionData.session_id,
-      charger: sessionData.charger || currentCharger,
-      merchant: sessionData.merchant || fullMerchant,
-      hub_id: sessionData.hub_id,
-      hub_name: sessionData.hub_name
+      session_id: sessionId,
+      charger: currentCharger,
+      merchant: fullMerchant,
+      event_id: session.event_id || EVENT_SLUG,
     };
     
     if (typeof sessionStorage !== 'undefined') {
@@ -546,10 +559,10 @@ async function handlePerkCardStartSession(perk) {
     
     window.pilotSession = sessionState;
     
-    console.log('[Explore] Session started:', sessionData.session_id);
+    console.log('[Explore] Session started (v1):', session);
     
-    // Navigate directly to Earn page - single navigation, no double calls
-    navigateToEarn(sessionData.session_id, merchantId, chargerId);
+    // Navigate directly to Earn page
+    navigateToEarn(sessionId, merchantId, chargerId);
     
   } catch (e) {
     console.error('[Explore] Failed to start session:', e);
@@ -615,34 +628,32 @@ async function handleStartSession() {
   
   try {
     // Call pilot API to start session
-    const sessionData = await Api.pilotStartSession(
-      userLat,
-      userLng,
-      chargerId,
-      merchantId,
-      123 // TODO: Get actual user_id from auth state
-    );
+    const session = await apiJoinChargeEvent({
+      eventSlug: EVENT_SLUG,
+      chargerId: charger.id,
+      merchantId: merchant.id,
+    });
     
-    // Store session in global state (sessionStorage for persistence)
+    const sessionId = session.session_id;
+    
+    // Store session in global state
     const sessionState = {
-      session_id: sessionData.session_id,
-      charger: sessionData.charger || charger,
-      merchant: sessionData.merchant || merchant,
-      hub_id: sessionData.hub_id,
-      hub_name: sessionData.hub_name
+      session_id: sessionId,
+      charger: charger,
+      merchant: merchant,
+      event_id: session.event_id || EVENT_SLUG,
     };
     
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.setItem('pilot_session', JSON.stringify(sessionState));
     }
     
-    // Also store in window for immediate access
     window.pilotSession = sessionState;
     
-    console.log('[Explore] Session started:', sessionData.session_id);
+    console.log('[Explore] Session started (v1):', session);
     
-    // Navigate to Earn page using centralized helper
-    navigateToEarn(sessionData.session_id, merchantId, chargerId);
+    // Navigate to Earn page
+    navigateToEarn(sessionId, merchantId, chargerId);
     
     hideMerchantPopover();
     

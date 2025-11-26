@@ -41,14 +41,28 @@ function getApiBase() {
 
 const BASE = getApiBase();
 
+// Constants for Domain January charge party
+export const EVENT_SLUG = 'domain_jan_2025';
+export const ZONE_SLUG = 'domain_austin';
+
 async function _req(path, opts = {}) {
+  const headers = { 
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    ...opts.headers 
+  };
+  
   const r = await fetch(BASE + path, {
-    headers: { Accept: 'application/json' },
+    headers,
     credentials: 'include',
     ...opts,
   });
+  
   if (r.status === 404) return null;
-  if (!r.ok) throw new Error(`${r.status} ${path}`);
+  if (!r.ok) {
+    const errorText = await r.text().catch(() => 'Unknown error');
+    throw new Error(`${r.status} ${path}: ${errorText}`);
+  }
   return r.json();
 }
 
@@ -59,7 +73,143 @@ export const apiGet = (path, params) => {
 };
 
 export async function apiPost(path, body = {}, headers = {}) {
-  return _req(path, { method: 'POST', body, headers });
+  return _req(path, { 
+    method: 'POST', 
+    body: typeof body === 'string' ? body : JSON.stringify(body),
+    headers 
+  });
+}
+
+// ============================================
+// Auth API (canonical /v1/auth/*)
+// ============================================
+
+/**
+ * Register a new user
+ */
+export async function apiRegister(email, password, displayName = null, role = 'driver') {
+  try {
+    const body = { email, password };
+    if (displayName) body.display_name = displayName;
+    if (role) body.role = role;
+    
+    const res = await _req('/v1/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    
+    console.log('[API][Auth] Registration successful:', email);
+    
+    // Store token if provided
+    if (res.access_token) {
+      // Token is in HTTP-only cookie, but store user info if available
+      await apiMe(); // Refresh current user
+    }
+    
+    return res;
+  } catch (e) {
+    console.error('[API][Auth] Registration failed:', e.message);
+    throw e;
+  }
+}
+
+/**
+ * Login user
+ */
+export async function apiLogin(email, password) {
+  try {
+    const formData = new URLSearchParams();
+    formData.append('username', email);
+    formData.append('password', password);
+    
+    const res = await _req('/v1/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: formData.toString(),
+    });
+    
+    console.log('[API][Auth] Login successful:', email);
+    
+    // Token is in HTTP-only cookie, refresh current user
+    const user = await apiMe();
+    return { ...res, user };
+  } catch (e) {
+    console.error('[API][Auth] Login failed:', e.message);
+    throw e;
+  }
+}
+
+/**
+ * Logout user
+ */
+export async function apiLogout() {
+  try {
+    await _req('/v1/auth/logout', { method: 'POST' });
+    console.log('[API][Auth] Logged out');
+    
+    // Clear local user state
+    if (typeof window !== 'undefined') {
+      window.NERAVA_USER = null;
+      localStorage.removeItem('NERAVA_USER_ID');
+    }
+  } catch (e) {
+    console.warn('[API][Auth] Logout failed:', e.message);
+    // Clear local state anyway
+    if (typeof window !== 'undefined') {
+      window.NERAVA_USER = null;
+      localStorage.removeItem('NERAVA_USER_ID');
+    }
+  }
+}
+
+/**
+ * Get current user info
+ */
+export async function apiMe() {
+  try {
+    const user = await _req('/v1/auth/me');
+    
+    // Store globally
+    if (typeof window !== 'undefined') {
+      window.NERAVA_USER = user;
+      if (user.id) {
+        localStorage.setItem('NERAVA_USER_ID', String(user.id));
+      }
+    }
+    
+    return user;
+  } catch (e) {
+    // 401 means not logged in - that's OK
+    if (e.message.includes('401') || e.message.includes('Unauthorized')) {
+      if (typeof window !== 'undefined') {
+        window.NERAVA_USER = null;
+        localStorage.removeItem('NERAVA_USER_ID');
+      }
+      return null;
+    }
+    console.error('[API][Auth] Failed to get current user:', e.message);
+    throw e;
+  }
+}
+
+/**
+ * Get current user (from cache or fetch)
+ */
+export function getCurrentUser() {
+  if (typeof window !== 'undefined' && window.NERAVA_USER) {
+    return window.NERAVA_USER;
+  }
+  
+  // Try to get from localStorage
+  const userId = localStorage.getItem('NERAVA_USER_ID');
+  if (userId) {
+    // Return minimal user object - will be refreshed on next apiMe() call
+    return { id: parseInt(userId, 10) };
+  }
+  
+  return null;
 }
 
 export async function fetchPilotBootstrap() {
@@ -208,18 +358,154 @@ export async function pilotCancelSession(sessionId) {
   }
 }
 
+// ============================================
+// Driver API (canonical /v1/drivers/*)
+// ============================================
+
+/**
+ * Join a charge party event
+ */
+export async function apiJoinChargeEvent({ eventSlug, chargerId = null, merchantId = null }) {
+  try {
+    const body = {};
+    if (chargerId) body.charger_id = chargerId;
+    if (merchantId) body.merchant_id = merchantId;
+    
+    const res = await _req(`/v1/drivers/charge_events/${eventSlug}/join`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    
+    console.log('[API][Drivers] Joined charge event:', eventSlug, res);
+    return res;
+  } catch (e) {
+    console.error('[API][Drivers] Failed to join charge event:', e.message);
+    throw e;
+  }
+}
+
+/**
+ * Get nearby merchants in a zone
+ */
+export async function apiNearbyMerchants({ lat, lng, zoneSlug, radiusM = 5000 }) {
+  try {
+    const params = new URLSearchParams({
+      lat: String(lat),
+      lng: String(lng),
+      zone_slug: zoneSlug,
+      radius_m: String(radiusM),
+    });
+    
+    const res = await _req(`/v1/drivers/merchants/nearby?${params.toString()}`);
+    console.log('[API][Drivers] Nearby merchants:', res?.length || 0);
+    return res || [];
+  } catch (e) {
+    console.error('[API][Drivers] Failed to get nearby merchants:', e.message);
+    return []; // Return empty array on error
+  }
+}
+
+/**
+ * Get driver wallet
+ */
+export async function apiDriverWallet() {
+  try {
+    const res = await _req('/v1/drivers/me/wallet');
+    console.log('[API][Drivers] Wallet:', res);
+    return res;
+  } catch (e) {
+    console.error('[API][Drivers] Failed to get wallet:', e.message);
+    throw e;
+  }
+}
+
+/**
+ * Get driver activity/transactions
+ */
+export async function apiDriverActivity({ limit = 50 } = {}) {
+  try {
+    // If backend has /v1/drivers/activity, use it. Otherwise use transactions.
+    // For now, we'll use wallet endpoint which may include transaction history
+    const wallet = await apiDriverWallet();
+    return wallet.transactions || [];
+  } catch (e) {
+    console.warn('[API][Drivers] Failed to get activity:', e.message);
+    return [];
+  }
+}
+
+/**
+ * Session ping (update session location)
+ * Note: Backend doesn't have a v1 session ping endpoint yet, using pilot endpoint temporarily
+ * TODO: Backend should expose /v1/drivers/sessions/{id}/ping
+ */
+export async function apiSessionPing({ sessionId, lat, lng }) {
+  // For now, use pilot endpoint until backend exposes v1 endpoint
+  // The response shape should be compatible
+  return pilotVerifyPing(sessionId, lat, lng);
+}
+
+/**
+ * Cancel session
+ * Note: Backend doesn't have a v1 cancel endpoint yet, using pilot endpoint temporarily
+ * TODO: Backend should expose /v1/drivers/sessions/{id}/cancel
+ */
+export async function apiCancelSession(sessionId) {
+  // For now, use pilot endpoint until backend exposes v1 endpoint
+  return pilotCancelSession(sessionId);
+}
+
+// ============================================
+// Legacy Pilot Endpoints (DEPRECATED - will be removed)
+// ============================================
+
 if (typeof window !== 'undefined') {
   window.NeravaAPI = window.NeravaAPI || {};
   window.NeravaAPI.apiGet = apiGet;
   window.NeravaAPI.apiPost = apiPost;
+  window.NeravaAPI.apiRegister = apiRegister;
+  window.NeravaAPI.apiLogin = apiLogin;
+  window.NeravaAPI.apiLogout = apiLogout;
+  window.NeravaAPI.apiMe = apiMe;
+  window.NeravaAPI.getCurrentUser = getCurrentUser;
+  window.NeravaAPI.apiJoinChargeEvent = apiJoinChargeEvent;
+  window.NeravaAPI.apiNearbyMerchants = apiNearbyMerchants;
+  window.NeravaAPI.apiDriverWallet = apiDriverWallet;
+  window.NeravaAPI.apiDriverActivity = apiDriverActivity;
+  window.NeravaAPI.apiSessionPing = apiSessionPing;
+  window.NeravaAPI.apiCancelSession = apiCancelSession;
+  
+  // Legacy pilot endpoints (deprecated)
   window.NeravaAPI.fetchPilotBootstrap = fetchPilotBootstrap;
   window.NeravaAPI.fetchPilotWhileYouCharge = fetchPilotWhileYouCharge;
   window.NeravaAPI.fetchMerchantOffer = fetchMerchantOffer;
 }
 
 const Api = {
+  // Auth
+  apiRegister,
+  apiLogin,
+  apiLogout,
+  apiMe,
+  getCurrentUser,
+  
+  // Drivers
+  apiJoinChargeEvent,
+  apiNearbyMerchants,
+  apiDriverWallet,
+  apiDriverActivity,
+  apiSessionPing,
+  apiCancelSession,
+  
+  // Utils
   apiGet,
   apiPost,
+  
+  // Constants
+  EVENT_SLUG,
+  ZONE_SLUG,
+  
+  // Legacy pilot endpoints (deprecated - remove after migration)
   fetchPilotBootstrap,
   fetchPilotWhileYouCharge,
   fetchMerchantOffer,

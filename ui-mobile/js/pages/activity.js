@@ -92,76 +92,81 @@ export async function initActivityPage(rootEl) {
   }
 
   try {
-    // Use pilot activity endpoint instead of legacy endpoint
-    const userId = localStorage.NERAVA_USER_ID || '123';  // TODO: Get actual user_id
-    let data;
+    // Use v1 driver activity endpoint
+    const { apiDriverActivity, getCurrentUser } = await import('../core/api.js');
+    
+    // Ensure user is logged in
+    const user = getCurrentUser();
+    if (!user) {
+      console.warn('[Activity] No user logged in - showing demo state only');
+      // Continue with demo state only
+    }
+    
+    let events = [];
     try {
-      data = await window.NeravaAPI.apiGet('/v1/pilot/activity', { user_id: userId, limit: 50 });
+      events = await apiDriverActivity({ limit: 50 });
+      console.log('[Activity] Loaded (v1):', events);
     } catch (apiError) {
       // Handle API errors gracefully - still show demo state
       console.warn(`[Activity] Failed to load activity: ${apiError.message || 'Unknown error'}`);
-      data = null; // Will fall through to demo-only rendering
+      events = []; // Will fall through to demo-only rendering
     }
     
-    // If we have API data, merge it with demo state for reputation
-    if (data && data.reputation) {
-      const reputation = data.reputation;
-      const apiScore = reputation.score || 0;
-      const apiTier = reputation.tier || 'Bronze';
-      const apiStreakDays = reputation.streakDays || 0;
+    // Map v1 events to UI format
+    function mapActivityItem(item) {
+      return {
+        type: item.type || 'unknown',
+        createdAt: item.created_at,
+        novaAmount: item.amount || 0,
+        merchantName: item.merchant?.name || item.merchant_name || null,
+        description: item.metadata?.reason || `${item.type}: ${item.amount || 0} Nova`,
+      };
+    }
+    
+    const mappedEvents = events.map(mapActivityItem);
+    const data = mappedEvents.length > 0 ? { events: mappedEvents } : null;
+    
+    // Render v1 activity events
+    if (data && data.events && data.events.length > 0) {
+      // Render activity events from v1 API
+      const eventsList = document.getElementById('follow-list');
+      const emptyState = document.getElementById('activityEmptyState');
       
-      // Use demo state if it's higher/more recent, otherwise use API
-      const finalScore = (demo && demo.reputation_score) ? Math.max(demo.reputation_score, apiScore) : apiScore;
-      const finalTier = (demo && demo.reputation_score >= 50) ? (demo.reputation_score >= 100 ? 'Gold' : 'Silver') : apiTier;
-      const finalStreak = (demo && demo.streak_days) ? Math.max(demo.streak_days, apiStreakDays) : apiStreakDays;
-      
-      if (repTierEl) repTierEl.textContent = finalTier;
-      if (repScoreEl) repScoreEl.textContent = String(finalScore);
-      if (finalStreak > 0 && repStreak) {
-        repStreak.hidden = false;
-        repStreak.textContent = `🔋 ${finalStreak}-day streak`;
+      if (emptyState) emptyState.style.display = 'none';
+      if (eventsList) {
+        eventsList.innerHTML = data.events.map(evt => {
+          const when = new Date(evt.createdAt);
+          const whenLabel = when.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+          return `
+            <li class="intent">
+              <div class="intent__main">
+                <div class="title">${evt.merchantName || evt.description}</div>
+                <div class="sub">${whenLabel} • ${evt.type}</div>
+              </div>
+              <div class="activity-row-amount">+${evt.novaAmount || 0} Nova</div>
+            </li>
+          `;
+        }).join('');
       }
-      
-      const ni = nextTierInfo(finalScore);
-      if (repFillEl) repFillEl.style.width = ni.pct + '%';
-      if (repNextEl) {
-        repNextEl.textContent = ni.next
-          ? `${ni.toNext} pts to ${ni.next.name}`
-          : 'Top tier reached';
-      }
-
-      // Add follower/following counts from API
-      const repMeta = document.createElement('div');
-      repMeta.className = 'rep-meta';
-      repMeta.innerHTML = `
-        <div class="rep-pill"><strong>${reputation.followers_count || 12}</strong> Followers</div>
-        <div class="rep-pill"><strong>${reputation.following_count || 8}</strong> Following</div>
-      `;
-      rootEl.querySelector('.rep-stack').appendChild(repMeta);
-    } else if (!demo) {
-      // No API data and no demo - show defaults
-      if (repTierEl) repTierEl.textContent = 'Bronze';
-      if (repScoreEl) repScoreEl.textContent = '0';
-      if (repStreak) repStreak.hidden = true;
-      if (repFillEl) repFillEl.style.width = '0%';
-      if (repNextEl) repNextEl.textContent = '—';
     }
 
-    // Earnings - use demo state if available
-    let followTotal = data?.totals?.followCents || 0;
+    // Calculate total earnings from events
+    let followTotal = 0;
+    if (data && data.events && data.events.length > 0) {
+      followTotal = data.events.reduce((sum, evt) => sum + (evt.novaAmount || 0), 0) * 10; // Convert Nova to cents
+    }
     if (demo && demo.nova_awarded) {
-      // Convert demo Nova to dollars ($0.10 per Nova for demo)
       const demoDollars = (demo.nova_awarded * 0.10);
       followTotal = Math.max(followTotal, Math.round(demoDollars * 100));
     }
     const dollars = (followTotal/100).toFixed(2);
     rootEl.querySelector('#follow-total').textContent = `$${dollars}`;
 
-    // Render pilot activities (sessions, rewards, merchant visits)
+    // Render v1 activity events
     const ul = rootEl.querySelector('#follow-list');
     let hasActivities = false;
     
-    if (data && data.activities && data.activities.length > 0) {
+    if (data && data.events && data.events.length > 0) {
       ul.innerHTML = data.activities.map(item => {
         hasActivities = true;
         // Format activity based on type

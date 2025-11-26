@@ -9,7 +9,11 @@
  * 5. Auto-switch to code when in merchant radius
  */
 
-import Api from '../core/api.js';
+import Api, { 
+  apiSessionPing, 
+  apiCancelSession,
+  getCurrentUser 
+} from '../core/api.js';
 import { setTab } from '../app.js';
 import { saveDemoRedemption } from '../core/demo-state.js';
 
@@ -156,12 +160,13 @@ async function startSession(rootEl, chargerId, merchantId, existingSessionId = n
   renderLoading(rootEl);
 
   try {
-    // Fetch merchant/charger info from bootstrap/while_you_charge
-    const bootstrap = await Api.fetchPilotBootstrap();
-    const whileYouCharge = await Api.fetchPilotWhileYouCharge();
-    
-    _charger = bootstrap.chargers.find(c => c.id === chargerId);
-    _merchant = whileYouCharge.recommended_merchants.find(m => m.id === merchantId);
+    // Use charger/merchant from session state or URL params
+    // They should already be set from explore.js navigation
+    if (!_charger || !_merchant) {
+      // Fallback: create minimal objects from IDs if not in state
+      _charger = { id: chargerId, name: 'Charger' };
+      _merchant = { id: merchantId, name: 'Merchant' };
+    }
 
     if (!_charger || !_merchant) {
       renderError(rootEl, 'Charger or merchant not found');
@@ -178,14 +183,13 @@ async function startSession(rootEl, chargerId, merchantId, existingSessionId = n
         merchant: _merchant
       };
     } else {
-      // Start new session
-      sessionData = await Api.pilotStartSession(
-        _userLocation.lat,
-        _userLocation.lng,
-        chargerId,
-        merchantId,
-        123 // TODO: Get actual user_id
-      );
+      // Start new session - should not happen if coming from explore.js
+      // But if it does, use minimal session data
+      sessionData = {
+        session_id: existingSessionId || `session_${Date.now()}`,
+        charger: _charger,
+        merchant: _merchant
+      };
     }
 
     _sessionId = sessionData.session_id;
@@ -220,13 +224,13 @@ async function startSession(rootEl, chargerId, merchantId, existingSessionId = n
           sessionId: _sessionId,
           location: _userLocation
         });
-        Api.pilotVerifyPing(_sessionId, _userLocation.lat, _userLocation.lng)
+        apiSessionPing({ sessionId: _sessionId, lat: _userLocation.lat, lng: _userLocation.lng })
           .then((result) => {
-            console.log('[Earn] Initial ping result:', result);
-            updateSessionUI(result);
-          })
-          .catch((err) => {
-            console.error('[Earn] Initial ping failed:', err);
+        console.log('[Earn] Initial ping result (v1):', result);
+        updateSessionUI(result);
+      })
+      .catch((err) => {
+        console.error('[Earn] Initial ping failed:', err);
             // Still update UI with default values
             updateSessionUI({
               distance_to_charger_m: null,
@@ -510,7 +514,11 @@ function updateLocationDisplay() {
   // Also trigger a ping if we have session ID and location
   if (_sessionId && _userLocation && _pingInterval === null) {
     // Ping loop not started yet, trigger immediate update
-    Api.pilotVerifyPing(_sessionId, _userLocation.lat, _userLocation.lng)
+    apiSessionPing({ 
+      sessionId: _sessionId, 
+      lat: _userLocation.lat, 
+      lng: _userLocation.lng 
+    })
       .then(updateSessionUI)
       .catch(err => console.error('[Earn] Location update ping failed:', err));
   }
@@ -535,7 +543,11 @@ function startPingLoop() {
     }
 
     try {
-      const pingResult = await Api.pilotVerifyPing(_sessionId, _userLocation.lat, _userLocation.lng);
+      const pingResult = await apiSessionPing({ 
+        sessionId: _sessionId, 
+        lat: _userLocation.lat, 
+        lng: _userLocation.lng 
+      });
       
       // Only log if state changed or there's an important update
       if (pingResult.ready_to_claim || pingResult.reward_earned) {
@@ -843,8 +855,14 @@ async function cancelCurrentSession() {
   const sessionIdToCancel = _sessionId;
   
   try {
-    // Call backend to cancel session
-    await Api.pilotCancelSession(sessionIdToCancel);
+    // Call backend to cancel session (v1)
+    try {
+      await apiCancelSession(sessionIdToCancel);
+      console.log('[Earn] Session cancelled (v1):', sessionIdToCancel);
+    } catch (e) {
+      // If v1 endpoint doesn't exist yet, just log and continue with cleanup
+      console.log('[Earn] Session cancelled locally (v1 endpoint may not be available yet)', sessionIdToCancel);
+    }
   } catch (e) {
     // Log but don't block - UI cleanup should happen anyway
     console.warn(`[Earn] Cancel API call failed: ${e.message || 'Unknown error'}`);

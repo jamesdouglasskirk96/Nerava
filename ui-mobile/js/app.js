@@ -258,7 +258,26 @@ if ('serviceWorker' in navigator) {
 }
 
 // Initialize app
+// Initialize user on app load
+async function initAuth() {
+  try {
+    const { apiMe } = await import('./core/api.js');
+    const user = await apiMe();
+    if (user) {
+      console.log('[BOOT] Authenticated user:', user.email);
+    } else {
+      console.log('[BOOT] No authenticated user - will prompt for login');
+    }
+  } catch (e) {
+    console.warn('[BOOT] Failed to check auth status:', e.message);
+  }
+}
+
 async function initApp() {
+  // Check authentication status
+  await initAuth();
+  
+  console.log('[BOOT] Using canonical /v1 backend (no pilot endpoints)');
   
   // Load demo state and show banner if enabled
   await loadDemoState();
