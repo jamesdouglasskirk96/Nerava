@@ -90,7 +90,7 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
 def login(
     request: LoginRequest,
     db: Session = Depends(get_db),
-    http_response: Response = None
+    response: Response = None
 ):
     """Login user and return JWT token (accepts JSON body)"""
     try:
@@ -104,8 +104,8 @@ def login(
         token = AuthService.create_session_token(user)
         
         # Set HTTP-only cookie for better security
-        if http_response:
-            http_response.set_cookie(
+        if response:
+            response.set_cookie(
                 key="access_token",
                 value=token,
                 httponly=True,

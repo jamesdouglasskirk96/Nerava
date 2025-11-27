@@ -159,6 +159,12 @@ async def get_nearby_merchants(
     Zones are data-scoped (configured via Zone rows), not path-scoped.
     New zones/events don't require new endpoints.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(
+        "Nearby merchants requested",
+        extra={"lat": lat, "lng": lng, "zone_slug": zone_slug, "radius_m": radius_m, "user_id": user.id}
+    )
     # For now, bridge to the Domain hub view which has all the merchant data we need
     # TODO: Eventually refactor to query DomainMerchant + enrich with perks/logo/walk_time
     if zone_slug == "domain_austin":

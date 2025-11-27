@@ -6,13 +6,12 @@ from sqlalchemy import pool
 from alembic import context
 
 # Import your models
-# NOTE: models_domain.py is the SINGLE canonical source for EnergyEvent and Zone models.
-# Do NOT import models_extra.py here to avoid duplicate table definitions.
-# If models_extra needs to be imported, do it after models_domain to ensure canonical models are registered first.
+# CRITICAL: Import models through the aggregator module to ensure single registration.
+# The aggregator imports all model modules exactly once, preventing duplicate table errors.
+import app.models_all  # noqa: F401  # This imports all models and registers them with Base.metadata
+
+# Import Base from db (also imported by models_all, but we need it explicitly for target_metadata)
 from app.db import Base
-from app.models import *  # Import all models
-from app.models_while_you_charge import *  # Import While You Charge models
-from app.models_domain import *  # Import Domain Charge Party MVP models (now canonical v1) - includes EnergyEvent and Zone
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
