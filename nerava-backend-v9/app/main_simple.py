@@ -7,6 +7,21 @@ from .config import settings
 from .run_migrations import run_migrations
 
 logger = logging.getLogger(__name__)
+
+# CRITICAL: Run migrations FIRST before importing any routers that might import models
+# This ensures Base.metadata is clean and models are registered in the correct order
+# Note: models_domain will be imported during migrations (via env.py) and again when routers load
+# Python's module cache should prevent re-execution, but if duplicate table errors occur,
+# it means models are being registered twice in the same metadata instance
+try:
+    logger.info("Running database migrations on startup (before router imports)...")
+    run_migrations()
+    logger.info("Database migrations completed successfully")
+except Exception as e:
+    logger.error(f"Failed to run migrations on startup: {e}", exc_info=True)
+    # Don't fail startup if migrations fail - let the app start and log the error
+    # This prevents the app from being completely broken if migrations have issues
+
 from .middleware.logging import LoggingMiddleware
 from .middleware.metrics import MetricsMiddleware
 from .middleware.ratelimit import RateLimitMiddleware
@@ -17,7 +32,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 from pathlib import Path
 
-# Domain routers
+# Domain routers (imported AFTER migrations to avoid model registration conflicts)
 from .routers import (
     users,
     hubs,
@@ -164,15 +179,8 @@ STATIC_DIR = Path(__file__).parent / "static"
 if STATIC_DIR.exists() and STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR), html=False), name="static")
 
-# Run Alembic migrations on startup (creates all tables including sessions)
-try:
-    logger.info("Running database migrations on startup...")
-    run_migrations()
-    logger.info("Database migrations completed successfully")
-except Exception as e:
-    logger.error(f"Failed to run migrations on startup: {e}", exc_info=True)
-    # Don't fail startup if migrations fail - let the app start and log the error
-    # This prevents the app from being completely broken if migrations have issues
+# Migrations already run at the top of this file (before router imports)
+# This prevents model registration conflicts when routers import models_extra
 
 # Create tables on startup as fallback (SQLite dev only - migrations should handle this)
 # Base.metadata.create_all(bind=engine)
@@ -285,6 +293,34 @@ app.include_router(pilot_debug.router)
 app.include_router(merchant_reports.router)
 app.include_router(merchant_balance.router)
 app.include_router(pilot_redeem.router)
+
+# Canonical v1 API routers (promoted from Domain Charge Party MVP)
+# These are the production endpoints that the PWA uses
+from .routers import (
+    auth_domain,
+    drivers_domain,
+    merchants_domain,
+    admin_domain,
+    nova_domain
+)
+
+# Stripe router (optional - only load if stripe package is available)
+try:
+    from .routers import stripe_domain
+    STRIPE_AVAILABLE = True
+except (ImportError, ModuleNotFoundError) as e:
+    logger.warning(f"Stripe router not available (stripe package not installed): {e}")
+    STRIPE_AVAILABLE = False
+    stripe_domain = None
+
+# These are now the canonical /v1/* endpoints (no /domain/ prefix)
+app.include_router(auth_domain.router)  # /v1/auth/*
+app.include_router(drivers_domain.router)  # /v1/drivers/* (includes /merchants/nearby)
+app.include_router(merchants_domain.router)  # /v1/merchants/*
+if STRIPE_AVAILABLE:
+    app.include_router(stripe_domain.router)  # /v1/stripe/*
+app.include_router(admin_domain.router)  # /v1/admin/*
+app.include_router(nova_domain.router)  # /v1/nova/*
 
 # Add PWA error normalization for pilot endpoints
 from fastapi.responses import JSONResponse

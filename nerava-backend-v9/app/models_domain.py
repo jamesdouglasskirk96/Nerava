@@ -142,8 +142,9 @@ class NovaTransaction(Base):
     session_id = Column(String, ForeignKey("domain_charging_sessions.id"), nullable=True)
     event_id = Column(String, ForeignKey("energy_events.id"), nullable=True, index=True)  # Optional event reference
     
-    # Metadata
-    metadata = Column(JSON, nullable=True)  # Flexible JSON for additional context
+    # Metadata (Python attribute is 'transaction_meta' to avoid SQLAlchemy reserved word 'metadata')
+    # Database column name remains 'metadata' for backward compatibility
+    transaction_meta = Column("metadata", JSON, nullable=True)  # Flexible JSON for additional context
     
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     

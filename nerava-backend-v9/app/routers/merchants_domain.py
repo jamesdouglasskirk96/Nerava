@@ -183,7 +183,7 @@ def get_merchant_dashboard(
                 "amount": txn.amount,
                 "driver_user_id": txn.driver_user_id,
                 "created_at": txn.created_at.isoformat(),
-                "metadata": txn.metadata
+                "metadata": txn.transaction_meta
             }
             for txn in transactions
         ]

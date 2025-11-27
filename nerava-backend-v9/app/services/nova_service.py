@@ -63,7 +63,7 @@ class NovaService:
             amount=amount,
             session_id=session_id,
             event_id=event_id,
-            metadata=metadata or {}
+            transaction_meta=metadata or {}
         )
         db.add(transaction)
         db.commit()
@@ -134,7 +134,7 @@ class NovaService:
             merchant_id=merchant_id,
             amount=amount,
             session_id=session_id,
-            metadata=metadata or {}
+            transaction_meta=metadata or {}
         )
         db.add(driver_txn)
         
@@ -146,7 +146,7 @@ class NovaService:
             merchant_id=merchant_id,
             amount=amount,
             session_id=session_id,
-            metadata={**(metadata or {}), "source": "driver_redeem"}
+            transaction_meta={**(metadata or {}), "source": "driver_redeem"}
         )
         db.add(merchant_txn)
         
@@ -199,7 +199,7 @@ class NovaService:
             merchant_id=merchant_id,
             amount=amount,
             stripe_payment_id=stripe_payment_id,
-            metadata=metadata or {}
+            transaction_meta=metadata or {}
         )
         db.add(transaction)
         db.commit()

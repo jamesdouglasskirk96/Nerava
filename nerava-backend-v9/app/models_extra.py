@@ -256,13 +256,11 @@ class GreenHourDeal(Base):
     geo = Column(JSON, default=dict)
 
 # 16 Events
-class EnergyEvent(Base):
-    __tablename__ = "energy_events"
-    id = Column(Integer, primary_key=True)
-    event_id = Column(String, unique=True, nullable=False)
-    host_id = Column(String, index=True, nullable=False)
-    schedule = Column(JSON, default=dict)
-    boost_rate = Column(Integer, default=0)  # Using Integer for SQLite compatibility
+# NOTE: EnergyEvent is now defined ONLY in app/models_domain.py (canonical Domain Charge Party model)
+# This legacy EnergyEvent definition has been REMOVED to avoid SQLAlchemy table duplication errors.
+# If you need the legacy EnergyEvent schema (with event_id, host_id, schedule, boost_rate),
+# create a new table with a different name or migrate to models_domain.EnergyEvent.
+# DO NOT redefine EnergyEvent here - it will cause "Table 'energy_events' is already defined" errors.
 
 # 17 Utility Platform Tenants
 class TenantModule(Base):
