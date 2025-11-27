@@ -8,6 +8,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from datetime import timedelta
+import logging
 
 from app.db import get_db
 from app.models import User
@@ -19,6 +20,8 @@ from app.dependencies_domain import (
     require_merchant_admin
 )
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/auth", tags=["auth-v1"])
 
@@ -85,32 +88,44 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 def login(
-    form: OAuth2PasswordRequestForm = Depends(),
+    request: LoginRequest,
     db: Session = Depends(get_db),
-    response: Response = None
+    http_response: Response = None
 ):
-    """Login user and return JWT token"""
-    user = AuthService.authenticate_user(db, form.username, form.password)
-    if not user:
+    """Login user and return JWT token (accepts JSON body)"""
+    try:
+        user = AuthService.authenticate_user(db, request.email, request.password)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password"
+            )
+        
+        token = AuthService.create_session_token(user)
+        
+        # Set HTTP-only cookie for better security
+        if http_response:
+            http_response.set_cookie(
+                key="access_token",
+                value=token,
+                httponly=True,
+                secure=False,  # Set to False for localhost/HTTP, True in production with HTTPS
+                samesite="lax",
+                max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+            )
+        
+        return TokenResponse(access_token=token)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_detail = str(e)
+        error_traceback = traceback.format_exc()
+        logger.error(f"Login failed: {error_detail}\n{error_traceback}")
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Login failed: {error_detail}"
         )
-    
-    token = AuthService.create_session_token(user)
-    
-    # Set HTTP-only cookie for better security
-    if response:
-        response.set_cookie(
-            key="access_token",
-            value=token,
-            httponly=True,
-            secure=True,  # Set to True in production with HTTPS
-            samesite="lax",
-            max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
-        )
-    
-    return TokenResponse(access_token=token)
 
 
 @router.post("/logout")
