@@ -575,22 +575,12 @@ function triggerWalletToast(msg){
 // IMPORTANT: do not call L.map() anywhere else in this file.
 // Boot should call initExplore(); do NOT call another initMap().
 
-// Backend healthcheck and bootstrap verification
+// Backend healthcheck (skipped - using v1 endpoints directly)
 async function checkBackend() {
-  try {
-    const { fetchPilotBootstrap } = await import('./core/api.js');
-    const res = await fetchPilotBootstrap();
-    console.log('[BOOTSTRAP OK]', res);
-    window.__BOOTSTRAP__ = res;
-    return true;
-  } catch (e) {
-    console.error('[BOOTSTRAP FAILED]', e);
-    // Don't show alert in production - just log it
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      console.warn('Backend is unreachable. Make sure the backend is running at http://127.0.0.1:8001');
-    }
-    return false;
-  }
+  // No longer calling deprecated /v1/pilot/app/bootstrap
+  // App now uses canonical /v1/* endpoints directly (auth/me, drivers/merchants/nearby, etc.)
+  console.log('[BOOTSTRAP SKIPPED] Using canonical /v1 endpoints - no pilot bootstrap needed');
+  return true;
 }
 
 window.addEventListener('load', async ()=>{

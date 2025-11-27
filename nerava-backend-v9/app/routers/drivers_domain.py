@@ -39,9 +39,17 @@ class NearbyMerchantResponse(BaseModel):
     name: str
     lat: float
     lng: float
-    zone_slug: str
+    zone_slug: Optional[str] = None
     address: Optional[str] = None
     phone: Optional[str] = None
+    # Additional fields for frontend compatibility
+    merchant_id: Optional[str] = None
+    nova_reward: Optional[int] = None
+    walk_time_s: Optional[int] = None
+    walk_time_seconds: Optional[int] = None
+    distance_m: Optional[int] = None
+    logo_url: Optional[str] = None
+    category: Optional[str] = None
 
 
 class RedeemNovaRequest(BaseModel):
@@ -133,8 +141,8 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     return R * c
 
 
-@router.get("/merchants/nearby", response_model=List[NearbyMerchantResponse])
-def get_nearby_merchants(
+@router.get("/merchants/nearby")
+async def get_nearby_merchants(
     lat: float = Query(..., description="Latitude"),
     lng: float = Query(..., description="Longitude"),
     zone_slug: str = Query(..., description="Zone slug (e.g., domain_austin)"),
@@ -145,35 +153,103 @@ def get_nearby_merchants(
     """
     Get nearby merchants in a zone.
     
+    Bridge to while_you_charge service to get full merchant data with perks, logos, walk times.
+    Returns the same shape as the pilot while_you_charge endpoint for compatibility.
+    
     Zones are data-scoped (configured via Zone rows), not path-scoped.
     New zones/events don't require new endpoints.
     """
-    # Query active merchants in the zone
-    merchants = db.query(DomainMerchant).filter(
-        DomainMerchant.zone_slug == zone_slug,
-        DomainMerchant.status == "active"
-    ).all()
-    
-    # Filter by distance
-    nearby = []
-    for merchant in merchants:
-        distance = haversine_distance(lat, lng, merchant.lat, merchant.lng)
-        if distance <= radius_m:
-            address = merchant.addr_line1
-            if merchant.city:
-                address = f"{address}, {merchant.city}, {merchant.state}" if address else f"{merchant.city}, {merchant.state}"
-            
-            nearby.append(NearbyMerchantResponse(
-                id=merchant.id,
-                name=merchant.name,
-                lat=merchant.lat,
-                lng=merchant.lng,
-                zone_slug=merchant.zone_slug,
-                address=address,
-                phone=merchant.public_phone
-            ))
-    
-    return nearby
+    # For now, bridge to the Domain hub view which has all the merchant data we need
+    # TODO: Eventually refactor to query DomainMerchant + enrich with perks/logo/walk_time
+    if zone_slug == "domain_austin":
+        from app.services.while_you_charge import get_domain_hub_view_async, build_recommended_merchants_from_chargers
+        from app.utils.pwa_responses import shape_charger, shape_merchant
+        
+        # Get Domain hub view with chargers and merchants
+        hub_view = await get_domain_hub_view_async(db)
+        
+        # Get shaped chargers with merchants
+        shaped_chargers = []
+        for charger in hub_view.get("chargers", []):
+            shaped = shape_charger(
+                charger,
+                user_lat=lat,
+                user_lng=lng
+            )
+            # Attach merchants if present
+            if "merchants" in charger:
+                shaped_merchants = []
+                for merchant in charger["merchants"]:
+                    # Convert walk_minutes to walk_time_s if needed
+                    if "walk_minutes" in merchant and "walk_time_s" not in merchant:
+                        merchant["walk_time_s"] = merchant["walk_minutes"] * 60
+                    shaped_m = shape_merchant(
+                        merchant,
+                        user_lat=lat,
+                        user_lng=lng
+                    )
+                    # Ensure walk_time_seconds for aggregation
+                    if "walk_time_s" in shaped_m:
+                        shaped_m["walk_time_seconds"] = shaped_m["walk_time_s"]
+                    elif "walk_minutes" in merchant:
+                        shaped_m["walk_time_seconds"] = int(merchant["walk_minutes"] * 60)
+                    # Ensure merchant_id for aggregation
+                    if "id" in shaped_m and "merchant_id" not in shaped_m:
+                        shaped_m["merchant_id"] = shaped_m["id"]
+                    shaped_merchants.append(shaped_m)
+                shaped["merchants"] = shaped_merchants
+            shaped_chargers.append(shaped)
+        
+        # Build recommended merchants from chargers (same logic as pilot endpoint)
+        recommended_merchants = build_recommended_merchants_from_chargers(shaped_chargers, limit=20)
+        
+        # Filter by distance if user location provided
+        if lat and lng:
+            from app.services.verify_dwell import haversine_m
+            filtered = []
+            for merchant in recommended_merchants:
+                merchant_lat = merchant.get("lat")
+                merchant_lng = merchant.get("lng")
+                if merchant_lat and merchant_lng:
+                    distance = haversine_m(lat, lng, merchant_lat, merchant_lng)
+                    if distance <= radius_m:
+                        merchant["distance_m"] = int(round(distance))
+                        filtered.append(merchant)
+            return filtered
+        
+        return recommended_merchants
+    else:
+        # For other zones, fall back to DomainMerchant query
+        # TODO: Enrich with perks/logo/walk_time data
+        merchants = db.query(DomainMerchant).filter(
+            DomainMerchant.zone_slug == zone_slug,
+            DomainMerchant.status == "active"
+        ).all()
+        
+        nearby = []
+        for merchant in merchants:
+            distance = haversine_distance(lat, lng, merchant.lat, merchant.lng)
+            if distance <= radius_m:
+                address = merchant.addr_line1
+                if merchant.city:
+                    address = f"{address}, {merchant.city}, {merchant.state}" if address else f"{merchant.city}, {merchant.state}"
+                
+                nearby.append({
+                    "id": merchant.id,
+                    "merchant_id": merchant.id,
+                    "name": merchant.name,
+                    "lat": merchant.lat,
+                    "lng": merchant.lng,
+                    "zone_slug": merchant.zone_slug,
+                    "address": address,
+                    "phone": merchant.public_phone,
+                    "nova_reward": 10,  # Default
+                    "walk_time_s": 0,
+                    "walk_time_seconds": 0,
+                    "distance_m": int(round(distance))
+                })
+        
+        return nearby
 
 
 @router.post("/nova/redeem", response_model=RedeemNovaResponse)
