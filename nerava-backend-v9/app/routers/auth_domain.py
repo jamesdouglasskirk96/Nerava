@@ -72,9 +72,14 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
             detail=str(e)
         )
     except Exception as e:
+        import traceback
+        error_detail = str(e)
+        error_traceback = traceback.format_exc()
+        logger.error(f"Registration failed: {error_detail}\n{error_traceback}")
+        # Include more detail in response for debugging
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Registration failed: {str(e)}"
+            detail=f"Registration failed: {error_detail}. Check server logs for full traceback."
         )
 
 

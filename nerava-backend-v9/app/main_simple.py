@@ -360,6 +360,11 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    """Global exception handler for unhandled errors"""
+    import traceback
+    error_detail = str(exc)
+    error_traceback = traceback.format_exc()
+    logger.error(f"Unhandled exception: {error_detail}\n{error_traceback}", exc_info=True)
     """Global exception handler to ensure CORS headers are always set."""
     import logging
     logger = logging.getLogger(__name__)
@@ -371,9 +376,10 @@ async def global_exception_handler(request: Request, exc: Exception):
     
     # For other exceptions, return a 500 with proper CORS headers
     from fastapi.responses import JSONResponse
+    error_message = str(exc) if exc else "Internal server error"
     return JSONResponse(
         status_code=500,
-        content={"detail": "Internal server error"},
+        content={"detail": f"Internal server error: {error_message}"},
         headers={
             "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
             "Access-Control-Allow-Credentials": "true",
