@@ -1,0 +1,60 @@
+name: nerava_flutter
+description: Nerava - EV Charging & Rewards mobile app (v1)
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  flutter_riverpod: ^2.4.9
+
+  # WebView
+  webview_flutter: ^4.4.2
+
+  # QR Scanner
+  mobile_scanner: ^5.0.0
+
+  # Secure Storage
+  flutter_secure_storage: ^9.0.0
+
+  # HTTP Client
+  dio: ^5.4.0
+
+  # URL Launcher
+  url_launcher: ^6.2.2
+
+  # Package Info
+  package_info_plus: ^9.0.0
+
+  # JSON Serialization
+  json_annotation: ^4.8.1
+
+  # Path Provider (for secure storage on some platforms)
+  path_provider: ^2.1.1
+
+  # Permissions
+  permission_handler: ^11.1.0
+
+  # Connectivity
+  connectivity_plus: ^5.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+  build_runner: ^2.4.7
+  json_serializable: ^6.7.1
+
+flutter:
+  uses-material-design: true
+
+  # App Icon and Splash (to be added)
+  # assets:
+  #   - assets/images/
+  #   - assets/icons/
+
