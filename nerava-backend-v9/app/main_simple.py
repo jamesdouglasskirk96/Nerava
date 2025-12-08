@@ -221,8 +221,20 @@ paths:
 UI_DIR = Path(__file__).parent.parent.parent / "ui-mobile"
 if UI_DIR.exists() and UI_DIR.is_dir():
     try:
-        app.mount("/app", StaticFiles(directory=str(UI_DIR), html=True), name="ui")
+        # Use check_dir=False to prevent crashes if directory structure is unexpected
+        app.mount("/app", StaticFiles(directory=str(UI_DIR), html=True, check_dir=False), name="ui")
         logger.info("Mounted UI at /app from directory: %s", str(UI_DIR))
+        # Verify key files exist
+        me_js = UI_DIR / "js" / "pages" / "me.js"
+        avatar_png = UI_DIR / "img" / "avatar-default.png"
+        if me_js.exists():
+            logger.info("Verified: me.js exists at %s", str(me_js))
+        else:
+            logger.warning("me.js not found at %s", str(me_js))
+        if avatar_png.exists():
+            logger.info("Verified: avatar-default.png exists at %s", str(avatar_png))
+        else:
+            logger.warning("avatar-default.png not found at %s", str(avatar_png))
     except Exception as e:
         logger.exception("Failed to mount UI directory: %s", str(e))
         raise

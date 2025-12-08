@@ -3,6 +3,7 @@ function getApiBase() {
   // PRIORITY 1: Check for explicit production backend override (full URL)
   // This allows local UI to call production backend for testing
   // Example: localStorage.setItem('NERAVA_PROD_BACKEND', 'https://web-production-526f6.up.railway.app')
+  // NOTE: For local dev, leave this unset so UI talks to local backend
   const prodBackendOverride = localStorage.getItem('NERAVA_PROD_BACKEND');
   if (prodBackendOverride && prodBackendOverride.startsWith('http')) {
     console.log('[API] Using production backend (override URL):', prodBackendOverride);
@@ -46,6 +47,7 @@ function getApiBase() {
   
   // Development: use same origin as frontend to avoid CORS issues
   // This ensures requests from localhost:8001 go to localhost:8001, not 127.0.0.1:8001
+  // DEFAULT: Local UI talks to local backend unless explicitly overridden
   const devUrl = window.location.origin; // e.g., "http://localhost:8001"
   console.log('[API] Using development backend (same origin):', devUrl);
   return devUrl;

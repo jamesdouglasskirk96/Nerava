@@ -70,7 +70,7 @@ class RedeemNovaResponse(BaseModel):
 def join_charge_party(
     event_slug: str,
     request: JoinChargePartyRequest,
-    user: User = Depends(require_driver),
+    user: User = Depends(get_current_driver),
     db: Session = Depends(get_db)
 ):
     """
@@ -262,7 +262,7 @@ async def get_nearby_merchants(
 @router.post("/nova/redeem", response_model=RedeemNovaResponse)
 def redeem_nova(
     request: RedeemNovaRequest,
-    user: User = Depends(require_driver),
+    user: User = Depends(get_current_driver),
     db: Session = Depends(get_db)
 ):
     """Redeem Nova from driver to merchant"""
@@ -327,7 +327,7 @@ def ping_session_v1(
     session_id: str,
     payload: SessionPingRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_driver),
+    current_user: User = Depends(get_current_driver),
 ):
     """
     Ping a session to update location and verification status.
@@ -352,7 +352,7 @@ def ping_session_v1(
 def cancel_session_v1(
     session_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_driver),
+    current_user: User = Depends(get_current_driver),
 ):
     """
     Cancel a charging session.
