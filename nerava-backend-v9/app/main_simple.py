@@ -222,6 +222,7 @@ UI_DIR = Path(__file__).parent.parent.parent / "ui-mobile"
 if UI_DIR.exists() and UI_DIR.is_dir():
     try:
         # Use check_dir=False to prevent crashes if directory structure is unexpected
+        # Mount BEFORE routers to ensure static files are served first
         app.mount("/app", StaticFiles(directory=str(UI_DIR), html=True, check_dir=False), name="ui")
         logger.info("Mounted UI at /app from directory: %s", str(UI_DIR))
         # Verify key files exist
@@ -237,7 +238,8 @@ if UI_DIR.exists() and UI_DIR.is_dir():
             logger.warning("avatar-default.png not found at %s", str(avatar_png))
     except Exception as e:
         logger.exception("Failed to mount UI directory: %s", str(e))
-        raise
+        # Don't raise - allow app to start even if UI mount fails
+        logger.error("UI mount failed, but continuing startup")
 else:
     logger.warning("UI directory not found at: %s", str(UI_DIR))
 
