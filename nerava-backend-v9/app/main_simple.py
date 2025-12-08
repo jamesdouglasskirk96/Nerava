@@ -265,6 +265,7 @@ if UI_DIR.exists() and UI_DIR.is_dir():
         @app.get("/app/img/avatar-default.png")
         async def serve_avatar_default():
             """Direct route handler for avatar-default.png to bypass StaticFiles issues"""
+            # Read file and return as Response - don't raise HTTPException to avoid exception handler
             try:
                 with open(avatar_png, 'rb') as f:
                     content = f.read()
@@ -274,9 +275,18 @@ if UI_DIR.exists() and UI_DIR.is_dir():
                     media_type="image/svg+xml",  # File is SVG data URI
                     headers={"Content-Disposition": 'inline; filename="avatar-default.png"'}
                 )
+            except FileNotFoundError:
+                from fastapi.responses import Response
+                return Response(content="Avatar file not found", status_code=404, media_type="text/plain")
             except Exception as e:
                 logger.error(f"Error in serve_avatar_default: {e}", exc_info=True)
-                raise HTTPException(status_code=500, detail=f"Error serving avatar: {str(e)}")
+                # Return error response directly instead of raising HTTPException
+                from fastapi.responses import Response
+                return Response(
+                    content=f"Error serving avatar: {str(e)}",
+                    status_code=500,
+                    media_type="text/plain"
+                )
         logger.info("Added direct route handler for /app/img/avatar-default.png")
     
     # Now mount StaticFiles - routes registered above will take precedence
