@@ -226,13 +226,14 @@ paths:
 """
     return Response(content=fallback_spec, media_type="text/yaml")
 
-# Mount UI after app is defined
+# Mount UI AFTER all middleware to ensure it's processed last
+# StaticFiles should handle its own errors (404 for missing files)
 # Use Path(__file__) to resolve relative to this file's location
 UI_DIR = Path(__file__).parent.parent.parent / "ui-mobile"
 if UI_DIR.exists() and UI_DIR.is_dir():
     try:
         # Use check_dir=False to prevent crashes if directory structure is unexpected
-        # Mount BEFORE routers to ensure static files are served first
+        # Mount AFTER middleware but BEFORE routers to ensure static files are served
         app.mount("/app", StaticFiles(directory=str(UI_DIR), html=True, check_dir=False), name="ui")
         logger.info("Mounted UI at /app from directory: %s", str(UI_DIR))
         # Verify key files exist
@@ -253,18 +254,13 @@ if UI_DIR.exists() and UI_DIR.is_dir():
 else:
     logger.warning("UI directory not found at: %s", str(UI_DIR))
 
-# Mount /static for verify assets
-STATIC_DIR = Path(__file__).parent / "static"
-if STATIC_DIR.exists() and STATIC_DIR.is_dir():
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR), html=False), name="static")
-
 # Migrations already run at the top of this file (before router imports)
 # This prevents model registration conflicts when routers import models_extra
 
 # Create tables on startup as fallback (SQLite dev only - migrations should handle this)
 # Base.metadata.create_all(bind=engine)
 
-# Add middleware
+# Add middleware (BEFORE static mounts to ensure they process requests first)
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(MetricsMiddleware)
 app.add_middleware(RateLimitMiddleware, requests_per_minute=settings.rate_limit_per_minute)
@@ -326,6 +322,12 @@ app.add_middleware(
 
 print(">>>> CORSMiddleware added successfully <<<<", flush=True)
 logger.info(">>>> CORSMiddleware added successfully <<<<")
+
+# Mount /static for verify assets (AFTER middleware)
+STATIC_DIR = Path(__file__).parent / "static"
+if STATIC_DIR.exists() and STATIC_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR), html=False), name="static")
+    logger.info("Mounted /static from directory: %s", str(STATIC_DIR))
 
 # Operations routes
 app.include_router(ops.router)
