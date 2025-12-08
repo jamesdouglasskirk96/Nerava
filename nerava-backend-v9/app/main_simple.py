@@ -265,22 +265,36 @@ if allowed_origins_str == "*":
         "https://app.nerava.app",  # Production frontend
         "https://www.nerava.app",  # Production frontend (www)
     ]
+    
+    # CRITICAL: If FRONTEND_URL is set with a path (e.g., "http://localhost:8001/app"),
+    # extract just the origin (scheme://host:port) for CORS
+    # CORS origins must be exactly scheme://host[:port] - NO PATH
+    if hasattr(settings, 'FRONTEND_URL') and settings.FRONTEND_URL:
+        from urllib.parse import urlparse
+        parsed = urlparse(settings.FRONTEND_URL)
+        frontend_origin = f"{parsed.scheme}://{parsed.netloc}"
+        if frontend_origin not in allowed_origins:
+            allowed_origins.append(frontend_origin)
+            logger.info("Added FRONTEND_URL origin to CORS: %s (extracted from %s)", frontend_origin, settings.FRONTEND_URL)
+    
     # Note: Vercel domains will be handled by custom CORS middleware below
 else:
     # Split by comma and strip whitespace
     allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",")]
 
 # CRITICAL: CORS must be on the real app
-print(">>>> Adding CORSMiddleware to app <<<<", flush=True)
-logger.info(">>>> Adding CORSMiddleware to app <<<<")
+# Log the exact origins we're allowing for debugging
+final_origins = allowed_origins + [
+    "https://www.nerava.network",
+    "https://nerava.network",
+]
+print(f">>>> CORS allowed origins: {final_origins} <<<<", flush=True)
+logger.info(">>>> CORS allowed origins: %s <<<<", final_origins)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"https://.*\.vercel\.app|https://web-production-.*\.up\.railway\.app|https://.*\.nerava\.network",
-    allow_origins=allowed_origins + [
-        "https://www.nerava.network",
-        "https://nerava.network",
-    ],
+    allow_origins=final_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
