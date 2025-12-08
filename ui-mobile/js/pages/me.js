@@ -1,6 +1,32 @@
 import { apiMe, apiLogout, getCurrentUser, apiGetSmartcarConnectUrl, apiGetVehicleTelemetry } from '../core/api.js';
 import { loadDemoRedemption } from '../core/demo-state.js';
 
+// Safe MetaMask/Ethereum provider detection and connection
+function isMetaMaskAvailable() {
+  return typeof window !== 'undefined' &&
+    window.ethereum &&
+    (window.ethereum.isMetaMask || window.ethereum.isBraveWallet || true);
+}
+
+async function safeConnectMetaMask() {
+  if (!isMetaMaskAvailable()) {
+    console.warn('[Wallet][EV] No Ethereum provider / MetaMask extension detected. Skipping wallet connect.');
+    return null;
+  }
+
+  try {
+    const accounts = await window.ethereum.request({
+      method: 'eth_requestAccounts',
+    });
+    console.log('[Wallet][EV] Connected MetaMask accounts:', accounts);
+    return accounts;
+  } catch (err) {
+    // Silently handle MetaMask connection failures - don't block the page
+    console.warn('[Wallet][EV] Failed to connect to MetaMask (non-fatal):', err.message || err);
+    return null;
+  }
+}
+
 // Tier thresholds for reputation display
 const TIERS = [
   { name: 'Bronze', min: 0, color: '#9CA3AF' },
@@ -25,6 +51,12 @@ function getTierInfo(score) {
 
 export async function initMePage(rootEl) {
   console.log('[Profile] Initializing profile page...');
+
+  // Safely attempt MetaMask connection (non-blocking, non-fatal)
+  // This prevents unhandled promise rejections if MetaMask is not available
+  safeConnectMetaMask().catch(() => {
+    // Silently ignore - MetaMask connection is optional
+  });
 
   // Get user info
   let user = getCurrentUser();
