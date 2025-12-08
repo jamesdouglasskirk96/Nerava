@@ -1,5 +1,5 @@
 // Service Worker for Nerava PWA
-const CACHE_VERSION = 'v6';
+const CACHE_VERSION = 'v7';
 const CACHE_NAME = `nerava-${CACHE_VERSION}`;
 const OFFLINE_URL = './offline.html';
 
@@ -83,19 +83,33 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
         fetch(request)
             .then((response) => {
-                // Only cache successful GET responses
-                if (response.status === 200 && request.method === 'GET') {
+                // Only cache successful GET responses (200-299 status codes)
+                // NEVER cache error responses (4xx, 5xx) - they might be temporary backend issues
+                if (response.status >= 200 && response.status < 300 && request.method === 'GET') {
                     const responseClone = response.clone();
                     caches.open(CACHE_NAME).then((cache) => {
                         cache.put(request, responseClone).catch(err => {
                             console.warn('Service Worker: Failed to cache', request.url, err);
                         });
                     });
+                } else if (response.status >= 400) {
+                    // For error responses, try to get from cache if available, but don't cache the error
+                    console.warn('Service Worker: Error response', response.status, 'for', request.url);
+                    return caches.match(request).then((cachedResponse) => {
+                        // If we have a cached version, use it instead of the error
+                        if (cachedResponse && cachedResponse.status < 400) {
+                            console.log('Service Worker: Using cached version instead of error response');
+                            return cachedResponse;
+                        }
+                        // Otherwise, return the error response (don't cache it)
+                        return response;
+                    });
                 }
                 return response;
             })
-            .catch(() => {
-                // Offline: return cached version or offline page
+            .catch((error) => {
+                // Network error: return cached version or offline page
+                console.warn('Service Worker: Network error for', request.url, error);
                 return caches.match(request).then((cachedResponse) => {
                     if (cachedResponse) {
                         return cachedResponse;
