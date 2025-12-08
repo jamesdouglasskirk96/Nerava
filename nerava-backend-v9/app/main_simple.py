@@ -502,10 +502,12 @@ async def global_exception_handler(request: Request, exc: Exception):
     """Global exception handler for unhandled errors"""
     # Skip exception handling for static file paths - let FastAPI/Starlette handle them
     # IMPORTANT: StaticFiles should handle its own errors (404 for missing files, etc.)
-    if request.url.path.startswith("/app/") or request.url.path.startswith("/static/"):
-        # Log the error but don't convert it to JSON - let StaticFiles handle it
-        logger.debug(f"Exception in static file request {request.url.path}: {exc}")
+    path = request.url.path
+    if path.startswith("/app/") or path.startswith("/static/"):
+        # Log the error for debugging but don't convert it to JSON
+        logger.warning(f"Exception in static file request {path}: {type(exc).__name__}: {exc}")
         # Re-raise to let StaticFiles/Starlette handle the error naturally
+        # This allows StaticFiles to return proper 404 for missing files
         raise exc
     
     import traceback
