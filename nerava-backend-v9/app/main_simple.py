@@ -261,13 +261,28 @@ else:
 # Route handlers registered after mounts take precedence for specific paths
 # This bypasses StaticFiles mount and serves the file directly
 if avatar_png and avatar_png.exists():
-        @app.get("/app/img/avatar-default.png", response_class=FileResponse)
+        @app.get("/app/img/avatar-default.png")
         async def serve_avatar_default():
             """Direct route handler for avatar-default.png to bypass StaticFiles issues"""
-            # Return FileResponse directly - FastAPI will handle it
+            # Check if file is actually an SVG data URI (text) or a real PNG
+            try:
+                with open(avatar_png, 'rb') as f:
+                    first_bytes = f.read(8)
+                    # PNG files start with PNG signature: 89 50 4E 47 0D 0A 1A 0A
+                    if first_bytes.startswith(b'\x89PNG\r\n\x1a\n'):
+                        media_type = "image/png"
+                    elif first_bytes.startswith(b'data:image'):
+                        # It's a data URI - serve as text/plain or detect SVG
+                        media_type = "image/svg+xml" if b'svg' in first_bytes.lower() else "text/plain"
+                    else:
+                        # Default to PNG for backwards compatibility
+                        media_type = "image/png"
+            except Exception:
+                media_type = "image/png"  # Fallback
+            
             return FileResponse(
                 path=str(avatar_png),
-                media_type="image/png",
+                media_type=media_type,
                 filename="avatar-default.png"
             )
         logger.info("Added direct route handler for /app/img/avatar-default.png")
