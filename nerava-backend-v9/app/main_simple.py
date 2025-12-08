@@ -149,7 +149,11 @@ logger.info(">>>> Nerava Logging Middleware Decorator Applied <<<<")
 @app.get("/")
 async def root():
     from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/app/")
+    try:
+        return RedirectResponse(url="/app/")
+    except Exception as e:
+        logger.exception("Error in root redirect: %s", str(e))
+        raise
 
 # Serve OpenAPI spec for ChatGPT Actions
 @app.get("/openapi-actions.yaml")
@@ -216,7 +220,14 @@ paths:
 # Use Path(__file__) to resolve relative to this file's location
 UI_DIR = Path(__file__).parent.parent.parent / "ui-mobile"
 if UI_DIR.exists() and UI_DIR.is_dir():
-    app.mount("/app", StaticFiles(directory=str(UI_DIR), html=True), name="ui")
+    try:
+        app.mount("/app", StaticFiles(directory=str(UI_DIR), html=True), name="ui")
+        logger.info("Mounted UI at /app from directory: %s", str(UI_DIR))
+    except Exception as e:
+        logger.exception("Failed to mount UI directory: %s", str(e))
+        raise
+else:
+    logger.warning("UI directory not found at: %s", str(UI_DIR))
 
 # Mount /static for verify assets
 STATIC_DIR = Path(__file__).parent / "static"
