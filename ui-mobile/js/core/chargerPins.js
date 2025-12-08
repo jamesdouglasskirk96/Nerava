@@ -7,16 +7,17 @@
 
 /* globals L */
 
-// Network logo mapping (using Clearbit CDN for now)
+// Network logo mapping (using local placeholder to avoid 403s from third-party domains)
+const MERCHANT_LOGO_PLACEHOLDER = './img/avatar-default.png';
 const NETWORK_LOGOS = {
-  'tesla': './img/avatar-default.png',
-  'chargepoint': 'https://logo.clearbit.com/chargepoint.com',
-  'evgo': 'https://logo.clearbit.com/evgo.com',
-  'electrify_america': 'https://logo.clearbit.com/electrifyamerica.com',
-  'volta': 'https://logo.clearbit.com/volta.com',
-  'blink': 'https://logo.clearbit.com/blinkcharging.com',
-  'flo': 'https://logo.clearbit.com/flo.com',
-  'ampup': 'https://logo.clearbit.com/ampup.com',
+  'tesla': MERCHANT_LOGO_PLACEHOLDER,
+  'chargepoint': MERCHANT_LOGO_PLACEHOLDER,
+  'evgo': MERCHANT_LOGO_PLACEHOLDER,
+  'electrify_america': MERCHANT_LOGO_PLACEHOLDER,
+  'volta': MERCHANT_LOGO_PLACEHOLDER,
+  'blink': MERCHANT_LOGO_PLACEHOLDER,
+  'flo': MERCHANT_LOGO_PLACEHOLDER,
+  'ampup': MERCHANT_LOGO_PLACEHOLDER,
   'generic': 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEzIDJMMyAxNGg3bC0xIDggMTAtMTJoLTdsMS04eiIgZmlsbD0iIzJGNkJGRiIvPgo8L3N2Zz4K' // Generic lightning bolt
 };
 
