@@ -161,7 +161,7 @@ logger.info(">>>> Nerava Logging Middleware Decorator Applied <<<<")
 async def root():
     from fastapi.responses import RedirectResponse
     try:
-    return RedirectResponse(url="/app/")
+        return RedirectResponse(url="/app/")
     except Exception as e:
         logger.exception("Error in root redirect: %s", str(e))
         raise
