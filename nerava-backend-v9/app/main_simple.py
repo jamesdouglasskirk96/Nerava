@@ -127,16 +127,26 @@ logger.info(">>>> Nerava REAL APP MODULE LOADED - app object created <<<<")
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     """Log all requests and responses for debugging in Railway"""
-    # CRITICAL DEBUG: This confirms the middleware is executing
-    print(f">>>> REQUEST {request.method} {request.url.path} <<<<", flush=True)
-    logger.info(">>>> REQUEST %s %s <<<<", request.method, request.url.path)
+    # Skip detailed logging for static files to reduce noise
+    is_static = request.url.path.startswith("/app/") or request.url.path.startswith("/static/")
+    
+    if not is_static:
+        print(f">>>> REQUEST {request.method} {request.url.path} <<<<", flush=True)
+        logger.info(">>>> REQUEST %s %s <<<<", request.method, request.url.path)
+    
     try:
         response = await call_next(request)
-        print(f">>>> RESPONSE {request.method} {request.url.path} -> {response.status_code} <<<<", flush=True)
-        logger.info(">>>> RESPONSE %s %s -> %s <<<<", request.method, request.url.path, response.status_code)
+        
+        if not is_static:
+            print(f">>>> RESPONSE {request.method} {request.url.path} -> {response.status_code} <<<<", flush=True)
+            logger.info(">>>> RESPONSE %s %s -> %s <<<<", request.method, request.url.path, response.status_code)
         return response
     except Exception as e:
-        # Log full stack trace in Railway logs
+        # For static files, let the exception propagate without logging (StaticFiles will handle it)
+        if is_static:
+            raise
+        
+        # Log full stack trace in Railway logs for non-static requests
         print(f">>>> UNHANDLED ERROR during {request.method} {request.url.path}: {e} <<<<", flush=True)
         logger.exception(">>>> UNHANDLED ERROR during %s %s <<<<", request.method, request.url.path)
         raise
