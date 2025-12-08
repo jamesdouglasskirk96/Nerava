@@ -30,11 +30,19 @@ class AuthMiddleware(BaseHTTPMiddleware):
             "/v1/energyhub/events/charge-stop",  # Public endpoint
             "/oauth/smartcar/callback",  # Smartcar OAuth callback (no auth required)
         }
+        # Exclude all /app paths (UI static files)
+        # Check if path starts with /app to allow all UI routes
+        self.excluded_path_prefixes = ["/app"]
     
     async def dispatch(self, request: Request, call_next):
         # Skip authentication for excluded paths
         if request.url.path in self.excluded_paths:
             return await call_next(request)
+        
+        # Skip authentication for paths starting with excluded prefixes (e.g., /app for UI)
+        for prefix in getattr(self, 'excluded_path_prefixes', []):
+            if request.url.path.startswith(prefix):
+                return await call_next(request)
         
         # Extract token from Authorization header
         auth_header = request.headers.get("Authorization")
