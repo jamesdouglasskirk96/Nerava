@@ -257,21 +257,43 @@ if UI_DIR.exists() and UI_DIR.is_dir():
 else:
     logger.warning("UI directory not found at: %s", str(UI_DIR))
 
-# Add direct route handler for avatar-default.png AFTER mount
+# Add direct route handlers for common paths AFTER mount
 # Route handlers registered after mounts take precedence for specific paths
-# This bypasses StaticFiles mount and serves the file directly
-if avatar_png and avatar_png.exists():
-        @app.get("/app/img/avatar-default.png")
-        async def serve_avatar_default():
-            """Direct route handler for avatar-default.png to bypass StaticFiles issues"""
-            # File is actually an SVG data URI stored as text, but served as image
-            # Let FileResponse auto-detect content type or use image/svg+xml
+# This bypasses StaticFiles mount and serves files directly to avoid 500 errors
+
+# Handler for /app (without trailing slash) - redirect to /app/
+@app.get("/app")
+async def serve_app_root():
+    """Redirect /app to /app/ to ensure StaticFiles serves index.html"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/app/", status_code=301)
+
+# Handler for /app/ - serve index.html directly
+if UI_DIR.exists() and UI_DIR.is_dir():
+    index_html = UI_DIR / "index.html"
+    if index_html.exists():
+        @app.get("/app/")
+        async def serve_app_index():
+            """Direct route handler for /app/ to serve index.html"""
             return FileResponse(
-                path=str(avatar_png),
-                media_type="image/svg+xml",  # File is SVG data URI
-                filename="avatar-default.png"
+                path=str(index_html),
+                media_type="text/html",
+                filename="index.html"
             )
-        logger.info("Added direct route handler for /app/img/avatar-default.png")
+        logger.info("Added direct route handler for /app/")
+
+# Handler for avatar-default.png
+if avatar_png and avatar_png.exists():
+    @app.get("/app/img/avatar-default.png")
+    async def serve_avatar_default():
+        """Direct route handler for avatar-default.png to bypass StaticFiles issues"""
+        # File is actually an SVG data URI stored as text, but served as image
+        return FileResponse(
+            path=str(avatar_png),
+            media_type="image/svg+xml",  # File is SVG data URI
+            filename="avatar-default.png"
+        )
+    logger.info("Added direct route handler for /app/img/avatar-default.png")
 
 # Migrations already run at the top of this file (before router imports)
 # This prevents model registration conflicts when routers import models_extra
