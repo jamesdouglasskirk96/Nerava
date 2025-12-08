@@ -118,22 +118,32 @@ from .routers.user_prefs import router as prefs_router
 
 app = FastAPI(title="Nerava Backend v9", version="0.9.0")
 
+# CRITICAL DEBUG: Confirm app object is created
+print(">>>> Nerava REAL APP MODULE LOADED - app object created <<<<", flush=True)
+logger.info(">>>> Nerava REAL APP MODULE LOADED - app object created <<<<")
+
 # Request/Response logging middleware
 # CRITICAL: This middleware MUST execute for Railway logs to show requests/errors
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     """Log all requests and responses for debugging in Railway"""
     # CRITICAL DEBUG: This confirms the middleware is executing
-    logger.info(">>>> MIDDLEWARE EXECUTING: %s %s <<<<", request.method, request.url.path)
-    logger.info("REQUEST %s %s", request.method, request.url.path)
+    print(f">>>> REQUEST {request.method} {request.url.path} <<<<", flush=True)
+    logger.info(">>>> REQUEST %s %s <<<<", request.method, request.url.path)
     try:
         response = await call_next(request)
-        logger.info("RESPONSE %s %s -> %s", request.method, request.url.path, response.status_code)
+        print(f">>>> RESPONSE {request.method} {request.url.path} -> {response.status_code} <<<<", flush=True)
+        logger.info(">>>> RESPONSE %s %s -> %s <<<<", request.method, request.url.path, response.status_code)
         return response
     except Exception as e:
         # Log full stack trace in Railway logs
-        logger.exception("UNHANDLED ERROR during %s %s: %s", request.method, request.url.path, str(e))
+        print(f">>>> UNHANDLED ERROR during {request.method} {request.url.path}: {e} <<<<", flush=True)
+        logger.exception(">>>> UNHANDLED ERROR during %s %s <<<<", request.method, request.url.path)
         raise
+
+# CRITICAL DEBUG: Confirm middleware decorator was applied
+print(">>>> Nerava Logging Middleware Decorator Applied <<<<", flush=True)
+logger.info(">>>> Nerava Logging Middleware Decorator Applied <<<<")
 
 # Redirect root to /app
 @app.get("/")
@@ -249,6 +259,10 @@ else:
     # Split by comma and strip whitespace
     allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",")]
 
+# CRITICAL: CORS must be on the real app
+print(">>>> Adding CORSMiddleware to app <<<<", flush=True)
+logger.info(">>>> Adding CORSMiddleware to app <<<<")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"https://.*\.vercel\.app|https://web-production-.*\.up\.railway\.app|https://.*\.nerava\.network",
@@ -260,6 +274,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+print(">>>> CORSMiddleware added successfully <<<<", flush=True)
+logger.info(">>>> CORSMiddleware added successfully <<<<")
 
 # Operations routes
 app.include_router(ops.router)
