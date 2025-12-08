@@ -986,7 +986,7 @@ function renderDiscoverMerchants(merchants) {
     const ratingCount = merchant.rating_count || '3,200';
     const category = merchant.category || 'Smoothies';
     const priceTier = merchant.price_tier || '$$';
-    const logoUrl = merchant.logo_url || merchant.image_url || '/img/juiceland-logo.png';
+    const logoUrl = merchant.logo_url || merchant.image_url || './img/juiceland-logo.png';
 
     card.innerHTML = `
       <div class="merchant-card__left">
