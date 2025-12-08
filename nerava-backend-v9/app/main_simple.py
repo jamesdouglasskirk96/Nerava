@@ -20,6 +20,10 @@ logging.basicConfig(
 logger = logging.getLogger("nerava")
 logger.info("Starting Nerava Backend v9")
 
+# CRITICAL DEBUG: Confirm this file is being loaded
+print(">>>> Nerava main_simple.py LOADED <<<<", flush=True)
+logger.info(">>>> Nerava main_simple.py LOADED <<<<")
+
 # CRITICAL: Run migrations FIRST before importing any routers that might import models
 # This ensures Base.metadata is clean and models are registered in the correct order
 # Note: models_domain will be imported during migrations (via env.py) and again when routers load
@@ -115,17 +119,20 @@ from .routers.user_prefs import router as prefs_router
 app = FastAPI(title="Nerava Backend v9", version="0.9.0")
 
 # Request/Response logging middleware
+# CRITICAL: This middleware MUST execute for Railway logs to show requests/errors
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     """Log all requests and responses for debugging in Railway"""
+    # CRITICAL DEBUG: This confirms the middleware is executing
+    logger.info(">>>> MIDDLEWARE EXECUTING: %s %s <<<<", request.method, request.url.path)
     logger.info("REQUEST %s %s", request.method, request.url.path)
     try:
         response = await call_next(request)
         logger.info("RESPONSE %s %s -> %s", request.method, request.url.path, response.status_code)
         return response
-    except Exception:
+    except Exception as e:
         # Log full stack trace in Railway logs
-        logger.exception("UNHANDLED ERROR during %s %s", request.method, request.url.path)
+        logger.exception("UNHANDLED ERROR during %s %s: %s", request.method, request.url.path, str(e))
         raise
 
 # Redirect root to /app
