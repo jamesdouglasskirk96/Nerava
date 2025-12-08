@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 import sys
@@ -263,8 +264,11 @@ if UI_DIR.exists() and UI_DIR.is_dir():
         @app.get("/app/img/avatar-default.png")
         async def serve_avatar_default():
             """Direct route handler for avatar-default.png to bypass StaticFiles issues"""
-            from fastapi.responses import FileResponse
-            return FileResponse(str(avatar_png), media_type="image/png")
+            try:
+                return FileResponse(str(avatar_png), media_type="image/png")
+            except Exception as e:
+                logger.error(f"Error serving avatar-default.png: {e}", exc_info=True)
+                raise HTTPException(status_code=500, detail=f"Error serving file: {str(e)}")
         logger.info("Added direct route handler for /app/img/avatar-default.png")
 
 # Migrations already run at the top of this file (before router imports)
