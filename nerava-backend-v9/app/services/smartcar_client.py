@@ -47,7 +47,8 @@ async def exchange_code_for_tokens(code: str) -> Dict[str, Any]:
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as e:
-            logger.error(f"Smartcar token exchange failed: {e.response.status_code} - {e.response.text}")
+            # Don't log response body - may contain tokens/secrets
+            logger.error(f"Smartcar token exchange failed: {e.response.status_code}")
             raise
         except Exception as e:
             logger.error(f"Unexpected error during token exchange: {e}")
@@ -100,7 +101,8 @@ async def refresh_tokens(db: Session, vehicle_account: VehicleAccount) -> Vehicl
             response.raise_for_status()
             token_data = response.json()
         except httpx.HTTPStatusError as e:
-            logger.error(f"Smartcar token refresh failed: {e.response.status_code} - {e.response.text}")
+            # Don't log response body - may contain tokens/secrets
+            logger.error(f"Smartcar token refresh failed: {e.response.status_code}")
             raise
         except Exception as e:
             logger.error(f"Unexpected error during token refresh: {e}")
