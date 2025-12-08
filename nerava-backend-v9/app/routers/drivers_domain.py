@@ -14,7 +14,7 @@ from app.db import get_db
 from app.models import User
 from app.models_domain import DomainMerchant, DomainChargingSession
 from app.services.nova_service import NovaService
-from app.dependencies_domain import require_driver, get_current_user
+from app.dependencies_domain import get_current_user
 from app.dependencies_driver import get_current_driver
 from app.services.auth_service import AuthService
 
