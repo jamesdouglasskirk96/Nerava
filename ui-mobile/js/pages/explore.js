@@ -857,13 +857,13 @@ function renderMerchantCard(merchant) {
     category = 'Smoothies',
     price_tier = '$$',
     distance_text = '0.1 mi',
-    image_url = '/img/placeholder-merchant.jpg',
+    image_url = './img/placeholder-merchant.jpg',
     logo_url,
     photo_url
   } = merchant;
 
   // Use photo_url or logo_url as fallback
-  const merchantImage = image_url || photo_url || logo_url || '/img/placeholder-merchant.jpg';
+  const merchantImage = image_url || photo_url || logo_url || './img/placeholder-merchant.jpg';
 
   const card = document.createElement('div');
   card.className = 'perk-card perk-card--resy';
@@ -885,7 +885,7 @@ function renderMerchantCard(merchant) {
       <button class="btn btn-primary perk-card__button">View details</button>
     </div>
     <div class="perk-card__right">
-      <img src="${merchantImage}" alt="${name}" class="perk-card__image" onerror="this.src='/img/placeholder-merchant.jpg'" />
+      <img src="${merchantImage}" alt="${name}" class="perk-card__image" onerror="this.src='./img/placeholder-merchant.jpg'" />
     </div>
   `;
 
@@ -1013,7 +1013,7 @@ function renderDiscoverMerchants(merchants) {
           src="${logoUrl}"
           alt="${name}"
           class="merchant-card__image"
-          onerror="this.src='/img/placeholder-merchant.jpg'"
+          onerror="this.src='./img/placeholder-merchant.jpg'"
         />
       </div>
     `;
