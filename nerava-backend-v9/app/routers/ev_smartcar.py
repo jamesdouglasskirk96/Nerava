@@ -11,13 +11,32 @@ from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 import uuid
-from jose import jwt
 
 from app.db import get_db
 from app.models import User
 from app.models_vehicle import VehicleAccount, VehicleToken
 from app.dependencies_domain import get_current_user, get_current_user_id
 from app.core.config import settings
+
+# Use jose for JWT (same as rest of codebase)
+try:
+    from jose import jwt
+except ImportError:
+    # Fallback to PyJWT if jose not available (shouldn't happen in production)
+    import jwt as pyjwt
+    # Create a compatibility wrapper
+    class JoseJWT:
+        @staticmethod
+        def encode(payload, key, algorithm="HS256"):
+            return pyjwt.encode(payload, key, algorithm=algorithm)
+        
+        @staticmethod
+        def decode(token, key, algorithms=None):
+            if algorithms is None:
+                algorithms = ["HS256"]
+            return pyjwt.decode(token, key, algorithms=algorithms)
+    
+    jwt = JoseJWT()
 from app.services.smartcar_client import (
     exchange_code_for_tokens,
     list_vehicles,
