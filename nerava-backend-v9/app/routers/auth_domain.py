@@ -261,13 +261,11 @@ async def request_magic_link(
             """,
         )
         
-        # In dev/staging or when DEBUG_RETURN_MAGIC_LINK is enabled, return the link in response
+        # In dev/staging or when DEBUG_RETURN_MAGIC_LINK is enabled, log and return the link
         if settings.ENV != "prod" or settings.DEBUG_RETURN_MAGIC_LINK:
-            logger.info(
-                "[Auth][MagicLink][DEBUG] Magic link for %s: %s",
-                email,
-                magic_link_url,
-            )
+            # CRITICAL: Log the magic link URL so it appears in Railway logs for easy copy-paste
+            logger.info("MAGIC_LINK DEBUG URL for %s: %s", email, magic_link_url)
+            print(f"MAGIC_LINK DEBUG URL for {email}: {magic_link_url}", flush=True)
             return {
                 "message": "Magic link generated (DEBUG MODE)",
                 "email": email,
@@ -275,6 +273,11 @@ async def request_magic_link(
             }
         
         # Production behavior: don't expose token in response
+        # But still log it in non-prod for debugging
+        if settings.ENV != "prod":
+            logger.info("MAGIC_LINK DEBUG URL for %s: %s", email, magic_link_url)
+            print(f"MAGIC_LINK DEBUG URL for {email}: {magic_link_url}", flush=True)
+        
         return {"message": "Magic link sent to your email", "email": email}
     except HTTPException:
         raise
