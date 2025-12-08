@@ -287,17 +287,18 @@ if avatar_png and avatar_png.exists():
     @app.get("/app/img/avatar-default.png")
     async def serve_avatar_default():
         """Direct route handler for avatar-default.png to bypass StaticFiles issues"""
+        # Read file content and return as Response to avoid FileResponse streaming issues
         try:
-            # File is actually an SVG data URI stored as text, but served as image
-            response = FileResponse(
-                path=str(avatar_png),
+            with open(avatar_png, 'rb') as f:
+                content = f.read()
+            from fastapi.responses import Response
+            return Response(
+                content=content,
                 media_type="image/svg+xml",  # File is SVG data URI
-                filename="avatar-default.png"
+                headers={"Content-Disposition": 'inline; filename="avatar-default.png"'}
             )
-            return response
         except Exception as e:
             logger.error(f"Error in serve_avatar_default: {e}", exc_info=True)
-            # Return a simple error response instead of raising
             from fastapi.responses import Response
             return Response(
                 content=f"Error serving avatar: {str(e)}",
@@ -542,8 +543,9 @@ async def global_exception_handler(request: Request, exc: Exception):
         # For static files, don't catch exceptions - let them propagate naturally
         # This allows StaticFiles to return proper 404 for missing files
         # and prevents our handler from converting errors to 500 JSON responses
-        logger.debug(f"Exception in static file request {path}: {type(exc).__name__}: {exc}")
+        logger.warning(f"Exception in static file request {path}: {type(exc).__name__}: {exc}")
         # Re-raise immediately - don't process further
+        # This allows FastAPI/Starlette to handle the error naturally
         raise exc
     
     import traceback
