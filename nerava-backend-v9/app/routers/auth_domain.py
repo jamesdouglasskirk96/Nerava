@@ -261,7 +261,20 @@ async def request_magic_link(
             """,
         )
         
-        # Return success (don't expose token in response)
+        # In dev/staging or when DEBUG_RETURN_MAGIC_LINK is enabled, return the link in response
+        if settings.ENV != "prod" or settings.DEBUG_RETURN_MAGIC_LINK:
+            logger.info(
+                "[Auth][MagicLink][DEBUG] Magic link for %s: %s",
+                email,
+                magic_link_url,
+            )
+            return {
+                "message": "Magic link generated (DEBUG MODE)",
+                "email": email,
+                "magic_link_url": magic_link_url,
+            }
+        
+        # Production behavior: don't expose token in response
         return {"message": "Magic link sent to your email", "email": email}
     except HTTPException:
         raise

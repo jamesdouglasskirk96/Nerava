@@ -29,6 +29,10 @@ class Settings(BaseModel):
     # Demo Mode Settings
     DEMO_MODE: bool = os.getenv("DEMO_MODE", "false").lower() == "true"
     
+    # Environment and Debug Settings
+    ENV: str = os.getenv("ENV", "dev")  # dev, staging, prod
+    DEBUG_RETURN_MAGIC_LINK: bool = os.getenv("DEBUG_RETURN_MAGIC_LINK", "false").lower() == "true"
+    
     # Feature Flags (default OFF for safety)
     feature_merchant_intel: bool = False
     feature_behavior_cloud: bool = False
