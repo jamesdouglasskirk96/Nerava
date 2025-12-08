@@ -1,12 +1,23 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import logging
+import sys
 
 from .db import Base, engine
 from .config import settings
 from .run_migrations import run_migrations
 
+# Configure logging for production visibility
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
 logger = logging.getLogger(__name__)
+logger.info("Starting Nerava Backend v9")
 
 # CRITICAL: Run migrations FIRST before importing any routers that might import models
 # This ensures Base.metadata is clean and models are registered in the correct order
@@ -101,6 +112,19 @@ from .routers.auth import router as auth_router
 from .routers.user_prefs import router as prefs_router
 
 app = FastAPI(title="Nerava Backend v9", version="0.9.0")
+
+# Request/Response logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log all requests and responses for debugging"""
+    logger.info("→ %s %s", request.method, request.url.path)
+    try:
+        response = await call_next(request)
+        logger.info("← %s %s -> %s", request.method, request.url.path, response.status_code)
+        return response
+    except Exception as e:
+        logger.exception("✗ %s %s -> ERROR: %s", request.method, request.url.path, str(e))
+        raise
 
 # Redirect root to /app
 @app.get("/")
