@@ -89,6 +89,8 @@ def get_current_driver(
     Uses get_current_driver_id to resolve the driver ID (with dev fallback),
     then fetches and validates the User object.
     
+    In dev mode, if user doesn't exist, creates a default driver user.
+    
     Args:
         driver_id: Driver user ID from get_current_driver_id
         db: Database session
@@ -100,6 +102,36 @@ def get_current_driver(
         HTTPException: 401 if user not found or inactive
     """
     user = AuthService.get_user_by_id(db, driver_id)
+    
+    # Dev fallback: create default driver user if it doesn't exist
+    if not user and DEV_ALLOW_ANON_DRIVER and driver_id == 1:
+        try:
+            from app.models import User as UserModel
+            # Create a default driver user for dev
+            default_user = UserModel(
+                id=1,
+                email="dev@nerava.local",
+                password_hash="dev",  # Not used in dev mode
+                is_active=True,
+                role_flags="driver",
+                auth_provider="local"
+            )
+            db.add(default_user)
+            db.commit()
+            db.refresh(default_user)
+            print(f"[AUTH][DEV] Created default driver user (id=1)")
+            user = default_user
+        except Exception as e:
+            # If creation fails (e.g., user already exists), try to fetch again
+            db.rollback()
+            user = AuthService.get_user_by_id(db, driver_id)
+            if not user:
+                print(f"[AUTH][DEV] Failed to create/fetch dev user: {e}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Dev mode: could not create or fetch driver user: {str(e)}"
+                )
+    
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
