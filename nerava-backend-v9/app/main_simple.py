@@ -143,8 +143,13 @@ async def log_requests(request: Request, call_next):
             logger.info(">>>> RESPONSE %s %s -> %s <<<<", request.method, request.url.path, response.status_code)
         return response
     except Exception as e:
-        # For static files, let the exception propagate without logging (StaticFiles will handle it)
+        # For static files, log the exception but still re-raise so StaticFiles can handle it
         if is_static:
+            import traceback
+            error_traceback = traceback.format_exc()
+            print(f">>>> MIDDLEWARE: Exception in static file {request.url.path}: {type(e).__name__}: {e} <<<<", flush=True)
+            print(f">>>> MIDDLEWARE TRACEBACK:\n{error_traceback} <<<<", flush=True)
+            logger.error(f"Exception in static file request {request.url.path}: {e}", exc_info=True)
             raise
         
         # Log full stack trace in Railway logs for non-static requests
