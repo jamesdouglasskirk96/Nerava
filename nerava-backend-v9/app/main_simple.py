@@ -232,12 +232,57 @@ paths:
 # Use Path(__file__) to resolve relative to this file's location
 UI_DIR = Path(__file__).parent.parent.parent / "ui-mobile"
 avatar_png = None
+index_html = None
 if UI_DIR.exists() and UI_DIR.is_dir():
     avatar_png = UI_DIR / "img" / "avatar-default.png"
+    index_html = UI_DIR / "index.html"
+    
+    # Register direct route handlers BEFORE mount so they take precedence
+    # Handler for /app (without trailing slash) - redirect to /app/
+    @app.get("/app")
+    async def serve_app_root():
+        """Redirect /app to /app/ to ensure index.html is served"""
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/app/", status_code=301)
+    
+    # Handler for /app/ - serve index.html directly
+    if index_html and index_html.exists():
+        @app.get("/app/")
+        async def serve_app_index():
+            """Direct route handler for /app/ to serve index.html"""
+            try:
+                with open(index_html, 'rb') as f:
+                    content = f.read()
+                from fastapi.responses import Response
+                return Response(content=content, media_type="text/html")
+            except Exception as e:
+                logger.error(f"Error serving index.html: {e}", exc_info=True)
+                raise HTTPException(status_code=500, detail=f"Error serving index.html: {str(e)}")
+        logger.info("Added direct route handler for /app/")
+    
+    # Handler for avatar-default.png
+    if avatar_png and avatar_png.exists():
+        @app.get("/app/img/avatar-default.png")
+        async def serve_avatar_default():
+            """Direct route handler for avatar-default.png to bypass StaticFiles issues"""
+            try:
+                with open(avatar_png, 'rb') as f:
+                    content = f.read()
+                from fastapi.responses import Response
+                return Response(
+                    content=content,
+                    media_type="image/svg+xml",  # File is SVG data URI
+                    headers={"Content-Disposition": 'inline; filename="avatar-default.png"'}
+                )
+            except Exception as e:
+                logger.error(f"Error in serve_avatar_default: {e}", exc_info=True)
+                raise HTTPException(status_code=500, detail=f"Error serving avatar: {str(e)}")
+        logger.info("Added direct route handler for /app/img/avatar-default.png")
+    
+    # Now mount StaticFiles - routes registered above will take precedence
     try:
         # Use check_dir=False to prevent crashes if directory structure is unexpected
-        # Mount AFTER middleware but BEFORE routers to ensure static files are served
-        # CRITICAL: Mount must happen AFTER middleware to avoid interference
+        # Mount AFTER middleware but AFTER route handlers to ensure routes take precedence
         app.mount("/app", StaticFiles(directory=str(UI_DIR), html=True, check_dir=False), name="ui")
         logger.info("Mounted UI at /app from directory: %s", str(UI_DIR))
         # Verify key files exist
@@ -257,72 +302,8 @@ if UI_DIR.exists() and UI_DIR.is_dir():
 else:
     logger.warning("UI directory not found at: %s", str(UI_DIR))
 
-# Add direct route handlers for common paths AFTER mount
-# Route handlers registered after mounts take precedence for specific paths
-# This bypasses StaticFiles mount and serves files directly to avoid 500 errors
-
-# Handler for /app (without trailing slash) - redirect to /app/
-@app.get("/app")
-async def serve_app_root():
-    """Redirect /app to /app/ to ensure StaticFiles serves index.html"""
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/app/", status_code=301)
-
-# Handler for /app/ - serve index.html directly
-if UI_DIR.exists() and UI_DIR.is_dir():
-    index_html = UI_DIR / "index.html"
-    if index_html.exists():
-        @app.get("/app/")
-        async def serve_app_index():
-            """Direct route handler for /app/ to serve index.html"""
-            return FileResponse(
-                path=str(index_html),
-                media_type="text/html",
-                filename="index.html"
-            )
-        logger.info("Added direct route handler for /app/")
-
-# Handler for avatar-default.png
-if avatar_png and avatar_png.exists():
-    @app.get("/app/img/avatar-default.png")
-    async def serve_avatar_default():
-        """Direct route handler for avatar-default.png to bypass StaticFiles issues"""
-        # Read file content and return as Response to avoid FileResponse streaming issues
-        import os
-        try:
-            # Use absolute path to ensure file is found
-            abs_path = os.path.abspath(str(avatar_png))
-            logger.info(f"Serving avatar from: {abs_path}")
-            
-            if not os.path.exists(abs_path):
-                logger.error(f"Avatar file not found: {abs_path}")
-                from fastapi.responses import Response
-                return Response(
-                    content="Avatar file not found",
-                    status_code=404,
-                    media_type="text/plain"
-                )
-            
-            with open(abs_path, 'rb') as f:
-                content = f.read()
-            
-            from fastapi.responses import Response
-            return Response(
-                content=content,
-                media_type="image/svg+xml",  # File is SVG data URI
-                headers={"Content-Disposition": 'inline; filename="avatar-default.png"'}
-            )
-        except Exception as e:
-            logger.error(f"Error in serve_avatar_default: {e}", exc_info=True)
-            import traceback
-            logger.error(traceback.format_exc())
-            from fastapi.responses import Response
-            return Response(
-                content=f"Error serving avatar: {str(e)}",
-                status_code=500,
-                media_type="text/plain"
-            )
-    logger.info("Added direct route handler for /app/img/avatar-default.png")
+# Route handlers are now registered BEFORE the mount (see above)
+# This ensures they take precedence over StaticFiles
 
 # Migrations already run at the top of this file (before router imports)
 # This prevents model registration conflicts when routers import models_extra
