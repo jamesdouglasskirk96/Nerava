@@ -16,7 +16,8 @@ logging.basicConfig(
     ]
 )
 
-logger = logging.getLogger(__name__)
+# Use a consistent logger name for all app logs
+logger = logging.getLogger("nerava")
 logger.info("Starting Nerava Backend v9")
 
 # CRITICAL: Run migrations FIRST before importing any routers that might import models
@@ -116,14 +117,15 @@ app = FastAPI(title="Nerava Backend v9", version="0.9.0")
 # Request/Response logging middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    """Log all requests and responses for debugging"""
-    logger.info("→ %s %s", request.method, request.url.path)
+    """Log all requests and responses for debugging in Railway"""
+    logger.info("REQUEST %s %s", request.method, request.url.path)
     try:
         response = await call_next(request)
-        logger.info("← %s %s -> %s", request.method, request.url.path, response.status_code)
+        logger.info("RESPONSE %s %s -> %s", request.method, request.url.path, response.status_code)
         return response
-    except Exception as e:
-        logger.exception("✗ %s %s -> ERROR: %s", request.method, request.url.path, str(e))
+    except Exception:
+        # Log full stack trace in Railway logs
+        logger.exception("UNHANDLED ERROR during %s %s", request.method, request.url.path)
         raise
 
 # Redirect root to /app
@@ -352,6 +354,20 @@ app.include_router(nova_domain.router)  # /v1/nova/*
 
 # EV/Smartcar integration
 app.include_router(ev_smartcar.router)  # /v1/ev/* and /oauth/smartcar/callback
+
+# Debug router for logging verification
+from fastapi import APIRouter as DebugRouter
+debug_router = DebugRouter()
+
+@debug_router.get("/v1/debug/log-test")
+async def debug_log_test():
+    """Test endpoint to verify logging is working in Railway"""
+    logger.info("DEBUG LOG TEST endpoint hit")
+    # Intentionally raise an error to generate a traceback in logs
+    from fastapi import HTTPException
+    raise HTTPException(status_code=500, detail="Intentional test error for logging")
+
+app.include_router(debug_router)
 
 # Add PWA error normalization for pilot endpoints
 from fastapi.responses import JSONResponse
