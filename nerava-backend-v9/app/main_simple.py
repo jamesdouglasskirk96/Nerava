@@ -471,6 +471,11 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Global exception handler for unhandled errors"""
+    # Skip exception handling for static file paths - let FastAPI/Starlette handle them
+    if request.url.path.startswith("/app/") or request.url.path.startswith("/static/"):
+        # Re-raise to let StaticFiles handle the error (will return 404 if file not found)
+        raise exc
+    
     import traceback
     error_detail = str(exc)
     error_traceback = traceback.format_exc()
