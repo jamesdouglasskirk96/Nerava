@@ -562,6 +562,15 @@ async def global_exception_handler(request: Request, exc: Exception):
     path = request.url.path
     if path.startswith("/app/") or path.startswith("/static/"):
         # For static files, log the exception with full traceback for debugging
+        # BUT: Don't re-raise if it's a Starlette HTTPException (like 404 from StaticFiles)
+        # StaticFiles raises HTTPException for missing files, which should be returned as 404, not 500
+        from starlette.exceptions import HTTPException as StarletteHTTPException
+        if isinstance(exc, StarletteHTTPException):
+            # This is a normal 404 from StaticFiles - let it through
+            logger.debug(f"StaticFiles HTTPException for {path}: {exc.status_code}")
+            raise exc
+        
+        # For other exceptions, log and re-raise
         import traceback
         error_traceback = traceback.format_exc()
         logger.error(f"Exception in static file request {path}:\n{error_traceback}")
