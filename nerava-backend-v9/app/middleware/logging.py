@@ -2,7 +2,7 @@ import time
 import uuid
 import json
 import logging
-from fastapi import Request
+from fastapi import Request, HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = logging.getLogger(__name__)
@@ -40,14 +40,28 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             response.headers["X-Request-ID"] = request_id
             
             return response
+        except HTTPException as exc:
+            # HTTPException is expected - log as warning, let FastAPI handle the response
+            duration_ms = (time.time() - start_time) * 1000
+            logger.warning(
+                "HTTPException on %s %s: %s (status=%s) after %sms",
+                request.method,
+                request.url.path,
+                exc.detail,
+                exc.status_code,
+                round(duration_ms, 2)
+            )
+            # Re-raise so FastAPI can return proper JSON response with status code
+            raise
         except Exception as e:
-            # Log exceptions with full traceback
+            # Log unhandled exceptions with full traceback
             duration_ms = (time.time() - start_time) * 1000
             logger.exception(
-                "ERROR in LoggingMiddleware: %s %s failed after %sms: %s",
+                "Unhandled error on %s %s after %sms: %s",
                 request.method,
                 request.url.path,
                 round(duration_ms, 2),
                 str(e)
             )
+            # Re-raise so FastAPI's exception handlers can respond
             raise

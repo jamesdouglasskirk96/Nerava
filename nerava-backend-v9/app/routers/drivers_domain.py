@@ -15,6 +15,7 @@ from app.models import User
 from app.models_domain import DomainMerchant, DomainChargingSession
 from app.services.nova_service import NovaService
 from app.dependencies_domain import require_driver, get_current_user
+from app.dependencies_driver import get_current_driver
 from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/v1/drivers", tags=["drivers"])
@@ -147,7 +148,7 @@ async def get_nearby_merchants(
     lng: float = Query(..., description="Longitude"),
     zone_slug: str = Query(..., description="Zone slug (e.g., domain_austin)"),
     radius_m: float = Query(5000, description="Radius in meters"),
-    user: User = Depends(require_driver),
+    user: User = Depends(get_current_driver),
     db: Session = Depends(get_db)
 ):
     """
@@ -288,7 +289,7 @@ def redeem_nova(
 
 @router.get("/me/wallet")
 def get_driver_wallet(
-    user: User = Depends(require_driver),
+    user: User = Depends(get_current_driver),
     db: Session = Depends(get_db)
 ):
     """Get driver wallet balance"""
