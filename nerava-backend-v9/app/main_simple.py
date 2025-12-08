@@ -561,12 +561,13 @@ async def global_exception_handler(request: Request, exc: Exception):
     # IMPORTANT: StaticFiles should handle its own errors (404 for missing files, etc.)
     path = request.url.path
     if path.startswith("/app/") or path.startswith("/static/"):
-        # For static files, log the exception with full traceback for debugging
-        # BUT: Don't re-raise if it's a Starlette HTTPException (like 404 from StaticFiles)
-        # StaticFiles raises HTTPException for missing files, which should be returned as 404, not 500
+        # For static files, allow HTTPException (both FastAPI and Starlette) to pass through
+        # StaticFiles raises HTTPException for missing files (404), which should be returned properly
         from starlette.exceptions import HTTPException as StarletteHTTPException
-        if isinstance(exc, StarletteHTTPException):
-            # This is a normal 404 from StaticFiles - let it through
+        from fastapi.exceptions import HTTPException as FastAPIHTTPException
+        
+        if isinstance(exc, (StarletteHTTPException, FastAPIHTTPException)):
+            # This is a normal HTTP exception from StaticFiles - let it through
             logger.debug(f"StaticFiles HTTPException for {path}: {exc.status_code}")
             raise exc
         
