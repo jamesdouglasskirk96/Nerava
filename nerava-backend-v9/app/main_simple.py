@@ -287,12 +287,23 @@ if avatar_png and avatar_png.exists():
     @app.get("/app/img/avatar-default.png")
     async def serve_avatar_default():
         """Direct route handler for avatar-default.png to bypass StaticFiles issues"""
-        # File is actually an SVG data URI stored as text, but served as image
-        return FileResponse(
-            path=str(avatar_png),
-            media_type="image/svg+xml",  # File is SVG data URI
-            filename="avatar-default.png"
-        )
+        try:
+            # File is actually an SVG data URI stored as text, but served as image
+            response = FileResponse(
+                path=str(avatar_png),
+                media_type="image/svg+xml",  # File is SVG data URI
+                filename="avatar-default.png"
+            )
+            return response
+        except Exception as e:
+            logger.error(f"Error in serve_avatar_default: {e}", exc_info=True)
+            # Return a simple error response instead of raising
+            from fastapi.responses import Response
+            return Response(
+                content=f"Error serving avatar: {str(e)}",
+                status_code=500,
+                media_type="text/plain"
+            )
     logger.info("Added direct route handler for /app/img/avatar-default.png")
 
 # Migrations already run at the top of this file (before router imports)
