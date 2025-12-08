@@ -161,7 +161,7 @@ logger.info(">>>> Nerava Logging Middleware Decorator Applied <<<<")
 async def root():
     from fastapi.responses import RedirectResponse
     try:
-        return RedirectResponse(url="/app/")
+    return RedirectResponse(url="/app/")
     except Exception as e:
         logger.exception("Error in root redirect: %s", str(e))
         raise
@@ -556,10 +556,12 @@ async def global_exception_handler(request: Request, exc: Exception):
     # IMPORTANT: StaticFiles should handle its own errors (404 for missing files, etc.)
     path = request.url.path
     if path.startswith("/app/") or path.startswith("/static/"):
-        # For static files, don't catch exceptions - let them propagate naturally
-        # This allows StaticFiles to return proper 404 for missing files
-        # and prevents our handler from converting errors to 500 JSON responses
-        logger.warning(f"Exception in static file request {path}: {type(exc).__name__}: {exc}")
+        # For static files, log the exception with full traceback for debugging
+        import traceback
+        error_traceback = traceback.format_exc()
+        logger.error(f"Exception in static file request {path}:\n{error_traceback}")
+        print(f">>>> EXCEPTION in static file {path}: {type(exc).__name__}: {exc} <<<<", flush=True)
+        print(f">>>> TRACEBACK:\n{error_traceback} <<<<", flush=True)
         # Re-raise immediately - don't process further
         # This allows FastAPI/Starlette to handle the error naturally
         raise exc
