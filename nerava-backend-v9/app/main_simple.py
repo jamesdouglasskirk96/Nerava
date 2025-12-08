@@ -231,7 +231,9 @@ paths:
 # StaticFiles should handle its own errors (404 for missing files)
 # Use Path(__file__) to resolve relative to this file's location
 UI_DIR = Path(__file__).parent.parent.parent / "ui-mobile"
+avatar_png = None
 if UI_DIR.exists() and UI_DIR.is_dir():
+    avatar_png = UI_DIR / "img" / "avatar-default.png"
     try:
         # Use check_dir=False to prevent crashes if directory structure is unexpected
         # Mount AFTER middleware but BEFORE routers to ensure static files are served
@@ -240,7 +242,6 @@ if UI_DIR.exists() and UI_DIR.is_dir():
         logger.info("Mounted UI at /app from directory: %s", str(UI_DIR))
         # Verify key files exist
         me_js = UI_DIR / "js" / "pages" / "me.js"
-        avatar_png = UI_DIR / "img" / "avatar-default.png"
         if me_js.exists():
             logger.info("Verified: me.js exists at %s", str(me_js))
         else:
@@ -256,20 +257,19 @@ if UI_DIR.exists() and UI_DIR.is_dir():
 else:
     logger.warning("UI directory not found at: %s", str(UI_DIR))
 
-# Add direct route handler for avatar-default.png as a workaround for StaticFiles 500 issue
+# Add direct route handler for avatar-default.png AFTER mount
+# Route handlers registered after mounts take precedence for specific paths
 # This bypasses StaticFiles mount and serves the file directly
-if UI_DIR.exists() and UI_DIR.is_dir():
-    avatar_png = UI_DIR / "img" / "avatar-default.png"
-    if avatar_png.exists():
-        @app.get("/app/img/avatar-default.png")
-        async def serve_avatar_default():
-            """Direct route handler for avatar-default.png to bypass StaticFiles issues"""
-            try:
-                return FileResponse(str(avatar_png), media_type="image/png")
-            except Exception as e:
-                logger.error(f"Error serving avatar-default.png: {e}", exc_info=True)
-                raise HTTPException(status_code=500, detail=f"Error serving file: {str(e)}")
-        logger.info("Added direct route handler for /app/img/avatar-default.png")
+if avatar_png and avatar_png.exists():
+    @app.get("/app/img/avatar-default.png")
+    async def serve_avatar_default():
+        """Direct route handler for avatar-default.png to bypass StaticFiles issues"""
+        try:
+            return FileResponse(str(avatar_png), media_type="image/png")
+        except Exception as e:
+            logger.error(f"Error serving avatar-default.png: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Error serving file: {str(e)}")
+    logger.info("Added direct route handler for /app/img/avatar-default.png")
 
 # Migrations already run at the top of this file (before router imports)
 # This prevents model registration conflicts when routers import models_extra
@@ -504,10 +504,11 @@ async def global_exception_handler(request: Request, exc: Exception):
     # IMPORTANT: StaticFiles should handle its own errors (404 for missing files, etc.)
     path = request.url.path
     if path.startswith("/app/") or path.startswith("/static/"):
-        # Log the error for debugging but don't convert it to JSON
-        logger.warning(f"Exception in static file request {path}: {type(exc).__name__}: {exc}")
-        # Re-raise to let StaticFiles/Starlette handle the error naturally
+        # For static files, don't catch exceptions - let them propagate naturally
         # This allows StaticFiles to return proper 404 for missing files
+        # and prevents our handler from converting errors to 500 JSON responses
+        logger.debug(f"Exception in static file request {path}: {type(exc).__name__}: {exc}")
+        # Re-raise immediately - don't process further
         raise exc
     
     import traceback
