@@ -234,6 +234,7 @@ if UI_DIR.exists() and UI_DIR.is_dir():
     try:
         # Use check_dir=False to prevent crashes if directory structure is unexpected
         # Mount AFTER middleware but BEFORE routers to ensure static files are served
+        # CRITICAL: Mount must happen AFTER middleware to avoid interference
         app.mount("/app", StaticFiles(directory=str(UI_DIR), html=True, check_dir=False), name="ui")
         logger.info("Mounted UI at /app from directory: %s", str(UI_DIR))
         # Verify key files exist
@@ -253,6 +254,18 @@ if UI_DIR.exists() and UI_DIR.is_dir():
         logger.error("UI mount failed, but continuing startup")
 else:
     logger.warning("UI directory not found at: %s", str(UI_DIR))
+
+# Add direct route handler for avatar-default.png as a workaround for StaticFiles 500 issue
+# This bypasses StaticFiles mount and serves the file directly
+if UI_DIR.exists() and UI_DIR.is_dir():
+    avatar_png = UI_DIR / "img" / "avatar-default.png"
+    if avatar_png.exists():
+        @app.get("/app/img/avatar-default.png")
+        async def serve_avatar_default():
+            """Direct route handler for avatar-default.png to bypass StaticFiles issues"""
+            from fastapi.responses import FileResponse
+            return FileResponse(str(avatar_png), media_type="image/png")
+        logger.info("Added direct route handler for /app/img/avatar-default.png")
 
 # Migrations already run at the top of this file (before router imports)
 # This prevents model registration conflicts when routers import models_extra
@@ -484,8 +497,11 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 async def global_exception_handler(request: Request, exc: Exception):
     """Global exception handler for unhandled errors"""
     # Skip exception handling for static file paths - let FastAPI/Starlette handle them
+    # IMPORTANT: StaticFiles should handle its own errors (404 for missing files, etc.)
     if request.url.path.startswith("/app/") or request.url.path.startswith("/static/"):
-        # Re-raise to let StaticFiles handle the error (will return 404 if file not found)
+        # Log the error but don't convert it to JSON - let StaticFiles handle it
+        logger.debug(f"Exception in static file request {request.url.path}: {exc}")
+        # Re-raise to let StaticFiles/Starlette handle the error naturally
         raise exc
     
     import traceback
