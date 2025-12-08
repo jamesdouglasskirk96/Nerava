@@ -34,9 +34,8 @@ const L = window.L;
 const $ = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
 
-// Prefer local asset; will fallback to Clearbit if it fails to load.
-const STARBUCKS_LOGO_LOCAL = "./img/brands/starbucks.png";
-const STARBUCKS_LOGO_CDN   = "https://logo.clearbit.com/starbucks.com";
+// Use local placeholder for all merchant logos to avoid 403s from third-party domains
+const MERCHANT_LOGO_PLACEHOLDER = "./img/avatar-default.png";
 
 // === Recommended Perks Data =====================================
 // Three perks: Starbucks, Target, Whole Foods
@@ -44,21 +43,21 @@ const _recommendedPerks = [
   {
     id: 'perk_1',
     name: "Starbucks",
-    logo: "https://logo.clearbit.com/starbucks.com",
+    logo: MERCHANT_LOGO_PLACEHOLDER,
     nova: 12,
     walk: "3 min walk"
   },
   {
     id: 'perk_2',
     name: "Target",
-    logo: "https://logo.clearbit.com/target.com",
+    logo: MERCHANT_LOGO_PLACEHOLDER,
     nova: 8,
     walk: "5 min walk"
   },
   {
     id: 'perk_3',
     name: "Whole Foods",
-    logo: "https://logo.clearbit.com/wholefoodsmarket.com",
+    logo: MERCHANT_LOGO_PLACEHOLDER,
     nova: 10,
     walk: "7 min walk"
   }
@@ -66,9 +65,9 @@ const _recommendedPerks = [
 
 // === Explore: Next Charger Micro-State =====================================
 const CHARGER_FALLBACK = [
-  { id: 'hub_arboretum', name:'Arboretum Supercharger', addr:'9722 Great Hills Trl, Austin, TX', lat:30.3996, lng:-97.7472, merchant:{name:'Starbucks', logo:'https://logo.clearbit.com/starbucks.com'}, perk:'Free coffee 2–4pm • 3 min walk' },
-  { id: 'hub_domain',     name:'Domain Northside',      addr:'11821 Rock Rose Ave, Austin, TX', lat:30.4019, lng:-97.7251, merchant:{name:'Neiman Marcus', logo:'https://logo.clearbit.com/neimanmarcus.com'}, perk:'10% off with charge • 4 min walk' },
-  { id: 'hub_dt',         name:'Downtown 5th & Lavaca', addr:'500 Lavaca St, Austin, TX',       lat:30.2676, lng:-97.7429, merchant:{name:'Starbucks', logo:'https://logo.clearbit.com/starbucks.com'}, perk:'Free coffee 2–4pm • 3 min walk' }
+  { id: 'hub_arboretum', name:'Arboretum Supercharger', addr:'9722 Great Hills Trl, Austin, TX', lat:30.3996, lng:-97.7472, merchant:{name:'Starbucks', logo:MERCHANT_LOGO_PLACEHOLDER}, perk:'Free coffee 2–4pm • 3 min walk' },
+  { id: 'hub_domain',     name:'Domain Northside',      addr:'11821 Rock Rose Ave, Austin, TX', lat:30.4019, lng:-97.7251, merchant:{name:'Neiman Marcus', logo:MERCHANT_LOGO_PLACEHOLDER}, perk:'10% off with charge • 4 min walk' },
+  { id: 'hub_dt',         name:'Downtown 5th & Lavaca', addr:'500 Lavaca St, Austin, TX',       lat:30.2676, lng:-97.7429, merchant:{name:'Starbucks', logo:MERCHANT_LOGO_PLACEHOLDER}, perk:'Free coffee 2–4pm • 3 min walk' }
 ];
 
 const FALLBACK_HUB = {
@@ -933,8 +932,8 @@ function renderDiscoverMerchants(merchants) {
     category: 'Smoothies',
     price_tier: '$$',
     distance_text: '0.1 mi walk to charger',
-    image_url: 'https://logo.clearbit.com/juiceland.com',
-    logo_url: 'https://logo.clearbit.com/juiceland.com',
+    image_url: MERCHANT_LOGO_PLACEHOLDER,
+    logo_url: MERCHANT_LOGO_PLACEHOLDER,
     lat: 30.4021,
     lng: -97.7266,
   };

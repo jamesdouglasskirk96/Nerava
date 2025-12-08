@@ -9,7 +9,7 @@
 
 // Network logo mapping (using Clearbit CDN for now)
 const NETWORK_LOGOS = {
-  'tesla': 'https://logo.clearbit.com/tesla.com',
+  'tesla': './img/avatar-default.png',
   'chargepoint': 'https://logo.clearbit.com/chargepoint.com',
   'evgo': 'https://logo.clearbit.com/evgo.com',
   'electrify_america': 'https://logo.clearbit.com/electrifyamerica.com',

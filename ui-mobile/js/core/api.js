@@ -1,22 +1,35 @@
 // Determine API base URL based on environment
 function getApiBase() {
-  // PRIORITY 1: Check for explicit production backend override (full URL)
-  // This allows local UI to call production backend for testing
+  const origin = window.location.origin;
+  const hostname = window.location.hostname;
+  
+  // PRIORITY 1: Local development - use same origin (no CORS)
+  // This ensures http://localhost:8001/app calls http://localhost:8001/v1/... (same origin)
+  const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.includes('192.168.') || hostname.includes('10.');
+  
+  if (isLocalhost) {
+    // Use empty string for same-origin requests (relative paths)
+    // This makes fetch('/v1/...') resolve to http://localhost:8001/v1/...
+    console.log('[API] Local dev detected - using same origin (no CORS):', origin);
+    return '';
+  }
+  
+  // PRIORITY 2: Explicit production backend override (for testing prod from local)
+  // Only use this if you explicitly want to test against production
   // Example: localStorage.setItem('NERAVA_PROD_BACKEND', 'https://web-production-526f6.up.railway.app')
-  // NOTE: For local dev, leave this unset so UI talks to local backend
   const prodBackendOverride = localStorage.getItem('NERAVA_PROD_BACKEND');
   if (prodBackendOverride && prodBackendOverride.startsWith('http')) {
     console.log('[API] Using production backend (override URL):', prodBackendOverride);
     return prodBackendOverride;
   }
   
-  // PRIORITY 2: Check for explicit override in localStorage (legacy)
+  // PRIORITY 3: Legacy localStorage override
   if (localStorage.NERAVA_URL) {
     console.log('[API] Using localStorage.NERAVA_URL override:', localStorage.NERAVA_URL);
     return localStorage.NERAVA_URL;
   }
   
-  // PRIORITY 3: Check for Vite environment variable (if using Vite)
+  // PRIORITY 4: Vite environment variable (if using Vite)
   try {
     // eslint-disable-next-line no-undef
     if (import.meta && import.meta.env && import.meta.env.VITE_API_BASE_URL) {
@@ -25,32 +38,24 @@ function getApiBase() {
       return import.meta.env.VITE_API_BASE_URL;
     }
   } catch (e) {
-    // import.meta not available (not in ES module context or browser doesn't support it)
+    // import.meta not available
   }
   
-  // PRIORITY 4: Detect production environment
-  const hostname = window.location.hostname;
+  // PRIORITY 5: Production environment - use Railway backend
   const protocol = window.location.protocol;
-  const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.includes('192.168.') || hostname.includes('10.');
   const isVercel = hostname.includes('vercel.app');
   const isNeravaNetwork = hostname.includes('nerava.network');
   const isProduction = !isLocalhost && (protocol === 'https:' || isVercel || isNeravaNetwork);
   
-  console.log('[API] Detected environment:', { hostname, protocol, isLocalhost, isVercel, isNeravaNetwork, isProduction });
-  
-  // Production: use Railway backend (current production deployment)
   if (isProduction) {
     const prodUrl = 'https://web-production-526f6.up.railway.app';
     console.log('[API] Using production backend (Railway):', prodUrl);
     return prodUrl;
   }
   
-  // Development: use same origin as frontend to avoid CORS issues
-  // This ensures requests from localhost:8001 go to localhost:8001, not 127.0.0.1:8001
-  // DEFAULT: Local UI talks to local backend unless explicitly overridden
-  const devUrl = window.location.origin; // e.g., "http://localhost:8001"
-  console.log('[API] Using development backend (same origin):', devUrl);
-  return devUrl;
+  // Fallback: same origin
+  console.log('[API] Using same origin (fallback):', origin);
+  return '';
 }
 
 const BASE = getApiBase();
@@ -72,7 +77,12 @@ async function _req(path, opts = {}) {
     ...opts,
   });
   
-  if (r.status === 404) return null;
+  // Handle 404 gracefully - return null for missing resources
+  if (r.status === 404) {
+    console.warn(`[API] 404 for ${path} - resource not found`);
+    return null;
+  }
+  
   if (!r.ok) {
     const errorText = await r.text().catch(() => 'Unknown error');
     throw new Error(`${r.status} ${path}: ${errorText}`);
@@ -506,16 +516,24 @@ export async function apiDriverWallet() {
 
 /**
  * Get driver activity/transactions
+ * Returns empty array if endpoint doesn't exist (404) or on any error
  */
 export async function apiDriverActivity({ limit = 50 } = {}) {
   try {
     const params = new URLSearchParams({ limit: String(limit) });
     const res = await _req(`/v1/drivers/activity?${params.toString()}`);
+    
+    // Handle 404 (endpoint doesn't exist) gracefully
+    if (res === null) {
+      console.warn('[API][Drivers] Activity endpoint not found (404) - returning empty list');
+      return [];
+    }
+    
     console.log('[API][Drivers] Activity (v1):', res);
     
     // Backend returns array directly, or wrap if needed
     const events = Array.isArray(res) ? res : (res.events || res.transactions || []);
-    return events;
+    return events || [];
   } catch (e) {
     console.warn('[API][Drivers] Failed to get activity:', e.message);
     return [];
