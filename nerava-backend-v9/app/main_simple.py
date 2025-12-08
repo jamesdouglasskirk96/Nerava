@@ -261,15 +261,16 @@ else:
 # Route handlers registered after mounts take precedence for specific paths
 # This bypasses StaticFiles mount and serves the file directly
 if avatar_png and avatar_png.exists():
-    @app.get("/app/img/avatar-default.png")
-    async def serve_avatar_default():
-        """Direct route handler for avatar-default.png to bypass StaticFiles issues"""
-        try:
-            return FileResponse(str(avatar_png), media_type="image/png")
-        except Exception as e:
-            logger.error(f"Error serving avatar-default.png: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Error serving file: {str(e)}")
-    logger.info("Added direct route handler for /app/img/avatar-default.png")
+        @app.get("/app/img/avatar-default.png", response_class=FileResponse)
+        async def serve_avatar_default():
+            """Direct route handler for avatar-default.png to bypass StaticFiles issues"""
+            # Return FileResponse directly - FastAPI will handle it
+            return FileResponse(
+                path=str(avatar_png),
+                media_type="image/png",
+                filename="avatar-default.png"
+            )
+        logger.info("Added direct route handler for /app/img/avatar-default.png")
 
 # Migrations already run at the top of this file (before router imports)
 # This prevents model registration conflicts when routers import models_extra
