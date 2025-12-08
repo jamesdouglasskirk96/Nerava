@@ -153,7 +153,8 @@ async def list_vehicles(access_token: str) -> Dict[str, Any]:
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as e:
-            logger.error(f"Smartcar list vehicles failed: {e.response.status_code} - {e.response.text}")
+            # Don't log response body - may contain sensitive data
+            logger.error(f"Smartcar list vehicles failed: {e.response.status_code}")
             raise
         except Exception as e:
             logger.error(f"Unexpected error listing vehicles: {e}")
@@ -187,7 +188,8 @@ async def get_vehicle_location(access_token: str, vehicle_id: str) -> Dict[str, 
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as e:
-            logger.error(f"Smartcar get location failed: {e.response.status_code} - {e.response.text}")
+            # Don't log response body - may contain sensitive data
+            logger.error(f"Smartcar get location failed: {e.response.status_code}")
             raise
         except Exception as e:
             logger.error(f"Unexpected error getting location: {e}")
@@ -221,7 +223,8 @@ async def get_vehicle_charge(access_token: str, vehicle_id: str) -> Dict[str, An
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as e:
-            logger.error(f"Smartcar get charge failed: {e.response.status_code} - {e.response.text}")
+            # Don't log response body - may contain sensitive data
+            logger.error(f"Smartcar get charge failed: {e.response.status_code}")
             raise
         except Exception as e:
             logger.error(f"Unexpected error getting charge: {e}")
