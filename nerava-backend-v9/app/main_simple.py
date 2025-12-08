@@ -288,9 +288,24 @@ if avatar_png and avatar_png.exists():
     async def serve_avatar_default():
         """Direct route handler for avatar-default.png to bypass StaticFiles issues"""
         # Read file content and return as Response to avoid FileResponse streaming issues
+        import os
         try:
-            with open(avatar_png, 'rb') as f:
+            # Use absolute path to ensure file is found
+            abs_path = os.path.abspath(str(avatar_png))
+            logger.info(f"Serving avatar from: {abs_path}")
+            
+            if not os.path.exists(abs_path):
+                logger.error(f"Avatar file not found: {abs_path}")
+                from fastapi.responses import Response
+                return Response(
+                    content="Avatar file not found",
+                    status_code=404,
+                    media_type="text/plain"
+                )
+            
+            with open(abs_path, 'rb') as f:
                 content = f.read()
+            
             from fastapi.responses import Response
             return Response(
                 content=content,
@@ -299,6 +314,8 @@ if avatar_png and avatar_png.exists():
             )
         except Exception as e:
             logger.error(f"Error in serve_avatar_default: {e}", exc_info=True)
+            import traceback
+            logger.error(traceback.format_exc())
             from fastapi.responses import Response
             return Response(
                 content=f"Error serving avatar: {str(e)}",
