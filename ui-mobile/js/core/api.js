@@ -1,22 +1,33 @@
 // Determine API base URL based on environment
 function getApiBase() {
-  // Check for explicit override in localStorage
+  // PRIORITY 1: Check for explicit production backend override (full URL)
+  // This allows local UI to call production backend for testing
+  // Example: localStorage.setItem('NERAVA_PROD_BACKEND', 'https://web-production-526f6.up.railway.app')
+  const prodBackendOverride = localStorage.getItem('NERAVA_PROD_BACKEND');
+  if (prodBackendOverride && prodBackendOverride.startsWith('http')) {
+    console.log('[API] Using production backend (override URL):', prodBackendOverride);
+    return prodBackendOverride;
+  }
+  
+  // PRIORITY 2: Check for explicit override in localStorage (legacy)
   if (localStorage.NERAVA_URL) {
+    console.log('[API] Using localStorage.NERAVA_URL override:', localStorage.NERAVA_URL);
     return localStorage.NERAVA_URL;
   }
   
-  // Check for Vite environment variable (if using Vite)
+  // PRIORITY 3: Check for Vite environment variable (if using Vite)
   try {
     // eslint-disable-next-line no-undef
     if (import.meta && import.meta.env && import.meta.env.VITE_API_BASE_URL) {
       // eslint-disable-next-line no-undef
+      console.log('[API] Using Vite env var:', import.meta.env.VITE_API_BASE_URL);
       return import.meta.env.VITE_API_BASE_URL;
     }
   } catch (e) {
     // import.meta not available (not in ES module context or browser doesn't support it)
   }
   
-  // Detect production environment
+  // PRIORITY 4: Detect production environment
   const hostname = window.location.hostname;
   const protocol = window.location.protocol;
   const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.includes('192.168.') || hostname.includes('10.');
@@ -25,15 +36,6 @@ function getApiBase() {
   const isProduction = !isLocalhost && (protocol === 'https:' || isVercel || isNeravaNetwork);
   
   console.log('[API] Detected environment:', { hostname, protocol, isLocalhost, isVercel, isNeravaNetwork, isProduction });
-  
-  // Development: check for explicit production backend override (full URL)
-  // This allows local UI to call production backend for testing
-  // Example: localStorage.setItem('NERAVA_PROD_BACKEND', 'https://web-production-526f6.up.railway.app')
-  const prodBackendOverride = localStorage.getItem('NERAVA_PROD_BACKEND');
-  if (prodBackendOverride && prodBackendOverride.startsWith('http')) {
-    console.log('[API] Using production backend (override URL):', prodBackendOverride);
-    return prodBackendOverride;
-  }
   
   // Production: use Railway backend (current production deployment)
   if (isProduction) {
