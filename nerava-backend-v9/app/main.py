@@ -62,10 +62,27 @@ app.add_middleware(CanaryRoutingMiddleware, canary_percentage=0.0)  # Disabled b
 app.add_middleware(AuthMiddleware)
 app.add_middleware(AuditMiddleware)
 
-# CORS (tighten in prod)
+# CORS configuration
+# Allow localhost for local dev UI testing against production backend
+cors_origins = [
+    "http://localhost:8001",
+    "http://127.0.0.1:8001",
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "https://app.nerava.app",
+    "https://www.nerava.app",
+]
+
+# Add any additional origins from env if set
+if settings.cors_allow_origins and settings.cors_allow_origins != "*":
+    env_origins = [origin.strip() for origin in settings.cors_allow_origins.split(",")]
+    cors_origins.extend(env_origins)
+    # Remove duplicates
+    cors_origins = list(dict.fromkeys(cors_origins))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_allow_origins.split(",") if settings.cors_allow_origins != "*" else ["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
