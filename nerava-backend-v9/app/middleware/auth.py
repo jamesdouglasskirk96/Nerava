@@ -28,6 +28,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             "/v1/energyhub/windows",  # Public endpoint
             "/v1/energyhub/events/charge-start",  # Public endpoint
             "/v1/energyhub/events/charge-stop",  # Public endpoint
+            "/oauth/smartcar/callback",  # Smartcar OAuth callback (no auth required)
         }
     
     async def dispatch(self, request: Request, call_next):

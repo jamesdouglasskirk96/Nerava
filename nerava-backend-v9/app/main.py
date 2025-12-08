@@ -108,7 +108,8 @@ from .routers import (
     merchants_domain,
     stripe_domain,
     admin_domain,
-    nova_domain
+    nova_domain,
+    ev_smartcar
 )
 
 # These are now the canonical /v1/* endpoints (no /domain/ prefix)
@@ -118,5 +119,6 @@ app.include_router(merchants_domain.router)  # /v1/merchants/*
 app.include_router(stripe_domain.router)  # /v1/stripe/*
 app.include_router(admin_domain.router)  # /v1/admin/*
 app.include_router(nova_domain.router)  # /v1/nova/*
+app.include_router(ev_smartcar.router)  # /v1/ev/* and /oauth/smartcar/callback
 
 # Lifespan events are now handled in lifespan.py

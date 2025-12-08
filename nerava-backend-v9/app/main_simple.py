@@ -94,6 +94,7 @@ from .routers import debug_verify
 from .routers import debug_pool
 from .routers import discover_api, affiliate_api, insights_api
 from .routers import while_you_charge, pilot, pilot_debug, merchant_reports, merchant_balance, pilot_redeem
+from .routers import ev_smartcar
 
 # Auth + JWT preferences
 from .routers.auth import router as auth_router
@@ -206,6 +207,8 @@ if allowed_origins_str == "*":
         "http://localhost:3000",
         "http://localhost:8080",
         "http://localhost:5173",  # Vite default
+        "https://app.nerava.app",  # Production frontend
+        "https://www.nerava.app",  # Production frontend (www)
     ]
     # Note: Vercel domains will be handled by custom CORS middleware below
 else:
@@ -220,8 +223,8 @@ app.add_middleware(
         "https://nerava.network",
     ],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS", "PUT", "DELETE"],
-    allow_headers=["Content-Type", "Authorization", "X-Api-Key", "X-Merchant-Key"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Operations routes
@@ -321,6 +324,9 @@ if STRIPE_AVAILABLE:
     app.include_router(stripe_domain.router)  # /v1/stripe/*
 app.include_router(admin_domain.router)  # /v1/admin/*
 app.include_router(nova_domain.router)  # /v1/nova/*
+
+# EV/Smartcar integration
+app.include_router(ev_smartcar.router)  # /v1/ev/* and /oauth/smartcar/callback
 
 # Add PWA error normalization for pilot endpoints
 from fastapi.responses import JSONResponse

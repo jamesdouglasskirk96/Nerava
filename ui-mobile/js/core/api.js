@@ -26,16 +26,26 @@ function getApiBase() {
   
   console.log('[API] Detected environment:', { hostname, protocol, isLocalhost, isVercel, isNeravaNetwork, isProduction });
   
-  // Production: use Railway backend
+  // Development: check for explicit production backend override (full URL)
+  // This allows local UI to call production backend for testing
+  // Example: localStorage.setItem('NERAVA_PROD_BACKEND', 'https://web-production-526f6.up.railway.app')
+  const prodBackendOverride = localStorage.getItem('NERAVA_PROD_BACKEND');
+  if (prodBackendOverride && prodBackendOverride.startsWith('http')) {
+    console.log('[API] Using production backend (override URL):', prodBackendOverride);
+    return prodBackendOverride;
+  }
+  
+  // Production: use Railway backend (current production deployment)
   if (isProduction) {
     const prodUrl = 'https://web-production-526f6.up.railway.app';
-    console.log('[API] Using production backend:', prodUrl);
+    console.log('[API] Using production backend (Railway):', prodUrl);
     return prodUrl;
   }
   
-  // Development: use localhost
-  const devUrl = 'http://127.0.0.1:8001';
-  console.log('[API] Using development backend:', devUrl);
+  // Development: use same origin as frontend to avoid CORS issues
+  // This ensures requests from localhost:8001 go to localhost:8001, not 127.0.0.1:8001
+  const devUrl = window.location.origin; // e.g., "http://localhost:8001"
+  console.log('[API] Using development backend (same origin):', devUrl);
   return devUrl;
 }
 
@@ -137,6 +147,75 @@ export async function apiLogin(email, password) {
     return { ...res, user };
   } catch (e) {
     console.error('[API][Auth] Login failed:', e.message);
+    throw e;
+  }
+}
+
+/**
+ * Request magic link for email-only authentication
+ */
+export async function apiRequestMagicLink(email) {
+  try {
+    const res = await _req('/v1/auth/magic_link/request', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+    
+    console.log('[Auth][MagicLink] Request sent for:', email);
+    return res;
+  } catch (e) {
+    console.error('[Auth][MagicLink] Request failed:', e.message);
+    throw e;
+  }
+}
+
+/**
+ * Verify magic link token and create session
+ */
+export async function apiVerifyMagicLink(token) {
+  try {
+    const res = await _req('/v1/auth/magic_link/verify', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
+    
+    console.log('[Auth][MagicLink] Verify success');
+    
+    // Token is in HTTP-only cookie, refresh current user
+    const user = await apiMe();
+    return { ...res, user };
+  } catch (e) {
+    console.error('[Auth][MagicLink] Verify failed:', e.message);
+    throw e;
+  }
+}
+
+/**
+ * Get Smartcar Connect URL for EV integration
+ */
+export async function apiGetSmartcarConnectUrl() {
+  try {
+    const res = await _req('/v1/ev/connect', {
+      method: 'GET',
+    });
+    return res;
+  } catch (e) {
+    console.error('[API][Smartcar] Failed to get connect URL:', e.message);
+    throw e;
+  }
+}
+
+/**
+ * Get latest vehicle telemetry
+ */
+export async function apiGetVehicleTelemetry() {
+  try {
+    const res = await _req('/v1/ev/me/telemetry/latest', {
+      method: 'GET',
+    });
+    return res;
+  } catch (e) {
+    console.error('[API][Smartcar] Failed to get telemetry:', e.message);
     throw e;
   }
 }
@@ -535,6 +614,8 @@ if (typeof window !== 'undefined') {
   window.NeravaAPI.apiDriverActivity = apiDriverActivity;
   window.NeravaAPI.apiSessionPing = apiSessionPing;
   window.NeravaAPI.apiCancelSession = apiCancelSession;
+  window.NeravaAPI.apiGetSmartcarConnectUrl = apiGetSmartcarConnectUrl;
+  window.NeravaAPI.apiGetVehicleTelemetry = apiGetVehicleTelemetry;
   
   // Legacy pilot endpoints (deprecated)
   window.NeravaAPI.fetchPilotBootstrap = fetchPilotBootstrap;

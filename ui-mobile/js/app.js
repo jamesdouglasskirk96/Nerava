@@ -7,6 +7,9 @@ import { ensureDemoBanner } from './components/demoBanner.js';
 import { apiGet, apiPost } from './core/api.js';
 import { ensureMap, drawRoute, clearRoute, getMap } from './core/map.js';
 
+// Import magic-link auth functions
+let apiRequestMagicLink, apiVerifyMagicLink;
+
 window.Nerava = window.Nerava || {};
 
 // Toast helper function
@@ -19,36 +22,127 @@ function showToast(message) {
   setTimeout(() => { toast.style.opacity = 0; toast.addEventListener('transitionend', () => toast.remove()); }, 3000);
 }
 
-// === SSO → prefs → wallet pre-balance → push banner flow ===
+// === Magic-link auth flow ===
 function getUser(){ return localStorage.NERAVA_USER || null; }
 function setUser(email){ localStorage.NERAVA_USER = email; const b = document.getElementById('auth-badge'); if(b) b.textContent=email; }
-function renderSSO(){ if(document.getElementById('sso-overlay')) return;
-  const wrap = document.createElement('div'); wrap.id='sso-overlay';
+
+// Render magic-link email-only auth UI
+function renderMagicLinkAuth(){ 
+  if(document.getElementById('sso-overlay')) return;
+  
+  const wrap = document.createElement('div'); 
+  wrap.id='sso-overlay';
   wrap.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.72);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:100000;';
-  wrap.innerHTML = `<div id="sso-card" style="width:clamp(320px,90vw,420px);background:#fff;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,.25);padding:20px">
-    <h2 style="margin:0 0 8px;font:700 18px/1.2 -apple-system,system-ui">Welcome</h2>
-    <p style="margin:0 0 12px;color:#64748b">Sign in to set preferences, see wallet, and claim incentives.</p>
-    <div class="sso-row">
-      <button id="btn-email"  class="sso-btn">Email sign up</button>
-      <button id="btn-apple"  class="sso-btn btn-apple"><span>🍎</span><span>Sign in with Apple</span></button>
-      <button id="btn-google" class="sso-btn btn-google"><span>G</span><span>Sign in with Google</span></button>
+  
+  wrap.innerHTML = `<div id="sso-card" style="width:clamp(320px,90vw,420px);background:#fff;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,.25);padding:24px">
+    <h2 style="margin:0 0 8px;font:700 20px/1.2 -apple-system,system-ui">Sign in to Nerava</h2>
+    <p style="margin:0 0 20px;color:#64748b;font-size:14px">Enter your email and we'll send you a magic link to sign in.</p>
+    
+    <form id="magic-link-form" style="margin-bottom:16px">
+      <input 
+        type="email" 
+        id="magic-email-input" 
+        placeholder="you@example.com" 
+        required
+        autocomplete="email"
+        style="width:100%;padding:12px;border:1px solid #e2e8f0;border-radius:8px;font-size:16px;margin-bottom:12px;box-sizing:border-box"
+      />
+      <button 
+        type="submit" 
+        id="magic-link-submit"
+        style="width:100%;padding:12px;background:#1e40af;color:#fff;border:none;border-radius:8px;font-weight:600;font-size:16px;cursor:pointer"
+      >Send Magic Link</button>
+    </form>
+    
+    <div id="magic-link-success" style="display:none;text-align:center;padding:20px 0">
+      <div style="font-size:48px;margin-bottom:12px">✉️</div>
+      <h3 style="margin:0 0 8px;font:600 18px/1.2 -apple-system,system-ui">Check your email</h3>
+      <p style="margin:0 0 16px;color:#64748b;font-size:14px">We've sent a magic link to <strong id="sent-email"></strong></p>
+      <p style="margin:0;color:#94a3b8;font-size:12px">Click the link in your email to sign in. It expires in 15 minutes.</p>
+      <p id="dev-mode-notice" style="margin-top:12px;padding:12px;background:#fef3c7;border-radius:8px;color:#92400e;font-size:12px;display:none">
+        <strong>Dev Mode:</strong> Check backend console for magic link URL.
+      </p>
+      <button 
+        id="magic-link-back"
+        style="margin-top:16px;padding:8px 16px;background:transparent;color:#64748b;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;cursor:pointer"
+      >Back</button>
     </div>
-    <p style="margin:12px 0 0;color:#94a3b8;font-size:12px">By continuing you agree to the Terms &amp; Privacy.</p>
+    
+    <div id="magic-link-error" style="display:none;padding:12px;background:#fee2e2;border-radius:8px;color:#dc2626;font-size:14px;margin-bottom:16px"></div>
+    
+    <p style="margin:16px 0 0;color:#94a3b8;font-size:12px;text-align:center">By continuing you agree to the Terms &amp; Privacy.</p>
   </div>`;
+  
   document.body.appendChild(wrap);
-  const proceed=(email)=>{
-    setUser(email);
-    const bal=document.getElementById('wallet-balance'); if(bal) bal.textContent='+$0.00'; // pre-balance
-    const e=document.getElementById('prof-email'); if(e) e.textContent=email; // show profile email
-    wrap.remove();
-    loadPrefs(); loadWallet(); loadBanner(); loadRecommendation();
-    triggerDemoPush();
+  
+  const form = wrap.querySelector('#magic-link-form');
+  const emailInput = wrap.querySelector('#magic-email-input');
+  const submitBtn = wrap.querySelector('#magic-link-submit');
+  const successDiv = wrap.querySelector('#magic-link-success');
+  const errorDiv = wrap.querySelector('#magic-link-error');
+  const sentEmailSpan = wrap.querySelector('#sent-email');
+  const backBtn = wrap.querySelector('#magic-link-back');
+  
+  // Show dev mode notice if on localhost
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    wrap.querySelector('#dev-mode-notice').style.display = 'block';
+  }
+  
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    
+    const email = emailInput.value.trim().toLowerCase();
+    if (!email) return;
+    
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Sending...';
+    errorDiv.style.display = 'none';
+    
+    try {
+      console.log('[Auth][MagicLink] Requesting magic link for:', email);
+      
+      const { apiRequestMagicLink } = await import('./core/api.js');
+      await apiRequestMagicLink(email);
+      
+      // Show success state
+      form.style.display = 'none';
+      sentEmailSpan.textContent = email;
+      successDiv.style.display = 'block';
+      
+      console.log('[Auth][MagicLink] Magic link request successful');
+    } catch (err) {
+      console.error('[Auth][MagicLink] Request failed:', err);
+      errorDiv.textContent = err.message || 'Failed to send magic link. Please try again.';
+      errorDiv.style.display = 'block';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Send Magic Link';
+    }
   };
-  wrap.querySelector('#btn-apple').onclick  = ()=> proceed('apple_demo@nerava.app');
-  wrap.querySelector('#btn-google').onclick = ()=> proceed('google_demo@nerava.app');
-  wrap.querySelector('#btn-email').onclick  = ()=>{ const em=prompt('Enter your email:','you@nerava.app'); if(em) proceed(em); };
+  
+  backBtn.onclick = () => {
+    successDiv.style.display = 'none';
+    form.style.display = 'block';
+    emailInput.value = '';
+  };
+  
+  // Focus email input
+  setTimeout(() => emailInput.focus(), 100);
 }
-function ensureAuth(){ if(!getUser()){ renderSSO(); return false; } const b=document.getElementById('auth-badge'); if(b) b.textContent=getUser(); return true; }
+
+// Legacy renderSSO for backward compatibility (fallback)
+function renderSSO() {
+  renderMagicLinkAuth();
+}
+
+function ensureAuth(){ 
+  if(!getUser()){ 
+    renderMagicLinkAuth(); 
+    return false; 
+  } 
+  const b=document.getElementById('auth-badge'); 
+  if(b) b.textContent=getUser(); 
+  return true; 
+}
 function triggerDemoPush(){
   if(document.getElementById('demo-push')) return;
   const bar=document.createElement('div'); bar.id='demo-push';
@@ -103,6 +197,76 @@ const inited = {};
 // Handle hash routing
 function handleHashRoute() {
   const hash = location.hash;
+  
+  // Handle Smartcar callback - redirect to profile tab
+  if (hash.includes('#profile') || hash.includes('vehicle=connected') || hash.includes('error=')) {
+    const params = new URLSearchParams(hash.split('?')[1] || '');
+    const vehicle = params.get('vehicle');
+    const error = params.get('error');
+    
+    // Set profile tab
+    if (typeof setTab === 'function') {
+      setTab('profile');
+    } else {
+      // Fallback: trigger tab click
+      const profileTab = document.querySelector('[data-tab="profile"]');
+      if (profileTab) {
+        profileTab.click();
+      }
+    }
+    
+    // The profile page will handle the query params
+    return;
+  }
+  
+  // Handle magic-link callback
+  if (hash.startsWith('#/auth/magic')) {
+    const params = new URLSearchParams(hash.split('?')[1] || '');
+    const token = params.get('token');
+    
+    if (token) {
+      console.log('[Auth][MagicLink] Processing magic link callback');
+      
+      // Import and verify token
+      import('./core/api.js').then(async ({ apiVerifyMagicLink, apiMe }) => {
+        try {
+          await apiVerifyMagicLink(token);
+          
+          // Get user info to set in localStorage
+          const user = await apiMe();
+          if (user && user.email) {
+            setUser(user.email);
+            console.log('[Auth][MagicLink] Session created for:', user.email);
+          }
+          
+          // Navigate to Wallet tab
+          location.hash = '#/wallet';
+          window.location.reload();
+        } catch (err) {
+          console.error('[Auth][MagicLink] Verification failed:', err);
+          
+          // Show error state
+          const wrap = document.createElement('div');
+          wrap.id = 'magic-link-error';
+          wrap.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.92);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:100000;';
+          wrap.innerHTML = `<div style="width:clamp(320px,90vw,420px);background:#fff;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,.25);padding:24px;text-align:center">
+            <h2 style="margin:0 0 12px;font:700 18px/1.2 -apple-system,system-ui;color:#dc2626">Link Expired or Invalid</h2>
+            <p style="margin:0 0 20px;color:#64748b">This magic link has expired or is invalid. Please request a new one.</p>
+            <button id="retry-magic-link" style="width:100%;padding:12px;background:#1e40af;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer">Request New Link</button>
+          </div>`;
+          document.body.appendChild(wrap);
+          
+          wrap.querySelector('#retry-magic-link').onclick = () => {
+            wrap.remove();
+            location.hash = '#/';
+            renderMagicLinkAuth();
+          };
+        }
+      });
+      
+      return;
+    }
+  }
   
   // Handle show code page
   if (hash.startsWith('#/code')) {
@@ -221,9 +385,32 @@ export async function setTab(tab){
   }
   
   _activeTab = tab;
-  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active', p.id==='page-'+tab));
+  
+  // Map discover tab to explore page
+  const pageMap = {
+    'wallet': 'page-wallet',
+    'discover': 'page-explore',
+    'profile': 'page-profile'
+  };
+  
+  const targetPageId = pageMap[tab] || `page-${tab}`;
+  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active', p.id===targetPageId));
   document.querySelectorAll('.tabbar .tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===tab));
-  if(tab==='explore') ensureMap();
+  
+  console.log(`[Nav][Tabs] Switched to ${tab}`);
+  
+  if(tab==='explore' || tab==='discover') {
+    ensureMap();
+    if(tab==='discover') {
+      // Initialize explore page when switching to discover tab
+      const exploreEl = document.getElementById('page-explore');
+      if (exploreEl && !exploreEl.dataset.initialized) {
+        const { initExplore } = await import('./pages/explore.js');
+        initExplore();
+        exploreEl.dataset.initialized = 'true';
+      }
+    }
+  }
   if(tab==='activity') await initActivity();
   if(tab==='earn') await initEarn();
   if(tab==='wallet') {
@@ -334,7 +521,7 @@ async function initApp() {
   
   // Only set default tab if no hash route
   if (!location.hash || location.hash === '#') {
-    setTab('explore');
+    setTab('wallet');
   }
   
   // Add bottom padding to all pages
@@ -368,7 +555,10 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     }
   } catch(_) {}
 
-  setTab('Explore');            // now guaranteed defined
+  // Default to wallet tab on load (will be overridden by hash routes if present)
+  if (!location.hash || location.hash === '#') {
+    setTab('wallet');
+  }
   // Gate on SSO; after SSO completes, it calls the loaders again.
   if (typeof ensureAuth === 'function' && !ensureAuth()) return;
   await loadBanner();
@@ -587,8 +777,11 @@ window.addEventListener('load', async ()=>{
   // Check backend connectivity
   await checkBackend();
   
-  // Start with explore tab by default
-  setTab('explore');
+  // Log tab layout initialization
+  console.log('[Nav][Tabs] Layout: flex spacing enabled');
+  
+  // Start with wallet tab by default
+  setTab('wallet');
   // lazy import to avoid cyclic loads
   const { initExplore } = await import('./pages/explore.js');
   initExplore();

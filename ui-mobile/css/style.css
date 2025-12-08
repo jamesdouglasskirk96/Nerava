@@ -110,8 +110,12 @@ overflow:hidden;
 /* ===== Explore Page - Apple Maps-style Redesign ===== */
 
 /* Full-screen Explore page */
-.page-explore-fullscreen {
+.page-explore-fullscreen,
+#page-explore {
   position: relative;
+}
+
+.page-explore-fullscreen {
   height: calc(100vh - var(--tabbar-height, 76px));
   overflow: hidden;
   padding: 0;
@@ -119,6 +123,10 @@ overflow:hidden;
 }
 
 /* Full-screen map background */
+.discover-map-container {
+  position: relative;
+}
+
 .explore-map-fullscreen {
   position: absolute;
   top: 0;
@@ -128,12 +136,23 @@ overflow:hidden;
   width: 100%;
   height: 100%;
   z-index: 0;
+  border-radius: 0 !important;
 }
 
 .explore-map-fullscreen .leaflet-container {
   height: 100% !important;
   width: 100% !important;
   background: #e5e7eb;
+  border-radius: 0 !important;
+}
+
+/* Ensure all map elements have no rounded corners */
+#discover-map,
+#map,
+.discover-map-wrapper,
+.leaflet-container,
+.map-wrap {
+  border-radius: 0 !important;
 }
 
 /* Top overlay: Search + Suggestions */
@@ -229,6 +248,45 @@ overflow:hidden;
   display: none;
 }
 
+/* ===== Discover map overlays: off-peak pill + center button ===== */
+
+/* Map container must be the positioning context */
+.page-explore-fullscreen,
+#page-explore {
+  position: relative;
+}
+
+/* Off-peak pill: left side, above the card */
+.discover-offpeak-pill,
+.charge-chip {
+  position: absolute;
+  left: 24px;
+  bottom: 350px; /* Raised another 20px above the merchant card */
+  z-index: 650;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(17, 24, 39, 0.94);
+  color: #f9fafb;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.45);
+  pointer-events: auto;
+}
+
+/* Optional icon spacing inside pill */
+.discover-offpeak-pill .icon,
+.charge-chip .icon {
+  margin-right: 4px;
+}
+
+.charge-chip__text {
+  font-weight: 500;
+}
+
 .suggestion-chip {
   background: #FFFFFF;
   border: 1px solid #E5E5E5;
@@ -260,8 +318,162 @@ overflow:hidden;
   box-shadow: none;
 }
 
-/* Recommended Perks Container - Single card with 3 compact perks */
-/* Positioned above tab bar - accounts for tab bar height + safe area + gap */
+/* Discover Merchants Section - Horizontal Carousel */
+.discover-merchants-section {
+  position: fixed;
+  bottom: calc(var(--tabbar-height, 76px) + env(safe-area-inset-bottom, 0px) + 0px);
+  left: 0;
+  right: 0;
+  z-index: 500; /* Below the map overlays */
+  pointer-events: none;
+  background: transparent;
+}
+
+/* List View text under merchant cards */
+.list-view-text {
+  display: block;
+  text-align: center;
+  text-decoration: underline;
+  font-size: 14px;
+  color: #6b7280;
+  margin-top: 8px;
+  pointer-events: auto;
+  padding: 0 2%;
+  width: 100%;
+}
+
+/* Discover merchant cards */
+.discover-merchant-card-container,
+.discover-merchant-card-strip {
+  position: relative;
+  z-index: 500;
+}
+
+/* Merchant card stack should sit above the map but below controls */
+.discover-merchant-scroller,
+.discover-merchant-card-container,
+.discover-merchant-card {
+  position: relative;
+  z-index: 500;
+}
+
+/* Horizontal merchant carousel: one full card per "page" */
+.discover-merchant-scroller {
+  display: flex;
+  flex-direction: row;
+  overflow-x: auto;
+  padding: 0 2% 5px;
+  gap: 16px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  pointer-events: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  justify-content: flex-start; /* Start from beginning */
+}
+
+.discover-merchant-scroller::-webkit-scrollbar {
+  display: none;
+}
+
+/* Merchant Card - Resy-style with image on right */
+.discover-merchant-card,
+.merchant-card {
+  flex: 0 0 99%;
+  max-width: 99%;
+  scroll-snap-align: center;
+  display: flex;
+  justify-content: space-between;
+  align-items: stretch;
+  padding: 16px;
+  border-radius: 24px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  cursor: pointer;
+  transition: transform 0.2s;
+  z-index: 500;
+  margin: 0 auto; /* center the card */
+}
+
+.merchant-card:hover {
+  transform: translateY(-2px);
+}
+
+.merchant-card__left {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.merchant-card__name {
+  font-weight: 600;
+  font-size: 16px;
+  color: #111827;
+  margin-bottom: 2px;
+}
+
+.merchant-card__meta {
+  font-size: 13px;
+  color: #6b7280;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.merchant-card__rating {
+  color: #fbbf24;
+}
+
+.merchant-card__rating-count {
+  color: #9ca3af;
+}
+
+.merchant-card__dot {
+  color: #6b7280;
+}
+
+.merchant-card__category,
+.merchant-card__price {
+  color: #6b7280;
+}
+
+.merchant-card__distance {
+  font-size: 13px;
+  color: #9ca3af;
+  margin-top: 4px;
+}
+
+.merchant-card__nova {
+  font-size: 12px;
+  color: #16a34a;
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+.merchant-card__button {
+  margin-top: 8px;
+  align-self: flex-start;
+}
+
+.merchant-card__right {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 12px;
+  flex-shrink: 0;
+}
+
+.merchant-card__image {
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  object-fit: cover;
+  background: #f3f4f6;
+}
+
 .recommended-perks-container {
   position: fixed;
   bottom: calc(var(--tabbar-height, 76px) + env(safe-area-inset-bottom, 0px) + 16px);
@@ -297,13 +509,6 @@ overflow:hidden;
   pointer-events: auto;
 }
 
-.recommended-perks-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #333333;
-  margin-bottom: 8px;
-  text-align: left;
-}
 
 .recommended-perks-row {
   display: flex;
@@ -312,15 +517,155 @@ overflow:hidden;
   align-items: stretch;
   overflow-x: auto; /* Enable horizontal scrolling */
   overflow-y: hidden; /* Prevent vertical scrolling */
-  scroll-snap-type: x proximity; /* Smooth scrolling between cards */
+  scroll-snap-type: x mandatory; /* Smooth scrolling between cards */
   -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
   scrollbar-width: thin; /* Thin scrollbar on Firefox */
-  padding-bottom: 4px; /* Space for scrollbar */
+  padding: 12px 16px 24px;
   /* Prevent wrapping */
   flex-wrap: nowrap;
   /* Hide scrollbar for cleaner look (optional) */
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE/Edge */
+  pointer-events: auto;
+}
+
+/* Resy-style Merchant Cards */
+.perk-card--resy {
+  display: flex;
+  justify-content: space-between;
+  align-items: stretch;
+  background: #ffffff;
+  color: #111827;
+  border-radius: 20px;
+  padding: 12px 16px;
+  min-width: 320px;
+  max-width: 360px;
+  scroll-snap-align: start;
+  cursor: pointer;
+  transition: transform 0.2s;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+}
+
+.perk-card--resy:hover {
+  transform: translateY(-2px);
+}
+
+.perk-card__left {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.perk-card__name {
+  font-weight: 600;
+  font-size: 16px;
+  color: #111827;
+  margin-bottom: 2px;
+}
+
+.perk-card__meta {
+  font-size: 13px;
+  color: #6b7280;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.perk-card__rating {
+  color: #fbbf24;
+}
+
+.perk-card__rating-count {
+  color: #9ca3af;
+}
+
+.perk-card__dot {
+  color: #6b7280;
+}
+
+.perk-card__category,
+.perk-card__price {
+  color: #6b7280;
+}
+
+.perk-card__distance {
+  font-size: 13px;
+  color: #9ca3af;
+  margin-top: 4px;
+}
+
+.perk-card__nova {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #16a34a;
+  font-weight: 500;
+}
+
+.perk-card__button {
+  margin-top: 8px;
+  align-self: flex-start;
+}
+
+.perk-card__right {
+  margin-left: 12px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.perk-card__image {
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: #f3f4f6;
+}
+
+/* Center map button: right side, aligned vertically with pill */
+.map-center-btn,
+.discover-map-center-button {
+  position: absolute;
+  right: 115px;
+  bottom: 350px;
+  z-index: 660;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: none;
+  background: #111827;
+  color: #f9fafb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.55);
+  cursor: pointer;
+  transition: transform 0.2s;
+  pointer-events: auto;
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* Optional: if the button uses an SVG icon, constrain it */
+.map-center-btn svg,
+.discover-map-center-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+.discover-map-center-button .icon-target {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.map-center-btn:hover {
+  transform: scale(1.05);
+}
+
+.map-center-btn:active {
+  transform: scale(0.95);
 }
 
 .recommended-perks-row::-webkit-scrollbar {
@@ -332,7 +677,7 @@ overflow:hidden;
   flex: 0 0 auto; /* Don't shrink or grow, use fixed width */
   min-width: 140px; /* Fixed minimum width for horizontal scrolling */
   max-width: 180px; /* Optional: max width for larger screens */
-  width: 140px; /* Fixed width for consistent card size */
+  width: 240px; /* Fixed width for consistent card size - increased for better visibility */
   height: 100px;
   display: flex;
   flex-direction: column;
@@ -635,6 +980,30 @@ overflow:hidden;
 .btn{border:0; cursor:pointer; font-weight:800; border-radius:18px}
 .btn-primary{background:var(--green); color:#0a1a26; padding:1rem 1.2rem}
 .btn-wide{width:100%}
+.btn-pill {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-pill.btn-primary {
+  background: #3b82f6;
+  color: #fff;
+}
+.btn-pill.btn-primary:hover {
+  background: #2563eb;
+}
+.btn-pill.btn-light {
+  background: rgba(255, 255, 255, 0.2);
+  color: #f9fafb;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.btn-pill.btn-light:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
 .pill-btn{background:#102e41; color:var(--text); padding:.7rem 1rem}
 
 /* Charge/Wallet/Profile */
@@ -714,7 +1083,7 @@ overflow:hidden;
 
 /* Map container styling */
 #map, .map-shell { 
-  border-radius: 18px; 
+  border-radius: 0 !important; 
   overflow: hidden; 
 }
 
@@ -740,26 +1109,7 @@ overflow:hidden;
   font-size: 18px;
 }
 
-/* Tabbar */
-.tabbar{
-  position:fixed; left:0; right:0; bottom:0; height:var(--tabbar-height);
-  display:flex; align-items:center; justify-content:space-around;
-  padding: 8px 12px calc(env(safe-area-inset-bottom,0px) + 8px);
-  background:rgba(255,255,255,.85); backdrop-filter: blur(10px);
-  box-shadow:0 -8px 20px rgba(0,0,0,.12); z-index:30;
-  border-radius: 20px 20px 0 0;
-}
-.tab{
-  flex:1; display:flex; flex-direction:column; align-items:center; gap:6px;
-  min-width:48px; color: #A0A3B1; text-decoration:none;
-  padding: 8px; /* Ensure 48px minimum tap area */
-}
-.tab .icon{
-  width:24px; height:24px; stroke: currentColor; fill:none; stroke-width:1.5;
-}
-.tab .label{ font-size:12px; color:#A0A3B1; font-weight:500; }
-.tab.active{ color: var(--brand-blue); }
-.tab.active .label{ color: var(--brand-blue); font-weight:600; }
+/* Tabbar - REMOVED: Replaced by canonical rule at end of file (#app .tabbar) */
 
 /* Centered Earn pill - aligned with nav icons */
 .earn-pill{
@@ -804,14 +1154,10 @@ overflow:hidden;
   box-shadow: 0 12px 30px rgba(0,0,0,.18);
 }
 
-/* Give breathing room to tabs adjacent to FAB */
-.tabbar .tab[data-tab="charge"] { margin-right: 28px; }
-.tabbar .tab[data-tab="wallet"] { margin-left: 28px; }
-
+/* Removed margin rules to ensure even spacing */
 /* Spacing tweaks for Earn pill */
 .tabbar{ padding: 8px 18px calc(env(safe-area-inset-bottom,0) + 8px); }
 .tabbar .main{ transform: translateY(-10px); } /* reduce float height */
-.tabbar .tab{ margin: 0 18px; }               /* a bit more gap */
 
 /* Keep Earn pill clear of the map */
 .tabbar--pill {
@@ -825,7 +1171,7 @@ overflow:hidden;
   display:flex; align-items:center; justify-content:space-around;
   gap:0;
 }
-.tabbar .tab{ flex: 0 0 auto; }
+/* Removed conflicting flex rule - using flex: 1 1 0 for even spacing */
 
 
 /* Enhanced Explore page styling */
@@ -934,7 +1280,7 @@ overflow:hidden;
 .leaflet-div-icon.merchant-logo img{ width:34px; height:34px; border-radius:8px; object-fit:cover; }
 
 /* Ensure #map stays clipped nicely */
-#map{ border-radius:20px; overflow:hidden; }
+#map{ border-radius:0 !important; overflow:hidden; }
 
 /* Map card */
 .map-card{
@@ -971,17 +1317,18 @@ overflow:hidden;
 /* ---------- Tabbar (same height, bigger icons) ---------- */
 .tabbar{
   position: sticky; bottom:0; z-index: 30;
-  height: var(--tabbar-height); display:flex; align-items:center; justify-content:space-around;
+  height: var(--tabbar-height); display:flex; align-items:center; justify-content:space-between;
   backdrop-filter: blur(10px);
   background: rgba(255,255,255,.85); border-top: 1px solid rgba(0,0,0,.06);
+  padding: 8px 0;
 }
 .tab{
   display:flex; flex-direction:column; align-items:center; justify-content:center;
-  gap:6px; width:20%; height:100%;
+  gap:6px; flex: 1; text-align: center; height:100%; padding: 0;
 }
-.tab .icon{ font-size: 28px; line-height: 1; color:#a0a6b2 }       /* light grey */
-.tab .label{ font-size:14px; color:#6c7280 }
-.tab.active .icon, .tab.active .label{ color: var(--brand) }
+.tab .icon{ font-size: 28px; line-height: 1; color:#9ca3af }       /* light grey */
+.tab .label{ font-size:14px; color:#9ca3af }
+.tab.active .icon, .tab.active .label{ color: #2563eb; } /* blue for active */
 
 /* Raised Claim button stays same size; color now brand */
 .tab.claim .pill{
@@ -1104,9 +1451,7 @@ overflow:hidden;
   border:2px solid #6B7DA6; 
 } /* outline matches icon stroke */
 
-.tabbar .tab:nth-child(2), .tabbar .tab:nth-child(4){ 
-  margin:0 6px; 
-} /* breathing room around pill */
+/* Removed margin rules to ensure even spacing */
 
 /* --- Map card --- */
 .map-card{
@@ -1133,8 +1478,10 @@ overflow:hidden;
   z-index: 20;
 }
 .tabbar .tab{
-  display:flex; flex-direction:column; align-items:center; gap:4px;
-  color: var(--ink-weak); text-decoration:none; user-select:none;
+  flex: 1;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+  color: #9ca3af; text-decoration:none; user-select:none;
+  text-align: center;
 }
 .tabbar .tab .icon{
   width: 28px; height: 28px; display:grid; place-items:center;
@@ -1143,9 +1490,11 @@ overflow:hidden;
   width: 28px; height: 28px; stroke: currentColor; fill: none; stroke-width: 2.2;
 }
 .tabbar .tab .label{
-  font-size: 14px; line-height: 16px; color: inherit;
+  font-size: 14px; line-height: 16px; color: #9ca3af;
 }
-.tabbar .tab.active{ color: var(--brand-blue); }
+.tabbar .tab.active{ color: #2563eb; }
+.tabbar .tab.active .icon{ color: #2563eb; }
+.tabbar .tab.active .label{ color: #2563eb; font-weight:600; }
 
 /* --- Center FAB (Earn) --- */
 #fab-earn{
@@ -1176,8 +1525,7 @@ overflow:hidden;
 #fab-earn .icon svg{ width: 24px; height: 24px; stroke:#fff; fill:none; stroke-width:2.4; }
 #fab-earn .label{ font-weight:600; font-size:12px; line-height:1; }
 
-/* spacing so neighbors don't crowd the FAB */
-.tabbar .tab:nth-child(3){ margin: 0 14px; }  /* center slot gutters */
+/* Removed margin to ensure even spacing */
 
 /* ========= Explore layout ========= */
 .explore-stack{
@@ -1201,11 +1549,11 @@ overflow:hidden;
 #map.leaflet-host{
   width:100%;
   height:220px;          /* map height - leave space for info bar */
-  border-radius:16px;    /* rounded corners for the map */
+  border-radius:0 !important;    /* no rounded corners for the map */
   overflow:hidden;        /* ensure content stays within bounds */
 }
 .leaflet-container{
-  border-radius:16px;    /* enforce rounded tiles inside */
+  border-radius:0 !important;    /* no rounded corners */
   overflow:hidden;        /* prevent map from extending beyond container */
 }
 
@@ -1363,10 +1711,14 @@ overflow:hidden;
 
 /* ========= NAVBAR STYLING ========= */
 .tabbar .tab{
-  color: var(--ink-500); /* inactive tab text */
+  color: #9ca3af; /* inactive tab text - gray */
 }
 .tabbar .tab.active{
-  color: var(--ink-900); /* active tab text */
+  color: #2563eb; /* active tab text - blue */
+}
+.tabbar .tab.active .icon,
+.tabbar .tab.active .label {
+  color: #2563eb; /* active tab icon and label - blue */
 }
 .tabbar .tab .icon svg{
   stroke: currentColor; /* icons match text color */
@@ -1413,7 +1765,7 @@ overflow:hidden;
 .map-card #map{
   width: 100%;
   height: 100%;
-  border-radius: 16px;
+  border-radius: 0 !important;
 }
 
 /* Section title - "Nearby perk" */
@@ -1936,4 +2288,99 @@ body {
   .btn { padding: 8px 16px; font-size: 13px; height: 36px; }
   .card { padding: 10px 14px; margin: 8px; }
   .page-scroll { max-height: calc(100vh - 100px); }
+}
+
+/* ===== Bottom tab bar – canonical layout ===== */
+/* This rule overrides all previous tabbar rules - tabbar is outside #app, so using !important */
+
+.tabbar {
+  position: fixed !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  height: 64px !important;
+
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: space-around !important; /* equal spacing */
+  align-items: center !important;
+
+  background: #ffffff !important;
+  border-top: 1px solid #e5e7eb !important;
+  padding: 4px 0 !important;
+  z-index: 1000 !important;
+  border-radius: 20px 20px 0 0 !important;
+}
+
+/* Each tab takes equal space and is centered */
+.tabbar .tab {
+  flex: 1 1 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  margin: 0 !important;
+  padding: 4px 0 !important;
+  gap: 2px !important;
+  text-align: center !important;
+  border: none !important;
+  background: transparent !important;
+  text-decoration: none !important;
+  min-width: 48px !important;
+  color: #9ca3af !important;
+  transform: none !important;
+  width: 100% !important;
+}
+
+/* Kill any previous margin hacks */
+.tabbar .tab:nth-child(1),
+.tabbar .tab:nth-child(2),
+.tabbar .tab:nth-child(3),
+.tabbar .tab:nth-child(4) {
+  margin: 0 !important;
+  transform: none !important;
+  flex: 1 1 0 !important;
+}
+
+/* Icon + label colors – inactive vs active */
+.tabbar .tab .icon {
+  width: 20px !important;
+  height: 20px !important;
+  stroke: currentColor !important;
+  fill: none !important;
+  stroke-width: 1.5 !important;
+  color: #9ca3af !important; /* gray */
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 auto 2px auto !important; /* center align icon */
+  flex-shrink: 0 !important;
+}
+
+.tabbar .tab .icon svg {
+  width: 20px !important;
+  height: 20px !important;
+  display: block !important;
+  margin: 0 auto !important;
+}
+
+.tabbar .tab .label {
+  font-size: 11px !important;
+  line-height: 1.2 !important;
+  color: #6b7280 !important; /* slightly darker gray */
+  font-weight: 500 !important;
+  text-align: center !important;
+  width: 100% !important;
+  display: block !important;
+}
+
+/* Active (selected) tab is blue */
+.tabbar .tab.active .icon,
+.tabbar .tab.active .label {
+  color: #2563eb !important; /* blue */
+}
+
+.tabbar .tab.active .label {
+  font-weight: 600 !important;
 }

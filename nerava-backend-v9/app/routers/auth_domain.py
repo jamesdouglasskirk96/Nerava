@@ -7,11 +7,12 @@ from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from typing import Optional, List
-from datetime import timedelta
+from datetime import timedelta, datetime
 import logging
+from jose import jwt
 
 from app.db import get_db
-from app.models import User
+from app.models import User, UserPreferences
 from app.services.auth_service import AuthService
 from app.dependencies_domain import (
     get_current_user,
@@ -20,10 +21,27 @@ from app.dependencies_domain import (
     require_merchant_admin
 )
 from app.core.config import settings
+from app.core.security import hash_password, create_access_token
+from app.core.email_sender import get_email_sender
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/auth", tags=["auth-v1"])
+
+
+# Helper Functions
+def create_magic_link_token(user_id: int, email: str) -> str:
+    """Create a time-limited magic link token (expires in 15 minutes)"""
+    expires_delta = timedelta(minutes=15)
+    expire = datetime.utcnow() + expires_delta
+    
+    payload = {
+        "sub": str(user_id),
+        "email": email,
+        "purpose": "magic_link",
+        "exp": expire,
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
 # Request/Response Models
@@ -50,6 +68,14 @@ class UserResponse(BaseModel):
     display_name: Optional[str]
     role_flags: Optional[str]
     linked_merchant: Optional[dict] = None
+
+
+class MagicLinkRequest(BaseModel):
+    email: EmailStr
+
+
+class MagicLinkVerify(BaseModel):
+    token: str
 
 
 @router.post("/register", response_model=TokenResponse)
@@ -159,4 +185,187 @@ def get_current_user_info(
         role_flags=user.role_flags,
         linked_merchant=linked_merchant
     )
+
+
+@router.post("/magic_link/request")
+async def request_magic_link(
+    payload: MagicLinkRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Request a magic link for email-only authentication.
+    
+    - Looks up or creates user (without password)
+    - Generates time-limited token
+    - Sends email with magic link (console logger for dev)
+    """
+    try:
+        email = payload.email.lower().strip()
+        
+        logger.info(f"[Auth][MagicLink] Request for {email}")
+        
+        # Lookup or create user (without password requirement)
+        user = db.query(User).filter(User.email == email).first()
+        
+        if not user:
+            try:
+                # Create new user with placeholder password (magic-link only)
+                # Use a dummy password hash - user can set real password later if needed
+                placeholder_password = "magic-link-user-no-password"
+                user = User(
+                    email=email, 
+                    password_hash=hash_password(placeholder_password),
+                    is_active=True,
+                    auth_provider="local"  # Required field with default, but explicit is safer
+                )
+                db.add(user)
+                db.flush()
+                db.add(UserPreferences(user_id=user.id))
+                db.commit()
+                db.refresh(user)
+                logger.info(f"[Auth][MagicLink] Created new user {user.id} for {email}")
+            except Exception as e:
+                db.rollback()
+                logger.error(f"[Auth][MagicLink] Failed to create user: {e}", exc_info=True)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to create user: {str(e)}"
+                )
+        
+        # Generate magic link token
+        magic_token = create_magic_link_token(user.id, email)
+        
+        # Get frontend URL from settings (default to localhost:8001/app for mobile)
+        frontend_url = settings.FRONTEND_URL.rstrip("/")
+        # If frontend_url doesn't include /app/, add it for mobile app hash routing
+        if "/app" not in frontend_url:
+            frontend_url = f"{frontend_url}/app"
+        magic_link_url = f"{frontend_url}/#/auth/magic?token={magic_token}"
+        
+        # Send email via email sender abstraction
+        email_sender = get_email_sender()
+        email_sender.send_email(
+            to_email=email,
+            subject="Sign in to Nerava",
+            body_text=f"Click this link to sign in to Nerava:\n\n{magic_link_url}\n\nThis link expires in 15 minutes.\n\nIf you didn't request this link, you can safely ignore this email.",
+            body_html=f"""
+            <html>
+            <body>
+                <h2>Sign in to Nerava</h2>
+                <p>Click this link to sign in:</p>
+                <p><a href="{magic_link_url}">{magic_link_url}</a></p>
+                <p><small>This link expires in 15 minutes.</small></p>
+                <p><small>If you didn't request this link, you can safely ignore this email.</small></p>
+            </body>
+            </html>
+            """,
+        )
+        
+        # Return success (don't expose token in response)
+        return {"message": "Magic link sent to your email", "email": email}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_detail = str(e)
+        error_traceback = traceback.format_exc()
+        logger.error(f"[Auth][MagicLink] Request failed: {error_detail}\n{error_traceback}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to send magic link: {error_detail}"
+        )
+
+
+@router.post("/magic_link/verify", response_model=TokenResponse)
+async def verify_magic_link(
+    payload: MagicLinkVerify,
+    db: Session = Depends(get_db),
+    response: Response = None,
+):
+    """
+    Verify a magic link token and create a session.
+    
+    - Verifies token signature and expiration
+    - Checks token purpose is "magic_link"
+    - Creates access token (same format as password login)
+    - Returns TokenResponse for session creation
+    """
+    token = payload.token
+    
+    try:
+        # Decode and verify token
+        payload_data = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+        )
+        
+        # Verify token purpose
+        if payload_data.get("purpose") != "magic_link":
+            logger.warning("[Auth][MagicLink] Verify failed: Invalid token purpose")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid token purpose",
+            )
+        
+        # Get user ID from token
+        user_id_str = payload_data.get("sub")
+        if not user_id_str:
+            logger.warning("[Auth][MagicLink] Verify failed: Missing user ID in token")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid token: missing user ID",
+            )
+        
+        user_id = int(user_id_str)
+        
+        # Verify user exists
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            logger.warning(f"[Auth][MagicLink] Verify failed: User not found (user_id={user_id})")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            )
+        
+        # Create access token using AuthService (consistent with login/register)
+        access_token = AuthService.create_session_token(user)
+        
+        # Set HTTP-only cookie for better security (consistent with login)
+        if response:
+            response.set_cookie(
+                key="access_token",
+                value=access_token,
+                httponly=True,
+                secure=False,  # Set to False for localhost/HTTP, True in production with HTTPS
+                samesite="lax",
+                max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+            )
+        
+        logger.info(f"[Auth][MagicLink] Verify success for user_id={user.id}")
+        return TokenResponse(access_token=access_token)
+        
+    except jwt.ExpiredSignatureError:
+        logger.warning("[Auth][MagicLink] Verify failed: Token expired")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Magic link has expired. Please request a new one.",
+        )
+    except jwt.JWTError as e:
+        logger.warning(f"[Auth][MagicLink] Verify failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid magic link token: {str(e)}",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_detail = str(e)
+        error_traceback = traceback.format_exc()
+        logger.error(f"[Auth][MagicLink] Verify failed: {error_detail}\n{error_traceback}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Magic link verification failed: {error_detail}",
+        )
 

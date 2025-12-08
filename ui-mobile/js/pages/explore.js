@@ -26,6 +26,7 @@ import Api, {
 } from '../core/api.js';
 import { ensureMap, clearStations, addStationDot, fitToStations, getMap } from '../core/map.js';
 import { setTab } from '../app.js';
+import { getOptimalChargingTime, getChargingStateDisplay, getChargingState } from '../core/charging-state.js';
 
 // Leaflet reference (assumes L is global from Leaflet script)
 const L = window.L;
@@ -188,13 +189,6 @@ function fallbackChargers() {
   }));
 }
 
-function updateHubHeader(bootstrap) {
-  const title = document.querySelector('.recommended-perks-title');
-  if (title && bootstrap?.hub_name) {
-    title.textContent = `${bootstrap.hub_name} merchants`;
-  }
-}
-
 async function loadPilotData() {
   showLoadingState();
   try {
@@ -244,6 +238,19 @@ async function loadPilotData() {
     _merchants = merchantsRaw.map(toMapMerchant).filter(Boolean);
     console.log('[Explore] Mapped merchants:', _merchants.length, 'merchants');
     
+    // Convert merchants to Resy-style format and render
+    if (_merchants.length > 0) {
+      const merchantCards = _merchants.map(m => ({
+        ...m,
+        rating: m.rating || 4.6,
+        rating_count: m.rating_count || 2500,
+        price_tier: m.price_tier || '$$',
+        distance_text: m.distance_text || (m.walk_time_s ? `${Math.round(m.walk_time_s / 60)} min` : '0.1 mi'),
+        image_url: m.image_url || m.photo_url || m.logo_url,
+      }));
+      updateRecommendedPerks(merchantCards);
+    }
+    
     // Log first mapped merchant to see logo field
     if (_merchants.length > 0) {
       const firstMapped = _merchants[0];
@@ -268,8 +275,18 @@ async function loadPilotData() {
         nova_reward: perk.nova,
         walk_time_s: 0,
       }));
-      updateRecommendedPerks(_recommendedPerks);
-      showEmptyState('No merchants found – showing default perks');
+      // Convert perks to merchant format for Resy cards
+      const merchantCards = _recommendedPerks.map(p => ({
+        id: p.id,
+        name: p.name,
+        rating: 4.6,
+        rating_count: 2500,
+        category: 'Food & Drink',
+        price_tier: '$$',
+        distance_text: p.walk || '0.1 mi',
+        image_url: p.logo,
+      }));
+      updateRecommendedPerks(merchantCards);
     }
 
     if (_chargers.length) {
@@ -286,7 +303,18 @@ async function loadPilotData() {
       nova_reward: perk.nova,
       walk_time_s: 0,
     }));
-    updateRecommendedPerks(_recommendedPerks);
+    // Convert perks to merchant format for Resy cards
+    const merchantCards = _recommendedPerks.map(p => ({
+      id: p.id,
+      name: p.name,
+      rating: 4.6,
+      rating_count: 2500,
+      category: 'Food & Drink',
+      price_tier: '$$',
+      distance_text: p.walk || '0.1 mi',
+      image_url: p.logo,
+    }));
+    updateRecommendedPerks(merchantCards);
     showEmptyState('Failed to load merchants – please try again.');
 
     if (_chargers.length) {
@@ -316,7 +344,16 @@ function applyMerchantFilter(query = '') {
     showEmptyState('No matching merchants');
     return;
   }
-  updateRecommendedPerks(filtered.map(merchantToPerkCard));
+  // Convert merchants to format expected by Resy-style cards
+  const merchantCards = filtered.map(m => ({
+    ...m,
+    rating: m.rating || 4.6,
+    rating_count: m.rating_count || 2500,
+    price_tier: m.price_tier || '$$',
+    distance_text: m.distance_text || (m.walk_time_s ? `${Math.round(m.walk_time_s / 60)} min` : '0.1 mi'),
+    image_url: m.image_url || m.photo_url || m.logo_url,
+  }));
+  updateRecommendedPerks(merchantCards);
 }
 
 // Toast helper
@@ -415,6 +452,81 @@ async function filterByCategory(category) {
   };
   _selectedCategory = categoryMap[category] || category || null;
   applyMerchantFilter(_activeQuery);
+}
+
+// === Charge Chip ==============================================
+function updateChargeChip() {
+  const chip = $('#charge-chip');
+  if (!chip) return;
+
+  const chipText = chip.querySelector('.charge-chip__text');
+  if (!chipText) return;
+
+  const { state, nextChangeTime } = getChargingState();
+  const stateDisplay = getChargingStateDisplay();
+  
+  // Update icon
+  const iconEl = chip.querySelector('.charge-chip__icon');
+  if (iconEl) iconEl.textContent = stateDisplay.icon;
+
+  let label = '';
+  const now = new Date();
+  const diffMs = nextChangeTime - now;
+  const hours = Math.max(1, Math.round(diffMs / (1000 * 60 * 60)));
+  
+  if (state === 'off-peak') {
+    label = `Charge now, off-peak ends in ${hours}h`;
+  } else {
+    label = `Next off-peak starts in ${hours}h`;
+  }
+
+  chipText.textContent = label;
+  chip.style.display = 'inline-flex';
+}
+
+function initChargeChip() {
+  updateChargeChip();
+  // Update every minute
+  setInterval(updateChargeChip, 60000);
+}
+
+// === Center Map Button ==============================================
+function centerMapOnUser() {
+  if (!_map) {
+    _map = getMap();
+  }
+  
+  if (!_map) {
+    console.warn('[Explore] Map not available for centering');
+    return;
+  }
+
+  // Try user location first, then fallback to charger or default
+  let loc = _userLocation;
+  
+  if (!loc && _chargers && _chargers.length > 0) {
+    // Use first charger as fallback
+    loc = {
+      lat: _chargers[0].lat,
+      lng: _chargers[0].lng
+    };
+  }
+  
+  if (!loc) {
+    // Default to Domain area
+    loc = { lat: 30.4021, lng: -97.7266 };
+  }
+
+  _map.setView([loc.lat, loc.lng], 15);
+  console.log('[Explore] Map centered on:', loc);
+}
+
+function initMapCenterButton() {
+  const btn = $('#map-center-btn');
+  if (!btn) return;
+
+  btn.addEventListener('click', centerMapOnUser);
+  console.log('[Explore] Center map button initialized');
 }
 
 // === Merchant Popover ======================================================
@@ -716,15 +828,15 @@ async function showDiscountCode(merchantId, merchantName) {
 
 // === Loading & Empty States ==============================================
 function showLoadingState() {
-  const container = $('#recommended-perks-container');
-  if (!container) return;
+  const scroller = document.getElementById('discover-merchant-scroller');
+  if (!scroller) return;
   
-  const row = container.querySelector('.recommended-perks-row');
-  if (!row) return;
+  scroller.innerHTML = '<div style="text-align: center; padding: 20px; color: #6B7280; font-size: 14px;">Loading merchants...</div>';
   
-  row.innerHTML = '<div style="text-align: center; padding: 20px; color: #6B7280; font-size: 14px;">Loading perks...</div>';
-  container.style.display = 'block';
-  container.classList.add('visible');
+  const section = document.getElementById('discover-merchants-section');
+  if (section) {
+    section.style.display = 'block';
+  }
 }
 
 function hideLoadingState() {
@@ -732,81 +844,213 @@ function hideLoadingState() {
 }
 
 function showEmptyState(message = 'No perks available') {
-  const container = $('#recommended-perks-container');
-  if (!container) return;
+  // Always show at least JuiceLand card
+  updateRecommendedPerks([]);
+}
+
+// === Resy-style Merchant Card Renderer ==================================================
+function renderMerchantCard(merchant) {
+  const {
+    name = 'Merchant',
+    rating = 4.6,
+    rating_count = 2500,
+    category = 'Smoothies',
+    price_tier = '$$',
+    distance_text = '0.1 mi',
+    image_url = '/img/placeholder-merchant.jpg',
+    logo_url,
+    photo_url
+  } = merchant;
+
+  // Use photo_url or logo_url as fallback
+  const merchantImage = image_url || photo_url || logo_url || '/img/placeholder-merchant.jpg';
+
+  const card = document.createElement('div');
+  card.className = 'perk-card perk-card--resy';
+  card.dataset.merchantId = merchant.id || merchant.merchant_id || '';
+
+  card.innerHTML = `
+    <div class="perk-card__left">
+      <div class="perk-card__name">${name}</div>
+      <div class="perk-card__meta">
+        <span class="perk-card__rating">★ ${rating.toFixed(1)}</span>
+        <span class="perk-card__rating-count">(${rating_count.toLocaleString()})</span>
+        <span class="perk-card__dot">•</span>
+        <span class="perk-card__category">${category}</span>
+        <span class="perk-card__dot">•</span>
+        <span class="perk-card__price">${price_tier}</span>
+      </div>
+      <div class="perk-card__distance">${distance_text} walk to charger</div>
+      <div class="perk-card__nova">Nova accepted here</div>
+      <button class="btn btn-primary perk-card__button">View details</button>
+    </div>
+    <div class="perk-card__right">
+      <img src="${merchantImage}" alt="${name}" class="perk-card__image" onerror="this.src='/img/placeholder-merchant.jpg'" />
+    </div>
+  `;
+
+  // Wire up button click
+  const button = card.querySelector('.perk-card__button');
+  if (button) {
+    button.addEventListener('click', (e) => {
+      e.stopPropagation();
+      handlePerkCardStartSession(merchant);
+    });
+  }
+
+  // Card click also triggers view details
+  card.addEventListener('click', () => {
+    handlePerkCardStartSession(merchant);
+  });
+
+  return card;
+}
+
+// === Discover Subheader (Off-peak Indicator) ======================================
+function updateDiscoverSubheader() {
+  // Subheader element removed - off-peak indicator is now the charge-chip pill
+  // This function kept for compatibility but no longer updates any element
+  const el = document.getElementById('discover-subheader');
+  if (el) {
+    el.textContent = '';
+  }
+}
+
+// === Discover Merchants Carousel Renderer ===========================================
+function renderDiscoverMerchants(merchants) {
+  const scroller = document.getElementById('discover-merchant-scroller');
+  if (!scroller) return;
+
+  scroller.innerHTML = '';
+
+  // Create JuiceLand @ Domain card as first (featured)
+  const juicelandMerchant = {
+    id: 'merchant_juiceland_domain',
+    display_name: 'JuiceLand – The Domain',
+    name: 'JuiceLand – The Domain',
+    rating: 4.7,
+    rating_count: '3,200',
+    category: 'Smoothies',
+    price_tier: '$$',
+    distance_text: '0.1 mi walk to charger',
+    image_url: 'https://logo.clearbit.com/juiceland.com',
+    logo_url: 'https://logo.clearbit.com/juiceland.com',
+    lat: 30.4021,
+    lng: -97.7266,
+  };
+
+  // Combine JuiceLand with other merchants
+  const allMerchants = [juicelandMerchant];
   
-  const row = container.querySelector('.recommended-perks-row');
-  if (!row) return;
-  
-  row.innerHTML = `<div style="text-align: center; padding: 20px; color: #6B7280; font-size: 14px;">${message}</div>`;
-  container.style.display = 'block';
-  container.classList.add('visible');
+  if (merchants && merchants.length > 0) {
+    // Convert perk objects to merchant objects if needed
+    const merchantList = merchants.map(m => {
+      if (m.name && m.category) {
+        // Already a merchant object
+        return {
+          ...m,
+          display_name: m.display_name || m.name,
+          rating: m.rating || 4.6,
+          rating_count: m.rating_count || '2,500',
+          price_tier: m.price_tier || '$$',
+          distance_text: m.distance_text || (m.walk_time_s ? `${Math.round(m.walk_time_s / 60)} min walk to charger` : '0.1 mi walk to charger'),
+          logo_url: m.logo_url || m.image_url || m.photo_url,
+        };
+      } else {
+        // Convert from perk format
+        return {
+          id: m.id || m.perkId,
+          display_name: m.name || 'Merchant',
+          name: m.name || 'Merchant',
+          rating: 4.6,
+          rating_count: '2,500',
+          category: m.category || 'Food & Drink',
+          price_tier: '$$',
+          distance_text: m.walk || '0.1 mi walk to charger',
+          logo_url: m.logo || m.logo_url,
+        };
+      }
+    });
+    
+    allMerchants.push(...merchantList);
+  }
+
+  // Render all merchants
+  allMerchants.forEach((merchant) => {
+    const card = document.createElement('article');
+    card.className = 'merchant-card';
+
+    const name = merchant.display_name || merchant.name || 'Unknown merchant';
+    const distance = merchant.distance_text || '0.1 mi walk to charger';
+    const rating = merchant.rating || 4.7;
+    const ratingCount = merchant.rating_count || '3,200';
+    const category = merchant.category || 'Smoothies';
+    const priceTier = merchant.price_tier || '$$';
+    const logoUrl = merchant.logo_url || merchant.image_url || '/img/juiceland-logo.png';
+
+    card.innerHTML = `
+      <div class="merchant-card__left">
+        <div class="merchant-card__name">${name}</div>
+        <div class="merchant-card__meta">
+          <span class="merchant-card__rating">★ ${rating.toFixed(1)}</span>
+          <span class="merchant-card__rating-count">(${ratingCount})</span>
+          <span class="merchant-card__dot">•</span>
+          <span class="merchant-card__category">${category}</span>
+          <span class="merchant-card__dot">•</span>
+          <span class="merchant-card__price">${priceTier}</span>
+        </div>
+        <div class="merchant-card__distance">${distance}</div>
+        <div class="merchant-card__nova">Nova accepted here</div>
+        <button
+          class="btn btn-primary merchant-card__button"
+          data-merchant-id="${merchant.id}"
+        >
+          View details
+        </button>
+      </div>
+      <div class="merchant-card__right">
+        <img
+          src="${logoUrl}"
+          alt="${name}"
+          class="merchant-card__image"
+          onerror="this.src='/img/placeholder-merchant.jpg'"
+        />
+      </div>
+    `;
+
+    scroller.appendChild(card);
+  });
+
+  // Attach click handlers for "View details"
+  scroller.querySelectorAll('.merchant-card__button').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const merchantId = e.currentTarget.getAttribute('data-merchant-id');
+      if (!merchantId) return;
+      // Reuse existing view-merchant logic
+      const merchant = allMerchants.find(m => m.id === merchantId);
+      if (merchant) {
+        handlePerkCardStartSession(merchant);
+      }
+    });
+  });
+
+  // Show the section
+  const section = document.getElementById('discover-merchants-section');
+  if (section) {
+    section.style.display = 'block';
+  }
+
+  console.log('[Discover][Merchants] Rendered horizontal carousel with', allMerchants.length, 'merchants');
 }
 
 // === Recommended Perks Management ==================================================
-function updateRecommendedPerks(perks) {
-  const container = $('#recommended-perks-container');
-  const row = container?.querySelector('.recommended-perks-row');
+function updateRecommendedPerks(merchants) {
+  // Update off-peak indicator
+  updateDiscoverSubheader();
   
-  if (!container || !row) return;
-  
-  // Hide if no perks
-  if (!perks || perks.length === 0) {
-    showEmptyState('No perks found');
-    return;
-  }
-  
-  // Sort perks by nova_reward descending (already sorted, but ensure)
-  const sortedPerks = [...perks].sort((a, b) => (b.nova || b.nova_reward || 0) - (a.nova || a.nova_reward || 0));
-  
-  // Clear existing cards
-  row.innerHTML = '';
-  // Horizontal scrolling is handled by CSS, no need for overflow styles here
-  
-  // Render all perk cards in scrollable list
-  sortedPerks.forEach((perk, index) => {
-    const card = document.createElement('div');
-    card.className = 'perk-card-compact';
-    card.dataset.perkId = perk.id || '';
-    
-    // Debug first perk logo
-    if (index === 0) {
-      console.log('[Explore] === FIRST PERK CARD DEBUG ===');
-      console.log('[Explore] Perk name:', perk.name);
-      console.log('[Explore] Perk logo value:', perk.logo);
-      console.log('[Explore] Perk logo type:', typeof perk.logo);
-      console.log('[Explore] Perk logo truthy?', !!perk.logo);
-      console.log('[Explore] Perk logo trimmed?', perk.logo && perk.logo.trim());
-      console.log('[Explore] === END FIRST PERK CARD DEBUG ===');
-    }
-    
-          // Compact layout: Logo (only if exists) + "Earn X Nova" + "X min walk"
-          const logoHtml = (perk.logo && perk.logo.trim() && perk.logo !== 'null') 
-            ? `<img class="perk-card-logo" src="${perk.logo}" alt="${perk.name || ''}" onerror="this.classList.add('hidden')">`
-            : '';
-    
-    card.innerHTML = `
-      ${logoHtml}
-      <div class="perk-card-reward">Earn ${perk.nova || 0} Nova</div>
-      <div class="perk-card-walk">${perk.walk || '0 min walk'}</div>
-    `;
-    
-    // Handle card click - navigate directly to Earn page
-    card.addEventListener('click', () => {
-      console.log('[Explore] Perk card clicked:', perk.name);
-      handlePerkCardStartSession(perk);
-    });
-    
-    row.appendChild(card);
-  });
-  
-  // Show container with animation
-  container.style.display = 'block';
-  container.style.opacity = '0';
-  container.classList.add('visible');
-  void container.offsetHeight; // Force reflow
-  
-  console.log(`[WhileYouCharge] Rendered ${sortedPerks.length} perk cards`);
+  // Use new carousel renderer
+  renderDiscoverMerchants(merchants);
 }
 
 // === Charger Selection =====================================================
@@ -848,8 +1092,15 @@ export async function initExplore(){
   // Initialize UI components
   initSearchBar();
   initSuggestions();
+  initChargeChip();
+  initMapCenterButton();
   
   initMerchantPopover();
+  
+  // Initialize off-peak indicator
+  updateDiscoverSubheader();
+  // Update every minute
+  setInterval(updateDiscoverSubheader, 60000);
 
   if (!_merchants.length) {
     showEmptyState('No pilot merchants yet');

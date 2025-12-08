@@ -1,5 +1,5 @@
 // Service Worker for Nerava PWA
-const CACHE_VERSION = 'v5';
+const CACHE_VERSION = 'v6';
 const CACHE_NAME = `nerava-${CACHE_VERSION}`;
 const OFFLINE_URL = './offline.html';
 

@@ -120,7 +120,8 @@ class DriverWallet(Base):
     
     # Relationships
     user = relationship("User", foreign_keys=[user_id])
-    transactions = relationship("NovaTransaction", back_populates="driver")
+    # Note: transactions relationship removed - query NovaTransaction directly via driver_user_id
+    # transactions = relationship("NovaTransaction", back_populates="driver")  # BROKEN: no direct FK
 
 
 class NovaTransaction(Base):
