@@ -8,7 +8,8 @@
 /* globals L */
 
 // Network logo mapping (using local placeholder to avoid 403s from third-party domains)
-const MERCHANT_LOGO_PLACEHOLDER = './img/avatar-default.png';
+// Temporarily using data URI to avoid loading avatar-default.png
+const MERCHANT_LOGO_PLACEHOLDER = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 const NETWORK_LOGOS = {
   'tesla': MERCHANT_LOGO_PLACEHOLDER,
   'chargepoint': MERCHANT_LOGO_PLACEHOLDER,

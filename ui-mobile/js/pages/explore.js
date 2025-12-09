@@ -35,7 +35,8 @@ const $ = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
 
 // Use local placeholder for all merchant logos to avoid 403s from third-party domains
-const MERCHANT_LOGO_PLACEHOLDER = "./img/avatar-default.png";
+// Temporarily using data URI to avoid loading avatar-default.png
+const MERCHANT_LOGO_PLACEHOLDER = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
 // === Recommended Perks Data =====================================
 // Three perks: Starbucks, Target, Whole Foods
@@ -856,13 +857,13 @@ function renderMerchantCard(merchant) {
     category = 'Smoothies',
     price_tier = '$$',
     distance_text = '0.1 mi',
-    image_url = './img/avatar-default.png',
+    image_url = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
     logo_url,
     photo_url
   } = merchant;
 
   // Use photo_url or logo_url as fallback
-  const merchantImage = image_url || photo_url || logo_url || './img/avatar-default.png';
+  const merchantImage = image_url || photo_url || logo_url || 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
   const card = document.createElement('div');
   card.className = 'perk-card perk-card--resy';
@@ -884,7 +885,7 @@ function renderMerchantCard(merchant) {
       <button class="btn btn-primary perk-card__button">View details</button>
     </div>
     <div class="perk-card__right">
-      <img src="${merchantImage}" alt="${name}" class="perk-card__image" onerror="this.src='./img/avatar-default.png'" />
+      <img src="${merchantImage}" alt="${name}" class="perk-card__image" onerror="this.style.display='none'" />
     </div>
   `;
 
@@ -1012,7 +1013,7 @@ function renderDiscoverMerchants(merchants) {
           src="${logoUrl}"
           alt="${name}"
           class="merchant-card__image"
-          onerror="this.src='./img/avatar-default.png'"
+          onerror="this.style.display='none'"
         />
       </div>
     `;

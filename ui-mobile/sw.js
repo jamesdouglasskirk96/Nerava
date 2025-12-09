@@ -1,5 +1,5 @@
 // Service Worker for Nerava PWA
-const CACHE_VERSION = 'v7';
+const CACHE_VERSION = 'v8';
 const CACHE_NAME = `nerava-${CACHE_VERSION}`;
 const OFFLINE_URL = './offline.html';
 
@@ -95,11 +95,27 @@ self.addEventListener('fetch', (event) => {
                 } else if (response.status >= 400) {
                     // For error responses, try to get from cache if available, but don't cache the error
                     console.warn('Service Worker: Error response', response.status, 'for', request.url);
-                    return caches.match(request).then((cachedResponse) => {
+                    return caches.match(request).then(async (cachedResponse) => {
                         // If we have a cached version, use it instead of the error
                         if (cachedResponse && cachedResponse.status < 400) {
                             console.log('Service Worker: Using cached version instead of error response');
                             return cachedResponse;
+                        }
+                        // For 500 errors on static assets, delete from cache and retry once
+                        if (response.status === 500 && (request.url.includes('/app/') || request.url.includes('/static/'))) {
+                            console.log('Service Worker: 500 error on static file, deleting from cache and retrying');
+                            const cache = await caches.open(CACHE_NAME);
+                            await cache.delete(request).catch(() => {});
+                            // Retry the request once
+                            try {
+                                const retryResponse = await fetch(request);
+                                if (retryResponse.status < 400) {
+                                    console.log('Service Worker: Retry succeeded, returning successful response');
+                                    return retryResponse;
+                                }
+                            } catch (retryError) {
+                                console.warn('Service Worker: Retry failed:', retryError);
+                            }
                         }
                         // Otherwise, return the error response (don't cache it)
                         return response;

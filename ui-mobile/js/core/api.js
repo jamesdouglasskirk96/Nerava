@@ -5,9 +5,13 @@ function getApiBase() {
   
   // PRIORITY 1: Local development - use same origin (no CORS)
   // This ensures http://localhost:8001/app calls http://localhost:8001/v1/... (same origin)
+  // CRITICAL: On localhost, ALWAYS use local backend unless explicitly forced with ?force_prod=true
   const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.includes('192.168.') || hostname.includes('10.');
+  const urlParams = new URLSearchParams(window.location.search);
+  const forceProd = urlParams.get('force_prod') === 'true';
   
-  if (isLocalhost) {
+  if (isLocalhost && !forceProd) {
+    // Clear any localStorage overrides that might interfere
     // Use empty string for same-origin requests (relative paths)
     // This makes fetch('/v1/...') resolve to http://localhost:8001/v1/...
     console.log('[API] Local dev detected - using same origin (no CORS):', origin);
@@ -17,14 +21,15 @@ function getApiBase() {
   // PRIORITY 2: Explicit production backend override (for testing prod from local)
   // Only use this if you explicitly want to test against production
   // Example: localStorage.setItem('NERAVA_PROD_BACKEND', 'https://web-production-526f6.up.railway.app')
+  // OR add ?force_prod=true to URL
   const prodBackendOverride = localStorage.getItem('NERAVA_PROD_BACKEND');
-  if (prodBackendOverride && prodBackendOverride.startsWith('http')) {
+  if ((forceProd || prodBackendOverride) && prodBackendOverride && prodBackendOverride.startsWith('http')) {
     console.log('[API] Using production backend (override URL):', prodBackendOverride);
     return prodBackendOverride;
   }
   
-  // PRIORITY 3: Legacy localStorage override
-  if (localStorage.NERAVA_URL) {
+  // PRIORITY 3: Legacy localStorage override (only if not localhost)
+  if (!isLocalhost && localStorage.NERAVA_URL) {
     console.log('[API] Using localStorage.NERAVA_URL override:', localStorage.NERAVA_URL);
     return localStorage.NERAVA_URL;
   }
