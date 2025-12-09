@@ -41,13 +41,13 @@ export default function ChargerOwnersSection() {
           <p className="text-lg text-gray-700 mb-6">
             If you manage EV chargers at an apartment complex, hotel, corporate campus, or retail 
             property, understanding your charging patterns unlocks significant value. Nerava can analyze 
-            your usage data to reveal how much off-peak potential exists and what it&apos;s worth – both for 
+            your usage data to reveal how much off-peak potential exists and what it's worth – both for 
             your residents and your bottom line.
           </p>
           <p className="text-lg text-gray-700 mb-8">
             Our free usage report analysis examines your charging data to identify optimization 
             opportunities. We model driver incentive programs and estimate merchant demand around your 
-            location, giving you a clear picture of how Nerava could enhance your property&apos;s value proposition.
+            location, giving you a clear picture of how Nerava could enhance your property's value proposition.
           </p>
           
           <div className="bg-primary-soft rounded-lg p-6 mb-6">

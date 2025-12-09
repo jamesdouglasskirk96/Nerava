@@ -77,7 +77,7 @@ export default function HowItWorks() {
                     </OutlineButton>
                   </label>
                   <p className="text-xs text-gray-500 mt-2 italic">
-                    We&apos;ll walk you through this on our intro call
+                    We'll walk you through this on our intro call
                   </p>
                 </div>
               )}
