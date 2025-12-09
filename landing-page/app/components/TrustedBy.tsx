@@ -40,7 +40,7 @@ export default function TrustedBy() {
                 </svg>
               </div>
               <blockquote className="ml-4 text-lg text-gray-700 italic">
-                "Finally—a charging amenity drivers actually use. It paid for itself in the first month through demand-charge reductions alone."
+                &quot;Finally—a charging amenity drivers actually use. It paid for itself in the first month through demand-charge reductions alone.&quot;
               </blockquote>
             </div>
           </div>

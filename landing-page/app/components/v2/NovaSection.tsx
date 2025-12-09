@@ -40,7 +40,7 @@ export default function NovaSection() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center mb-16">
         <div>
           <p className="text-lg text-gray-700 mb-4">
-            Nova is the universal reward currency that powers the Nerava network. It's not a 
+            Nova is the universal reward currency that powers the Nerava network. It&apos;s not a 
             cryptocurrency or speculative token, but a practical reward earned through verified 
             EV charging behavior and redeemed for real discounts at local merchants. Think of it 
             as loyalty points that work everywhere in the Nerava ecosystem.

@@ -15,7 +15,7 @@ export default function FinalCTA() {
           Nerava is launching in select cities with high EV density. Join our waitlist to be among 
           the first to experience the future of EV rewards and commerce. Early adopters get exclusive 
           perks and priority access to new merchant partnerships. Our network is growing daily. The 
-          sooner you join, the more merchants and drivers you'll connect with in your area.
+          sooner you join, the more merchants and drivers you&apos;ll connect with in your area.
         </p>
       </div>
       

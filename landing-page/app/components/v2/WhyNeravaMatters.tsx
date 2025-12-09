@@ -26,7 +26,7 @@ export default function WhyNeravaMatters() {
         <div className="flex items-start gap-4 mb-8">
           <div className="w-1 bg-primary h-full min-h-[60px]"></div>
           <p className="text-xl text-gray-700 italic max-w-3xl">
-            "We turn EV charging behavior into real-world commerce — and everyone wins."
+            &quot;We turn EV charging behavior into real-world commerce — and everyone wins.&quot;
           </p>
         </div>
       </div>
@@ -40,7 +40,7 @@ export default function WhyNeravaMatters() {
             incentives is ineffective.
           </p>
           <p className="text-lg text-gray-700">
-            Drivers need 'real' rewards – tangible value they can use today, not abstract 'green points' 
+            Drivers need &apos;real&apos; rewards – tangible value they can use today, not abstract &apos;green points&apos; 
             or vague environmental promises. And local merchants need new, cost-effective customer 
             acquisition strategies that avoid expensive advertising or blanket discounting.
           </p>

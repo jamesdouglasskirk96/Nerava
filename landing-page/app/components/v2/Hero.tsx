@@ -26,7 +26,7 @@ export default function Hero() {
         </p>
         <p className="text-lg sm:text-xl text-white/90 mb-8 max-w-2xl">
           Get rewarded for smart charging and spend Nova at participating merchants. 
-          Whether you're an EV driver looking to maximize your charging value or a merchant 
+          Whether you&apos;re an EV driver looking to maximize your charging value or a merchant 
           seeking new customers, Nerava connects sustainable charging behavior with local commerce.
         </p>
         

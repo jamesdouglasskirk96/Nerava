@@ -25,7 +25,7 @@ export default function ImpactCalculator() {
             Calculate Your Potential Impact
           </h2>
           <p className="text-lg text-gray-600">
-            See what happens when you optimize for off-peak charging. Based on a typical property with 10 chargers and 200 sessions per month, here's the value you could unlock immediately.
+            See what happens when you optimize for off-peak charging. Based on a typical property with 10 chargers and 200 sessions per month, here&apos;s the value you could unlock immediately.
           </p>
         </div>
 

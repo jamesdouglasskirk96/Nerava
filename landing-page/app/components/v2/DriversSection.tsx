@@ -34,7 +34,7 @@ export default function DriversSection() {
           <p className="text-lg text-gray-600 mb-8">
             Transform every charging session into tangible value. Nerava rewards you for 
             making grid-friendly choices while giving you spending power at the places you 
-            already love. It's that simple.
+            already love. It&apos;s that simple.
           </p>
           
           <div className="space-y-6 mb-8">
