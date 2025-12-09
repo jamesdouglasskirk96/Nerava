@@ -32,7 +32,7 @@ export default function NovaSection() {
         <p className="text-xl sm:text-2xl lg:text-3xl font-semibold text-primary uppercase tracking-wider mb-2 text-center">
           What Is Nova?
         </p>
-        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mb-6 text-center">
+        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mb-6 text-center break-words">
           The Currency for Smarter Charging
         </h2>
       </div>

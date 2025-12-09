@@ -23,7 +23,7 @@ export default function ChargerOwnersSection() {
 
   return (
     <SectionWrapper id="charger-owners">
-      <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mb-8">
+      <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mb-8 break-words">
         For Charger Owners & Properties
       </h2>
       

@@ -13,7 +13,7 @@ export default function NovaEconomy() {
           {/* Left Column - Content */}
           <div className="space-y-6">
             <div>
-              <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mb-2">
+              <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mb-2 break-words">
                 The Nova Economy
               </h2>
               <h3 className="text-xl sm:text-2xl text-primary font-semibold mb-6">

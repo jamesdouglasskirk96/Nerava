@@ -20,7 +20,7 @@ export default function WhyNeravaMatters() {
   return (
     <SectionWrapper>
       <div className="mb-12">
-        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mb-6">
+        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mb-6 break-words">
           Why Nerava Matters
         </h2>
         <div className="flex items-start gap-4 mb-8">

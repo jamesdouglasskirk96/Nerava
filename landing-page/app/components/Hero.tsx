@@ -26,7 +26,7 @@ export default function Hero() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
           {/* Left Column - Text Content */}
           <div className="space-y-6">
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 leading-tight">
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 leading-tight break-words">
               Cut EV Charging Costs & Reward Your Drivers Automatically
             </h1>
             <p className="text-lg sm:text-xl text-gray-600 leading-relaxed">
