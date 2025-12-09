@@ -18,7 +18,7 @@ export default function Hero() {
       
       <div className="relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
         <div className="max-w-4xl">
-        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-4 break-words">
+        <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-bold text-white mb-4 break-words leading-tight">
           Nerava — The EV Commerce Network
         </h1>
         <p className="text-xl sm:text-2xl lg:text-3xl text-white/90 mb-6 font-medium">
