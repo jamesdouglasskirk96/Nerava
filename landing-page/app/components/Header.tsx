@@ -17,8 +17,16 @@ export default function Header() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center">
-            <a href="/" className="text-2xl font-bold text-primary">
+            <a href="/" className="text-2xl font-bold text-primary flex items-center">
               Nerava
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="inline-block w-5 h-5 ml-1 text-primary"
+              >
+                <path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" />
+              </svg>
             </a>
           </div>
           <nav className="hidden md:flex items-center space-x-6">
