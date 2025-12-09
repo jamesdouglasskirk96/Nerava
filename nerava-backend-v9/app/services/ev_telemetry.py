@@ -43,12 +43,32 @@ async def poll_vehicle_telemetry_for_account(
     
     # Map Smartcar fields to our schema
     # Smartcar charge API returns: stateOfCharge (0-100), isPluggedIn, state (CHARGING, FULLY_CHARGED, NOT_CHARGING)
-    soc_pct = charge_data.get("stateOfCharge", {}).get("value")
-    charging_state = charge_data.get("state", {}).get("value")
+    # Handle both nested {"value": X} format and direct value format
+    state_of_charge = charge_data.get("stateOfCharge")
+    if isinstance(state_of_charge, dict):
+        soc_pct = state_of_charge.get("value")
+    else:
+        soc_pct = state_of_charge
+    
+    state = charge_data.get("state")
+    if isinstance(state, dict):
+        charging_state = state.get("value")
+    else:
+        charging_state = state  # Already a string like "CHARGING", "FULLY_CHARGED", "NOT_CHARGING"
     
     # Smartcar location API returns: latitude, longitude
-    latitude = location_data.get("latitude")
-    longitude = location_data.get("longitude")
+    # Handle both nested {"value": X} format and direct value format
+    lat = location_data.get("latitude")
+    if isinstance(lat, dict):
+        latitude = lat.get("value")
+    else:
+        latitude = lat
+    
+    lng = location_data.get("longitude")
+    if isinstance(lng, dict):
+        longitude = lng.get("value")
+    else:
+        longitude = lng
     
     # Create telemetry record
     telemetry = VehicleTelemetry(

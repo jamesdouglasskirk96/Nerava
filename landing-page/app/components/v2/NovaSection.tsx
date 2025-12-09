@@ -29,7 +29,7 @@ export default function NovaSection() {
   return (
     <SectionWrapper className="bg-gray-50">
       <div className="mb-12">
-        <p className="text-sm font-semibold text-primary uppercase tracking-wider mb-2 text-center">
+        <p className="text-xl sm:text-2xl lg:text-3xl font-semibold text-primary uppercase tracking-wider mb-2 text-center">
           What Is Nova?
         </p>
         <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mb-6 text-center">
@@ -54,7 +54,7 @@ export default function NovaSection() {
         
         <div className="relative w-full h-[400px] rounded-lg overflow-hidden shadow-xl">
           <Image
-            src="/landing/v2/5_What-Is-Nova.jpeg"
+            src="/landing/v2/5_What-Is-Nova.png"
             alt="Nova currency ecosystem"
             fill
             className="object-cover"

@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from app.core.config import settings
+from app.config import settings
 from app.models_vehicle import VehicleAccount, VehicleToken
 
 logger = logging.getLogger(__name__)
@@ -31,14 +31,14 @@ async def exchange_code_for_tokens(code: str) -> Dict[str, Any]:
     Raises:
         httpx.HTTPStatusError: If Smartcar API returns an error
     """
-    url = f"{settings.SMARTCAR_AUTH_URL}/oauth/token"
+    url = f"{settings.smartcar_auth_url}/oauth/token"
     
     data = {
         "grant_type": "authorization_code",
         "code": code,
-        "redirect_uri": settings.SMARTCAR_REDIRECT_URI,
-        "client_id": settings.SMARTCAR_CLIENT_ID,
-        "client_secret": settings.SMARTCAR_CLIENT_SECRET,
+        "redirect_uri": settings.smartcar_redirect_uri,
+        "client_id": settings.smartcar_client_id,
+        "client_secret": settings.smartcar_client_secret,
     }
     
     async with httpx.AsyncClient(timeout=SMARTCAR_TIMEOUT) as client:
@@ -86,13 +86,13 @@ async def refresh_tokens(db: Session, vehicle_account: VehicleAccount) -> Vehicl
         return latest_token
     
     # Refresh the token
-    url = f"{settings.SMARTCAR_AUTH_URL}/oauth/token"
+    url = f"{settings.smartcar_auth_url}/oauth/token"
     
     data = {
         "grant_type": "refresh_token",
         "refresh_token": latest_token.refresh_token,
-        "client_id": settings.SMARTCAR_CLIENT_ID,
-        "client_secret": settings.SMARTCAR_CLIENT_SECRET,
+        "client_id": settings.smartcar_client_id,
+        "client_secret": settings.smartcar_client_secret,
     }
     
     async with httpx.AsyncClient(timeout=SMARTCAR_TIMEOUT) as client:
@@ -140,7 +140,7 @@ async def list_vehicles(access_token: str) -> Dict[str, Any]:
     Raises:
         httpx.HTTPStatusError: If Smartcar API returns an error
     """
-    url = f"{settings.SMARTCAR_BASE_URL}/v2.0/vehicles"
+    url = f"{settings.smartcar_base_url}/v2.0/vehicles"
     
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -175,7 +175,7 @@ async def get_vehicle_location(access_token: str, vehicle_id: str) -> Dict[str, 
     Raises:
         httpx.HTTPStatusError: If Smartcar API returns an error
     """
-    url = f"{settings.SMARTCAR_BASE_URL}/v2.0/vehicles/{vehicle_id}/location"
+    url = f"{settings.smartcar_base_url}/v2.0/vehicles/{vehicle_id}/location"
     
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -210,7 +210,7 @@ async def get_vehicle_charge(access_token: str, vehicle_id: str) -> Dict[str, An
     Raises:
         httpx.HTTPStatusError: If Smartcar API returns an error
     """
-    url = f"{settings.SMARTCAR_BASE_URL}/v2.0/vehicles/{vehicle_id}/charge"
+    url = f"{settings.smartcar_base_url}/v2.0/vehicles/{vehicle_id}/charge"
     
     headers = {
         "Authorization": f"Bearer {access_token}",

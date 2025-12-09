@@ -300,6 +300,65 @@ def get_driver_wallet(
     }
 
 
+@router.get("/activity")
+def get_driver_activity(
+    limit: int = Query(50, ge=1, le=100, description="Number of activities to return"),
+    user: User = Depends(get_current_driver),
+    db: Session = Depends(get_db)
+):
+    """
+    Get driver activity/transactions.
+    
+    Returns recent charging sessions and wallet transactions for the driver.
+    """
+    activities = []
+    
+    # Get recent charging sessions
+    sessions = db.query(DomainChargingSession).filter(
+        DomainChargingSession.driver_user_id == user.id
+    ).order_by(DomainChargingSession.start_time.desc()).limit(limit).all()
+    
+    for session in sessions:
+        activities.append({
+            "id": session.id,
+            "type": "charging_session",
+            "status": "verified" if session.verified else "pending",
+            "kwh": session.kwh_estimate,
+            "start_time": session.start_time.isoformat() if session.start_time else None,
+            "end_time": session.end_time.isoformat() if session.end_time else None,
+            "verified": session.verified,
+            "verification_source": session.verification_source
+        })
+    
+    # Get wallet transactions if CreditLedger table exists
+    try:
+        from app.models_extra import CreditLedger
+        transactions = db.query(CreditLedger).filter(
+            CreditLedger.user_ref == user.id
+        ).order_by(CreditLedger.id.desc()).limit(limit).all()
+        
+        for tx in transactions:
+            activities.append({
+                "id": str(tx.id),
+                "type": "wallet_transaction",
+                "amount_cents": tx.cents,
+                "reason": tx.reason,
+                "created_at": tx.created_at.isoformat() if hasattr(tx, 'created_at') and tx.created_at else None,
+                "meta": tx.meta if hasattr(tx, 'meta') else {}
+            })
+    except Exception:
+        # CreditLedger table might not exist - skip wallet transactions
+        pass
+    
+    # Sort by most recent (by timestamp if available)
+    activities.sort(key=lambda x: (
+        x.get("start_time") or x.get("created_at") or "1970-01-01"
+    ), reverse=True)
+    
+    # Return only the requested limit
+    return activities[:limit]
+
+
 # Session ping/cancel endpoints
 class SessionPingRequest(BaseModel):
     lat: float

@@ -6,13 +6,13 @@ export default function Hero() {
   return (
     <div className="relative min-h-[90vh] flex items-center w-full">
       <div className="absolute inset-0 z-0">
-        <Image
-          src="/landing/v2/1_Nerava-The-EV-Commerce-Network.jpeg"
-          alt="EV charging station"
-          fill
-          className="object-cover"
-          priority
-        />
+          <Image
+            src="/landing/v2/1_Nerava-The-EV-Commerce-Network.png"
+            alt="EV charging station"
+            fill
+            className="object-cover"
+            priority
+          />
         <div className="absolute inset-0 bg-black/40" />
       </div>
       

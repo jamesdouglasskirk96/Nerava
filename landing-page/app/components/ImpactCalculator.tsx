@@ -13,8 +13,8 @@ export default function ImpactCalculator() {
   const avgDriverPerkValue = Math.round(estimatedMonthlySavings * 0.1)
 
   const handleGetFullReport = () => {
-    // TODO: Open contact form or modal
-    window.location.href = `mailto:founder@nerava.network?subject=Full Savings Report Request&body=Chargers: ${chargers}, Sessions/Month: ${sessionsPerMonth}`
+    // Redirect to charger usage report form
+    window.location.href = 'https://forms.gle/2HY3p3882yhqMkT69'
   }
 
   return (

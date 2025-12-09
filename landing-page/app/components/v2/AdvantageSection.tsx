@@ -54,7 +54,7 @@ export default function AdvantageSection() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 mb-16">
         <div className="relative w-full h-[500px] rounded-lg overflow-hidden shadow-xl">
           <Image
-            src="/landing/v2/9_The-Nerava-Advantage.jpeg"
+            src="/landing/v2/9_The-Nerava-Advantage.png"
             alt="EV charging under solar panels"
             fill
             className="object-cover"

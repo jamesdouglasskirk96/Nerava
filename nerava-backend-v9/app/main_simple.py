@@ -3,6 +3,10 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 import sys
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from .db import Base, engine
 from .config import settings
@@ -143,13 +147,9 @@ async def log_requests(request: Request, call_next):
             logger.info(">>>> RESPONSE %s %s -> %s <<<<", request.method, request.url.path, response.status_code)
         return response
     except Exception as e:
-        # For static files, log the exception but still re-raise so StaticFiles can handle it
+        # For static files, re-raise immediately without logging to avoid interfering
+        # StaticFiles will handle its own exceptions (404s, etc.) properly
         if is_static:
-            import traceback
-            error_traceback = traceback.format_exc()
-            print(f">>>> MIDDLEWARE: Exception in static file {request.url.path}: {type(e).__name__}: {e} <<<<", flush=True)
-            print(f">>>> MIDDLEWARE TRACEBACK:\n{error_traceback} <<<<", flush=True)
-            logger.error(f"Exception in static file request {request.url.path}: {e}", exc_info=True)
             raise
         
         # Log full stack trace in Railway logs for non-static requests
@@ -236,10 +236,8 @@ paths:
 # StaticFiles should handle its own errors (404 for missing files)
 # Use Path(__file__) to resolve relative to this file's location
 UI_DIR = Path(__file__).parent.parent.parent / "ui-mobile"
-avatar_png = None
 index_html = None
 if UI_DIR.exists() and UI_DIR.is_dir():
-    avatar_png = UI_DIR / "img" / "avatar-default.png"
     index_html = UI_DIR / "index.html"
     
     # Register direct route handlers BEFORE mount so they take precedence
@@ -266,41 +264,67 @@ if UI_DIR.exists() and UI_DIR.is_dir():
         logger.info("Added direct route handler for /app/")
     
     # Handler for avatar-default.png
-    if avatar_png and avatar_png.exists():
+    avatar_png_path = UI_DIR / "img" / "avatar-default.png"
+    if avatar_png_path.exists():
         @app.get("/app/img/avatar-default.png")
         async def serve_avatar_default():
-            """Direct route handler for avatar-default.png to bypass StaticFiles issues"""
-            logger.info("serve_avatar_default called - route handler is executing")
-            print(">>>> serve_avatar_default CALLED <<<<", flush=True)
-            # Read file and return as Response - don't raise HTTPException to avoid exception handler
+            """Direct route handler for avatar-default.png"""
             try:
-                logger.info(f"Reading avatar file from: {avatar_png}")
-                with open(avatar_png, 'rb') as f:
+                with open(avatar_png_path, 'rb') as f:
                     content = f.read()
-                logger.info(f"Read {len(content)} bytes from avatar file")
-                from fastapi.responses import Response
-                response = Response(
-                    content=content,
-                    media_type="image/svg+xml",  # File is SVG data URI
-                    headers={"Content-Disposition": 'inline; filename="avatar-default.png"'}
-                )
-                logger.info("Returning Response with status 200")
-                return response
-            except FileNotFoundError as e:
-                logger.error(f"Avatar file not found: {e}")
-                from fastapi.responses import Response
-                return Response(content="Avatar file not found", status_code=404, media_type="text/plain")
-            except Exception as e:
-                logger.error(f"Error in serve_avatar_default: {e}", exc_info=True)
-                # Return error response directly instead of raising HTTPException
                 from fastapi.responses import Response
                 return Response(
-                    content=f"Error serving avatar: {str(e)}",
-                    status_code=500,
-                    media_type="text/plain"
+                    content=content,
+                    media_type="image/png",
+                    headers={"Cache-Control": "public, max-age=31536000"}
                 )
-        logger.info("Added direct route handler for /app/img/avatar-default.png")
-        print(f">>>> Avatar route handler registered for: {avatar_png} <<<<", flush=True)
+            except Exception as e:
+                logger.error(f"Error serving avatar: {e}", exc_info=True)
+                from fastapi.responses import Response
+                return Response(content=f"Error: {str(e)}", status_code=500, media_type="text/plain")
+        logger.info("Added route handler for /app/img/avatar-default.png")
+    
+    # Handler for favicon.ico
+    favicon_path = UI_DIR / "assets" / "favicon.ico"
+    if favicon_path.exists():
+        @app.get("/app/assets/favicon.ico")
+        async def serve_favicon():
+            """Direct route handler for favicon.ico"""
+            try:
+                with open(favicon_path, 'rb') as f:
+                    content = f.read()
+                from fastapi.responses import Response
+                return Response(
+                    content=content,
+                    media_type="image/x-icon",
+                    headers={"Cache-Control": "public, max-age=31536000"}
+                )
+            except Exception as e:
+                logger.error(f"Error serving favicon: {e}", exc_info=True)
+                from fastapi.responses import Response
+                return Response(content=f"Error: {str(e)}", status_code=500, media_type="text/plain")
+        logger.info("Added route handler for /app/assets/favicon.ico")
+    
+    # Handler for icon-192.png
+    icon192_path = UI_DIR / "assets" / "icon-192.png"
+    if icon192_path.exists():
+        @app.get("/app/assets/icon-192.png")
+        async def serve_icon192():
+            """Direct route handler for icon-192.png"""
+            try:
+                with open(icon192_path, 'rb') as f:
+                    content = f.read()
+                from fastapi.responses import Response
+                return Response(
+                    content=content,
+                    media_type="image/png",
+                    headers={"Cache-Control": "public, max-age=31536000"}
+                )
+            except Exception as e:
+                logger.error(f"Error serving icon-192: {e}", exc_info=True)
+                from fastapi.responses import Response
+                return Response(content=f"Error: {str(e)}", status_code=500, media_type="text/plain")
+        logger.info("Added route handler for /app/assets/icon-192.png")
     
     # Now mount StaticFiles - routes registered above will take precedence
     try:
@@ -314,10 +338,10 @@ if UI_DIR.exists() and UI_DIR.is_dir():
             logger.info("Verified: me.js exists at %s", str(me_js))
         else:
             logger.warning("me.js not found at %s", str(me_js))
-        if avatar_png.exists():
-            logger.info("Verified: avatar-default.png exists at %s", str(avatar_png))
+        if avatar_png_path.exists():
+            logger.info("Verified: avatar-default.png exists at %s", str(avatar_png_path))
         else:
-            logger.warning("avatar-default.png not found at %s", str(avatar_png))
+            logger.warning("avatar-default.png not found at %s", str(avatar_png_path))
     except Exception as e:
         logger.exception("Failed to mount UI directory: %s", str(e))
         # Don't raise - allow app to start even if UI mount fails
@@ -571,14 +595,8 @@ async def global_exception_handler(request: Request, exc: Exception):
             logger.debug(f"StaticFiles HTTPException for {path}: {exc.status_code}")
             raise exc
         
-        # For other exceptions, log and re-raise
-        import traceback
-        error_traceback = traceback.format_exc()
-        logger.error(f"Exception in static file request {path}:\n{error_traceback}")
-        print(f">>>> EXCEPTION in static file {path}: {type(exc).__name__}: {exc} <<<<", flush=True)
-        print(f">>>> TRACEBACK:\n{error_traceback} <<<<", flush=True)
-        # Re-raise immediately - don't process further
-        # This allows FastAPI/Starlette to handle the error naturally
+        # For other exceptions on static paths, re-raise immediately without processing
+        # Let Starlette's default handler deal with it - don't log or wrap
         raise exc
     
     import traceback

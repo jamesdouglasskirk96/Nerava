@@ -18,13 +18,26 @@ class Settings(BaseModel):
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:8001")
     
     # Smartcar configuration
+    # For local dev, use sandbox mode. In production, set SMARTCAR_MODE=live
     SMARTCAR_CLIENT_ID: str = os.getenv("SMARTCAR_CLIENT_ID", "")
     SMARTCAR_CLIENT_SECRET: str = os.getenv("SMARTCAR_CLIENT_SECRET", "")
     SMARTCAR_REDIRECT_URI: str = os.getenv("SMARTCAR_REDIRECT_URI", "")
-    SMARTCAR_MODE: str = os.getenv("SMARTCAR_MODE", "live")  # live or sandbox
+    SMARTCAR_MODE: str = os.getenv("SMARTCAR_MODE", "sandbox")  # sandbox (dev) or live (production)
     SMARTCAR_BASE_URL: str = os.getenv("SMARTCAR_BASE_URL", "https://api.smartcar.com")
     SMARTCAR_AUTH_URL: str = os.getenv("SMARTCAR_AUTH_URL", "https://auth.smartcar.com")
     SMARTCAR_CONNECT_URL: str = os.getenv("SMARTCAR_CONNECT_URL", "https://connect.smartcar.com")
+    
+    @property
+    def smartcar_enabled(self) -> bool:
+        """
+        Check if Smartcar integration is fully configured.
+        Returns True only if client_id, client_secret, and redirect_uri are all set.
+        """
+        return bool(
+            self.SMARTCAR_CLIENT_ID and 
+            self.SMARTCAR_CLIENT_SECRET and 
+            self.SMARTCAR_REDIRECT_URI
+        )
     
     # Demo Mode Settings
     DEMO_MODE: bool = os.getenv("DEMO_MODE", "false").lower() == "true"

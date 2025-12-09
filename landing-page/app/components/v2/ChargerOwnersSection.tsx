@@ -30,7 +30,7 @@ export default function ChargerOwnersSection() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center mb-12">
         <div className="relative w-full h-[500px] rounded-lg overflow-hidden shadow-xl">
           <Image
-            src="/landing/v2/8_For-Charger-Owners-and-Properties.jpeg"
+            src="/landing/v2/8_For-Charger-Owners-and-Properties.png"
             alt="Property manager analyzing charging data"
             fill
             className="object-cover"
@@ -83,7 +83,7 @@ export default function ChargerOwnersSection() {
       
       <div className="text-center">
         <SecondaryButton 
-          href="mailto:founder@nerava.network?subject=Free Usage Report Analysis Request"
+          href="https://forms.gle/2HY3p3882yhqMkT69"
         >
           Get a free usage report review
         </SecondaryButton>

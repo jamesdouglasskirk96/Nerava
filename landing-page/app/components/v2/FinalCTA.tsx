@@ -27,19 +27,19 @@ export default function FinalCTA() {
           <p className="text-gray-600 mb-6">
             Start earning Nova with every smart charge
           </p>
-          <PrimaryButton href="mailto:founder@nerava.network?subject=Driver Waitlist Request">
+          <PrimaryButton href="https://forms.gle/J6Rv2yo6uiQvH4pj7">
             Join the driver waitlist
           </PrimaryButton>
         </div>
         
         <div className="bg-gray-50 rounded-lg p-8">
           <h3 className="text-2xl font-bold text-gray-900 mb-3">
-            For Merchants
+            Merchants
           </h3>
           <p className="text-gray-600 mb-6">
             Attract new customers from nearby chargers
           </p>
-          <PrimaryButton href="mailto:founder@nerava.network?subject=Merchant Inquiry">
+          <PrimaryButton href="https://forms.gle/5gvVWqXrhSWwReDJA">
             Start accepting Nova
           </PrimaryButton>
         </div>
@@ -49,10 +49,10 @@ export default function FinalCTA() {
         <p className="text-gray-600 mb-2">
           Charger owner or utility partner?{' '}
           <a 
-            href="mailto:founder@nerava.network?subject=Charger Owner / Utility Partnership Inquiry"
+            href="https://forms.gle/2HY3p3882yhqMkT69"
             className="text-primary hover:text-primary-dark underline font-semibold"
           >
-            Get in touch
+            Get a free usage report review
           </a>
           {' '}to explore usage analytics and grid optimization opportunities.
         </p>

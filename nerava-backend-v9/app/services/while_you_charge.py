@@ -180,6 +180,8 @@ async def find_and_link_merchants(
     elif merchant_name:
         query = query.filter(Merchant.name.ilike(f"%{merchant_name}%"))
     
+    # Note: Merchant.external_id is used for deduplication and linking with Google Places
+    # It's backed by the merchants.external_id column (added in migration 013, ensured in 021)
     existing_merchants = query.distinct().all()
     logger.info(f"[WhileYouCharge] Found {len(existing_merchants)} existing merchants in DB")
     

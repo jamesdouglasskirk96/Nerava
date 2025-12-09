@@ -29,7 +29,7 @@ export default function DriversSection() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
         <div>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mb-6">
-            For Drivers — Get Paid to Charge Smarter
+            Drivers — Get Paid to Charge
           </h2>
           <p className="text-lg text-gray-600 mb-8">
             Transform every charging session into tangible value. Nerava rewards you for 
@@ -50,7 +50,7 @@ export default function DriversSection() {
             ))}
           </div>
           
-          <PrimaryButton href="#final-cta">
+          <PrimaryButton href="https://forms.gle/J6Rv2yo6uiQvH4pj7">
             Join the driver waitlist
           </PrimaryButton>
           <p className="text-sm text-gray-500 mt-2">
@@ -60,7 +60,7 @@ export default function DriversSection() {
         
         <div className="relative w-full h-[500px] rounded-lg overflow-hidden shadow-xl">
           <Image
-            src="/landing/v2/3_For-Drivers-Get-Paid-to-Charge-Smarter.jpeg"
+            src="/landing/v2/3_For-Drivers-Get-Paid-to-Charge-Smarter.png"
             alt="EV driver earning rewards"
             fill
             className="object-cover"

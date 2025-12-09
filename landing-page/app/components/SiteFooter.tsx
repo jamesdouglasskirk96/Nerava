@@ -55,7 +55,7 @@ export default function Footer() {
               </li>
               <li>
                 <a 
-                  href="mailto:founder@nerava.network?subject=Nerava Contact"
+                  href="https://forms.gle/2HY3p3882yhqMkT69"
                   className="hover:text-white transition-colors"
                 >
                   Contact

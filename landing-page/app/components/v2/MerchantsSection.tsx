@@ -35,7 +35,7 @@ export default function MerchantsSection() {
   return (
     <SectionWrapper id="merchants">
       <SectionHeader
-        title="For Merchants — Turn EV Charging Into Foot Traffic"
+        title="Merchants — Turn EV Charging Into Foot Traffic"
         subtitle="EV drivers are already nearby, waiting for their vehicles to charge. Nerava routes them directly to your business with built-in incentives to spend. You only pay when they actually redeem Nova at your location — no monthly fees, no expensive hardware, just real customers and measurable results."
       />
       
@@ -68,15 +68,9 @@ export default function MerchantsSection() {
       </div>
       
       <div className="flex flex-col sm:flex-row gap-4 items-center justify-center">
-        <PrimaryButton href="#final-cta">
+        <PrimaryButton href="https://forms.gle/5gvVWqXrhSWwReDJA">
           Start accepting Nova
         </PrimaryButton>
-        <a 
-          href="mailto:founder@nerava.network?subject=Sample Merchant Report Request"
-          className="text-primary hover:text-primary-dark underline"
-        >
-          See sample merchant report
-        </a>
       </div>
     </SectionWrapper>
   )

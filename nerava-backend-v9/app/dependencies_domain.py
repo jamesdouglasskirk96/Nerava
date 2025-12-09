@@ -2,6 +2,7 @@
 Dependency injection for Domain Charge Party MVP
 Role-based access control dependencies
 """
+import os
 from typing import Optional
 from fastapi import Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
@@ -14,6 +15,10 @@ from app.services.auth_service import AuthService
 from app.core.config import settings
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
+
+# Dev-only flag: allow anonymous user access in local dev
+# DO NOT enable in production
+DEV_ALLOW_ANON_USER = os.getenv("NERAVA_DEV_ALLOW_ANON_USER", "false").lower() == "true"
 
 
 def get_current_user_id(
@@ -32,30 +37,32 @@ def get_current_user_id(
     if not token:
         token = request.cookies.get("access_token")
     
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    # If we have a token, decode it and extract user_id
+    if token:
+        try:
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+            user_id_str = payload.get("sub")
+            if user_id_str:
+                user_id = int(user_id_str)
+                return user_id
+        except jwt.ExpiredSignatureError:
+            # Token expired - fall through to dev fallback or raise
+            pass
+        except Exception:
+            # Invalid token - fall through to dev fallback or raise
+            pass
     
-    try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id_str = payload.get("sub")
-        if not user_id_str:
-            raise ValueError("missing sub")
-        user_id = int(user_id_str)
-        return user_id
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token expired"
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid token: {str(e)}"
-        )
+    # Dev fallback: if NERAVA_DEV_ALLOW_ANON_USER=true, use default user
+    if DEV_ALLOW_ANON_USER:
+        print("[AUTH][DEV] NERAVA_DEV_ALLOW_ANON_USER=true -> using user_id=1")
+        return 1
+    
+    # Production: authentication required
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 def get_current_user(
@@ -64,6 +71,36 @@ def get_current_user(
 ) -> User:
     """Get current user object"""
     user = AuthService.get_user_by_id(db, user_id)
+    
+    # Dev fallback: create default user if it doesn't exist
+    if not user and DEV_ALLOW_ANON_USER and user_id == 1:
+        try:
+            from app.models import User as UserModel
+            # Create a default user for dev
+            default_user = UserModel(
+                id=1,
+                email="dev@nerava.local",
+                password_hash="dev",  # Not used in dev mode
+                is_active=True,
+                role_flags="driver",
+                auth_provider="local"
+            )
+            db.add(default_user)
+            db.commit()
+            db.refresh(default_user)
+            print(f"[AUTH][DEV] Created default user (id=1)")
+            user = default_user
+        except Exception as e:
+            # If creation fails (e.g., user already exists), try to fetch again
+            db.rollback()
+            user = AuthService.get_user_by_id(db, user_id)
+            if not user:
+                print(f"[AUTH][DEV] Failed to create/fetch dev user: {e}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Dev mode: could not create or fetch user: {str(e)}"
+                )
+    
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

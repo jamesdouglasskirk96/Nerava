@@ -8,7 +8,7 @@ export default function WhyNeravaMatters() {
       description: 'Real rewards for charging smarter. Grid-friendly behavior translates into immediate spending power at places like coffee shops, gyms, and restaurants, making charging a source of ongoing value.',
     },
     {
-      title: 'For Merchants',
+      title: 'Merchants',
       description: 'Tap into a growing, high-value customer base with precise targeting. Nerava brings nearby EV drivers through your doors with built-in incentives, and you only pay for actual redemptions.',
     },
     {
@@ -48,7 +48,7 @@ export default function WhyNeravaMatters() {
         
         <div className="relative w-full h-[400px] rounded-lg overflow-hidden shadow-xl">
           <Image
-            src="/landing/v2/6_Why-Nerava-Matters.jpeg"
+            src="/landing/v2/6_Why-Nerava-Matters.png"
             alt="Sustainable city with EV charging"
             fill
             className="object-cover"

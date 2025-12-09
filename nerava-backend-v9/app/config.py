@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     # Public base URL
     public_base_url: str = os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:8001")
     
+    # Frontend URL for redirects (OAuth callbacks, etc.)
+    frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:8001/app")
+    
     # Region
     region: str = "local"
     primary_region: str = "local"
@@ -93,6 +96,31 @@ class Settings(BaseSettings):
     # Pilot Hub Configuration
     pilot_mode: bool = os.getenv("PILOT_MODE", "true").lower() == "true"
     pilot_hub: str = os.getenv("PILOT_HUB", "domain")  # e.g., "domain"
+    
+    # Dev-only flags (DO NOT enable in production)
+    nerava_dev_allow_anon_user: bool = os.getenv("NERAVA_DEV_ALLOW_ANON_USER", "false").lower() == "true"
+    nerava_dev_allow_anon_driver: bool = os.getenv("NERAVA_DEV_ALLOW_ANON_DRIVER", "false").lower() == "true"
+    
+    # Smartcar configuration
+    # For local dev, use sandbox mode. In production, set SMARTCAR_MODE=live
+    smartcar_client_id: str = os.getenv("SMARTCAR_CLIENT_ID", "")
+    smartcar_client_secret: str = os.getenv("SMARTCAR_CLIENT_SECRET", "")
+    smartcar_redirect_uri: str = os.getenv("SMARTCAR_REDIRECT_URI", "")
+    smartcar_mode: str = os.getenv("SMARTCAR_MODE", "sandbox")  # sandbox (dev) or live (production)
+    smartcar_base_url: str = os.getenv("SMARTCAR_BASE_URL", "https://api.smartcar.com")
+    smartcar_auth_url: str = os.getenv("SMARTCAR_AUTH_URL", "https://auth.smartcar.com")
+    smartcar_connect_url: str = os.getenv("SMARTCAR_CONNECT_URL", "https://connect.smartcar.com")
+    
+    def smartcar_enabled(self) -> bool:
+        """
+        Check if Smartcar integration is fully configured.
+        Returns True only if client_id, client_secret, and redirect_uri are all set.
+        """
+        return bool(
+            self.smartcar_client_id and 
+            self.smartcar_client_secret and 
+            self.smartcar_redirect_uri
+        )
     
     class Config:
         env_file = ".env"

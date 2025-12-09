@@ -1,6 +1,46 @@
 """
 Smartcar EV integration router
 Handles OAuth flow and telemetry endpoints
+
+Configuration:
+- Set SMARTCAR_CLIENT_ID, SMARTCAR_CLIENT_SECRET, and SMARTCAR_REDIRECT_URI environment variables
+- SMARTCAR_MODE defaults to "sandbox" for local dev (set to "live" for production)
+- Register the callback URL in Smartcar dashboard: {your-backend-url}/oauth/smartcar/callback
+- For local dev, use a tunnel (Cloudflare Tunnel, ngrok, etc.) to expose localhost:8001
+
+Example .env:
+  SMARTCAR_CLIENT_ID=your_client_id
+  SMARTCAR_CLIENT_SECRET=your_client_secret
+  SMARTCAR_MODE=sandbox
+  SMARTCAR_REDIRECT_URI=https://your-tunnel-domain/oauth/smartcar/callback
+  FRONTEND_URL=http://localhost:8001/app
+  NERAVA_DEV_ALLOW_ANON_USER=true
+
+Local Testing Flow:
+1. Start local backend with migrations:
+   - Delete nerava.db if schema is stale (or let migrations upgrade it)
+   - Run: python3 -m uvicorn app.main_simple:app --host 0.0.0.0 --port 8001 --reload
+   - Migrations will run on startup and create/update the DB schema
+
+2. Start local UI at http://localhost:8001/app
+
+3. Set env vars in .env:
+   - NERAVA_DEV_ALLOW_ANON_USER=true (allows user_id=1 fallback)
+   - FRONTEND_URL=http://localhost:8001/app
+   - SMARTCAR_REDIRECT_URI=https://<your-tunnel-host>/oauth/smartcar/callback
+   - SMARTCAR_CLIENT_ID, SMARTCAR_CLIENT_SECRET, SMARTCAR_MODE=sandbox
+
+4. Start a tunnel (e.g., cloudflared tunnel --url http://localhost:8001) and update
+   SMARTCAR_REDIRECT_URI with the tunnel URL
+
+5. Register the callback URL in Smartcar dashboard
+
+6. In the UI, go to the EV connect screen, click "Connect EV", complete Smartcar/Tesla login
+
+7. Verify:
+   - /oauth/smartcar/callback returns 302 redirect back to the app (no 500)
+   - A row exists in vehicle_accounts and vehicle_tokens for user_id=1
+   - /v1/ev/me/telemetry/latest returns 200 with telemetry data or clean 404 if unavailable
 """
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
@@ -17,7 +57,7 @@ from app.db import get_db
 from app.models import User
 from app.models_vehicle import VehicleAccount, VehicleToken
 from app.dependencies_domain import get_current_user, get_current_user_id
-from app.core.config import settings
+from app.config import settings
 from app.services.smartcar_client import (
     exchange_code_for_tokens,
     list_vehicles,
@@ -55,14 +95,14 @@ def create_state_token(user_id: int) -> str:
         "iat": datetime.utcnow(),
     }
     
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_alg)
 
 
 # Helper: Verify and decode state token
 def verify_state_token(token: str) -> int:
     """Verify state token and return user_id"""
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_alg])
         
         if payload.get("purpose") != "smartcar_oauth":
             raise ValueError("Invalid token purpose")
@@ -94,30 +134,37 @@ async def connect_vehicle(
     Returns a URL that the frontend should redirect the user to.
     After OAuth, Smartcar will redirect to /oauth/smartcar/callback.
     """
-    if not settings.SMARTCAR_CLIENT_ID or not settings.SMARTCAR_REDIRECT_URI:
+    if not settings.smartcar_enabled():
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Smartcar not configured"
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Smartcar integration is not configured. Set SMARTCAR_CLIENT_ID, SMARTCAR_CLIENT_SECRET, and SMARTCAR_REDIRECT_URI."
         )
     
     # Create signed state token
     state = create_state_token(current_user.id)
     
     # Build Smartcar Connect URL
-    base_url = f"{settings.SMARTCAR_CONNECT_URL}/oauth/authorize"
+    base_url = f"{settings.smartcar_connect_url}/oauth/authorize"
+    
+    # Default scope - can be extended later
+    scope = "read_vehicle_info read_location read_charge"
     
     params = {
         "response_type": "code",
-        "client_id": settings.SMARTCAR_CLIENT_ID,
-        "redirect_uri": settings.SMARTCAR_REDIRECT_URI,
-        "scope": "read_vehicle_info read_location read_charge",
-        "mode": settings.SMARTCAR_MODE,
+        "client_id": settings.smartcar_client_id,
+        "redirect_uri": settings.smartcar_redirect_uri,
+        "scope": scope,
+        "mode": settings.smartcar_mode,
         "state": state,
     }
     
     connect_url = f"{base_url}?{urlencode(params)}"
     
-    logger.info(f"Generated Smartcar Connect URL for user {current_user.id}")
+    # Log mode and redirect_uri (but NOT client_secret)
+    logger.info(
+        f"Generated Smartcar Connect URL for user {current_user.id} "
+        f"(mode={settings.smartcar_mode}, redirect_uri={settings.smartcar_redirect_uri})"
+    )
     
     return ConnectResponse(url=connect_url)
 
@@ -139,8 +186,8 @@ async def smartcar_callback(
     if error:
         logger.error(f"Smartcar OAuth error: {error}")
         # Redirect to frontend with error
-        frontend_url = f"{settings.FRONTEND_URL}/vehicle/connect?error={error}"
-        return RedirectResponse(url=frontend_url)
+        frontend_url = f"{settings.frontend_url.rstrip('/')}/#profile?error={error}"
+        return RedirectResponse(url=frontend_url, status_code=302)
     
     # Validate required parameters
     if not code:
@@ -185,16 +232,23 @@ async def smartcar_callback(
         scope = token_data.get("scope", "")
         
         # List vehicles (get first one for now)
+        # Smartcar API returns: {"vehicles": ["vehicle_id_1", "vehicle_id_2", ...]}
+        # The vehicles array contains vehicle ID strings, not objects
         vehicles_data = await list_vehicles(access_token)
         vehicles = vehicles_data.get("vehicles", [])
         
+        logger.info(f"[Smartcar] vehicles_resp keys: {list(vehicles_data.keys())}")
+        
         if not vehicles:
             logger.warning(f"No vehicles found for user {user_id}")
-            frontend_url = f"{settings.FRONTEND_URL}/vehicle/connect?error=no_vehicles"
+            frontend_url = f"{settings.frontend_url}/#profile?error=no_vehicles"
             return RedirectResponse(url=frontend_url)
         
         # Use first vehicle (can extend to multi-vehicle later)
-        vehicle_id = vehicles[0]["id"]
+        # vehicles[0] is already the vehicle ID string, not an object
+        vehicle_id = vehicles[0] if isinstance(vehicles[0], str) else vehicles[0].get("id", vehicles[0])
+        
+        logger.info(f"[Smartcar] Selected vehicle_id={vehicle_id} for user_id={user_id}")
         
         # Upsert VehicleAccount
         existing_account = (
@@ -240,24 +294,16 @@ async def smartcar_callback(
         logger.info(f"Connected vehicle {vehicle_id} for user {user_id}")
         
         # Redirect to frontend account page with success indicator
-        # Use FRONTEND_URL if set, otherwise construct from request
-        if settings.FRONTEND_URL:
-            frontend_url = f"{settings.FRONTEND_URL}/#profile?vehicle=connected"
-        else:
-            # Fallback: try to construct from request (for local dev)
-            frontend_url = f"/#profile?vehicle=connected"
+        frontend_url = f"{settings.frontend_url.rstrip('/')}/#profile?vehicle=connected"
         
-        return RedirectResponse(url=frontend_url)
+        return RedirectResponse(url=frontend_url, status_code=302)
         
     except Exception as e:
         logger.error(f"Error in Smartcar callback: {e}", exc_info=True)
         db.rollback()
         
         # Redirect to frontend with error
-        if settings.FRONTEND_URL:
-            frontend_url = f"{settings.FRONTEND_URL}/#profile?error=connection_failed"
-        else:
-            frontend_url = f"/#profile?error=connection_failed"
+        frontend_url = f"{settings.frontend_url.rstrip('/')}/#profile?error=connection_failed"
         
         return RedirectResponse(url=frontend_url)
 
