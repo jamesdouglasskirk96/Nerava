@@ -1,13 +1,5 @@
-"""
-FastAPI dependencies for database sessions and other common dependencies.
-"""
-from sqlalchemy.orm import Session
-from .db import SessionLocal
+# LEGACY: This file has been moved to app/dependencies/__init__.py
+# Import from new location for backward compatibility
+from .dependencies import get_db
 
-def get_db():
-    """Get database session dependency."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+__all__ = ["get_db"]

@@ -111,9 +111,9 @@ export async function initWalletPage(rootEl) {
 
   // Load wallet data
   let walletData = {
-    balance_dollars: '0.00',
-    balance_cents: 0,
-    nova_balance: 0,
+    balance_dollars: '10.00',
+    balance_cents: 1000,
+    nova_balance: 1000,
     reputation_score: 0,
   };
 

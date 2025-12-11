@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checkout - Nerava</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f7;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        .logo {
+            font-size: 32px;
+            font-weight: bold;
+            color: #007AFF;
+            margin-bottom: 8px;
+        }
+        h1 {
+            font-size: 24px;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+        }
+        .merchant-info {
+            text-align: center;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        .merchant-name {
+            font-size: 20px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        .perk-label {
+            color: #007AFF;
+            font-size: 16px;
+        }
+        .nova-balance {
+            text-align: center;
+            padding: 16px;
+            background: #e3f2fd;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        .balance-label {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+        .balance-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #007AFF;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            color: #333;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            transition: border-color 0.2s;
+        }
+        input:focus {
+            outline: none;
+            border-color: #007AFF;
+        }
+        .button {
+            width: 100%;
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 16px;
+            font-size: 18px;
+            font-weight: 600;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 20px;
+        }
+        .button:hover {
+            background: #0051D5;
+        }
+        .button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .connect-cta {
+            text-align: center;
+            padding: 40px 20px;
+        }
+        .connect-cta h2 {
+            margin-bottom: 12px;
+            color: #333;
+        }
+        .connect-cta p {
+            color: #666;
+            margin-bottom: 24px;
+        }
+        .connect-button {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 16px 32px;
+            font-size: 18px;
+            font-weight: 600;
+            border-radius: 12px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .success-screen {
+            text-align: center;
+            padding: 40px 20px;
+        }
+        .success-icon {
+            width: 80px;
+            height: 80px;
+            background: #34C759;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            font-size: 40px;
+        }
+        .success-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 12px;
+        }
+        .success-message {
+            color: #666;
+            margin-bottom: 24px;
+        }
+        .discount-info {
+            background: #e8f5e9;
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        .discount-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #c8e6c9;
+        }
+        .discount-row:last-child {
+            border-bottom: none;
+        }
+        .discount-label {
+            color: #666;
+        }
+        .discount-value {
+            font-weight: 600;
+            color: #2e7d32;
+        }
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="header">
+                <div class="logo">⚡ Nerava</div>
+                <h1>Checkout</h1>
+                <p class="subtitle">Redeem your Nova rewards</p>
+            </div>
+            
+            <div id="loading" class="loading">Loading checkout information...</div>
+            
+            <div id="error" class="error" style="display: none;"></div>
+            
+            <!-- Not authenticated / need to connect EV -->
+            <div id="connectPrompt" style="display: none;">
+                <div class="connect-cta">
+                    <h2>Connect Your EV to Start Earning Nova</h2>
+                    <p>You need to connect your EV to earn and redeem Nova rewards.</p>
+                    <a href="/app/" class="connect-button">Connect Your EV</a>
+                </div>
+            </div>
+            
+            <!-- Checkout form -->
+            <div id="checkoutForm" style="display: none;">
+                <div class="merchant-info">
+                    <div class="merchant-name" id="merchantName">-</div>
+                    <div class="perk-label" id="perkLabel">-</div>
+                </div>
+                
+                <div class="nova-balance">
+                    <div class="balance-label">Your Nova Balance</div>
+                    <div class="balance-value" id="novaBalance">-</div>
+                </div>
+                
+                <div class="input-group">
+                    <label for="orderTotal">Order Total ($)</label>
+                    <input 
+                        type="number" 
+                        id="orderTotal" 
+                        placeholder="0.00" 
+                        step="0.01" 
+                        min="0"
+                        oninput="updateDiscountPreview()"
+                    >
+                </div>
+                
+                <div id="discountPreview" style="display: none; background: #fff3cd; padding: 12px; border-radius: 8px; margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>Estimated Discount:</span>
+                        <span id="previewDiscount" style="font-weight: 600; color: #856404;">$0.00</span>
+                    </div>
+                </div>
+                
+                <button id="redeemButton" class="button" onclick="redeemNova()">
+                    Redeem Nova
+                </button>
+            </div>
+            
+            <!-- Success screen -->
+            <div id="successScreen" style="display: none;">
+                <div class="success-screen">
+                    <div class="success-icon">✓</div>
+                    <div class="success-title">Redemption Successful!</div>
+                    <div class="success-message">Show this screen to the merchant</div>
+                    
+                    <div class="discount-info">
+                        <div class="discount-row">
+                            <span class="discount-label">Order Total:</span>
+                            <span class="discount-value" id="successOrderTotal">$0.00</span>
+                        </div>
+                        <div class="discount-row">
+                            <span class="discount-label">Discount Applied:</span>
+                            <span class="discount-value" id="successDiscount">$0.00</span>
+                        </div>
+                        <div class="discount-row">
+                            <span class="discount-label">Remaining Nova:</span>
+                            <span class="discount-value" id="successRemainingNova">0</span>
+                        </div>
+                    </div>
+                    
+                    <div style="color: #666; font-size: 14px; margin-top: 20px;">
+                        <div id="successTimestamp"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        
+        // Get token from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+        
+        let checkoutData = null;
+        let authToken = null; // In a real app, get from localStorage or session
+        
+        // Load checkout info on page load
+        if (token) {
+            loadCheckoutInfo();
+        } else {
+            showError('QR token is required. Please scan a valid QR code.');
+        }
+        
+        async function loadCheckoutInfo() {
+            try {
+                // Try to load checkout info
+                // Note: This endpoint requires authentication
+                // For now, we'll handle the case where driver is not authenticated
+                const response = await fetch(`${API_BASE}/v1/checkout/qr/${token}`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken || ''}`
+                    }
+                });
+                
+                if (response.status === 401 || response.status === 403) {
+                    // Driver not authenticated
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('connectPrompt').style.display = 'block';
+                    return;
+                }
+                
+                if (!response.ok) {
+                    throw new Error('Failed to load checkout information');
+                }
+                
+                const data = await response.json();
+                checkoutData = data;
+                
+                // Render checkout form
+                renderCheckoutForm(data);
+                
+            } catch (error) {
+                console.error('Error loading checkout info:', error);
+                showError('Failed to load checkout information. Please try again.');
+            }
+        }
+        
+        function renderCheckoutForm(data) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('checkoutForm').style.display = 'block';
+            
+            document.getElementById('merchantName').textContent = data.merchant.name;
+            document.getElementById('perkLabel').textContent = data.merchant.perk_label || 'Nova discount available';
+            document.getElementById('novaBalance').textContent = formatNova(data.driver.nova_balance_cents || 0);
+        }
+        
+        function updateDiscountPreview() {
+            if (!checkoutData) return;
+            
+            const orderTotalInput = document.getElementById('orderTotal');
+            const orderTotal = parseFloat(orderTotalInput.value) || 0;
+            const orderTotalCents = Math.round(orderTotal * 100);
+            
+            const perkCents = checkoutData.merchant.recommended_perk_cents || 0;
+            const discountCents = Math.min(perkCents, orderTotalCents);
+            
+            const previewDiv = document.getElementById('discountPreview');
+            const previewDiscount = document.getElementById('previewDiscount');
+            
+            if (orderTotal > 0 && discountCents > 0) {
+                previewDiscount.textContent = formatCurrency(discountCents);
+                previewDiv.style.display = 'block';
+            } else {
+                previewDiv.style.display = 'none';
+            }
+        }
+        
+        async function redeemNova() {
+            if (!checkoutData) return;
+            
+            const orderTotalInput = document.getElementById('orderTotal');
+            const orderTotal = parseFloat(orderTotalInput.value) || 0;
+            
+            if (orderTotal <= 0) {
+                showError('Please enter a valid order total.');
+                return;
+            }
+            
+            const orderTotalCents = Math.round(orderTotal * 100);
+            const button = document.getElementById('redeemButton');
+            button.disabled = true;
+            button.textContent = 'Processing...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/v1/checkout/redeem`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken || ''}`
+                    },
+                    body: JSON.stringify({
+                        qr_token: token,
+                        order_total_cents: orderTotalCents
+                    })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || error.detail || 'Redemption failed');
+                }
+                
+                const result = await response.json();
+                showSuccess(result);
+                
+            } catch (error) {
+                console.error('Error redeeming Nova:', error);
+                showError(error.message || 'Failed to redeem Nova. Please try again.');
+                button.disabled = false;
+                button.textContent = 'Redeem Nova';
+            }
+        }
+        
+        function showSuccess(result) {
+            document.getElementById('checkoutForm').style.display = 'none';
+            document.getElementById('successScreen').style.display = 'block';
+            
+            document.getElementById('successOrderTotal').textContent = formatCurrency(result.order_total_cents);
+            document.getElementById('successDiscount').textContent = formatCurrency(result.discount_cents);
+            document.getElementById('successRemainingNova').textContent = formatNova(result.remaining_nova_cents);
+            
+            const timestamp = new Date().toLocaleString();
+            document.getElementById('successTimestamp').textContent = `Redeemed at ${timestamp}`;
+        }
+        
+        function formatCurrency(cents) {
+            return `$${(cents / 100).toFixed(2)}`;
+        }
+        
+        function formatNova(cents) {
+            return `${cents} Nova`;
+        }
+        
+        function showError(message) {
+            document.getElementById('loading').style.display = 'none';
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
+

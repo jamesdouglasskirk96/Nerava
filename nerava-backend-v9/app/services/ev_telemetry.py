@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 import uuid
 
 from app.models_vehicle import VehicleAccount, VehicleTelemetry
-from app.services.smartcar_client import (
+from app.services.smartcar_service import (
     refresh_tokens,
     get_vehicle_charge,
     get_vehicle_location,

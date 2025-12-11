@@ -53,6 +53,26 @@ class Settings(BaseSettings):
     stripe_connect_client_id: str = os.getenv("STRIPE_CONNECT_CLIENT_ID", "")
     stripe_webhook_secret: str = os.getenv("STRIPE_WEBHOOK_SECRET", "")
     
+    # Square OAuth (for merchant onboarding)
+    square_env: str = os.getenv("SQUARE_ENV", "sandbox")  # sandbox or production
+    
+    # Sandbox credentials
+    square_application_id_sandbox: str = os.getenv("SQUARE_APPLICATION_ID_SANDBOX", "")
+    square_application_secret_sandbox: str = os.getenv("SQUARE_APPLICATION_SECRET_SANDBOX", "")
+    square_redirect_url_sandbox: str = os.getenv("SQUARE_REDIRECT_URL_SANDBOX", "")
+    
+    # Production credentials
+    square_application_id_production: str = os.getenv("SQUARE_APPLICATION_ID_PRODUCTION", "")
+    square_application_secret_production: str = os.getenv("SQUARE_APPLICATION_SECRET_PRODUCTION", "")
+    square_redirect_url_production: str = os.getenv("SQUARE_REDIRECT_URL_PRODUCTION", "")
+    
+    # Legacy support (for backward compatibility)
+    square_application_id: str = os.getenv("SQUARE_APPLICATION_ID", "")
+    square_application_secret: str = os.getenv("SQUARE_APPLICATION_SECRET", "")
+    square_redirect_url: str = os.getenv("SQUARE_REDIRECT_URL", "")
+    
+    square_base_url: str = "https://connect.squareup.com" if os.getenv("SQUARE_ENV", "sandbox") == "production" else "https://connect.squareupsandbox.com"
+    
     # Payout Policy
     payout_min_cents: int = int(os.getenv("PAYOUT_MIN_CENTS", "100"))
     payout_max_cents: int = int(os.getenv("PAYOUT_MAX_CENTS", "10000"))

@@ -58,7 +58,7 @@ from app.models import User
 from app.models_vehicle import VehicleAccount, VehicleToken
 from app.dependencies_domain import get_current_user, get_current_user_id
 from app.config import settings
-from app.services.smartcar_client import (
+from app.services.smartcar_service import (
     exchange_code_for_tokens,
     list_vehicles,
 )

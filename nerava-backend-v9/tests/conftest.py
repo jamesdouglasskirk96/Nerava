@@ -98,29 +98,27 @@ def db():
 
 
 @pytest.fixture(scope="function")
-def client(setup_test_db):
+def client(setup_test_db, db):
     """
     Provide a FastAPI TestClient with test database dependency override.
     
     All API tests will use the test database instead of the dev/prod database.
+    Uses the same db session as the db fixture to ensure data consistency.
     """
     from fastapi.testclient import TestClient
     from app.main_simple import app
     from app.db import get_db
     
     def override_get_db():
-        """Override get_db to use test database session."""
-        db = TestingSessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
+        """Override get_db to use the shared test database session."""
+        yield db
     
     # Override the dependency
     app.dependency_overrides[get_db] = override_get_db
     
     try:
-        with TestClient(app) as test_client:
+        # Set raise_server_exceptions=False so HTTPException is converted to response
+        with TestClient(app, raise_server_exceptions=False) as test_client:
             yield test_client
     finally:
         # Clear the override

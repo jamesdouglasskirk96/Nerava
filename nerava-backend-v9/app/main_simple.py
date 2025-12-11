@@ -115,7 +115,7 @@ from .routers import debug_verify
 from .routers import debug_pool
 from .routers import discover_api, affiliate_api, insights_api
 from .routers import while_you_charge, pilot, pilot_debug, merchant_reports, merchant_balance, pilot_redeem
-from .routers import ev_smartcar
+from .routers import ev_smartcar, checkout
 
 # Auth + JWT preferences
 from .routers.auth import router as auth_router
@@ -451,6 +451,7 @@ app.include_router(prefs_router)
 # Legacy + domain routes
 app.include_router(users.router)
 app.include_router(merchants_router.router)
+app.include_router(checkout.router)
 app.include_router(hubs.router, prefix="/v1/hubs", tags=["hubs"])
 app.include_router(places.router)
 app.include_router(recommend.router, prefix="/v1", tags=["recommend"])
@@ -599,18 +600,18 @@ async def global_exception_handler(request: Request, exc: Exception):
         # Let Starlette's default handler deal with it - don't log or wrap
         raise exc
     
+    # Re-raise HTTPException to use existing handlers (before logging)
+    # Check both FastAPI and Starlette HTTPException
+    from fastapi.exceptions import HTTPException as FastAPIHTTPException
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+    if isinstance(exc, (FastAPIHTTPException, StarletteHTTPException)):
+        raise exc
+    
+    # Log unhandled exceptions
     import traceback
     error_detail = str(exc)
     error_traceback = traceback.format_exc()
     logger.error(f"Unhandled exception: {error_detail}\n{error_traceback}", exc_info=True)
-    """Global exception handler to ensure CORS headers are always set."""
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.error(f"Unhandled exception: {exc}", exc_info=True)
-    
-    # Re-raise HTTPException to use existing handlers
-    if isinstance(exc, HTTPException):
-        raise exc
     
     # For other exceptions, return a 500 with proper CORS headers
     from fastapi.responses import JSONResponse

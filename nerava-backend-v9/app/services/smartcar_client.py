@@ -1,16 +1,20 @@
-"""
-Smartcar API client service
-Handles OAuth token exchange, refresh, and vehicle API calls
-"""
-import logging
-import httpx
-from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
-from sqlalchemy.orm import Session
-from sqlalchemy import desc
+# LEGACY: This file has been moved to app/services/smartcar_service.py
+# Import from new location for backward compatibility
+from .smartcar_service import (
+    exchange_code_for_tokens,
+    refresh_tokens,
+    list_vehicles,
+    get_vehicle_location,
+    get_vehicle_charge,
+)
 
-from app.config import settings
-from app.models_vehicle import VehicleAccount, VehicleToken
+__all__ = [
+    "exchange_code_for_tokens",
+    "refresh_tokens",
+    "list_vehicles",
+    "get_vehicle_location",
+    "get_vehicle_charge",
+]
 
 logger = logging.getLogger(__name__)
 
