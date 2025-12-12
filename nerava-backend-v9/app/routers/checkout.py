@@ -44,6 +44,7 @@ class RedeemResponse(BaseModel):
     nova_spent_cents: int
     remaining_nova_cents: int
     message: str
+    redemption_id: str  # Add redemption_id to response
 
 
 @router.get("/qr/{token}", response_model=CheckoutQrResponse)
@@ -230,7 +231,8 @@ async def redeem_nova(
         order_total_cents=request.order_total_cents,
         nova_spent_cents=discount_cents,
         remaining_nova_cents=result["driver_balance"],
-        message="Nova applied. Show this screen to the merchant so they can add the discount in Square."
+        message="Nova applied. Show this screen to the merchant so they can add the discount in Square.",
+        redemption_id=redemption_id
     )
 
 

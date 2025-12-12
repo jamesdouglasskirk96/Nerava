@@ -289,6 +289,12 @@
                     <div style="color: #666; font-size: 14px; margin-top: 20px;">
                         <div id="successTimestamp"></div>
                     </div>
+                    
+                    <div style="margin-top: 24px; display: flex; flex-direction: column; gap: 12px;">
+                        <a id="presentLink" href="#" class="button" style="display: none; text-decoration: none; text-align: center;">View Redemption</a>
+                        <button class="button" onclick="addToAppleWallet()">Add to Apple Wallet</button>
+                        <a href="/app/wallet/" class="button secondary" style="text-decoration: none; text-align: center;">View Wallet</a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -303,6 +309,7 @@
         
         let checkoutData = null;
         let authToken = null; // In a real app, get from localStorage or session
+        let redemptionId = null; // Store redemption ID after successful redemption
         
         // Load checkout info on page load
         if (token) {
