@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nova Applied - Nerava</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            max-width: 400px;
+            width: 100%;
+            background: white;
+            border-radius: 24px;
+            padding: 40px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .success-icon {
+            width: 80px;
+            height: 80px;
+            background: #10b981;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+            font-size: 40px;
+            color: white;
+        }
+        h1 {
+            font-size: 28px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 12px;
+        }
+        .merchant-name {
+            font-size: 20px;
+            color: #666;
+            margin-bottom: 32px;
+        }
+        .discount-info {
+            background: #f0fdf4;
+            border: 2px solid #10b981;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        .discount-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #d1fae5;
+        }
+        .discount-row:last-child {
+            border-bottom: none;
+        }
+        .discount-label {
+            color: #666;
+            font-size: 16px;
+        }
+        .discount-value {
+            font-weight: 600;
+            color: #059669;
+            font-size: 18px;
+        }
+        .timestamp {
+            color: #999;
+            font-size: 14px;
+            margin-top: 24px;
+        }
+        .actions {
+            margin-top: 32px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .button {
+            background: #1e40af;
+            color: white;
+            border: none;
+            padding: 16px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 12px;
+            cursor: pointer;
+            text-decoration: none;
+            display: block;
+        }
+        .button.secondary {
+            background: #f1f5f9;
+            color: #334155;
+        }
+        .error {
+            background: #fee2e2;
+            color: #dc2626;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="loading" class="loading">Loading redemption details...</div>
+        <div id="error" class="error" style="display: none;"></div>
+        
+        <div id="presentContent" style="display: none;">
+            <div class="success-icon">✓</div>
+            <h1>Nova Applied</h1>
+            <div class="merchant-name" id="merchantName">-</div>
+            
+            <div class="discount-info">
+                <div class="discount-row">
+                    <span class="discount-label">Order Total:</span>
+                    <span class="discount-value" id="orderTotal">$0.00</span>
+                </div>
+                <div class="discount-row">
+                    <span class="discount-label">Discount Applied:</span>
+                    <span class="discount-value" id="discount">$0.00</span>
+                </div>
+            </div>
+            
+            <div class="timestamp" id="timestamp"></div>
+            
+            <div class="actions">
+                <a href="/app/wallet/" class="button">View Wallet</a>
+                <button class="button secondary" onclick="addToAppleWallet()">Add to Apple Wallet</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        let authToken = null; // In a real app, get from localStorage or session
+        
+        // Get redemption_id from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const redemptionId = urlParams.get('redemption_id');
+        
+        if (redemptionId) {
+            loadRedemption(redemptionId);
+        } else {
+            showError('Redemption ID is required.');
+        }
+        
+        async function loadRedemption(redemptionId) {
+            try {
+                const response = await fetch(`${API_BASE}/v1/checkout/redemption/${redemptionId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken || ''}`
+                    }
+                });
+                
+                if (response.status === 401 || response.status === 403) {
+                    showError('Please sign in to view this redemption.');
+                    return;
+                }
+                
+                if (response.status === 404) {
+                    showError('Redemption not found.');
+                    return;
+                }
+                
+                if (!response.ok) {
+                    throw new Error('Failed to load redemption details');
+                }
+                
+                const data = await response.json();
+                renderRedemption(data);
+                
+            } catch (error) {
+                console.error('Error loading redemption:', error);
+                showError('Failed to load redemption details. Please try again.');
+            }
+        }
+        
+        function renderRedemption(data) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('presentContent').style.display = 'block';
+            
+            document.getElementById('merchantName').textContent = data.merchant_name;
+            document.getElementById('orderTotal').textContent = formatCurrency(data.order_total_cents);
+            document.getElementById('discount').textContent = formatCurrency(data.discount_cents);
+            
+            const timestamp = new Date(data.created_at).toLocaleString();
+            document.getElementById('timestamp').textContent = `Redeemed at ${timestamp}`;
+        }
+        
+        async function addToAppleWallet() {
+            try {
+                const response = await fetch(`${API_BASE}/v1/wallet/pass/apple/create`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken || ''}`
+                    }
+                });
+                
+                if (response.status === 501) {
+                    const error = await response.json();
+                    alert('Apple Wallet not enabled yet. ' + (error.detail?.message || ''));
+                    return;
+                }
+                
+                if (response.status === 400) {
+                    const error = await response.json();
+                    alert(error.detail?.message || 'Not eligible for Apple Wallet. Connect your EV first.');
+                    return;
+                }
+                
+                if (!response.ok) {
+                    throw new Error('Failed to create Apple Wallet pass');
+                }
+                
+                // Download the .pkpass file
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'nerava-wallet.pkpass';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+            } catch (error) {
+                console.error('Error adding to Apple Wallet:', error);
+                alert('Failed to add to Apple Wallet. Please try again.');
+            }
+        }
+        
+        function formatCurrency(cents) {
+            return `$${(cents / 100).toFixed(2)}`;
+        }
+        
+        function showError(message) {
+            document.getElementById('loading').style.display = 'none';
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+    </script>
+</body>
+</html>

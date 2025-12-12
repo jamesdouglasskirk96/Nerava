@@ -410,6 +410,7 @@
                 }
                 
                 const result = await response.json();
+                redemptionId = result.redemption_id || result.id; // Store redemption ID
                 showSuccess(result);
                 
             } catch (error) {
@@ -430,6 +431,56 @@
             
             const timestamp = new Date().toLocaleString();
             document.getElementById('successTimestamp').textContent = `Redeemed at ${timestamp}`;
+            
+            // Update present link with redemption_id
+            if (redemptionId) {
+                const presentLink = document.getElementById('presentLink');
+                presentLink.href = `/app/wallet/present.html?redemption_id=${redemptionId}`;
+            } else {
+                document.getElementById('presentLink').style.display = 'none';
+            }
+        }
+        
+        async function addToAppleWallet() {
+            try {
+                const response = await fetch(`${API_BASE}/v1/wallet/pass/apple/create`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken || ''}`
+                    }
+                });
+                
+                if (response.status === 501) {
+                    const error = await response.json();
+                    alert('Apple Wallet not enabled yet. ' + (error.detail?.message || ''));
+                    return;
+                }
+                
+                if (response.status === 400) {
+                    const error = await response.json();
+                    alert(error.detail?.message || 'Not eligible for Apple Wallet. Connect your EV first.');
+                    return;
+                }
+                
+                if (!response.ok) {
+                    throw new Error('Failed to create Apple Wallet pass');
+                }
+                
+                // Download the .pkpass file
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'nerava-wallet.pkpass';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+            } catch (error) {
+                console.error('Error adding to Apple Wallet:', error);
+                alert('Failed to add to Apple Wallet. Please try again.');
+            }
         }
         
         function formatCurrency(cents) {
