@@ -314,6 +314,114 @@ Nerava Checkout endpoints for QR-based and discovery-based redemption.
 **Endpoints:**
 - `GET /v1/checkout/qr/{token}` - Look up merchant and driver balance via QR token
 - `POST /v1/checkout/redeem` - Redeem Nova at checkout (debits driver wallet, creates MerchantRedemption)
+- `GET /v1/checkout/redemption/{redemption_id}` - Get redemption detail for present screen
+
+## Wallet & Apple Wallet Pass
+
+### Wallet Endpoints
+
+The wallet system provides a complete end-to-end experience for drivers to view their Nova balance, transaction history, and add their wallet to Apple Wallet.
+
+**Endpoints:**
+- `GET /v1/wallet` - Get wallet balance (existing endpoint)
+- `GET /v1/wallet/timeline?limit=20` - Get unified timeline of earned/spent events
+- `GET /v1/wallet/pass/status` - Get Apple Wallet pass refresh status
+- `GET /v1/wallet/pass/apple/eligibility` - Check if driver is eligible for Apple Wallet pass
+- `POST /v1/wallet/pass/apple/create` - Create Apple Wallet pass (returns .pkpass file)
+- `POST /v1/wallet/pass/apple/refresh` - Refresh existing Apple Wallet pass
+
+**Timeline Rules:**
+- EARNED events come from `NovaTransaction` rows where `type == "driver_earn"`
+- SPENT events come from `MerchantRedemption` rows ONLY
+- `NovaTransaction` rows with `type == "driver_redeem"` are explicitly excluded to prevent duplicates
+- Timeline is ordered newest first
+
+**Example Timeline Response:**
+```json
+[
+  {
+    "id": "earn_abc123",
+    "type": "EARNED",
+    "amount_cents": 500,
+    "title": "Off-Peak Charging",
+    "subtitle": "Nova issued",
+    "created_at": "2025-01-24T12:00:00Z",
+    "merchant_id": null,
+    "redemption_id": null
+  },
+  {
+    "id": "spent_def456",
+    "type": "SPENT",
+    "amount_cents": 200,
+    "title": "Coffee Shop",
+    "subtitle": "Nova applied",
+    "created_at": "2025-01-24T11:00:00Z",
+    "merchant_id": "merchant_123",
+    "redemption_id": "redemption_456"
+  }
+]
+```
+
+### Apple Wallet Pass Configuration
+
+**Environment Variables:**
+- `APPLE_WALLET_SIGNING_ENABLED` - Set to `true` to enable pass signing (default: `false`)
+- `APPLE_WALLET_TEAM_ID` - Apple Developer Team ID
+- `APPLE_WALLET_PASS_TYPE_ID` - Pass Type Identifier (e.g., `pass.com.nerava.wallet`)
+- `APPLE_WALLET_CERT_PATH` - Path to Apple Wallet certificate (.pem)
+- `APPLE_WALLET_KEY_PATH` - Path to private key (.pem)
+- `APPLE_WALLET_KEY_PASSWORD` - Optional password for private key
+- `PUBLIC_BASE_URL` - Base URL for web service endpoints (e.g., `https://my.nerava.network`)
+
+**Signing Behavior:**
+- When `APPLE_WALLET_SIGNING_ENABLED=false` or certificates are missing, endpoints return `501 Not Implemented` with error code `APPLE_WALLET_SIGNING_DISABLED`
+- Unsigned passes are NOT installable on iPhone - this prevents user confusion
+- In dev/testing, the generator still creates a structurally correct pkpass bundle for inspection
+
+**Security:**
+- Barcode payload uses an opaque `wallet_pass_token` (random, stored in DB)
+- Never includes `driver_id` or PII in pass.json or barcode
+- Tokens are generated using `secrets.token_urlsafe(24)`
+
+### Wallet Activity Tracking
+
+The wallet tracks activity for pass refresh:
+- `wallet_activity_updated_at` - Bumped whenever Nova is earned or spent
+- `wallet_pass_last_generated_at` - Set when pass is created/refreshed
+- `needs_refresh` = `wallet_activity_updated_at > wallet_pass_last_generated_at` (handles None safely)
+
+Activity is automatically marked when:
+- Nova is granted via `NovaService.grant_to_driver()`
+- Nova is redeemed via `NovaService.redeem_from_driver()`
+- Merchant redemption is created via `POST /v1/checkout/redeem`
+
+### Wallet UI
+
+**Web Pages:**
+- `/app/wallet/` or `/app/wallet/index.html` - Wallet balance and timeline view
+- `/app/wallet/present.html?redemption_id=...` - Redemption present screen
+- `/app/checkout.html?token=...` - Checkout flow (updated with wallet links)
+
+**Local Development:**
+1. Start backend: `uvicorn app.main_simple:app --reload --port 8001`
+2. Open wallet: `http://127.0.0.1:8001/app/wallet/`
+3. Open checkout: `http://127.0.0.1:8001/app/checkout.html?token=...`
+
+### Merchant Share Card
+
+**Endpoint:**
+- `GET /v1/merchants/{merchant_id}/share-card.png?range=7d` - Generate shareable PNG social card
+
+**Features:**
+- Deterministic 1200x630 PNG output
+- Uses bundled font (`ui-mobile/assets/fonts/Inter-Regular.ttf`) for CI compatibility
+- Works with 0 redemptions (returns valid card)
+- Shows merchant name, date range, redemption count, total discount
+
+**Font Setup:**
+1. Download Inter-Regular.ttf from https://github.com/rsms/inter/releases
+2. Place in `ui-mobile/assets/fonts/Inter-Regular.ttf`
+3. Font is licensed under SIL Open Font License (free to use)
 
 ## Development
 
