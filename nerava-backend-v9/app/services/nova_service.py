@@ -16,6 +16,7 @@ from app.models_domain import (
     DomainChargingSession,
     StripePayment
 )
+from app.services.wallet_activity import mark_wallet_activity
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,10 @@ class NovaService:
         db.add(transaction)
         db.commit()
         db.refresh(transaction)
+        
+        # Mark wallet activity for pass refresh
+        mark_wallet_activity(db, driver_id)
+        db.commit()
         
         logger.info(f"Granted {amount} Nova to driver {driver_id} (type: {type}, session: {session_id})")
         return transaction
@@ -153,6 +158,10 @@ class NovaService:
         db.commit()
         db.refresh(wallet)
         db.refresh(merchant)
+        
+        # Mark wallet activity for pass refresh
+        mark_wallet_activity(db, driver_id)
+        db.commit()
         
         logger.info(f"Redeemed {amount} Nova from driver {driver_id} to merchant {merchant_id}")
         

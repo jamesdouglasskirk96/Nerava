@@ -15,6 +15,7 @@ from ..models import User
 from ..models.domain import DomainMerchant, DriverWallet, MerchantRedemption
 from ..services.qr_service import resolve_qr_token as resolve_merchant_qr_token
 from ..services.nova_service import NovaService
+from ..services.wallet_activity import mark_wallet_activity
 from ..dependencies_driver import get_current_driver
 
 logger = logging.getLogger(__name__)
@@ -212,6 +213,10 @@ async def redeem_nova(
     db.add(redemption)
     db.commit()
     db.refresh(redemption)
+    
+    # Mark wallet activity for pass refresh
+    mark_wallet_activity(db, user.id)
+    db.commit()
     
     logger.info(
         f"Redemption: driver {user.id} redeemed {discount_cents} Nova at merchant {merchant.id}, "
