@@ -2,7 +2,8 @@
 Domain Charge Party MVP Merchant Router
 Merchant-specific endpoints for registration, dashboard, and redemption
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.responses import Response
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from typing import Optional, List
@@ -13,6 +14,7 @@ from app.models import User
 from app.models_domain import DomainMerchant, NovaTransaction
 from app.services.auth_service import AuthService
 from app.services.nova_service import NovaService
+from app.services.merchant_share_card import generate_share_card
 from app.dependencies_domain import require_merchant_admin, get_current_user
 from app.routers.drivers_domain import haversine_distance
 
@@ -277,4 +279,52 @@ def get_merchant_transactions(
         }
         for txn in transactions
     ]
+
+
+@router.get("/{merchant_id}/share-card.png")
+def get_merchant_share_card(
+    merchant_id: str,
+    range: str = Query("7d", description="Time range: 7d, 30d, etc."),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate shareable PNG social card for merchant.
+    
+    Returns a 1200x630 PNG image with merchant stats.
+    Works even when 0 redemptions (returns valid card).
+    """
+    # Parse range (e.g., "7d" -> 7 days)
+    days = 7
+    if range.endswith('d'):
+        try:
+            days = int(range[:-1])
+        except ValueError:
+            days = 7
+    
+    try:
+        png_bytes = generate_share_card(db, merchant_id, days=days)
+        
+        return Response(
+            content=png_bytes,
+            media_type="image/png",
+            headers={
+                "Cache-Control": "public, max-age=3600"  # Cache for 1 hour
+            }
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": "MERCHANT_NOT_FOUND",
+                "message": str(e)
+            }
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "SHARE_CARD_GENERATION_FAILED",
+                "message": "Failed to generate share card"
+            }
+        )
 
