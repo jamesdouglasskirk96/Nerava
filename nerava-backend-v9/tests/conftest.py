@@ -123,3 +123,38 @@ def client(setup_test_db, db):
     finally:
         # Clear the override
         app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def test_user(db):
+    """Create a test user for wallet timeline tests"""
+    from app.models import User
+    user = User(
+        email="test@example.com",
+        password_hash="hashed",
+        is_active=True,
+        role_flags="driver"
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@pytest.fixture
+def test_merchant(db):
+    """Create a test merchant for wallet timeline tests"""
+    from app.models.domain import DomainMerchant
+    merchant = DomainMerchant(
+        id="test_merchant_123",
+        name="Test Merchant",
+        lat=30.4,
+        lng=-97.7,
+        zone_slug="test_zone",
+        status="active",
+        nova_balance=0
+    )
+    db.add(merchant)
+    db.commit()
+    db.refresh(merchant)
+    return merchant
