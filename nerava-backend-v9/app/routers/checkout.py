@@ -233,3 +233,62 @@ async def redeem_nova(
         message="Nova applied. Show this screen to the merchant so they can add the discount in Square."
     )
 
+
+class RedemptionDetailResponse(BaseModel):
+    """Redemption detail response for present screen"""
+    redemption_id: str
+    merchant_name: str
+    discount_cents: int
+    order_total_cents: int
+    created_at: str  # ISO string
+
+
+@router.get("/redemption/{redemption_id}", response_model=RedemptionDetailResponse)
+async def get_redemption_detail(
+    redemption_id: str,
+    user: User = Depends(get_current_driver),
+    db: Session = Depends(get_db)
+):
+    """
+    Get redemption detail for present screen.
+    
+    Ensures driver owns the redemption (driver_user_id matches).
+    """
+    redemption = db.query(MerchantRedemption).filter(
+        MerchantRedemption.id == redemption_id
+    ).first()
+    
+    if not redemption:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": "REDEMPTION_NOT_FOUND",
+                "message": "Redemption not found"
+            }
+        )
+    
+    # Ensure driver owns this redemption
+    if redemption.driver_user_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "REDEMPTION_ACCESS_DENIED",
+                "message": "You do not have access to this redemption"
+            }
+        )
+    
+    # Get merchant name
+    merchant_name = "Merchant"
+    if redemption.merchant:
+        merchant_name = redemption.merchant.name
+    elif redemption.merchant_id:
+        merchant_name = f"Merchant {redemption.merchant_id[:8]}"
+    
+    return RedemptionDetailResponse(
+        redemption_id=redemption.id,
+        merchant_name=merchant_name,
+        discount_cents=redemption.discount_cents,
+        order_total_cents=redemption.order_total_cents,
+        created_at=redemption.created_at.isoformat()
+    )
+
