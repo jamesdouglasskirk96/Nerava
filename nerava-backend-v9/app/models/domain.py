@@ -133,6 +133,11 @@ class DriverWallet(Base):
     nova_balance = Column(Integer, nullable=False, default=0)  # in smallest unit
     energy_reputation_score = Column(Integer, nullable=False, default=0)
     
+    # Apple Wallet pass fields
+    wallet_pass_token = Column(String, unique=True, nullable=True, index=True)  # Opaque token for barcode
+    wallet_activity_updated_at = Column(DateTime, nullable=True)  # Bumped on any earn/spend
+    wallet_pass_last_generated_at = Column(DateTime, nullable=True)  # Set when pkpass created/refreshed
+    
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=True)
     
