@@ -115,7 +115,7 @@ from .routers import debug_verify
 from .routers import debug_pool
 from .routers import discover_api, affiliate_api, insights_api
 from .routers import while_you_charge, pilot, pilot_debug, merchant_reports, merchant_balance, pilot_redeem
-from .routers import ev_smartcar, checkout
+from .routers import ev_smartcar, checkout, wallet_pass
 
 # Auth + JWT preferences
 from .routers.auth import router as auth_router
@@ -457,6 +457,7 @@ app.include_router(places.router)
 app.include_router(recommend.router, prefix="/v1", tags=["recommend"])
 app.include_router(reservations.router, prefix="/v1/reservations", tags=["reservations"])
 app.include_router(wallet.router)
+app.include_router(wallet_pass.router)
 app.include_router(chargers.router, prefix="/v1/chargers", tags=["chargers"])
 app.include_router(webhooks.router)
 app.include_router(users_register.router)
