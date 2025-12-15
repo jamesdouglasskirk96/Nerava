@@ -85,27 +85,82 @@ def get_wallet_timeline(
         })
     
     # 2. Get SPENT events from MerchantRedemption (ONLY source for spent)
-    spent_redemptions = db.query(MerchantRedemption).filter(
-        MerchantRedemption.driver_user_id == driver_user_id
-    ).order_by(MerchantRedemption.created_at.desc()).limit(limit * 2).all()
+    # Use explicit column selection to avoid loading reward_id relationship if column doesn't exist
+    try:
+        spent_redemptions = db.query(MerchantRedemption).filter(
+            MerchantRedemption.driver_user_id == driver_user_id
+        ).order_by(MerchantRedemption.created_at.desc()).limit(limit * 2).all()
+    except Exception as e:
+        # If query fails (e.g., reward_id column doesn't exist), try without relationship loading
+        import traceback
+        print(f"[WALLET_TIMELINE] Query failed, trying fallback: {e}")
+        print(traceback.format_exc())
+        # Fallback: query with explicit columns to avoid relationship issues
+        try:
+            from sqlalchemy import select
+            spent_redemptions = db.execute(
+                select(
+                    MerchantRedemption.id,
+                    MerchantRedemption.merchant_id,
+                    MerchantRedemption.driver_user_id,
+                    MerchantRedemption.nova_spent_cents,
+                    MerchantRedemption.created_at
+                ).where(
+                    MerchantRedemption.driver_user_id == driver_user_id
+                ).order_by(MerchantRedemption.created_at.desc()).limit(limit * 2)
+            ).all()
+        except Exception as e2:
+            print(f"[WALLET_TIMELINE] Fallback query also failed: {e2}")
+            # If all else fails, return empty list for spent events
+            spent_redemptions = []
     
     for redemption in spent_redemptions:
-        merchant_name = "Merchant"
-        if redemption.merchant:
-            merchant_name = redemption.merchant.name
-        elif redemption.merchant_id:
-            merchant_name = f"Merchant {redemption.merchant_id[:8]}"
-        
-        events.append({
-            "id": f"spent_{redemption.id}",
-            "type": "SPENT",
-            "amount_cents": redemption.nova_spent_cents,
-            "title": merchant_name,
-            "subtitle": "Nova applied",
-            "created_at": redemption.created_at.isoformat(),
-            "merchant_id": redemption.merchant_id,
-            "redemption_id": redemption.id
-        })
+        # Handle both ORM objects and row tuples
+        if isinstance(redemption, tuple) or hasattr(redemption, '_mapping'):
+            # Row tuple from explicit column selection
+            if hasattr(redemption, '_mapping'):
+                # SQLAlchemy Row object
+                redemption_id = redemption.id
+                merchant_id = redemption.merchant_id
+                nova_spent = redemption.nova_spent_cents
+                created_at = redemption.created_at
+            else:
+                # Plain tuple
+                redemption_id, merchant_id, driver_id, nova_spent, created_at = redemption
+            
+            merchant_name = f"Merchant {merchant_id[:8]}" if merchant_id else "Merchant"
+            events.append({
+                "id": f"spent_{redemption_id}",
+                "type": "SPENT",
+                "amount_cents": nova_spent,
+                "title": merchant_name,
+                "subtitle": "Nova applied",
+                "created_at": created_at.isoformat() if hasattr(created_at, 'isoformat') else str(created_at),
+                "merchant_id": merchant_id,
+                "redemption_id": redemption_id
+            })
+        else:
+            # ORM object
+            merchant_name = "Merchant"
+            try:
+                if redemption.merchant:
+                    merchant_name = redemption.merchant.name
+                elif redemption.merchant_id:
+                    merchant_name = f"Merchant {redemption.merchant_id[:8]}"
+            except Exception:
+                # If accessing merchant relationship fails, use merchant_id
+                merchant_name = f"Merchant {redemption.merchant_id[:8]}" if redemption.merchant_id else "Merchant"
+            
+            events.append({
+                "id": f"spent_{redemption.id}",
+                "type": "SPENT",
+                "amount_cents": redemption.nova_spent_cents,
+                "title": merchant_name,
+                "subtitle": "Nova applied",
+                "created_at": redemption.created_at.isoformat(),
+                "merchant_id": redemption.merchant_id,
+                "redemption_id": redemption.id
+            })
     
     # 3. Sort by created_at descending, with tie-breaker
     # Tie-breaker: SPENT before EARNED when timestamps equal, then by id

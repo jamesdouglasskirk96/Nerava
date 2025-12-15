@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     # CORS
     cors_allow_origins: str = os.getenv("ALLOWED_ORIGINS", "*")
     
-    # Public base URL
-    public_base_url: str = os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:8001")
+    # Public base URL (for OAuth redirects, wallet pass URLs, QR URLs)
+    public_base_url: str = os.getenv("PUBLIC_BASE_URL", "http://localhost:8001")
     
     # Frontend URL for redirects (OAuth callbacks, etc.)
     frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:8001/app")
@@ -57,8 +57,9 @@ class Settings(BaseSettings):
     square_env: str = os.getenv("SQUARE_ENV", "sandbox")  # sandbox or production
     
     # Sandbox credentials
-    square_application_id_sandbox: str = os.getenv("SQUARE_APPLICATION_ID_SANDBOX", "")
-    square_application_secret_sandbox: str = os.getenv("SQUARE_APPLICATION_SECRET_SANDBOX", "")
+    square_application_id_sandbox: str = os.getenv("SQUARE_APPLICATION_ID_SANDBOX", "REPLACE_ME")
+    square_application_secret_sandbox: str = os.getenv("SQUARE_APPLICATION_SECRET_SANDBOX", "REPLACE_ME")
+    # Redirect URL - will be computed via get_square_sandbox_config() to use PUBLIC_BASE_URL
     square_redirect_url_sandbox: str = os.getenv("SQUARE_REDIRECT_URL_SANDBOX", "")
     
     # Production credentials
@@ -148,3 +149,24 @@ class Settings(BaseSettings):
 
 # Global settings instance
 settings = Settings()
+
+
+def get_square_sandbox_config():
+    """
+    Get Square SANDBOX configuration.
+    
+    Returns:
+        Dict with application_id, application_secret, redirect_url, and base_url
+        Redirect URL defaults to PUBLIC_BASE_URL + callback path if not explicitly set
+    """
+    redirect_url = settings.square_redirect_url_sandbox
+    if not redirect_url:
+        # Default to PUBLIC_BASE_URL + callback path
+        redirect_url = f"{settings.public_base_url}/v1/merchants/square/callback"
+    
+    return {
+        "application_id": settings.square_application_id_sandbox,
+        "application_secret": settings.square_application_secret_sandbox,
+        "redirect_url": redirect_url,
+        "base_url": "https://connect.squareupsandbox.com"
+    }

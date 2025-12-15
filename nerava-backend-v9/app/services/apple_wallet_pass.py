@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.models.domain import DriverWallet
 from app.config import settings
 from app.services.wallet_timeline import get_wallet_timeline
+from app.services.token_encryption import encrypt_token, decrypt_token, TokenDecryptionError
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,31 @@ def _ensure_wallet_pass_token(db: Session, driver_user_id: int) -> str:
     return wallet.wallet_pass_token
 
 
+def _ensure_apple_auth_token(db: Session, wallet: DriverWallet) -> str:
+    """
+    Ensure the driver wallet has an Apple authentication token for PassKit web service.
+    
+    The token is:
+    - Random, opaque (no PII)
+    - Stored encrypted-at-rest via token_encryption
+    - Used as the PassKit authenticationToken (header + pass.json)
+    """
+    # If already present, decrypt and return
+    if wallet.apple_authentication_token:
+        try:
+            return decrypt_token(wallet.apple_authentication_token)
+        except TokenDecryptionError:
+            # If decryption fails (e.g., key rotation), generate a new token
+            pass
+
+    # Generate a new opaque token
+    auth_token = secrets.token_urlsafe(24)
+    wallet.apple_authentication_token = encrypt_token(auth_token)
+    db.commit()
+    db.refresh(wallet)
+    return auth_token
+
+
 def _get_pass_images_dir() -> Path:
     """Get directory for pass images"""
     # Try ui-mobile/assets first, fallback to a default location
@@ -74,37 +100,111 @@ def _create_pass_json(db: Session, driver_user_id: int, wallet: DriverWallet) ->
     
     Uses wallet_pass_token (opaque) in barcode, never driver_id or PII.
     """
-    # Get recent timeline events for auxiliary fields
-    timeline = get_wallet_timeline(db, driver_user_id, limit=3)
+    # Get recent timeline events for auxiliary fields / back fields
+    timeline = get_wallet_timeline(db, driver_user_id, limit=5)
     
     # Format balance
     balance_dollars = wallet.nova_balance / 100.0
     balance_str = f"${balance_dollars:.2f}"
     
-    # Build auxiliary fields from timeline
+    # Build auxiliary fields from balance + quick summary amounts (up to 3)
     auxiliary_fields = []
-    for i, event in enumerate(timeline[:3]):
-        if event["type"] == "EARNED":
-            label = f"+${event['amount_cents'] / 100:.2f}"
-        else:
-            label = f"-${event['amount_cents'] / 100:.2f}"
-        auxiliary_fields.append({
-            "key": f"event_{i+1}",
-            "label": label,
-            "value": event["title"][:30]  # Truncate if needed
-        })
     
-    # Get webServiceURL from settings
+    # Add charging status as first auxiliary field if charging detected
+    if wallet.charging_detected:
+        auxiliary_fields.append(
+            {
+                "key": "charging_status",
+                "label": "Status",
+                "value": "Charging detected",
+            }
+        )
+    
+    for i, event in enumerate(timeline[:3]):
+        sign = "+" if event["type"] == "EARNED" else "-"
+        label = f"{sign}${event['amount_cents'] / 100:.2f}"
+        auxiliary_fields.append(
+            {
+                "key": f"event_{i+1}",
+                "label": label,
+                "value": event["title"][:30],  # Truncate if needed
+            }
+        )
+
+    # Build back fields for deeper history (last 5 items) with short timestamps
+    back_fields = [
+        {
+            "key": "about",
+            "label": "About",
+            "value": "Nerava rewards you for off-peak EV charging. Use Nova at participating merchants.",
+        },
+        {
+            "key": "open_wallet",
+            "label": "Open Wallet",
+            "value": "/app/wallet/",
+        },
+        {
+            "key": "scan_merchant_qr",
+            "label": "Scan Merchant QR",
+            "value": "/app/scan.html",
+        },
+        {
+            "key": "where_to_spend",
+            "label": "Where to Spend Nova",
+            "value": "/app/spend.html",
+        },
+    ]
+    
+    # Add charging status to back fields (always visible, even if not charging)
+    if wallet.charging_detected:
+        back_fields.append(
+            {
+                "key": "charging_status",
+                "label": "Status",
+                "value": "Charging detected",
+            }
+        )
+    else:
+        back_fields.append(
+            {
+                "key": "charging_status",
+                "label": "Status",
+                "value": "Not charging",
+            }
+        )
+
+    for i, event in enumerate(timeline[:5]):
+        try:
+            # created_at is ISO string from timeline service
+            ts = datetime.fromisoformat(event["created_at"].replace("Z", "+00:00"))
+            short_ts = ts.strftime("%m/%d %H:%M")
+        except Exception:
+            short_ts = event.get("created_at", "")[:16]
+
+        label = short_ts
+        sign = "+" if event["type"] == "EARNED" else "-"
+        amount_str = f"{sign}${event['amount_cents'] / 100:.2f}"
+        back_fields.append(
+            {
+                "key": f"timeline_{i+1}",
+                "label": label,
+                "value": f"{amount_str} • {event['title'][:40]}",
+            }
+        )
+    
+    # Get webServiceURL and app launch URL from settings
     base_url = getattr(settings, 'public_base_url', 'https://my.nerava.network').rstrip('/')
     web_service_url = f"{base_url}/v1/wallet/pass/apple"
     
-    # Get pass token (opaque)
+    # Get pass token (opaque, for serial/barcode) and Apple auth token (for web service)
     pass_token = _ensure_wallet_pass_token(db, driver_user_id)
+    auth_token = _ensure_apple_auth_token(db, wallet)
     
     pass_data = {
         "formatVersion": 1,
         "passTypeIdentifier": os.getenv("APPLE_WALLET_PASS_TYPE_ID", "pass.com.nerava.wallet"),
-        "serialNumber": f"nerava-{driver_user_id}",
+        # Serial must not contain PII; use opaque wallet_pass_token with stable prefix
+        "serialNumber": f"nerava-{pass_token}",
         "teamIdentifier": os.getenv("APPLE_WALLET_TEAM_ID", ""),
         "organizationName": "Nerava",
         "description": "Nerava Wallet - Off-Peak Charging Rewards",
@@ -120,13 +220,7 @@ def _create_pass_json(db: Session, driver_user_id: int, wallet: DriverWallet) ->
                 }
             ],
             "auxiliaryFields": auxiliary_fields,
-            "backFields": [
-                {
-                    "key": "description",
-                    "label": "About",
-                    "value": "Nerava rewards you for off-peak EV charging. Use Nova at participating merchants."
-                }
-            ]
+            "backFields": back_fields,
         },
         "barcode": {
             "format": "PKBarcodeFormatQR",
@@ -134,7 +228,8 @@ def _create_pass_json(db: Session, driver_user_id: int, wallet: DriverWallet) ->
             "messageEncoding": "iso-8859-1"
         },
         "webServiceURL": web_service_url,
-        "authenticationToken": pass_token,  # For web service updates
+        "authenticationToken": auth_token,  # For web service updates (separate from barcode token)
+        "appLaunchURL": f"{base_url}/app/wallet/",
         "relevantDate": datetime.utcnow().isoformat() + "Z"
     }
     

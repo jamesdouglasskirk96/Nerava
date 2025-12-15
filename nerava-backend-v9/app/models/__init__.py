@@ -11,6 +11,8 @@ from .domain import (
     NovaTransaction,
     DomainChargingSession,
     StripePayment,
+    ApplePassRegistration,
+    GoogleWalletLink,
 )
 from .vehicle import (
     VehicleAccount,
@@ -72,6 +74,8 @@ __all__ = [
     "NovaTransaction",
     "DomainChargingSession",
     "StripePayment",
+    "ApplePassRegistration",
+    "GoogleWalletLink",
     # Vehicle models
     "VehicleAccount",
     "VehicleToken",

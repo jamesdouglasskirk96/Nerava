@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 
 from app.models.domain import DriverWallet
+from app.services.apple_pass_push import send_updates_for_wallet
+from app.services.google_wallet_service import update_google_wallet_object_on_activity
 
 
 def mark_wallet_activity(db: Session, driver_user_id: int) -> None:
@@ -38,3 +40,23 @@ def mark_wallet_activity(db: Session, driver_user_id: int) -> None:
     
     wallet.wallet_activity_updated_at = datetime.utcnow()
     # Note: updated_at is handled by SQLAlchemy onupdate
+
+    import os
+
+    # Optionally trigger PassKit silent push (non-blocking)
+    if os.getenv("APPLE_PASS_PUSH_ENABLED", "false").lower() == "true":
+        try:
+            # Fire-and-forget; errors are logged inside send_updates_for_wallet
+            send_updates_for_wallet(db, wallet)
+        except Exception:
+            # Never block wallet activity on push failures
+            pass
+
+    # Optionally update Google Wallet object immediately
+    if os.getenv("GOOGLE_WALLET_ENABLED", "false").lower() == "true":
+        try:
+            if wallet.wallet_pass_token:
+                update_google_wallet_object_on_activity(db, wallet, wallet.wallet_pass_token)
+        except Exception:
+            # Never block wallet activity on Google Wallet failures
+            pass

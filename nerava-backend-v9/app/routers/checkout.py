@@ -2,21 +2,30 @@
 Checkout Router - QR-based and discovery-based Nova redemption
 Handles driver checkout flow at merchants.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, List
 import uuid
 from datetime import datetime
 import logging
 
 from ..db import get_db
 from ..models import User
-from ..models.domain import DomainMerchant, DriverWallet, MerchantRedemption
-from ..services.qr_service import resolve_qr_token as resolve_merchant_qr_token
+from ..models.domain import DomainMerchant, DriverWallet, MerchantRedemption, MerchantReward
+from ..services.demo_seed import ensure_eggman_demo_reward
+from ..services.qr_service import resolve_merchant_qr_token
 from ..services.nova_service import NovaService
 from ..services.wallet_activity import mark_wallet_activity
-from ..dependencies_driver import get_current_driver
+from ..services.square_orders import (
+    search_recent_orders,
+    get_order_total_cents,
+    SquareNotConnectedError,
+    SquareOrderTotalUnavailableError,
+    SquareError
+)
+from ..services.merchant_fee import record_merchant_fee
+from ..dependencies_driver import get_current_driver, get_current_driver_optional
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +42,7 @@ class RedeemRequest(BaseModel):
     """Request to redeem Nova at checkout"""
     qr_token: str
     order_total_cents: int
+    square_order_id: Optional[str] = None  # Optional Square order ID
 
 
 class RedeemResponse(BaseModel):
@@ -44,24 +54,40 @@ class RedeemResponse(BaseModel):
     nova_spent_cents: int
     remaining_nova_cents: int
     message: str
-    redemption_id: str  # Add redemption_id to response
+    redemption_id: str
+    square_order_id: Optional[str] = None  # Square order ID if provided
+    merchant_fee_cents: Optional[int] = None  # Merchant fee for this redemption
+
+
+class RedeemRewardRequest(BaseModel):
+    """Request to redeem a predefined merchant reward"""
+    reward_id: str
+
+
+class RedeemRewardResponse(BaseModel):
+    """Response from reward redemption"""
+    status: str
+    nova_redeemed: int
+    reward: str
+    redemption_id: str
+    remaining_nova_cents: int
 
 
 @router.get("/qr/{token}", response_model=CheckoutQrResponse)
 async def checkout_qr(
     token: str,
-    user: User = Depends(get_current_driver),
+    user: Optional[User] = Depends(get_current_driver_optional),
     db: Session = Depends(get_db)
 ):
     """
     Look up merchant info and driver balance via QR token.
     
     This endpoint is called when a driver scans a merchant QR code.
-    It returns merchant info (name, perk) and driver Nova balance.
+    It returns merchant info (name, perk) and driver Nova balance (if authenticated).
     
     Args:
         token: QR token from merchant sign
-        user: Authenticated driver (from get_current_driver)
+        user: Optional authenticated driver (for balance display)
         
     Returns:
         CheckoutQrResponse with merchant and driver info
@@ -77,24 +103,115 @@ async def checkout_qr(
             }
         )
     
-    # Get driver wallet balance
-    wallet = db.query(DriverWallet).filter(DriverWallet.user_id == user.id).first()
-    nova_balance = wallet.nova_balance if wallet else 0
+    # Get driver wallet balance (if authenticated)
+    nova_balance = 0
+    if user:
+        try:
+            wallet = db.query(DriverWallet).filter(DriverWallet.user_id == user.id).first()
+            nova_balance = wallet.nova_balance if wallet else 0
+        except Exception as e:
+            # If wallet query fails (e.g., missing columns), just use 0
+            logger.warning(f"Could not fetch wallet balance: {e}")
+            nova_balance = 0
+    
+    # Ensure Eggman demo reward exists (sandbox only)
+    ensure_eggman_demo_reward(db)
+    
+    # Check for active merchant rewards
+    active_reward = db.query(MerchantReward).filter(
+        MerchantReward.merchant_id == merchant.id,
+        MerchantReward.is_active == True
+    ).first()
     
     # Determine perk amount (use custom if set, otherwise recommended)
     perk_cents = merchant.custom_perk_cents or merchant.recommended_perk_cents or 0
     
+    merchant_data = {
+        "id": merchant.id,
+        "name": merchant.name,
+        "perk_label": merchant.perk_label or f"${perk_cents / 100:.2f} off any order",
+        "recommended_perk_cents": perk_cents
+    }
+    
+    # If there's an active reward, include it in the response
+    if active_reward:
+        merchant_data["reward"] = {
+            "id": active_reward.id,
+            "nova_amount": active_reward.nova_amount,
+            "title": active_reward.title,
+            "description": active_reward.description
+        }
+    
     return CheckoutQrResponse(
-        merchant={
-            "id": merchant.id,
-            "name": merchant.name,
-            "perk_label": merchant.perk_label or f"${perk_cents / 100:.2f} off any order",
-            "recommended_perk_cents": perk_cents
-        },
+        merchant=merchant_data,
         driver={
-            "connected": True,
+            "connected": user is not None,
             "nova_balance_cents": nova_balance
         }
+    )
+
+
+class OrdersResponse(BaseModel):
+    """Response for recent orders lookup"""
+    merchant_id: str
+    merchant_name: str
+    perk: dict
+    orders: List[dict]
+
+
+@router.get("/orders", response_model=OrdersResponse)
+async def list_recent_orders(
+    token: str = Query(..., description="QR token"),
+    minutes: int = Query(10, description="Minutes to look back"),
+    db: Session = Depends(get_db)
+):
+    """
+    List recent Square orders for a merchant.
+    
+    Args:
+        token: QR token
+        minutes: Number of minutes to look back (default: 10)
+        db: Database session
+        
+    Returns:
+        OrdersResponse with merchant info, perk, and recent orders
+    """
+    # Resolve merchant
+    merchant = resolve_merchant_qr_token(db, token)
+    if not merchant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": "INVALID_QR_TOKEN",
+                "message": "QR token not found or merchant not active"
+            }
+        )
+    
+    # Determine perk
+    perk_cents = merchant.custom_perk_cents or merchant.recommended_perk_cents or 300
+    perk_label = merchant.perk_label or f"{perk_cents} Nova coffee perk"
+    
+    # Try to fetch recent orders from Square
+    orders = []
+    try:
+        orders = search_recent_orders(db, merchant, minutes=minutes, limit=20)
+    except SquareNotConnectedError:
+        # Merchant not connected to Square - return empty orders list
+        logger.info(f"Merchant {merchant.id} not connected to Square, returning empty orders")
+        orders = []
+    except SquareError as e:
+        # Log error but don't fail - return empty orders list
+        logger.warning(f"Error fetching Square orders: {e}")
+        orders = []
+    
+    return OrdersResponse(
+        merchant_id=merchant.id,
+        merchant_name=merchant.name,
+        perk={
+            "perk_cents": perk_cents,
+            "label": perk_label
+        },
+        orders=orders
     )
 
 
@@ -109,31 +226,22 @@ async def redeem_nova(
     
     This endpoint:
     1. Resolves merchant via QR token
-    2. Calculates discount amount
-    3. Validates driver has sufficient Nova
-    4. Debits Nova from driver wallet
-    5. Creates MerchantRedemption record
-    
-    Note: The merchant applies the discount manually in Square POS.
-    This endpoint just handles the Nova redemption side.
+    2. If square_order_id is provided:
+       - Fetches order total from Square
+       - Prevents duplicate redemption
+       - Records merchant fee
+    3. Calculates discount amount
+    4. Validates driver has sufficient Nova
+    5. Debits Nova from driver wallet
+    6. Creates MerchantRedemption record
     
     Args:
-        request: RedeemRequest with qr_token and order_total_cents
+        request: RedeemRequest with qr_token, order_total_cents, and optional square_order_id
         user: Authenticated driver
         
     Returns:
-        RedeemResponse with redemption details
+        RedeemResponse with redemption details including merchant_fee_cents
     """
-    # Validate order_total_cents
-    if request.order_total_cents <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "INVALID_ORDER_TOTAL",
-                "message": "Order total must be greater than zero"
-            }
-        )
-    
     # Resolve merchant
     merchant = resolve_merchant_qr_token(db, request.qr_token)
     if not merchant:
@@ -145,18 +253,65 @@ async def redeem_nova(
             }
         )
     
-    # Determine discount amount
-    perk_cents = merchant.custom_perk_cents or merchant.recommended_perk_cents or 0
-    discount_cents = min(perk_cents, request.order_total_cents)
+    # Handle Square order lookup if square_order_id is provided
+    order_total_cents = request.order_total_cents
+    if request.square_order_id:
+        try:
+            # Fetch order total from Square
+            order_total_cents = get_order_total_cents(db, merchant, request.square_order_id)
+            
+            # Check for duplicate redemption
+            existing = db.query(MerchantRedemption).filter(
+                MerchantRedemption.merchant_id == merchant.id,
+                MerchantRedemption.square_order_id == request.square_order_id
+            ).first()
+            
+            if existing:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "error": "ORDER_ALREADY_REDEEMED",
+                        "message": "This Square order has already been redeemed"
+                    }
+                )
+        except SquareNotConnectedError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "SQUARE_NOT_CONNECTED",
+                    "message": "Merchant is not connected to Square"
+                }
+            )
+        except SquareOrderTotalUnavailableError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "SQUARE_ORDER_TOTAL_UNAVAILABLE",
+                    "message": str(e)
+                }
+            )
+        except SquareError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    "error": "SQUARE_API_ERROR",
+                    "message": str(e)
+                }
+            )
     
-    if discount_cents <= 0:
+    # Validate order_total_cents
+    if order_total_cents <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
-                "error": "NO_DISCOUNT_AVAILABLE",
-                "message": "No discount available for this merchant"
+                "error": "INVALID_ORDER_TOTAL",
+                "message": "Order total must be greater than zero"
             }
         )
+    
+    # Determine discount amount
+    perk_cents = merchant.custom_perk_cents or merchant.recommended_perk_cents or 300
+    # Compute redeem_cents = min(perk_cents, wallet_balance, order_total_cents)
     
     # Check driver Nova balance
     wallet = db.query(DriverWallet).filter(DriverWallet.user_id == user.id).first()
@@ -169,14 +324,27 @@ async def redeem_nova(
             }
         )
     
-    if wallet.nova_balance < discount_cents:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "INSUFFICIENT_NOVA",
-                "message": f"Insufficient Nova balance. Has {wallet.nova_balance}, needs {discount_cents}"
-            }
-        )
+    # Calculate redeem_cents = min(perk_cents, wallet_balance, order_total_cents)
+    redeem_cents = min(perk_cents, wallet.nova_balance, order_total_cents)
+    discount_cents = redeem_cents
+    
+    if discount_cents <= 0:
+        if wallet.nova_balance < perk_cents:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "INSUFFICIENT_NOVA",
+                    "message": f"Insufficient Nova balance. Has {wallet.nova_balance}, needs {perk_cents}"
+                }
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "NO_DISCOUNT_AVAILABLE",
+                    "message": "No discount available for this merchant"
+                }
+            )
     
     # Redeem Nova via NovaService
     try:
@@ -187,7 +355,8 @@ async def redeem_nova(
             amount=discount_cents,
             metadata={
                 "qr_token": request.qr_token,
-                "order_total_cents": request.order_total_cents,
+                "order_total_cents": order_total_cents,
+                "square_order_id": request.square_order_id,
                 "checkout_type": "qr"
             }
         )
@@ -207,7 +376,8 @@ async def redeem_nova(
         merchant_id=merchant.id,
         driver_user_id=user.id,
         qr_token=request.qr_token,
-        order_total_cents=request.order_total_cents,
+        square_order_id=request.square_order_id,
+        order_total_cents=order_total_cents,
         discount_cents=discount_cents,
         nova_spent_cents=discount_cents
     )
@@ -215,24 +385,40 @@ async def redeem_nova(
     db.commit()
     db.refresh(redemption)
     
+    # Record merchant fee
+    merchant_fee_cents = None
+    if request.square_order_id:
+        try:
+            merchant_fee_cents = record_merchant_fee(
+                db,
+                merchant.id,
+                discount_cents,
+                datetime.utcnow()
+            )
+        except Exception as e:
+            logger.error(f"Failed to record merchant fee: {e}", exc_info=True)
+            # Don't fail redemption if fee recording fails
+    
     # Mark wallet activity for pass refresh
     mark_wallet_activity(db, user.id)
     db.commit()
     
     logger.info(
         f"Redemption: driver {user.id} redeemed {discount_cents} Nova at merchant {merchant.id}, "
-        f"order total: ${request.order_total_cents / 100:.2f}"
+        f"order total: ${order_total_cents / 100:.2f}, square_order_id: {request.square_order_id}"
     )
     
     return RedeemResponse(
         success=True,
         merchant_id=merchant.id,
         discount_cents=discount_cents,
-        order_total_cents=request.order_total_cents,
+        order_total_cents=order_total_cents,
         nova_spent_cents=discount_cents,
         remaining_nova_cents=result["driver_balance"],
         message="Nova applied. Show this screen to the merchant so they can add the discount in Square.",
-        redemption_id=redemption_id
+        redemption_id=redemption_id,
+        square_order_id=request.square_order_id,
+        merchant_fee_cents=merchant_fee_cents
     )
 
 
@@ -243,6 +429,138 @@ class RedemptionDetailResponse(BaseModel):
     discount_cents: int
     order_total_cents: int
     created_at: str  # ISO string
+
+
+@router.post("/redeem-reward", response_model=RedeemRewardResponse)
+async def redeem_reward(
+    request: RedeemRewardRequest,
+    user: User = Depends(get_current_driver),
+    db: Session = Depends(get_db)
+):
+    """
+    Redeem a predefined merchant reward (e.g., 300 Nova for Free Coffee).
+    
+    This endpoint handles atomic redemption of predefined rewards:
+    1. Validates driver wallet exists
+    2. Validates reward exists & active
+    3. Ensures driver has sufficient Nova
+    4. Deducts Nova from driver wallet
+    5. Creates MerchantRedemption record
+    6. Updates wallet activity for pass refresh
+    
+    Args:
+        request: RedeemRewardRequest with reward_id
+        user: Authenticated driver
+        db: Database session
+        
+    Returns:
+        RedeemRewardResponse with redemption details
+    """
+    # Validate reward exists and is active
+    reward = db.query(MerchantReward).filter(
+        MerchantReward.id == request.reward_id,
+        MerchantReward.is_active == True
+    ).first()
+    
+    if not reward:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": "REWARD_NOT_FOUND",
+                "message": "Reward not found or inactive"
+            }
+        )
+    
+    # Get merchant
+    merchant = db.query(DomainMerchant).filter(
+        DomainMerchant.id == reward.merchant_id,
+        DomainMerchant.status == "active"
+    ).first()
+    
+    if not merchant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": "MERCHANT_NOT_FOUND",
+                "message": "Merchant not found or inactive"
+            }
+        )
+    
+    # Check driver wallet exists
+    wallet = db.query(DriverWallet).filter(DriverWallet.user_id == user.id).first()
+    if not wallet:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "WALLET_NOT_FOUND",
+                "message": "Driver wallet not found"
+            }
+        )
+    
+    # Check driver has sufficient Nova
+    if wallet.nova_balance < reward.nova_amount:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "INSUFFICIENT_NOVA",
+                "message": f"Insufficient Nova balance. Has {wallet.nova_balance}, needs {reward.nova_amount}"
+            }
+        )
+    
+    # Redeem Nova via NovaService
+    try:
+        result = NovaService.redeem_from_driver(
+            db=db,
+            driver_id=user.id,
+            merchant_id=merchant.id,
+            amount=reward.nova_amount,
+            metadata={
+                "reward_id": reward.id,
+                "reward_title": reward.title,
+                "checkout_type": "predefined_reward"
+            }
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "REDEMPTION_FAILED",
+                "message": str(e)
+            }
+        )
+    
+    # Create MerchantRedemption record
+    redemption_id = str(uuid.uuid4())
+    redemption = MerchantRedemption(
+        id=redemption_id,
+        merchant_id=merchant.id,
+        driver_user_id=user.id,
+        qr_token=None,  # No QR token for predefined rewards
+        reward_id=reward.id,  # Track which reward was redeemed
+        order_total_cents=0,  # No order total for predefined rewards
+        discount_cents=reward.nova_amount,  # Discount equals reward amount
+        nova_spent_cents=reward.nova_amount
+    )
+    db.add(redemption)
+    db.commit()
+    db.refresh(redemption)
+    
+    # Mark wallet activity for pass refresh
+    mark_wallet_activity(db, user.id)
+    db.commit()
+    
+    logger.info(
+        f"Reward redemption: driver {user.id} redeemed {reward.nova_amount} Nova "
+        f"for reward '{reward.title}' at merchant {merchant.id}"
+    )
+    
+    return RedeemRewardResponse(
+        status="SUCCESS",
+        nova_redeemed=reward.nova_amount,
+        reward=reward.title,
+        redemption_id=redemption_id,
+        remaining_nova_cents=result["driver_balance"]
+    )
 
 
 @router.get("/redemption/{redemption_id}", response_model=RedemptionDetailResponse)

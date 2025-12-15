@@ -115,7 +115,8 @@ from .routers import debug_verify
 from .routers import debug_pool
 from .routers import discover_api, affiliate_api, insights_api
 from .routers import while_you_charge, pilot, pilot_debug, merchant_reports, merchant_balance, pilot_redeem
-from .routers import ev_smartcar, checkout, wallet_pass
+from .routers import ev_smartcar, checkout, wallet_pass, demo_qr, demo_charging, demo_square
+from .services.nova_accrual import nova_accrual_service
 
 # Auth + JWT preferences
 from .routers.auth import router as auth_router
@@ -146,6 +147,9 @@ async def log_requests(request: Request, call_next):
             print(f">>>> RESPONSE {request.method} {request.url.path} -> {response.status_code} <<<<", flush=True)
             logger.info(">>>> RESPONSE %s %s -> %s <<<<", request.method, request.url.path, response.status_code)
         return response
+    except HTTPException:
+        # HTTPException is expected - re-raise immediately without logging as unhandled
+        raise
     except Exception as e:
         # For static files, re-raise immediately without logging to avoid interfering
         # StaticFiles will handle its own exceptions (404s, etc.) properly
@@ -451,13 +455,17 @@ app.include_router(prefs_router)
 # Legacy + domain routes
 app.include_router(users.router)
 app.include_router(merchants_router.router)
+# Register demo_qr BEFORE checkout to ensure /qr/eggman-demo-checkout matches before /qr/{token}
+app.include_router(demo_qr.router)
 app.include_router(checkout.router)
+app.include_router(demo_square.router)
 app.include_router(hubs.router, prefix="/v1/hubs", tags=["hubs"])
 app.include_router(places.router)
 app.include_router(recommend.router, prefix="/v1", tags=["recommend"])
 app.include_router(reservations.router, prefix="/v1/reservations", tags=["reservations"])
 app.include_router(wallet.router)
 app.include_router(wallet_pass.router)
+app.include_router(demo_charging.router)
 app.include_router(chargers.router, prefix="/v1/chargers", tags=["chargers"])
 app.include_router(webhooks.router)
 app.include_router(users_register.router)
@@ -567,8 +575,18 @@ async def pilot_error_handler(request: Request, exc: HTTPException):
             status_code=exc.status_code,
             content=shape_error(error_type, detail)
         )
-    # For non-pilot endpoints, re-raise to use default FastAPI behavior
-    raise exc
+    # For non-pilot endpoints, return proper JSON response with the exception detail
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers={
+            "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Api-Key, X-Merchant-Key",
+        }
+    )
 
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(request: Request, exc: RequestValidationError):
@@ -651,3 +669,14 @@ app.include_router(finance.router)
 app.include_router(ai_growth.router)
 app.include_router(demo.router)
 app.include_router(dual_zone.router)
+
+# Start Nova accrual service on startup (demo mode only)
+@app.on_event("startup")
+async def start_nova_accrual():
+    """Start Nova accrual service for demo mode"""
+    await nova_accrual_service.start()
+
+@app.on_event("shutdown")
+async def stop_nova_accrual():
+    """Stop Nova accrual service on shutdown"""
+    await nova_accrual_service.stop()

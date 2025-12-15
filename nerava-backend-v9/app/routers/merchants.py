@@ -26,6 +26,7 @@ from ..services.merchant_onboarding import onboard_merchant_via_square
 from ..services.qr_service import create_or_get_merchant_qr
 from ..services.merchant_signs import generate_merchant_sign_pdf
 from ..services.merchant_reporting import get_merchant_summary, get_shareable_stats
+from ..services.merchant_analytics import merchant_billing_summary
 from ..dependencies_domain import require_merchant_admin, get_current_user
 from ..routers.drivers_domain import haversine_distance
 
@@ -321,6 +322,45 @@ async def square_connect(
         )
 
 
+@router.get("/square/sandbox/connect")
+async def square_sandbox_connect(
+    db: Session = Depends(get_db)
+):
+    """
+    Get Square SANDBOX OAuth authorization URL for testing.
+    
+    This endpoint is for SANDBOX testing only:
+    1. Generates random state (uuid4) and stores it using OAuth state logic
+    2. Returns Square sandbox OAuth URL with redirect_uri
+    
+    Use this endpoint to test Square OAuth flow locally with a public tunnel.
+    
+    Returns:
+        Dict with "url" (Square sandbox OAuth URL) and "redirect_uri" keys
+    """
+    from ..config import get_square_sandbox_config
+    
+    try:
+        # Create and persist OAuth state
+        state = create_oauth_state(db)
+        
+        # Generate OAuth URL with state
+        url = await get_square_oauth_authorize_url(state)
+        
+        # Get redirect URI from config
+        cfg = get_square_sandbox_config()
+        
+        return {
+            "url": url,
+            "redirect_uri": cfg["redirect_url"]
+        }
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
 @router.get("/square/callback")
 async def square_callback(
     code: str = Query(..., description="OAuth authorization code from Square"),
@@ -368,8 +408,11 @@ async def square_callback(
         # Get QR info (should already be set, but ensure it exists)
         qr_result = create_or_get_merchant_qr(db, merchant)
         
+        # Return success response for sandbox testing
         return {
+            "success": True,
             "merchant_id": merchant.id,
+            "message": "Square sandbox connected",
             "name": merchant.name,
             "perk": {
                 "avg_order_value_cents": merchant.avg_order_value_cents,
@@ -507,6 +550,51 @@ def get_merchant_summary_endpoint(
     
     summary = get_merchant_summary(db, merchant_id)
     return summary
+
+
+@router.get("/{merchant_id}/billing/summary")
+def get_merchant_billing_summary(
+    merchant_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get billing summary for a merchant.
+    
+    Merchants only pay the platform fee on redeemed Nova, not the full redemption amount.
+    
+    Args:
+        merchant_id: Merchant ID
+        
+    Returns:
+        {
+            "period_start": "2025-12-01",
+            "period_end": "2025-12-31",
+            "nova_redeemed_cents": 200,
+            "platform_fee_bps": 1500,
+            "platform_fee_cents": 30,
+            "status": "pending",
+            "settlement_method": "invoice"
+        }
+    """
+    # Validate merchant exists
+    merchant = db.query(DomainMerchant).filter(DomainMerchant.id == merchant_id).first()
+    if not merchant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": "MERCHANT_NOT_FOUND",
+                "message": f"Merchant {merchant_id} not found"
+            }
+        )
+    
+    try:
+        summary = merchant_billing_summary(db, merchant_id)
+        return summary
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get billing summary: {str(e)}"
+        )
 
 
 @router.get("/{merchant_id}/shareables")

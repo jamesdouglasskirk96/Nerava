@@ -62,8 +62,9 @@ def get_current_driver_id(
         except jwt.ExpiredSignatureError:
             # Token expired - fall through to dev fallback or raise
             pass
-        except Exception:
+        except Exception as e:
             # Invalid token - fall through to dev fallback or raise
+            print(f"[AUTH] Token decode failed: {e}")
             pass
     
     # 4. Dev fallback: if NERAVA_DEV_ALLOW_ANON_DRIVER=true, use default driver
@@ -74,7 +75,10 @@ def get_current_driver_id(
     # 5. Production: authentication required
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Driver authentication required",
+        detail={
+            "error": "AUTHENTICATION_REQUIRED",
+            "message": "Driver authentication required"
+        },
         headers={"WWW-Authenticate": "Bearer"},
     )
 
@@ -135,13 +139,55 @@ def get_current_driver(
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Driver user not found"
+            detail={
+                "error": "USER_NOT_FOUND",
+                "message": "Driver user not found"
+            }
         )
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Driver account is inactive"
+            detail={
+                "error": "ACCOUNT_INACTIVE",
+                "message": "Driver account is inactive"
+            }
         )
     return user
+
+
+def get_current_driver_optional(
+    request: Request,
+    token: Optional[str] = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+) -> Optional[User]:
+    """
+    Get current driver User object (optional - returns None if not authenticated).
+    
+    This is useful for public endpoints like QR code viewing where authentication
+    is optional but provides additional features (like showing balance) if present.
+    
+    Args:
+        request: FastAPI Request object
+        token: Optional OAuth2 token from header
+        db: Database session
+        
+    Returns:
+        Optional[User]: Driver user object if authenticated, None otherwise
+    """
+    try:
+        # Try to get driver ID
+        driver_id = get_current_driver_id(request, token, db)
+        # If we got a driver ID, get the user
+        user = AuthService.get_user_by_id(db, driver_id)
+        if user and user.is_active:
+            return user
+    except HTTPException:
+        # Authentication failed - that's OK, return None
+        pass
+    except Exception:
+        # Any other error - return None
+        pass
+    
+    return None
 
 

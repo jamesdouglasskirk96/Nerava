@@ -120,7 +120,7 @@ def create_or_get_merchant_qr(db: Session, merchant: DomainMerchant) -> dict:
     # If merchant already has a QR token, return it
     if merchant.qr_token:
         base_url = getattr(settings, 'public_base_url', 'https://my.nerava.network')
-        qr_url = f"{base_url}/qr/{merchant.qr_token}"
+        qr_url = f"{base_url}/v1/checkout/qr/{merchant.qr_token}"
         return {
             "token": merchant.qr_token,
             "url": qr_url
@@ -144,7 +144,7 @@ def create_or_get_merchant_qr(db: Session, merchant: DomainMerchant) -> dict:
     
     # Build QR URL
     base_url = getattr(settings, 'public_base_url', 'https://my.nerava.network')
-    qr_url = f"{base_url}/qr/{token}"
+    qr_url = f"{base_url}/v1/checkout/qr/{token}"
     
     logger.info(f"Created QR token for merchant {merchant.id}: {token[:8]}...")
     

@@ -10,7 +10,7 @@ import os
 import logging
 from urllib.parse import urlencode
 
-from ..config import settings
+from ..config import settings, get_square_sandbox_config
 from .token_encryption import decrypt_token, TokenDecryptionError
 from ..models.domain import SquareOAuthState
 from sqlalchemy.orm import Session
@@ -89,36 +89,39 @@ def get_square_creds() -> SquareCreds:
 
 async def get_square_oauth_authorize_url(state: str) -> str:
     """
-    Build the Square OAuth authorization URL.
+    Build the Square OAuth authorization URL (SANDBOX ONLY).
     
     Args:
         state: OAuth state parameter for CSRF protection
         
     Returns:
-        Authorization URL for Square OAuth
+        Authorization URL for Square OAuth (sandbox)
         
     Raises:
         ValueError: If Square configuration is missing
     """
-    creds = get_square_creds()
+    cfg = get_square_sandbox_config()
     
-    # Square OAuth URL structure
-    # https://squareup.com/oauth2/authorize?client_id={APPLICATION_ID}&scope=MERCHANT_PROFILE_READ PAYMENTS_READ&state={STATE}
-    params = {
-        "client_id": creds.application_id,
-        "scope": "MERCHANT_PROFILE_READ PAYMENTS_READ",  # Required scopes
-        "state": state,
+    scopes = [
+        "MERCHANT_PROFILE_READ",
+        "ORDERS_READ",
+        "PAYMENTS_READ"
+    ]
+    
+    query_params = {
+        "client_id": cfg["application_id"],
         "response_type": "code",
-        "redirect_uri": creds.redirect_url,
+        "scope": " ".join(scopes),
+        "redirect_uri": cfg["redirect_url"],
+        "state": state
     }
     
-    url = f"{creds.auth_base_url}/oauth2/authorize?{urlencode(params)}"
-    return url
+    return f'{cfg["base_url"]}/oauth2/authorize?' + urlencode(query_params)
 
 
 async def exchange_square_oauth_code(code: str) -> SquareOAuthResult:
     """
-    Exchange Square OAuth authorization code for access token.
+    Exchange Square OAuth authorization code for access token (SANDBOX ONLY).
     
     Args:
         code: OAuth authorization code from callback
@@ -130,18 +133,20 @@ async def exchange_square_oauth_code(code: str) -> SquareOAuthResult:
         ValueError: If configuration is missing or OAuth exchange fails
         HTTPException: If Square API returns an error
     """
-    creds = get_square_creds()
-    token_url = f"{creds.base_url}/oauth2/token"
+    cfg = get_square_sandbox_config()
+    token_url = f'{cfg["base_url"]}/oauth2/token'
     
     # Square OAuth token request
+    # Note: redirect_uri must match the one used in the authorization request
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(
             token_url,
             json={
-                "client_id": creds.application_id,
-                "client_secret": creds.application_secret,
+                "client_id": cfg["application_id"],
+                "client_secret": cfg["application_secret"],
                 "code": code,
                 "grant_type": "authorization_code",
+                "redirect_uri": cfg["redirect_url"],
             },
             headers={
                 "Square-Version": "2023-10-18",  # Use a recent Square API version
@@ -151,8 +156,13 @@ async def exchange_square_oauth_code(code: str) -> SquareOAuthResult:
         
         if response.status_code != 200:
             error_detail = response.text
-            logger.error(f"Square OAuth token exchange failed: {response.status_code} - {redact_token_for_log(error_detail)}")
-            raise ValueError(f"Square OAuth exchange failed: {response.status_code}")
+            try:
+                error_json = response.json()
+                error_message = error_json.get("message", error_json.get("errors", error_detail))
+                logger.error(f"Square OAuth token exchange failed: {response.status_code} - {error_message}")
+            except:
+                logger.error(f"Square OAuth token exchange failed: {response.status_code} - {redact_token_for_log(error_detail)}")
+            raise ValueError(f"Square OAuth exchange failed: {response.status_code} - {error_detail[:200]}")
         
         data = response.json()
         
@@ -174,7 +184,7 @@ async def exchange_square_oauth_code(code: str) -> SquareOAuthResult:
             raise ValueError(f"Square OAuth response missing required fields")
         
         # Fetch location_id from Locations API (use first location)
-        location_id = await _fetch_primary_location_id(access_token, creds.base_url)
+        location_id = await _fetch_primary_location_id(access_token, cfg["base_url"])
         
         return SquareOAuthResult(
             merchant_id=merchant_id,

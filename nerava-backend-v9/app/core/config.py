@@ -39,6 +39,9 @@ class Settings(BaseModel):
             self.SMARTCAR_REDIRECT_URI
         )
     
+    # Platform fee configuration (in basis points, 1500 = 15%)
+    PLATFORM_FEE_BPS: int = int(os.getenv("PLATFORM_FEE_BPS", "1500"))
+    
     # Demo Mode Settings
     DEMO_MODE: bool = os.getenv("DEMO_MODE", "false").lower() == "true"
     

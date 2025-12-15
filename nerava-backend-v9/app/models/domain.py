@@ -6,7 +6,7 @@ to support the Domain-specific charge party event system with merchants,
 drivers, Nova transactions, and Stripe integration.
 """
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text, Index
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Date, ForeignKey, Text, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.sqlite import JSON as SQLITE_JSON
 from ..db import Base
@@ -133,10 +133,18 @@ class DriverWallet(Base):
     nova_balance = Column(Integer, nullable=False, default=0)  # in smallest unit
     energy_reputation_score = Column(Integer, nullable=False, default=0)
     
+    # Encrypted Apple Wallet authentication token for PassKit web service
+    # Stored encrypted-at-rest using token_encryption service helpers
+    apple_authentication_token = Column(Text, nullable=True)
+    
     # Apple Wallet pass fields
     wallet_pass_token = Column(String, unique=True, nullable=True, index=True)  # Opaque token for barcode
     wallet_activity_updated_at = Column(DateTime, nullable=True)  # Bumped on any earn/spend
     wallet_pass_last_generated_at = Column(DateTime, nullable=True)  # Set when pkpass created/refreshed
+    
+    # Demo charging detection fields (sandbox/demo only)
+    charging_detected = Column(Boolean, nullable=False, default=False)  # Demo: charging state indicator
+    charging_detected_at = Column(DateTime, nullable=True)  # When charging was last detected (demo)
     
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=True)
@@ -145,6 +153,56 @@ class DriverWallet(Base):
     user = relationship("User", foreign_keys=[user_id])
     # Note: transactions relationship removed - query NovaTransaction directly via driver_user_id
     # transactions = relationship("NovaTransaction", back_populates="driver")  # BROKEN: no direct FK
+
+
+class ApplePassRegistration(Base):
+    """Apple Wallet Pass registration per device for a driver wallet."""
+    __tablename__ = "apple_pass_registrations"
+
+    id = Column(String, primary_key=True)  # UUID as string
+    driver_wallet_id = Column(Integer, ForeignKey("driver_wallets.user_id"), nullable=False, index=True)
+
+    # Device + PassKit identifiers
+    device_library_identifier = Column(String, nullable=False, index=True)
+    push_token = Column(String, nullable=True)
+    pass_type_identifier = Column(String, nullable=False)
+
+    # Serial number used by PassKit web service (backed by wallet_pass_token, no PII)
+    serial_number = Column(String, nullable=False, index=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_seen_at = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+
+    # Relationships
+    driver_wallet = relationship("DriverWallet", foreign_keys=[driver_wallet_id])
+
+    __table_args__ = (
+        Index("ix_apple_pass_registrations_driver_serial", "driver_wallet_id", "serial_number"),
+    )
+
+
+class GoogleWalletLink(Base):
+    """Google Wallet link for a driver wallet."""
+    __tablename__ = "google_wallet_links"
+
+    id = Column(String, primary_key=True)  # UUID as string
+    driver_wallet_id = Column(Integer, ForeignKey("driver_wallets.user_id"), nullable=False, index=True)
+
+    issuer_id = Column(String, nullable=False)
+    class_id = Column(String, nullable=False)
+    object_id = Column(String, nullable=False, index=True)
+    state = Column(String, nullable=False, index=True)  # e.g., active, revoked, error
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # Relationships
+    driver_wallet = relationship("DriverWallet", foreign_keys=[driver_wallet_id])
+
+    __table_args__ = (
+        Index("ix_google_wallet_links_driver_state", "driver_wallet_id", "state"),
+    )
 
 
 class NovaTransaction(Base):
@@ -252,20 +310,52 @@ class MerchantRedemption(Base):
     # QR token used (if any)
     qr_token = Column(String, nullable=True, index=True)
     
+    # Reward ID (if redeemed from predefined reward)
+    reward_id = Column(String, ForeignKey("merchant_rewards.id"), nullable=True, index=True)
+    
     # Order details
     order_total_cents = Column(Integer, nullable=False)
     discount_cents = Column(Integer, nullable=False)
     nova_spent_cents = Column(Integer, nullable=False)  # Amount of Nova driver spent
+    
+    # Square order ID (for Square POS integration)
+    square_order_id = Column(String, nullable=True)
     
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     
     # Relationships
     merchant = relationship("DomainMerchant", foreign_keys=[merchant_id])
     driver = relationship("User", foreign_keys=[driver_user_id])
+    reward = relationship("MerchantReward", foreign_keys=[reward_id])
     
     __table_args__ = (
         Index('ix_merchant_redemptions_merchant_created', 'merchant_id', 'created_at'),
         Index('ix_merchant_redemptions_driver_created', 'driver_user_id', 'created_at'),
+        # Unique constraint on (merchant_id, square_order_id) - enforced at application level for nulls
+        Index('ix_merchant_redemptions_merchant_square_order', 'merchant_id', 'square_order_id', unique=True),
+    )
+
+
+class MerchantReward(Base):
+    """Predefined merchant rewards (e.g., 300 Nova for Free Coffee)"""
+    __tablename__ = "merchant_rewards"
+    
+    id = Column(String, primary_key=True)  # UUID as string
+    merchant_id = Column(String, ForeignKey("domain_merchants.id"), nullable=False, index=True)
+    
+    nova_amount = Column(Integer, nullable=False)  # e.g. 300
+    title = Column(String, nullable=False)  # "Free Coffee"
+    description = Column(String, nullable=True)
+    
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    merchant = relationship("DomainMerchant", foreign_keys=[merchant_id])
+    
+    __table_args__ = (
+        Index('ix_merchant_rewards_merchant_active', 'merchant_id', 'is_active'),
     )
 
 
@@ -282,6 +372,38 @@ class SquareOAuthState(Base):
     __table_args__ = (
         Index('ix_square_oauth_states_state', 'state'),
         Index('ix_square_oauth_states_expires_at', 'expires_at'),
+    )
+
+
+class MerchantFeeLedger(Base):
+    """Merchant fee ledger - tracks Nova redemptions and fees per period"""
+    __tablename__ = "merchant_fee_ledger"
+    
+    id = Column(String, primary_key=True)  # UUID as string
+    merchant_id = Column(String, ForeignKey("domain_merchants.id"), nullable=False, index=True)
+    
+    # Period (monthly)
+    period_start = Column(Date, nullable=False, index=True)  # First day of month
+    period_end = Column(Date, nullable=True)  # Last day of month
+    
+    # Totals
+    nova_redeemed_cents = Column(Integer, nullable=False, default=0)
+    fee_cents = Column(Integer, nullable=False, default=0)  # 15% of nova_redeemed_cents
+    
+    # Status
+    status = Column(String, nullable=False, default="accruing")  # accruing, invoiced, paid
+    
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=True)
+    
+    # Relationships
+    merchant = relationship("DomainMerchant", foreign_keys=[merchant_id])
+    
+    __table_args__ = (
+        Index('ix_merchant_fee_ledger_merchant_id', 'merchant_id'),
+        Index('ix_merchant_fee_ledger_period_start', 'period_start'),
+        # Unique constraint on (merchant_id, period_start)
+        Index('uq_merchant_fee_ledger_merchant_period', 'merchant_id', 'period_start', unique=True),
     )
 
 

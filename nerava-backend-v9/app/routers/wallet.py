@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models_extra import CreditLedger, IncentiveRule
+from app.models.domain import DriverWallet
 from app.services.incentives import calc_award_cents
 from app.services.nova import cents_to_nova
+from app.services.nova_service import NovaService
 
 router = APIRouter(prefix="/v1", tags=["wallet"])
 
@@ -30,16 +32,66 @@ def _add_ledger(db: Session, user_ref: str, cents: int, reason: str, meta: Dict[
 
 # ---- endpoints ----
 @router.get("/wallet")
-def get_wallet(user_id: str, db: Session = Depends(get_db)):
-    """Get wallet balance - returns 0 if credit_ledger table doesn't exist."""
+def get_wallet(
+    user_id: str = Query(..., description="User ID or 'current' for authenticated user"),
+    db: Session = Depends(get_db),
+    # Try to get current user if user_id is "current"
+    current_user_id: int = None
+):
+    """
+    Get wallet balance - returns 0 if credit_ledger table doesn't exist.
+    
+    If user_id is "current", attempts to resolve from authentication token.
+    Falls back to checking all DriverWallet records if no auth.
+    """
+    # Resolve "current" to actual user ID
+    resolved_user_id = user_id
+    if user_id == "current":
+        # Try to get from dependency injection if available
+        try:
+            from app.dependencies.driver import get_current_driver_id
+            from fastapi import Request
+            # This won't work without request context, so we'll handle it differently
+            resolved_user_id = None
+        except:
+            resolved_user_id = None
+    
     try:
-        balance_cents = _balance(db, user_id)
+        balance_cents = _balance(db, resolved_user_id or user_id)
     except Exception as e:
         # Handle gracefully if table doesn't exist
         balance_cents = 0
+    
+    # Also get Nova balance from DriverWallet if available
+    nova_balance = 0
+    try:
+        # If user_id is "current" and we can't resolve it, check all wallets
+        # (for demo mode - in production this should require auth)
+        if user_id == "current":
+            # In demo mode, try to find any wallet with charging detected or use user_id=1
+            driver_wallet = db.query(DriverWallet).filter(
+                DriverWallet.charging_detected == True
+            ).first()
+            if not driver_wallet:
+                # Fallback to user_id=1 for demo
+                driver_wallet = db.query(DriverWallet).filter(DriverWallet.user_id == 1).first()
+        else:
+            # Try to parse user_id as int (for DriverWallet.user_id)
+            try:
+                user_id_int = int(user_id)
+                driver_wallet = db.query(DriverWallet).filter(DriverWallet.user_id == user_id_int).first()
+            except ValueError:
+                driver_wallet = None
+        
+        if driver_wallet:
+            nova_balance = driver_wallet.nova_balance or 0
+    except Exception:
+        # DriverWallet doesn't exist or error - ignore
+        pass
+    
     return {
         "balance_cents": balance_cents,
-        "nova_balance": cents_to_nova(balance_cents)
+        "nova_balance": cents_to_nova(balance_cents) + nova_balance
     }
 
 @router.post("/wallet/credit_qs")

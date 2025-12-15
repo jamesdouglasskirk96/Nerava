@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nerava - Scan Merchant QR</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #020617;
+      color: #e5e7eb;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    header {
+      padding: 12px 16px;
+      background: #020617;
+      border-bottom: 1px solid #1f2937;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header .title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+      gap: 16px;
+    }
+    #video-container {
+      position: relative;
+      width: 100%;
+      max-width: 480px;
+      aspect-ratio: 3 / 4;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #020617;
+      border: 1px solid #1f2937;
+    }
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+    #overlay {
+      position: absolute;
+      inset: 0;
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6);
+      border-radius: 16px;
+      pointer-events: none;
+    }
+    #scan-frame {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 70%;
+      max-width: 280px;
+      aspect-ratio: 1 / 1;
+      transform: translate(-50%, -50%);
+      border-radius: 16px;
+      border: 2px solid rgba(56, 189, 248, 0.9);
+      box-shadow: 0 0 30px rgba(56, 189, 248, 0.5);
+    }
+    #status {
+      font-size: 14px;
+      color: #9ca3af;
+      text-align: center;
+      min-height: 1.4em;
+    }
+    button {
+      padding: 10px 16px;
+      border-radius: 9999px;
+      border: none;
+      background: #1d4ed8;
+      color: white;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+    .hint {
+      font-size: 13px;
+      color: #9ca3af;
+      text-align: center;
+      max-width: 420px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title">Scan Merchant QR</div>
+  </header>
+  <main>
+    <div id="video-container">
+      <video id="video" autoplay playsinline></video>
+      <div id="overlay"></div>
+      <div id="scan-frame"></div>
+    </div>
+    <div id="status">Align the merchant QR code inside the frame.</div>
+    <button id="open-camera-btn" type="button">Enable Camera</button>
+    <p class="hint">
+      Your camera stays on device. We only read the merchant QR code and redirect you to complete checkout.
+    </p>
+  </main>
+
+  <script src="https://unpkg.com/@zxing/library@0.20.0"></script>
+  <script>
+    const video = document.getElementById('video');
+    const statusEl = document.getElementById('status');
+    const openBtn = document.getElementById('open-camera-btn');
+
+    let stream = null;
+    let codeReader = null;
+    let scanning = false;
+
+    function setStatus(msg) {
+      statusEl.textContent = msg;
+    }
+
+    async function startCamera() {
+      try {
+        setStatus('Requesting camera access…');
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' },
+          audio: false,
+        });
+        video.srcObject = stream;
+        openBtn.disabled = true;
+        scanning = true;
+        setStatus('Align the merchant QR code inside the frame.');
+        startScanner();
+      } catch (err) {
+        console.error(err);
+        setStatus('Camera access denied. Please allow camera permissions and try again.');
+      }
+    }
+
+    function stopCamera() {
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+        stream = null;
+      }
+      if (codeReader) {
+        try {
+          codeReader.reset();
+        } catch (e) {}
+      }
+      scanning = false;
+    }
+
+    function redirectToCheckout(token) {
+      stopCamera();
+      setStatus('QR detected. Redirecting…');
+      const base = window.location.origin;
+      window.location.href = base + '/qr/' + encodeURIComponent(token);
+    }
+
+    function startScanner() {
+      if (!('ZXing' in window)) {
+        setStatus('Scanner failed to load. Please refresh and try again.');
+        return;
+      }
+      codeReader = new ZXing.BrowserQRCodeReader();
+      codeReader.decodeFromVideoDevice(null, video, (result, err) => {
+        if (!scanning) return;
+        if (result) {
+          const text = result.getText();
+          if (text) {
+            // Expect merchant QR token; if URL, extract last segment
+            try {
+              let token = text;
+              try {
+                const url = new URL(text);
+                const parts = url.pathname.split('/');
+                token = parts[parts.length - 1] || parts[parts.length - 2];
+              } catch (_) {
+                // Not a URL; use raw text
+              }
+              redirectToCheckout(token);
+            } catch (e) {
+              console.error(e);
+              setStatus('Failed to parse QR. Hold steady and try again.');
+            }
+          }
+        }
+      });
+    }
+
+    openBtn.addEventListener('click', startCamera);
+
+    window.addEventListener('pagehide', stopCamera);
+  </script>
+</body>
+</html>
+
+

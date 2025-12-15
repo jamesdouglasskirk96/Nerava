@@ -49,6 +49,11 @@ def test_pkpass_contains_pass_json(db: Session, test_user):
         assert str(test_user.id) not in barcode_message
         assert len(barcode_message) > 20  # Should be a long token
 
+        # Serial number should not contain driver_id and should be derived from opaque token
+        serial = pass_json.get("serialNumber", "")
+        assert str(test_user.id) not in serial
+        assert serial.startswith("nerava-")
+
 
 def test_pkpass_no_driver_id_in_pass_json(db: Session, test_user):
     """Test that pass.json does not contain raw driver_id"""

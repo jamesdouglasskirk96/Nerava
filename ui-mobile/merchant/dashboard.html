@@ -111,6 +111,87 @@
             margin-bottom: 16px;
             color: #333;
         }
+        .billing-card {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .billing-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .billing-row:last-child {
+            border-bottom: none;
+        }
+        .billing-label {
+            color: #666;
+            font-size: 14px;
+        }
+        .billing-value {
+            font-size: 16px;
+            font-weight: 500;
+            color: #333;
+        }
+        .billing-value.total {
+            font-weight: bold;
+            font-size: 18px;
+            color: #34C759;
+        }
+        .billing-info {
+            color: #666;
+            font-size: 12px;
+            margin-top: 8px;
+        }
+        .billing-cta {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+        .btn-primary {
+            flex: 1;
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-primary:hover {
+            background: #0051D5;
+        }
+        .btn-secondary {
+            flex: 1;
+            background: white;
+            color: #007AFF;
+            border: 2px solid #007AFF;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-secondary:hover {
+            background: #f0f7ff;
+        }
+        .sandbox-badge {
+            display: inline-block;
+            background: #fff3cd;
+            color: #856404;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
     </style>
 </head>
 <body>
@@ -142,6 +223,40 @@
                     <div class="stat-value" id="avgDiscount">-</div>
                     <div class="stat-label">Average Discount</div>
                 </div>
+            </div>
+            
+            <div class="billing-card" id="billingCard" style="display: none;">
+                <h2 class="section-title">Billing & Settlement</h2>
+                <div id="sandboxBadge" class="sandbox-badge" style="display: none;">Sandbox</div>
+                <div class="billing-row">
+                    <span class="billing-label">Nova Redeemed (this period):</span>
+                    <span class="billing-value" id="novaRedeemed">$0.00</span>
+                </div>
+                <div class="billing-row">
+                    <span class="billing-label">Platform Fee (<span id="platformFeePercent">15%</span>):</span>
+                    <span class="billing-value" id="platformFee">$0.00</span>
+                </div>
+                <div class="billing-row">
+                    <span class="billing-label">Total Owed:</span>
+                    <span class="billing-value total" id="totalOwed">$0.00</span>
+                </div>
+                <div class="billing-info">
+                    <div>Billing Period: <span id="billingPeriod">-</span></div>
+                    <div>Settlement Method: <span id="settlementMethod">-</span></div>
+                    <div>Status: <span id="billingStatus">-</span></div>
+                </div>
+                <div class="billing-cta">
+                    <button class="btn-primary" id="buyNovaBtn">
+                        Buy Nova
+                    </button>
+                    <button class="btn-secondary" id="addCardBtn">
+                        Add Card on File
+                    </button>
+                </div>
+                <p style="color: #666; font-size: 12px; margin-top: 16px;">
+                    Merchants only pay Nerava's platform fee on redeemed Nova.
+                    Driver rewards are funded separately.
+                </p>
             </div>
             
             <div class="shareables-section">
@@ -181,8 +296,20 @@
                 }
                 const shareables = await shareablesResponse.json();
                 
+                // Fetch billing summary
+                let billingSummary = null;
+                try {
+                    const billingResponse = await fetch(`${API_BASE}/v1/merchants/${merchantId}/billing/summary`);
+                    if (billingResponse.ok) {
+                        billingSummary = await billingResponse.json();
+                    }
+                } catch (billingError) {
+                    console.warn('Failed to load billing summary:', billingError);
+                    // Continue without billing data
+                }
+                
                 // Render dashboard
-                renderDashboard(summary, shareables.lines || []);
+                renderDashboard(summary, shareables.lines || [], billingSummary);
                 
             } catch (error) {
                 console.error('Error loading dashboard:', error);
@@ -190,12 +317,45 @@
             }
         }
         
-        function renderDashboard(summary, shareableLines) {
+        function renderDashboard(summary, shareableLines, billingSummary) {
             // Update stats
             document.getElementById('totalRedemptions').textContent = summary.total_redemptions || 0;
             document.getElementById('totalDiscount').textContent = formatCurrency(summary.total_discount_cents || 0);
             document.getElementById('uniqueDrivers').textContent = summary.unique_drivers || 0;
             document.getElementById('avgDiscount').textContent = formatCurrency(summary.avg_discount_cents || 0);
+            
+            // Render billing section
+            if (billingSummary) {
+                const billingCard = document.getElementById('billingCard');
+                billingCard.style.display = 'block';
+                
+                // Check if demo mode (you can detect this from API or env)
+                const isDemo = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                if (isDemo) {
+                    document.getElementById('sandboxBadge').style.display = 'inline-block';
+                }
+                
+                // Format dates
+                const periodStart = new Date(billingSummary.period_start);
+                const periodEnd = new Date(billingSummary.period_end);
+                const periodStr = `${periodStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${periodEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                
+                document.getElementById('novaRedeemed').textContent = formatCurrency(billingSummary.nova_redeemed_cents || 0);
+                document.getElementById('platformFeePercent').textContent = '15%';
+                document.getElementById('platformFee').textContent = formatCurrency(billingSummary.fee_cents || 0);
+                document.getElementById('totalOwed').textContent = formatCurrency(billingSummary.fee_cents || 0);
+                document.getElementById('billingPeriod').textContent = periodStr;
+                document.getElementById('settlementMethod').textContent = 'Invoice';
+                document.getElementById('billingStatus').textContent = billingSummary.status || 'accruing';
+                
+                // Set up button handlers
+                document.getElementById('buyNovaBtn').onclick = function() {
+                    window.location.href = `/app/merchant/buy-nova.html?merchant_id=${merchantId}`;
+                };
+                document.getElementById('addCardBtn').onclick = function() {
+                    window.location.href = `/app/merchant/billing.html?merchant_id=${merchantId}`;
+                };
+            }
             
             // Render shareables
             const shareablesList = document.getElementById('shareablesList');

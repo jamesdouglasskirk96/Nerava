@@ -2,11 +2,13 @@
 Merchant analytics and summary services
 """
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, func
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
+from calendar import monthrange
 
 from app.utils.log import get_logger
+from app.core.config import settings
 
 logger = get_logger(__name__)
 
@@ -229,4 +231,70 @@ def merchant_offers(db: Session, merchant_id: int) -> Dict[str, List[Dict[str, A
     return {
         "local": local_offers,
         "external": external_offers
+    }
+
+
+def merchant_billing_summary(
+    db: Session,
+    merchant_id: str,
+    period_start: Optional[datetime] = None,
+    period_end: Optional[datetime] = None
+) -> Dict[str, Any]:
+    """
+    Get billing summary for a merchant based on Nova redemptions.
+    
+    Merchants only pay the platform fee on redeemed Nova, not the full redemption amount.
+    
+    Args:
+        db: Database session
+        merchant_id: Merchant ID (string)
+        period_start: Start of billing period (defaults to start of current month)
+        period_end: End of billing period (defaults to end of current month)
+    
+    Returns:
+        {
+            "period_start": "2025-12-01",
+            "period_end": "2025-12-31",
+            "nova_redeemed_cents": 200,
+            "platform_fee_bps": 1500,
+            "platform_fee_cents": 30,
+            "status": "pending",
+            "settlement_method": "invoice"
+        }
+    """
+    # Default to current calendar month
+    now = datetime.utcnow()
+    if not period_start:
+        period_start = datetime(now.year, now.month, 1)
+    if not period_end:
+        # Last day of current month
+        last_day = monthrange(now.year, now.month)[1]
+        period_end = datetime(now.year, now.month, last_day, 23, 59, 59)
+    
+    # Import MerchantRedemption model
+    from app.models.domain import MerchantRedemption
+    
+    # Aggregate redemptions for this merchant in the period
+    result = db.query(
+        func.sum(MerchantRedemption.nova_spent_cents).label('total_nova_cents')
+    ).filter(
+        MerchantRedemption.merchant_id == merchant_id,
+        MerchantRedemption.created_at >= period_start,
+        MerchantRedemption.created_at <= period_end
+    ).first()
+    
+    nova_redeemed_cents = int(result[0]) if result[0] else 0
+    
+    # Calculate platform fee (in basis points, so divide by 10000)
+    platform_fee_bps = settings.PLATFORM_FEE_BPS
+    platform_fee_cents = int(round(nova_redeemed_cents * platform_fee_bps / 10000))
+    
+    return {
+        "period_start": period_start.strftime("%Y-%m-%d"),
+        "period_end": period_end.strftime("%Y-%m-%d"),
+        "nova_redeemed_cents": nova_redeemed_cents,
+        "platform_fee_bps": platform_fee_bps,
+        "platform_fee_cents": platform_fee_cents,
+        "status": "pending",  # Always pending for now
+        "settlement_method": "invoice"  # Future: ach | card
     }

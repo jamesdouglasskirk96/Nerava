@@ -3,7 +3,7 @@ Wallet Pass Router
 
 Endpoints for wallet timeline, pass status, and Apple Wallet pass management.
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -12,11 +12,17 @@ from datetime import datetime
 
 from app.db import get_db
 from app.models import User
-from app.models.domain import DriverWallet
+from app.models.domain import DriverWallet, ApplePassRegistration
 from app.models.vehicle import VehicleAccount
 from app.dependencies.driver import get_current_driver
 from app.services.wallet_timeline import get_wallet_timeline
-from app.services.apple_wallet_pass import create_pkpass_bundle, refresh_pkpass_bundle
+from app.services.apple_wallet_pass import create_pkpass_bundle, refresh_pkpass_bundle, _ensure_wallet_pass_token
+from app.services.google_wallet_service import (
+    ensure_google_wallet_class,
+    create_or_get_google_wallet_object,
+    generate_google_wallet_add_link,
+    GoogleWalletNotConfigured,
+)
 import os
 import logging
 
@@ -50,6 +56,168 @@ class EligibilityResponse(BaseModel):
     reason: Optional[str] = None
 
 
+class GoogleEligibilityResponse(BaseModel):
+    """Google Wallet eligibility response"""
+    eligible: bool
+    reason: Optional[str] = None
+
+
+class GoogleWalletLinkResponse(BaseModel):
+    """Google Wallet link response"""
+    object_id: str
+    state: str
+    add_to_google_wallet_url: Optional[str] = None
+
+
+@router.get("/pass/google/eligibility", response_model=GoogleEligibilityResponse)
+def get_google_wallet_eligibility(
+    user: User = Depends(get_current_driver),
+    db: Session = Depends(get_db),
+):
+    """
+    Check if driver is eligible for Google Wallet pass.
+    
+    Eligibility requires Google Wallet configuration to be present.
+    """
+    try:
+        ensure_google_wallet_class()
+        return GoogleEligibilityResponse(eligible=True)
+    except GoogleWalletNotConfigured:
+        return GoogleEligibilityResponse(
+            eligible=False,
+            reason="Google Wallet is not configured for this environment",
+        )
+    except Exception as e:
+        logger.error(f"Google Wallet eligibility check failed: {e}", exc_info=True)
+        return GoogleEligibilityResponse(
+            eligible=False,
+            reason="Google Wallet is temporarily unavailable",
+        )
+
+
+@router.post("/pass/google/create", response_model=GoogleWalletLinkResponse)
+def create_google_wallet_pass(
+    user: User = Depends(get_current_driver),
+    db: Session = Depends(get_db),
+):
+    """
+    Create a Google Wallet pass for the driver's wallet.
+    
+    - barcode uses wallet_pass_token (opaque)
+    - link points to /app/wallet/
+    """
+    wallet = db.query(DriverWallet).filter(DriverWallet.user_id == user.id).first()
+    if not wallet:
+        wallet = DriverWallet(
+            user_id=user.id,
+            nova_balance=0,
+            energy_reputation_score=0,
+        )
+        db.add(wallet)
+        db.flush()
+
+    token = _ensure_wallet_pass_token(db, user.id)
+
+    try:
+        link = create_or_get_google_wallet_object(db, wallet, token)
+    except GoogleWalletNotConfigured:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail={
+                "error": "GOOGLE_WALLET_DISABLED",
+                "message": "Google Wallet is not configured for this environment.",
+            },
+        )
+    except Exception as e:
+        logger.error(f"Failed to create Google Wallet object: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "GOOGLE_WALLET_CREATION_FAILED",
+                "message": "Failed to create Google Wallet pass",
+            },
+        )
+
+    # Generate Add-to-Wallet link (non-blocking - if it fails, return object_id without link)
+    add_link = None
+    try:
+        add_link = generate_google_wallet_add_link(link.object_id)
+    except Exception as e:
+        logger.warning(f"Failed to generate Google Wallet Add-to-Wallet link: {e}", exc_info=True)
+        # Continue without link - object creation succeeded
+
+    return GoogleWalletLinkResponse(
+        object_id=link.object_id,
+        state=link.state,
+        add_to_google_wallet_url=add_link,
+    )
+
+
+@router.post("/pass/google/refresh", response_model=GoogleWalletLinkResponse)
+def refresh_google_wallet_pass(
+    user: User = Depends(get_current_driver),
+    db: Session = Depends(get_db),
+):
+    """
+    Refresh Google Wallet pass for the driver's wallet.
+    
+    No separate push channel; updates happen immediately.
+    """
+    wallet = db.query(DriverWallet).filter(DriverWallet.user_id == user.id).first()
+    if not wallet:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "GOOGLE_WALLET_NO_WALLET",
+                "message": "Driver wallet not found",
+            },
+        )
+
+    if not wallet.wallet_pass_token:
+        token = _ensure_wallet_pass_token(db, user.id)
+    else:
+        token = wallet.wallet_pass_token
+
+    try:
+        link = create_or_get_google_wallet_object(db, wallet, token)
+    except GoogleWalletNotConfigured:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail={
+                "error": "GOOGLE_WALLET_DISABLED",
+                "message": "Google Wallet is not configured for this environment.",
+            },
+        )
+    except Exception as e:
+        logger.error(f"Failed to refresh Google Wallet object: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "GOOGLE_WALLET_REFRESH_FAILED",
+                "message": "Failed to refresh Google Wallet pass",
+            },
+        )
+
+    # Generate Add-to-Wallet link (non-blocking - if it fails, return object_id without link)
+    add_link = None
+    try:
+        add_link = generate_google_wallet_add_link(link.object_id)
+    except Exception as e:
+        logger.warning(f"Failed to generate Google Wallet Add-to-Wallet link: {e}", exc_info=True)
+        # Continue without link - object refresh succeeded
+
+    return GoogleWalletLinkResponse(
+        object_id=link.object_id,
+        state=link.state,
+        add_to_google_wallet_url=add_link,
+    )
+
+
+class PreviewHeaderError(BaseModel):
+    error: str
+    message: str
+
+
 @router.get("/timeline", response_model=List[TimelineEvent])
 def get_timeline(
     limit: int = Query(20, ge=1, le=100),
@@ -63,8 +231,57 @@ def get_timeline(
     - EARNED events from NovaTransaction (driver_earn)
     - SPENT events from MerchantRedemption (excludes NovaTransaction driver_redeem to avoid duplicates)
     """
-    events = get_wallet_timeline(db, driver_user_id=user.id, limit=limit)
-    return events
+    try:
+        events = get_wallet_timeline(db, driver_user_id=user.id, limit=limit)
+        return events
+    except Exception as e:
+        logger.error(f"Failed to get wallet timeline for user {user.id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "TIMELINE_FETCH_FAILED",
+                "message": f"Failed to fetch wallet timeline: {str(e)}"
+            }
+        )
+
+
+class WalletStatusResponse(BaseModel):
+    """Wallet status including charging state"""
+    charging_detected: bool
+    charging_detected_at: Optional[str]  # ISO string or null
+    message: str
+
+
+@router.get("/status", response_model=WalletStatusResponse)
+def get_wallet_status(
+    user: User = Depends(get_current_driver),
+    db: Session = Depends(get_db)
+):
+    """
+    Get wallet status including charging detection state.
+    
+    Returns:
+    - charging_detected: bool
+    - charging_detected_at: ISO string or null
+    - message: "Charging detected. Nova is accruing." if charging, else ""
+    """
+    wallet = db.query(DriverWallet).filter(DriverWallet.user_id == user.id).first()
+    
+    if not wallet or not wallet.charging_detected:
+        return WalletStatusResponse(
+            charging_detected=False,
+            charging_detected_at=None,
+            message=""
+        )
+    
+    # Charging detected
+    detected_at_iso = wallet.charging_detected_at.isoformat() + "Z" if wallet.charging_detected_at else None
+    
+    return WalletStatusResponse(
+        charging_detected=True,
+        charging_detected_at=detected_at_iso,
+        message="Charging detected. Nova is accruing."
+    )
 
 
 @router.get("/pass/status", response_model=PassStatusResponse)
@@ -110,6 +327,45 @@ def get_pass_status(
         wallet_activity_updated_at=activity_at,
         wallet_pass_last_generated_at=pass_at,
         needs_refresh=needs_refresh
+    )
+
+
+class WalletStatusResponse(BaseModel):
+    """Wallet status including charging state"""
+    charging_detected: bool
+    charging_detected_at: Optional[str]  # ISO string or null
+    message: str
+
+
+@router.get("/status", response_model=WalletStatusResponse)
+def get_wallet_status(
+    user: User = Depends(get_current_driver),
+    db: Session = Depends(get_db)
+):
+    """
+    Get wallet status including charging detection state.
+    
+    Returns:
+    - charging_detected: bool
+    - charging_detected_at: ISO string or null
+    - message: "Charging detected. Nova is accruing." if charging, else ""
+    """
+    wallet = db.query(DriverWallet).filter(DriverWallet.user_id == user.id).first()
+    
+    if not wallet or not wallet.charging_detected:
+        return WalletStatusResponse(
+            charging_detected=False,
+            charging_detected_at=None,
+            message=""
+        )
+    
+    # Charging detected
+    detected_at_iso = wallet.charging_detected_at.isoformat() + "Z" if wallet.charging_detected_at else None
+    
+    return WalletStatusResponse(
+        charging_detected=True,
+        charging_detected_at=detected_at_iso,
+        message="Charging detected. Nova is accruing."
     )
 
 
@@ -301,4 +557,461 @@ def refresh_apple_pass(
                 "error": "PASS_GENERATION_FAILED",
                 "message": "Failed to refresh Apple Wallet pass"
             }
+        )
+
+
+@router.get("/pass/apple/preview")
+def preview_apple_pass(
+    request: Request,
+    user: User = Depends(get_current_driver),
+    db: Session = Depends(get_db),
+):
+    """
+    DEV ONLY: Preview Apple Wallet pass without requiring signing.
+    
+    Requirements:
+    - Header: x-nerava-pass-preview=true
+    - Never used as an installable pass (content-type is application/zip)
+    """
+    preview_header = request.headers.get("x-nerava-pass-preview", "").lower()
+    if preview_header != "true":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "APPLE_WALLET_PREVIEW_HEADER_REQUIRED",
+                "message": "x-nerava-pass-preview=true header required for preview.",
+            },
+        )
+
+    try:
+        bundle_bytes, is_signed = create_pkpass_bundle(db, user.id)
+        # For preview, we do not care if it's signed, but we must not pretend it's installable.
+        return Response(
+            content=bundle_bytes,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": 'attachment; filename="nerava-wallet-preview.pkpass"',
+                "X-Nerava-Pass-Preview": "true",
+                "X-Nerava-Pass-Signed": "true" if is_signed else "false",
+            },
+        )
+    except Exception as e:
+        logger.error(f"Failed to generate Apple Wallet preview pass: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "PASS_PREVIEW_FAILED",
+                "message": "Failed to generate Apple Wallet preview pass",
+            },
+        )
+
+
+def _extract_auth_token(request) -> str:
+    """
+    Extract Apple PassKit authentication token from headers.
+    
+    Supports:
+    - AuthenticationToken: <token>
+    - Authorization: ApplePass <token>
+    """
+    auth_token = request.headers.get("AuthenticationToken")
+    if auth_token:
+        return auth_token
+
+    auth_header = request.headers.get("Authorization") or request.headers.get("authorization")
+    if auth_header and auth_header.startswith("ApplePass "):
+        return auth_header.split(" ", 1)[1].strip()
+
+    return ""
+
+
+def _get_wallet_by_serial(db: Session, serial: str) -> DriverWallet:
+    """
+    Resolve PassKit serial number to DriverWallet using wallet_pass_token.
+    
+    Serial format (no PII):
+    - nerava-<wallet_pass_token>
+    """
+    prefix = "nerava-"
+    if not serial or not serial.startswith(prefix):
+        return None
+    token = serial[len(prefix) :]
+    if not token:
+        return None
+    return (
+        db.query(DriverWallet)
+        .filter(DriverWallet.wallet_pass_token == token)
+        .first()
+    )
+
+
+def _validate_passkit_auth(db: Session, wallet: DriverWallet, request) -> None:
+    """
+    Validate PassKit authentication token against stored encrypted token.
+    """
+    from app.services.token_encryption import decrypt_token, TokenDecryptionError
+
+    client_token = _extract_auth_token(request)
+    if not client_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": "APPLE_WALLET_AUTH_REQUIRED",
+                "message": "Missing AuthenticationToken header",
+            },
+        )
+
+    if not wallet.apple_authentication_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": "APPLE_WALLET_AUTH_INVALID",
+                "message": "Pass authentication token not provisioned",
+            },
+        )
+
+    try:
+        stored_token = decrypt_token(wallet.apple_authentication_token)
+    except TokenDecryptionError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": "APPLE_WALLET_AUTH_INVALID",
+                "message": "Failed to validate authentication token",
+            },
+        )
+
+    if client_token != stored_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": "APPLE_WALLET_AUTH_INVALID",
+                "message": "Invalid authentication token",
+            },
+        )
+
+
+@router.post(
+    "/pass/apple/devices/{deviceLibraryId}/registrations/{passTypeId}/{serial}",
+    status_code=status.HTTP_201_CREATED,
+)
+async def register_apple_pass_device(
+    deviceLibraryId: str,
+    passTypeId: str,
+    serial: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Apple PassKit: Register a device for pass updates.
+    
+    Validates AuthenticationToken and stores/upserts ApplePassRegistration.
+    """
+    # Resolve wallet by serial
+    wallet = _get_wallet_by_serial(db, serial)
+    if not wallet:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": "APPLE_WALLET_PASS_NOT_FOUND",
+                "message": "Pass not found for serial",
+            },
+        )
+
+    # Validate auth token
+    _validate_passkit_auth(db, wallet, request)
+
+    # Read pushToken from body (Apple sends JSON with "pushToken")
+    push_token = None
+    try:
+        import json as json_lib
+        body_bytes = await request.body()
+        if body_bytes:
+            body = json_lib.loads(body_bytes)
+            push_token = body.get("pushToken")
+    except Exception:
+        # If body parsing fails, continue without push_token
+        pass
+
+    # Upsert registration
+    registration = (
+        db.query(ApplePassRegistration)
+        .filter(
+            ApplePassRegistration.driver_wallet_id == wallet.user_id,
+            ApplePassRegistration.device_library_identifier == deviceLibraryId,
+            ApplePassRegistration.pass_type_identifier == passTypeId,
+            ApplePassRegistration.serial_number == serial,
+        )
+        .first()
+    )
+
+    now = datetime.utcnow()
+    import uuid
+
+    if registration:
+        registration.push_token = push_token or registration.push_token
+        registration.last_seen_at = now
+        registration.is_active = True
+    else:
+        registration = ApplePassRegistration(
+            id=str(uuid.uuid4()),
+            driver_wallet_id=wallet.user_id,
+            device_library_identifier=deviceLibraryId,
+            push_token=push_token,
+            pass_type_identifier=passTypeId,
+            serial_number=serial,
+            created_at=now,
+            last_seen_at=now,
+            is_active=True,
+        )
+        db.add(registration)
+
+    db.commit()
+
+    # Per Apple PassKit spec: POST registration returns HTTP 201 with empty body
+    return Response(status_code=status.HTTP_201_CREATED)
+
+
+@router.delete(
+    "/pass/apple/devices/{deviceLibraryId}/registrations/{passTypeId}/{serial}",
+    status_code=status.HTTP_200_OK,
+)
+def unregister_apple_pass_device(
+    deviceLibraryId: str,
+    passTypeId: str,
+    serial: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Apple PassKit: Unregister a device from pass updates.
+    """
+    wallet = _get_wallet_by_serial(db, serial)
+    if not wallet:
+        # Per spec, 200 is acceptable even if registration doesn't exist
+        return {"status": "OK"}
+
+    _validate_passkit_auth(db, wallet, request)
+
+    registration = (
+        db.query(ApplePassRegistration)
+        .filter(
+            ApplePassRegistration.driver_wallet_id == wallet.user_id,
+            ApplePassRegistration.device_library_identifier == deviceLibraryId,
+            ApplePassRegistration.pass_type_identifier == passTypeId,
+            ApplePassRegistration.serial_number == serial,
+        )
+        .first()
+    )
+
+    now = datetime.utcnow()
+
+    if registration:
+        registration.is_active = False
+        registration.last_seen_at = now
+        db.commit()
+
+    # Per Apple PassKit spec: DELETE registration returns HTTP 200 with empty body
+    return Response(status_code=status.HTTP_200_OK)
+
+
+@router.get(
+    "/pass/apple/devices/{deviceLibraryId}/registrations/{passTypeId}",
+    status_code=status.HTTP_200_OK,
+)
+def list_apple_pass_registrations(
+    deviceLibraryId: str,
+    passTypeId: str,
+    passesUpdatedSince: Optional[str] = Query(None, alias="passesUpdatedSince"),  # noqa: N803 - match Apple spec
+    request: Request = None,  # FastAPI will inject this
+    db: Session = Depends(get_db),
+):
+    """
+    Apple PassKit: List serials for a device that should be updated.
+    
+    Implements passesUpdatedSince filtering:
+    - Parse passesUpdatedSince as unix timestamp (int)
+    - Only return serialNumbers for wallets where:
+      - wallet_activity_updated_at > passesUpdatedSince OR
+      - wallet_pass_last_generated_at is NULL
+    - Return lastUpdated as unix timestamp (int), not ISO
+    """
+    # We don't know which serial Apple is asking about here, but Apple will call
+    # GET /passes/{passTypeId}/{serial} separately per serial, where we validate auth again.
+    # Here, we just ensure the AuthenticationToken is present (basic guard).
+    token = _extract_auth_token(request) if request else ""
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": "APPLE_WALLET_AUTH_REQUIRED",
+                "message": "Missing AuthenticationToken header",
+            },
+        )
+
+    # Find all active registrations for this device + passTypeId
+    regs = (
+        db.query(ApplePassRegistration)
+        .filter(
+            ApplePassRegistration.device_library_identifier == deviceLibraryId,
+            ApplePassRegistration.pass_type_identifier == passTypeId,
+            ApplePassRegistration.is_active == True,  # noqa: E712
+        )
+        .all()
+    )
+
+    # Parse passesUpdatedSince if provided (unix timestamp)
+    updated_since_dt = None
+    if passesUpdatedSince:
+        try:
+            updated_since_ts = int(passesUpdatedSince)
+            updated_since_dt = datetime.utcfromtimestamp(updated_since_ts)
+        except (ValueError, TypeError, OSError):
+            # Invalid timestamp - ignore filter
+            logger.warning(f"Invalid passesUpdatedSince: {passesUpdatedSince}")
+            updated_since_dt = None
+
+    # Filter serials based on wallet activity timestamps
+    serials = []
+    now = datetime.utcnow()
+    now_ts = int(now.timestamp())
+
+    for r in regs:
+        # Get wallet for this registration
+        wallet = db.query(DriverWallet).filter(DriverWallet.user_id == r.driver_wallet_id).first()
+        if not wallet:
+            continue
+
+        # Apply passesUpdatedSince filter
+        if updated_since_dt:
+            # Only include if wallet_activity_updated_at > passesUpdatedSince OR wallet_pass_last_generated_at is NULL
+            activity_updated = wallet.wallet_activity_updated_at
+            pass_generated = wallet.wallet_pass_last_generated_at
+
+            if activity_updated and activity_updated > updated_since_dt:
+                # Activity updated after the threshold - include
+                serials.append(r.serial_number)
+            elif pass_generated is None:
+                # Pass never generated - include
+                serials.append(r.serial_number)
+            # Otherwise, skip (pass was generated and no activity since threshold)
+        else:
+            # No filter - include all
+            serials.append(r.serial_number)
+
+        # Update last_seen_at
+        r.last_seen_at = now
+
+    if regs:
+        db.commit()
+
+    # Return lastUpdated as unix timestamp (int), not ISO
+    return {
+        "serialNumbers": serials,
+        "lastUpdated": str(now_ts),  # Apple expects string representation of unix timestamp
+    }
+
+
+@router.get(
+    "/pass/apple/passes/{passTypeId}/{serial}",
+    status_code=status.HTTP_200_OK,
+)
+def get_apple_pass_for_device(
+    passTypeId: str,
+    serial: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Apple PassKit: Return the signed .pkpass for a given serial.
+    
+    Rules:
+    - Validate AuthenticationToken
+    - Look up wallet by serialNumber (nerava-<wallet_pass_token>)
+    - Update last_seen_at on any matching registrations
+    - Return ONLY signed pkpass (no unsigned responses)
+    - Update wallet_pass_last_generated_at on fetch
+    """
+    wallet = _get_wallet_by_serial(db, serial)
+    if not wallet:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": "APPLE_WALLET_PASS_NOT_FOUND",
+                "message": "Pass not found for serial",
+            },
+        )
+
+    _validate_passkit_auth(db, wallet, request)
+
+    # Ensure signing is enabled; PassKit web service must never serve unsigned passes
+    import os as _os
+
+    signing_enabled = _os.getenv("APPLE_WALLET_SIGNING_ENABLED", "false").lower() == "true"
+    cert_path = _os.getenv("APPLE_WALLET_CERT_PATH")
+    key_path = _os.getenv("APPLE_WALLET_KEY_PATH")
+
+    if (
+        not signing_enabled
+        or not cert_path
+        or not key_path
+        or not _os.path.exists(cert_path)
+        or not _os.path.exists(key_path)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail={
+                "error": "APPLE_WALLET_SIGNING_DISABLED",
+                "message": "Apple Wallet pass signing is not enabled on this environment.",
+            },
+        )
+
+    try:
+        bundle_bytes, is_signed = refresh_pkpass_bundle(db, wallet.user_id)
+        if not is_signed:
+            # Unsigned pkpass must never pretend to be installable
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail={
+                    "error": "APPLE_WALLET_SIGNING_DISABLED",
+                    "message": "Apple Wallet pass signing failed.",
+                },
+            )
+
+        # Update wallet_pass_last_generated_at
+        wallet.wallet_pass_last_generated_at = datetime.utcnow()
+
+        # Update last_seen_at on registrations for this serial
+        now = datetime.utcnow()
+        regs = (
+            db.query(ApplePassRegistration)
+            .filter(
+                ApplePassRegistration.driver_wallet_id == wallet.user_id,
+                ApplePassRegistration.serial_number == serial,
+                ApplePassRegistration.is_active == True,  # noqa: E712
+            )
+            .all()
+        )
+        for r in regs:
+            r.last_seen_at = now
+
+        db.commit()
+
+        return Response(
+            content=bundle_bytes,
+            media_type="application/vnd.apple.pkpass",
+            headers={
+                "Content-Disposition": 'attachment; filename="nerava-wallet.pkpass"'
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to serve Apple Wallet pass via PassKit service: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "PASS_GENERATION_FAILED",
+                "message": "Failed to generate Apple Wallet pass",
+            },
         )

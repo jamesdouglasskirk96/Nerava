@@ -240,27 +240,61 @@
                     <div class="balance-value" id="novaBalance">-</div>
                 </div>
                 
-                <div class="input-group">
-                    <label for="orderTotal">Order Total ($)</label>
-                    <input 
-                        type="number" 
-                        id="orderTotal" 
-                        placeholder="0.00" 
-                        step="0.01" 
-                        min="0"
-                        oninput="updateDiscountPreview()"
-                    >
+                <!-- Predefined reward UI -->
+                <div id="rewardCard" style="display: none; background: #e8f5e9; padding: 20px; border-radius: 12px; margin-bottom: 20px; text-align: center;">
+                    <div style="font-size: 18px; font-weight: 600; color: #2e7d32; margin-bottom: 8px;">
+                        Redeem <span id="rewardNovaAmount">300</span> Nova
+                    </div>
+                    <div style="font-size: 24px; font-weight: bold; color: #333; margin-bottom: 8px;" id="rewardTitle">
+                        Free Coffee
+                    </div>
+                    <div style="color: #666; font-size: 14px;" id="rewardDescription">
+                        Redeem for a free coffee
+                    </div>
                 </div>
                 
-                <div id="discountPreview" style="display: none; background: #fff3cd; padding: 12px; border-radius: 8px; margin-bottom: 20px;">
-                    <div style="display: flex; justify-content: space-between;">
-                        <span>Estimated Discount:</span>
-                        <span id="previewDiscount" style="font-weight: 600; color: #856404;">$0.00</span>
+                <!-- Recent orders picker -->
+                <div id="ordersSection" style="display: none; margin-bottom: 20px;">
+                    <div style="font-size: 16px; font-weight: 600; color: #333; margin-bottom: 12px;">
+                        Recent purchases (last 10 minutes)
+                    </div>
+                    <div id="ordersList" style="background: #f9f9f9; border-radius: 12px; padding: 16px; max-height: 300px; overflow-y: auto;">
+                        <div id="ordersLoading" style="text-align: center; color: #666; padding: 20px;">
+                            Loading recent orders...
+                        </div>
+                        <div id="ordersEmpty" style="text-align: center; color: #666; padding: 20px; display: none;">
+                            No recent orders found. You can enter order total manually below.
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Standard checkout form (order total input) -->
+                <div id="standardCheckout" style="display: none;">
+                    <div class="input-group">
+                        <label for="orderTotal">Order Total ($) <span style="color: #666; font-weight: normal; font-size: 14px;">(if not selecting from above)</span></label>
+                        <input 
+                            type="number" 
+                            id="orderTotal" 
+                            placeholder="0.00" 
+                            step="0.01" 
+                            min="0"
+                            oninput="updateDiscountPreview()"
+                        >
+                    </div>
+                    
+                    <div id="discountPreview" style="display: none; background: #fff3cd; padding: 12px; border-radius: 8px; margin-bottom: 20px;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>Estimated Discount:</span>
+                            <span id="previewDiscount" style="font-weight: 600; color: #856404;">$0.00</span>
+                        </div>
                     </div>
                 </div>
                 
                 <button id="redeemButton" class="button" onclick="redeemNova()">
-                    Redeem Nova
+                    Apply 300 Nova
+                </button>
+                <button id="redeemRewardButton" class="button" style="display: none;" onclick="redeemReward()">
+                    Accept
                 </button>
             </div>
             
@@ -310,10 +344,13 @@
         let checkoutData = null;
         let authToken = null; // In a real app, get from localStorage or session
         let redemptionId = null; // Store redemption ID after successful redemption
+        let selectedOrderId = null; // Selected Square order ID
+        let recentOrders = []; // Recent orders from Square
         
         // Load checkout info on page load
         if (token) {
             loadCheckoutInfo();
+            loadRecentOrders();
         } else {
             showError('QR token is required. Please scan a valid QR code.');
         }
@@ -352,6 +389,99 @@
             }
         }
         
+        async function loadRecentOrders() {
+            try {
+                const response = await fetch(`${API_BASE}/v1/checkout/orders?token=${token}&minutes=10`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken || ''}`
+                    }
+                });
+                
+                if (!response.ok) {
+                    // If orders endpoint fails, just hide the orders section
+                    console.warn('Failed to load recent orders:', response.status);
+                    return;
+                }
+                
+                const data = await response.json();
+                recentOrders = data.orders || [];
+                
+                // Check localStorage for last created demo order
+                const lastDemoOrderId = localStorage.getItem('lastDemoOrderId');
+                if (lastDemoOrderId && !recentOrders.find(o => o.order_id === lastDemoOrderId)) {
+                    // Add cached order if not in recent orders
+                    recentOrders.unshift({
+                        order_id: lastDemoOrderId,
+                        display: 'Last demo order',
+                        total_cents: 850,
+                        created_at: new Date().toISOString()
+                    });
+                }
+                
+                renderOrdersList();
+                
+            } catch (error) {
+                console.error('Error loading recent orders:', error);
+                // Don't show error - just hide orders section
+            }
+        }
+        
+        function renderOrdersList() {
+            const ordersList = document.getElementById('ordersList');
+            const ordersLoading = document.getElementById('ordersLoading');
+            const ordersEmpty = document.getElementById('ordersEmpty');
+            const ordersSection = document.getElementById('ordersSection');
+            
+            ordersLoading.style.display = 'none';
+            
+            if (recentOrders.length === 0) {
+                ordersEmpty.style.display = 'block';
+                ordersSection.style.display = 'block';
+                return;
+            }
+            
+            ordersEmpty.style.display = 'none';
+            ordersSection.style.display = 'block';
+            
+            ordersList.innerHTML = recentOrders.map(order => {
+                const isSelected = selectedOrderId === order.order_id ? 'checked' : '';
+                return `
+                    <label style="display: flex; align-items: center; padding: 12px; margin-bottom: 8px; background: white; border-radius: 8px; cursor: pointer; border: 2px solid ${isSelected ? '#007AFF' : '#e0e0e0'};" onclick="selectOrder('${order.order_id}', ${order.total_cents})">
+                        <input type="radio" name="order" value="${order.order_id}" ${isSelected} style="margin-right: 12px;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; color: #333; margin-bottom: 4px;">${escapeHtml(order.display || `$${(order.total_cents / 100).toFixed(2)}`)}</div>
+                            <div style="font-size: 12px; color: #666;">${formatOrderTime(order.created_at)}</div>
+                        </div>
+                    </label>
+                `;
+            }).join('');
+        }
+        
+        function selectOrder(orderId, totalCents) {
+            selectedOrderId = orderId;
+            // Update order total input
+            document.getElementById('orderTotal').value = (totalCents / 100).toFixed(2);
+            updateDiscountPreview();
+            renderOrdersList(); // Re-render to show selection
+        }
+        
+        function formatOrderTime(isoString) {
+            try {
+                const date = new Date(isoString);
+                return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+            } catch (e) {
+                return '';
+            }
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        let currentReward = null; // Store current reward data
+        
         function renderCheckoutForm(data) {
             document.getElementById('loading').style.display = 'none';
             document.getElementById('checkoutForm').style.display = 'block';
@@ -359,6 +489,31 @@
             document.getElementById('merchantName').textContent = data.merchant.name;
             document.getElementById('perkLabel').textContent = data.merchant.perk_label || 'Nova discount available';
             document.getElementById('novaBalance').textContent = formatNova(data.driver.nova_balance_cents || 0);
+            
+            // Check if there's a predefined reward
+            if (data.merchant.reward) {
+                currentReward = data.merchant.reward;
+                // Show reward card, hide standard checkout
+                document.getElementById('rewardCard').style.display = 'block';
+                document.getElementById('standardCheckout').style.display = 'none';
+                document.getElementById('redeemButton').style.display = 'none';
+                document.getElementById('redeemRewardButton').style.display = 'block';
+                
+                // Populate reward info
+                document.getElementById('rewardNovaAmount').textContent = data.merchant.reward.nova_amount;
+                document.getElementById('rewardTitle').textContent = data.merchant.reward.title;
+                if (data.merchant.reward.description) {
+                    document.getElementById('rewardDescription').textContent = data.merchant.reward.description;
+                } else {
+                    document.getElementById('rewardDescription').style.display = 'none';
+                }
+            } else {
+                // Show standard checkout, hide reward card
+                document.getElementById('rewardCard').style.display = 'none';
+                document.getElementById('standardCheckout').style.display = 'block';
+                document.getElementById('redeemButton').style.display = 'block';
+                document.getElementById('redeemRewardButton').style.display = 'none';
+            }
         }
         
         function updateDiscountPreview() {
@@ -382,14 +537,52 @@
             }
         }
         
+        async function redeemReward() {
+            if (!currentReward) return;
+            
+            const button = document.getElementById('redeemRewardButton');
+            button.disabled = true;
+            button.textContent = 'Processing...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/v1/checkout/redeem-reward`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken || ''}`
+                    },
+                    body: JSON.stringify({
+                        reward_id: currentReward.id
+                    })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || error.detail?.message || 'Redemption failed');
+                }
+                
+                const result = await response.json();
+                redemptionId = result.redemption_id;
+                
+                // Show success with reward-specific data
+                showRewardSuccess(result);
+                
+            } catch (error) {
+                console.error('Error redeeming reward:', error);
+                showError(error.message || 'Failed to redeem reward. Please try again.');
+                button.disabled = false;
+                button.textContent = 'Accept';
+            }
+        }
+        
         async function redeemNova() {
             if (!checkoutData) return;
             
             const orderTotalInput = document.getElementById('orderTotal');
             const orderTotal = parseFloat(orderTotalInput.value) || 0;
             
-            if (orderTotal <= 0) {
-                showError('Please enter a valid order total.');
+            if (orderTotal <= 0 && !selectedOrderId) {
+                showError('Please select an order or enter a valid order total.');
                 return;
             }
             
@@ -399,21 +592,43 @@
             button.textContent = 'Processing...';
             
             try {
+                const requestBody = {
+                    qr_token: token,
+                    order_total_cents: orderTotalCents
+                };
+                
+                // Add square_order_id if an order was selected
+                if (selectedOrderId) {
+                    requestBody.square_order_id = selectedOrderId;
+                    // Store in localStorage for demo resilience
+                    localStorage.setItem('lastDemoOrderId', selectedOrderId);
+                }
+                
                 const response = await fetch(`${API_BASE}/v1/checkout/redeem`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${authToken || ''}`
                     },
-                    body: JSON.stringify({
-                        qr_token: token,
-                        order_total_cents: orderTotalCents
-                    })
+                    body: JSON.stringify(requestBody)
                 });
                 
                 if (!response.ok) {
                     const error = await response.json();
-                    throw new Error(error.message || error.detail || 'Redemption failed');
+                    const errorDetail = error.detail || {};
+                    
+                    // Handle specific error cases
+                    if (errorDetail.error === 'ORDER_ALREADY_REDEEMED') {
+                        throw new Error('This order has already been redeemed.');
+                    } else if (errorDetail.error === 'SQUARE_NOT_CONNECTED') {
+                        throw new Error('Merchant is not connected to Square. Please enter order total manually.');
+                    } else if (errorDetail.error === 'INSUFFICIENT_NOVA') {
+                        throw new Error(errorDetail.message || 'Insufficient Nova balance.');
+                    } else if (errorDetail.error === 'SQUARE_ORDER_TOTAL_UNAVAILABLE') {
+                        throw new Error('Could not retrieve order total from Square. Please enter order total manually.');
+                    } else {
+                        throw new Error(errorDetail.message || error.message || error.detail || 'Redemption failed');
+                    }
                 }
                 
                 const result = await response.json();
@@ -424,7 +639,29 @@
                 console.error('Error redeeming Nova:', error);
                 showError(error.message || 'Failed to redeem Nova. Please try again.');
                 button.disabled = false;
-                button.textContent = 'Redeem Nova';
+                button.textContent = 'Apply 300 Nova';
+            }
+        }
+        
+        function showRewardSuccess(result) {
+            document.getElementById('checkoutForm').style.display = 'none';
+            document.getElementById('successScreen').style.display = 'block';
+            
+            // For reward redemption, order_total_cents is 0
+            document.getElementById('successOrderTotal').textContent = formatCurrency(0);
+            document.getElementById('successDiscount').textContent = formatCurrency(result.nova_redeemed);
+            document.getElementById('successRemainingNova').textContent = formatNova(result.remaining_nova_cents);
+            
+            const timestamp = new Date().toLocaleString();
+            document.getElementById('successTimestamp').textContent = `Redeemed at ${timestamp}`;
+            
+            // Update present link with redemption_id
+            if (redemptionId) {
+                const presentLink = document.getElementById('presentLink');
+                presentLink.href = `/app/wallet/present.html?redemption_id=${redemptionId}`;
+                presentLink.style.display = 'block';
+            } else {
+                document.getElementById('presentLink').style.display = 'none';
             }
         }
         

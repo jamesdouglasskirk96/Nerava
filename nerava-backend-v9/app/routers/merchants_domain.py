@@ -11,12 +11,14 @@ import uuid
 
 from app.db import get_db
 from app.models import User
-from app.models_domain import DomainMerchant, NovaTransaction
+from app.models_domain import DomainMerchant, NovaTransaction, MerchantFeeLedger
 from app.services.auth_service import AuthService
 from app.services.nova_service import NovaService
 from app.services.merchant_share_card import generate_share_card
 from app.dependencies_domain import require_merchant_admin, get_current_user
 from app.routers.drivers_domain import haversine_distance
+from datetime import date, datetime
+from calendar import monthrange
 
 router = APIRouter(prefix="/v1/merchants", tags=["merchants-v1"])
 
@@ -326,5 +328,73 @@ def get_merchant_share_card(
                 "error": "SHARE_CARD_GENERATION_FAILED",
                 "message": "Failed to generate share card"
             }
+        )
+
+
+class BillingSummaryResponse(BaseModel):
+    """Response for merchant billing summary"""
+    period_start: str  # ISO date string
+    period_end: str  # ISO date string
+    nova_redeemed_cents: int
+    fee_cents: int
+    status: str
+
+
+@router.get("/{merchant_id}/billing/summary", response_model=BillingSummaryResponse)
+def get_billing_summary(
+    merchant_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get current month's billing summary for a merchant.
+    
+    Returns the current month's ledger row or defaults if not found.
+    
+    Args:
+        merchant_id: Merchant ID
+        db: Database session
+        
+    Returns:
+        BillingSummaryResponse with period, nova_redeemed_cents, fee_cents, and status
+    """
+    # Verify merchant exists
+    merchant = db.query(DomainMerchant).filter(DomainMerchant.id == merchant_id).first()
+    if not merchant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": "MERCHANT_NOT_FOUND",
+                "message": f"Merchant {merchant_id} not found"
+            }
+        )
+    
+    # Determine current month period
+    now = datetime.utcnow()
+    period_start = date(now.year, now.month, 1)
+    last_day = monthrange(now.year, now.month)[1]
+    period_end = date(now.year, now.month, last_day)
+    
+    # Get ledger row for current month
+    ledger = db.query(MerchantFeeLedger).filter(
+        MerchantFeeLedger.merchant_id == merchant_id,
+        MerchantFeeLedger.period_start == period_start
+    ).first()
+    
+    if ledger:
+        return BillingSummaryResponse(
+            period_start=ledger.period_start.isoformat(),
+            period_end=ledger.period_end.isoformat() if ledger.period_end else period_end.isoformat(),
+            nova_redeemed_cents=ledger.nova_redeemed_cents,
+            fee_cents=ledger.fee_cents,
+            status=ledger.status
+        )
+    else:
+        # Return defaults if no ledger row exists yet
+        return BillingSummaryResponse(
+            period_start=period_start.isoformat(),
+            period_end=period_end.isoformat(),
+            nova_redeemed_cents=0,
+            fee_cents=0,
+            status="accruing"
         )
 

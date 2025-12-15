@@ -79,6 +79,8 @@ Core services:
 - `merchant_onboarding.py` - Merchant creation/validation logic + Square onboarding
 - `qr_service.py` - QR/code logic (token → merchant/campaign resolution, status checks) + merchant QR tokens
 - `square_service.py` - Square OAuth and merchant data fetching (AOV calculation)
+- `square_orders.py` - Square Orders API integration (order lookup, creation, payment for demo)
+- `merchant_fee.py` - Merchant fee ledger management (15% fee on Nova redeemed)
 - `merchant_signs.py` - PDF sign generation for merchant QR codes
 - `merchant_reporting.py` - Merchant summary statistics and shareable social content
 - `payments.py` - Payment provider wrapper (Stripe/Square/Toast)
@@ -98,6 +100,36 @@ Merchants can connect their Square account to enable Nova rewards for EV drivers
    - `GET /v1/merchants/square/connect` - Returns Square OAuth authorization URL with CSRF state
    - Merchant authorizes in Square
    - `GET /v1/merchants/square/callback?code=...&state=...` - Completes OAuth and onboards merchant
+
+### Square Order Lookup & Redemption
+
+When a merchant is connected to Square, drivers can select their recent Square orders during checkout:
+
+1. **Order Lookup:**
+   - `GET /v1/checkout/orders?token=<qr_token>&minutes=10` - Lists recent Square orders (last 10 minutes)
+   - Returns normalized order list with `order_id`, `total_cents`, `display` string
+   - If merchant not connected, returns empty orders list (fallback to manual entry)
+
+2. **Redemption with Square Order:**
+   - `POST /v1/checkout/redeem` accepts optional `square_order_id`
+   - When provided:
+     - Fetches order total from Square API
+     - Validates order location matches merchant location
+     - Prevents duplicate redemption (409 if already redeemed)
+     - Records merchant fee (15% of Nova redeemed)
+   - Response includes `square_order_id` and `merchant_fee_cents`
+
+3. **Merchant Fee Ledger:**
+   - Fees are tracked per merchant per month in `merchant_fee_ledger` table
+   - Fee = 15% of total Nova redeemed in the period
+   - Status: `accruing` → `invoiced` → `paid`
+   - `GET /v1/merchants/{merchant_id}/billing/summary` returns current month's ledger
+
+4. **Demo Endpoints (Swagger):**
+   - `POST /v1/demo/square/orders/create` - Create Square sandbox order
+   - `POST /v1/demo/square/payments/create` - Create payment for order
+   - Requires `DEMO_MODE=true` and `X-Demo-Admin-Key` header
+   - Only works in `SQUARE_ENV=sandbox` mode
    - OAuth state is validated to prevent CSRF attacks
 
 2. **Merchant Onboarding:**
@@ -327,8 +359,12 @@ The wallet system provides a complete end-to-end experience for drivers to view 
 - `GET /v1/wallet/timeline?limit=20` - Get unified timeline of earned/spent events
 - `GET /v1/wallet/pass/status` - Get Apple Wallet pass refresh status
 - `GET /v1/wallet/pass/apple/eligibility` - Check if driver is eligible for Apple Wallet pass
-- `POST /v1/wallet/pass/apple/create` - Create Apple Wallet pass (returns .pkpass file)
-- `POST /v1/wallet/pass/apple/refresh` - Refresh existing Apple Wallet pass
+- `POST /v1/wallet/pass/apple/create` - Create Apple Wallet pass (returns signed .pkpass file)
+- `POST /v1/wallet/pass/apple/refresh` - Refresh existing Apple Wallet pass (signed only)
+- `GET /v1/wallet/pass/apple/preview` - Dev-only unsigned preview (requires `x-nerava-pass-preview=true`)
+- `GET /v1/wallet/pass/google/eligibility` - Check if driver is eligible for Google Wallet
+- `POST /v1/wallet/pass/google/create` - Create Google Wallet pass/object
+- `POST /v1/wallet/pass/google/refresh` - Refresh Google Wallet pass/object
 
 **Timeline Rules:**
 - EARNED events come from `NovaTransaction` rows where `type == "driver_earn"`
@@ -374,14 +410,35 @@ The wallet system provides a complete end-to-end experience for drivers to view 
 - `PUBLIC_BASE_URL` - Base URL for web service endpoints (e.g., `https://my.nerava.network`)
 
 **Signing Behavior:**
-- When `APPLE_WALLET_SIGNING_ENABLED=false` or certificates are missing, endpoints return `501 Not Implemented` with error code `APPLE_WALLET_SIGNING_DISABLED`
-- Unsigned passes are NOT installable on iPhone - this prevents user confusion
-- In dev/testing, the generator still creates a structurally correct pkpass bundle for inspection
+- When `APPLE_WALLET_SIGNING_ENABLED=false` or certificates are missing, Apple Wallet endpoints return `501 Not Implemented` with error code `APPLE_WALLET_SIGNING_DISABLED`
+- PassKit web service (`/v1/wallet/pass/apple/...`) **never** serves unsigned passes; failures surface as `APPLE_WALLET_SIGNING_DISABLED` or `PASS_GENERATION_FAILED`
+- Unsigned passes are only available via the dev-only preview endpoint and are served as `application/zip` so they do not masquerade as installable passes
 
 **Security:**
 - Barcode payload uses an opaque `wallet_pass_token` (random, stored in DB)
-- Never includes `driver_id` or PII in pass.json or barcode
+- Serial number is derived from the opaque token (`nerava-<wallet_pass_token>`), never from `user_id` or merchant identifiers
+- PassKit `authenticationToken` is a separate opaque secret, stored encrypted-at-rest on `DriverWallet.apple_authentication_token`
 - Tokens are generated using `secrets.token_urlsafe(24)`
+
+### Google Wallet
+
+The backend can mirror the driver wallet into Google Wallet using opaque tokens and immediate object updates.
+
+**Flow:**
+- `GET /v1/wallet/pass/google/eligibility` checks configuration and returns why it's disabled if not configured
+- `POST /v1/wallet/pass/google/create` creates a Google Wallet object linked to the driver's wallet
+- `POST /v1/wallet/pass/google/refresh` re-syncs the object after wallet activity
+
+**Behavior:**
+- Google Wallet barcode uses the same opaque `wallet_pass_token` as Apple Wallet barcodes (no PII)
+- Google Wallet links always direct to `/app/wallet/` for checkout and activity details
+- There is no push channel; objects are updated synchronously on wallet activity and refresh calls
+
+**Configuration:**
+- `GOOGLE_WALLET_ENABLED=true` - Enable automatic updates on wallet activity
+- `GOOGLE_WALLET_ISSUER_ID` - Google Wallet issuer ID
+- `GOOGLE_WALLET_CLASS_ID` - Wallet class ID (e.g., `nerava.wallet`)
+- `GOOGLE_WALLET_SERVICE_ACCOUNT_JWT` - Pre-signed JWT for Google Wallet REST API calls
 
 ### Wallet Activity Tracking
 
@@ -503,6 +560,76 @@ SQUARE_APPLICATION_SECRET=your_secret
 SQUARE_REDIRECT_URL=https://your-domain.com/v1/merchants/square/callback
 SQUARE_ENV=sandbox  # or "production"
 ```
+
+### Square Sandbox OAuth Testing
+
+Enable end-to-end Square SANDBOX OAuth testing using a public URL for local development.
+
+**Steps:**
+
+1. **Start backend on port 8001:**
+   ```bash
+   uvicorn app.main_simple:app --reload --port 8001
+   ```
+
+2. **Start public tunnel (choose one):**
+   ```bash
+   # Option 1: Cloudflare Tunnel
+   cloudflared tunnel --url http://localhost:8001
+   
+   # Option 2: ngrok
+   ngrok http 8001
+   ```
+
+3. **Set environment variables:**
+   ```bash
+   # Use the tunnel URL from step 2
+   export PUBLIC_BASE_URL=https://<tunnel-url>
+   export SQUARE_APPLICATION_ID_SANDBOX=sandbox-sq0idb-mql6xZXEwWYsmpYjqCMOCQ
+   export SQUARE_APPLICATION_SECRET_SANDBOX=<your-secret>
+   # SQUARE_REDIRECT_URL_SANDBOX will default to PUBLIC_BASE_URL/v1/merchants/square/callback
+   ```
+
+4. **Get OAuth URL:**
+   ```bash
+   # Open in browser or curl:
+   GET /v1/merchants/square/sandbox/connect
+   ```
+   Returns:
+   ```json
+   {
+     "url": "https://connect.squareupsandbox.com/oauth2/authorize?...",
+     "redirect_uri": "https://<tunnel-url>/v1/merchants/square/callback"
+   }
+   ```
+
+5. **Configure Square Sandbox:**
+   - Copy the `redirect_uri` from step 4
+   - Add it to your Square Sandbox application's OAuth redirect URLs in the Square Developer Dashboard
+
+6. **Complete OAuth flow:**
+   - Open the `url` from step 4 in your browser
+   - Authorize the application in Square Sandbox
+   - You'll be redirected back to your callback endpoint
+
+7. **Verify callback succeeds:**
+   The callback endpoint (`/v1/merchants/square/callback`) will return:
+   ```json
+   {
+     "success": true,
+     "merchant_id": "...",
+     "message": "Square sandbox connected",
+     "name": "...",
+     "perk": {...},
+     "qr": {...}
+   }
+   ```
+
+**Notes:**
+- This is SANDBOX ONLY - no production credentials are used
+- The `PUBLIC_BASE_URL` is used for OAuth redirects, wallet pass URLs, and QR URLs
+- OAuth state is validated for CSRF protection
+- Tokens are encrypted at rest and never logged
 
 ### Database Migration
 

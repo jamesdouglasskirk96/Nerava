@@ -143,6 +143,65 @@
             padding: 20px;
             color: #666;
         }
+        .charging-banner {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: 600;
+            display: none;
+        }
+        .demo-controls {
+            background: #f1f5f9;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .demo-controls h3 {
+            font-size: 14px;
+            color: #64748b;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .demo-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        .demo-button {
+            flex: 1;
+            background: white;
+            color: #1e40af;
+            border: 1px solid #cbd5e1;
+            padding: 10px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .demo-button:hover {
+            background: #f8fafc;
+        }
+        .demo-button.start {
+            background: #10b981;
+            color: white;
+            border-color: #10b981;
+        }
+        .demo-button.start:hover {
+            background: #059669;
+        }
+        .demo-button.stop {
+            background: #ef4444;
+            color: white;
+            border-color: #ef4444;
+        }
+        .demo-button.stop:hover {
+            background: #dc2626;
+        }
     </style>
 </head>
 <body>
@@ -154,8 +213,16 @@
         
         <div id="loading" class="loading">Loading wallet...</div>
         <div id="error" class="error" style="display: none;"></div>
+        <div id="chargingBanner" class="charging-banner">Charging detected. Nova is accruing.</div>
         
         <div id="walletContent" style="display: none;">
+            <div id="demoControls" class="demo-controls">
+                <h3>Demo Controls</h3>
+                <div class="demo-buttons">
+                    <button class="demo-button start" onclick="startChargingDemo()">Simulate Charging Start</button>
+                    <button class="demo-button stop" onclick="stopChargingDemo()">Simulate Charging Stop</button>
+                </div>
+            </div>
             <div class="balance-card">
                 <div class="balance-label">Nova Balance</div>
                 <div class="balance-value" id="balanceValue">$0.00</div>
@@ -164,7 +231,7 @@
             
             <div class="actions">
                 <button class="button" onclick="addToAppleWallet()">Add to Apple Wallet</button>
-                <button class="button secondary" onclick="window.location.href='/app/checkout.html'">Checkout</button>
+                <button class="button secondary" onclick="window.location.href='/app/scan.html'">Scan Merchant QR</button>
             </div>
             
             <div class="timeline">
@@ -180,6 +247,137 @@
         
         // Load wallet data on page load
         loadWallet();
+        loadWalletStatus();
+        
+        // Poll wallet status every 3 seconds when page is visible
+        setInterval(() => {
+            if (!document.hidden) {
+                loadWalletStatus();
+            }
+        }, 3000);
+        
+        // Poll wallet balance every 5 seconds when page is visible (matches Nova accrual interval)
+        setInterval(() => {
+            if (!document.hidden) {
+                loadWallet();
+            }
+        }, 5000);
+        
+        async function loadWalletStatus() {
+            try {
+                const statusResponse = await fetch(`${API_BASE}/v1/wallet/status`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken || ''}`
+                    }
+                });
+                
+                if (statusResponse.ok) {
+                    const statusData = await statusResponse.json();
+                    updateChargingBanner(statusData);
+                }
+            } catch (error) {
+                // Silently fail - status is optional
+                console.debug('Could not load wallet status:', error);
+            }
+        }
+        
+        function updateChargingBanner(statusData) {
+            const banner = document.getElementById('chargingBanner');
+            if (statusData.charging_detected && statusData.message) {
+                banner.textContent = statusData.message;
+                banner.style.display = 'block';
+            } else {
+                banner.style.display = 'none';
+            }
+        }
+        
+        async function startChargingDemo() {
+            try {
+                const response = await fetch(`${API_BASE}/v1/demo/charging/start`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken || ''}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.status === 404) {
+                    const error = await response.json();
+                    alert('Demo mode is not enabled. ' + (error.detail?.message || ''));
+                    return;
+                }
+                
+                if (response.status === 401) {
+                    const error = await response.json();
+                    alert('Please log in to use demo features. ' + (error.detail?.message || 'Authentication required'));
+                    return;
+                }
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    let errorMsg = 'Failed to start charging demo';
+                    try {
+                        const error = JSON.parse(errorText);
+                        errorMsg = error.detail?.message || error.detail || errorMsg;
+                    } catch (e) {
+                        errorMsg = errorText || errorMsg;
+                    }
+                    alert(errorMsg);
+                    return;
+                }
+                
+                const data = await response.json();
+                loadWalletStatus(); // Refresh status immediately
+                loadWallet(); // Reload wallet to show updated activity
+                
+            } catch (error) {
+                console.error('Error starting charging demo:', error);
+                alert('Failed to start charging demo. Please try again.');
+            }
+        }
+        
+        async function stopChargingDemo() {
+            try {
+                const response = await fetch(`${API_BASE}/v1/demo/charging/stop`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken || ''}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.status === 404) {
+                    const error = await response.json();
+                    alert('Demo mode is not enabled. ' + (error.detail?.message || ''));
+                    return;
+                }
+                
+                if (response.status === 401) {
+                    const error = await response.json();
+                    alert('Please log in to use demo features. ' + (error.detail?.message || 'Authentication required'));
+                    return;
+                }
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    let errorMsg = 'Failed to stop charging demo';
+                    try {
+                        const error = JSON.parse(errorText);
+                        errorMsg = error.detail?.message || error.detail || errorMsg;
+                    } catch (e) {
+                        errorMsg = errorText || errorMsg;
+                    }
+                    alert(errorMsg);
+                    return;
+                }
+                
+                loadWalletStatus(); // Refresh status immediately
+                
+            } catch (error) {
+                console.error('Error stopping charging demo:', error);
+                alert('Failed to stop charging demo. Please try again.');
+            }
+        }
         
         async function loadWallet() {
             try {
@@ -215,9 +413,65 @@
                 
                 renderWallet(balanceData, timelineData);
                 
+                // Check if demo mode is enabled (try demo endpoint)
+                checkDemoMode();
+                
             } catch (error) {
                 console.error('Error loading wallet:', error);
                 showError('Failed to load wallet. Please try again.');
+            }
+        }
+        
+        async function checkDemoMode() {
+            try {
+                const demoControls = document.getElementById('demoControls');
+                if (!demoControls) return;
+                
+                // Check if OPTIONS works (endpoint exists)
+                const optionsResponse = await fetch(`${API_BASE}/v1/demo/charging/start`, {
+                    method: 'OPTIONS'
+                });
+                
+                // If OPTIONS doesn't work, endpoint doesn't exist - hide controls
+                if (!optionsResponse.ok && optionsResponse.status !== 200) {
+                    demoControls.style.display = 'none';
+                    return;
+                }
+                
+                // Endpoint exists - now check if demo is enabled by trying POST
+                const testResponse = await fetch(`${API_BASE}/v1/demo/charging/start`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken || ''}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                // Parse response to check demo status
+                if (testResponse.status === 404) {
+                    try {
+                        const error = await testResponse.json();
+                        if (error.detail?.error === 'DEMO_DISABLED') {
+                            // Demo mode is disabled - hide controls
+                            demoControls.style.display = 'none';
+                            return;
+                        }
+                    } catch (e) {
+                        // Couldn't parse error - assume demo might be available
+                    }
+                }
+                
+                // If we get 401, demo exists but needs auth - show controls
+                // If we get 200, demo works - show controls
+                // If we get other status, show controls (endpoint exists)
+                demoControls.style.display = 'block';
+                
+            } catch (error) {
+                // Network error or endpoint doesn't exist - hide demo controls
+                const demoControls = document.getElementById('demoControls');
+                if (demoControls) {
+                    demoControls.style.display = 'none';
+                }
             }
         }
         
@@ -227,8 +481,13 @@
             
             // Format balance
             const balanceCents = balanceData.balance_cents || 0;
-            const balanceDollars = (balanceCents / 100).toFixed(2);
             const novaBalance = balanceData.nova_balance || 0;
+            
+            // Calculate dollar balance: 1 Nova = $0.01 USD
+            // Combine cents from CreditLedger and Nova balance converted to cents
+            const novaBalanceCents = novaBalance * 1; // 1 Nova = 1 cent = $0.01
+            const totalBalanceCents = balanceCents + novaBalanceCents;
+            const balanceDollars = (totalBalanceCents / 100).toFixed(2);
             
             document.getElementById('balanceValue').textContent = `$${balanceDollars}`;
             document.getElementById('balanceNova').textContent = `${novaBalance} Nova`;
