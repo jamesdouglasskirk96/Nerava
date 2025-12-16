@@ -258,13 +258,13 @@
                     <div style="font-size: 16px; font-weight: 600; color: #333; margin-bottom: 12px;">
                         Recent purchases (last 10 minutes)
                     </div>
-                    <div id="ordersList" style="background: #f9f9f9; border-radius: 12px; padding: 16px; max-height: 300px; overflow-y: auto;">
-                        <div id="ordersLoading" style="text-align: center; color: #666; padding: 20px;">
-                            Loading recent orders...
-                        </div>
-                        <div id="ordersEmpty" style="text-align: center; color: #666; padding: 20px; display: none;">
-                            No recent orders found. You can enter order total manually below.
-                        </div>
+                    <div id="ordersLoading" style="text-align: center; color: #666; padding: 20px; background: #f9f9f9; border-radius: 12px;">
+                        Loading recent orders...
+                    </div>
+                    <div id="ordersEmpty" style="text-align: center; color: #666; padding: 20px; display: none; background: #f9f9f9; border-radius: 12px;">
+                        No recent orders found. You can enter order total manually below.
+                    </div>
+                    <div id="ordersList" style="background: #f9f9f9; border-radius: 12px; padding: 16px; max-height: 300px; overflow-y: auto; display: none;">
                     </div>
                 </div>
                 
@@ -398,13 +398,20 @@
                 });
                 
                 if (!response.ok) {
-                    // If orders endpoint fails, just hide the orders section
+                    // If orders endpoint fails, try demo orders
                     console.warn('Failed to load recent orders:', response.status);
+                    await loadDemoOrders();
                     return;
                 }
                 
                 const data = await response.json();
                 recentOrders = data.orders || [];
+                
+                // If no orders from Square, try demo orders
+                if (recentOrders.length === 0) {
+                    await loadDemoOrders();
+                    return;
+                }
                 
                 // Check localStorage for last created demo order
                 const lastDemoOrderId = localStorage.getItem('lastDemoOrderId');
@@ -422,7 +429,30 @@
                 
             } catch (error) {
                 console.error('Error loading recent orders:', error);
-                // Don't show error - just hide orders section
+                await loadDemoOrders();
+            }
+        }
+        
+        async function loadDemoOrders() {
+            try {
+                // Try demo orders endpoint (works without Square)
+                const demoResponse = await fetch(`${API_BASE}/v1/demo/square/demo-orders?token=${token}`, {
+                    headers: {
+                        'X-Demo-Admin-Key': 'demo-admin-key'
+                    }
+                });
+                
+                if (demoResponse.ok) {
+                    const demoData = await demoResponse.json();
+                    recentOrders = demoData.orders || [];
+                    renderOrdersList();
+                } else {
+                    // No demo orders available either
+                    renderOrdersList();
+                }
+            } catch (error) {
+                console.log('Demo orders not available:', error);
+                renderOrdersList();
             }
         }
         
@@ -432,29 +462,36 @@
             const ordersEmpty = document.getElementById('ordersEmpty');
             const ordersSection = document.getElementById('ordersSection');
             
-            ordersLoading.style.display = 'none';
+            // Hide loading state
+            if (ordersLoading) ordersLoading.style.display = 'none';
             
             if (recentOrders.length === 0) {
-                ordersEmpty.style.display = 'block';
-                ordersSection.style.display = 'block';
+                if (ordersEmpty) ordersEmpty.style.display = 'block';
+                if (ordersList) ordersList.style.display = 'none';
+                if (ordersSection) ordersSection.style.display = 'block';
                 return;
             }
             
-            ordersEmpty.style.display = 'none';
-            ordersSection.style.display = 'block';
+            // Show orders list, hide empty state
+            if (ordersEmpty) ordersEmpty.style.display = 'none';
+            if (ordersList) ordersList.style.display = 'block';
+            if (ordersSection) ordersSection.style.display = 'block';
             
-            ordersList.innerHTML = recentOrders.map(order => {
-                const isSelected = selectedOrderId === order.order_id ? 'checked' : '';
-                return `
-                    <label style="display: flex; align-items: center; padding: 12px; margin-bottom: 8px; background: white; border-radius: 8px; cursor: pointer; border: 2px solid ${isSelected ? '#007AFF' : '#e0e0e0'};" onclick="selectOrder('${order.order_id}', ${order.total_cents})">
-                        <input type="radio" name="order" value="${order.order_id}" ${isSelected} style="margin-right: 12px;">
-                        <div style="flex: 1;">
-                            <div style="font-weight: 600; color: #333; margin-bottom: 4px;">${escapeHtml(order.display || `$${(order.total_cents / 100).toFixed(2)}`)}</div>
-                            <div style="font-size: 12px; color: #666;">${formatOrderTime(order.created_at)}</div>
-                        </div>
-                    </label>
-                `;
-            }).join('');
+            if (ordersList) {
+                ordersList.innerHTML = recentOrders.map(order => {
+                    const isSelected = selectedOrderId === order.order_id ? 'checked' : '';
+                    const displayText = order.display || `$${(order.total_cents / 100).toFixed(2)}`;
+                    return `
+                        <label style="display: flex; align-items: center; padding: 12px; margin-bottom: 8px; background: white; border-radius: 8px; cursor: pointer; border: 2px solid ${isSelected ? '#007AFF' : '#e0e0e0'};" onclick="selectOrder('${order.order_id}', ${order.total_cents})">
+                            <input type="radio" name="order" value="${order.order_id}" ${isSelected} style="margin-right: 12px; flex-shrink: 0;">
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="font-weight: 600; color: #333; margin-bottom: 4px; white-space: nowrap;">${escapeHtml(displayText)}</div>
+                                <div style="font-size: 12px; color: #666;">${formatOrderTime(order.created_at)}</div>
+                            </div>
+                        </label>
+                    `;
+                }).join('');
+            }
         }
         
         function selectOrder(orderId, totalCents) {
@@ -597,8 +634,9 @@
                     order_total_cents: orderTotalCents
                 };
                 
-                // Add square_order_id if an order was selected
-                if (selectedOrderId) {
+                // Add square_order_id if a real (non-demo) order was selected
+                // Demo orders start with "demo-" and shouldn't be passed to Square
+                if (selectedOrderId && !selectedOrderId.startsWith('demo-')) {
                     requestBody.square_order_id = selectedOrderId;
                     // Store in localStorage for demo resilience
                     localStorage.setItem('lastDemoOrderId', selectedOrderId);

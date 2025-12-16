@@ -117,44 +117,36 @@ export async function initWalletPage(rootEl) {
     reputation_score: 0,
   };
 
-  // Apply demo redemption state if available
+  // Apply demo redemption state if available (takes priority over API)
   const demo = loadDemoRedemption();
-  if (demo) {
-    if (typeof demo.wallet_nova_balance === 'number' && demo.wallet_nova_balance > 0) {
-      walletData.nova_balance = demo.wallet_nova_balance;
-      walletData.balance_dollars = (demo.wallet_nova_balance * 0.10).toFixed(2);
-      walletData.balance_cents = Math.round(demo.wallet_nova_balance * 10);
-    }
+  if (demo && typeof demo.wallet_nova_balance === 'number' && demo.wallet_nova_balance > 0) {
+    // Demo mode: use fixed demo balance, skip API to prevent accumulation
+    walletData.nova_balance = demo.wallet_nova_balance;
+    walletData.balance_dollars = (demo.wallet_nova_balance * 0.10).toFixed(2);
+    walletData.balance_cents = Math.round(demo.wallet_nova_balance * 10);
     if (demo.reputation_score) {
       walletData.reputation_score = demo.reputation_score;
     }
-  }
+    console.log('[Wallet] Using demo state (skipping API):', walletData);
+  } else {
+    // No demo state: load from API
+    try {
+      const wallet = await apiDriverWallet();
+      console.log('[Wallet] Wallet (v1) data:', wallet);
 
-  // Try to load from v1 API
-  try {
-    const wallet = await apiDriverWallet();
-    console.log('[Wallet] Wallet (v1) data:', wallet);
-
-    if (wallet) {
-      if (typeof wallet.nova_balance === 'number') {
-        walletData.nova_balance = wallet.nova_balance;
-        walletData.balance_dollars = (wallet.nova_balance * 0.10).toFixed(2);
-        walletData.balance_cents = Math.round(wallet.nova_balance * 10);
+      if (wallet) {
+        if (typeof wallet.nova_balance === 'number') {
+          walletData.nova_balance = wallet.nova_balance;
+          walletData.balance_dollars = (wallet.nova_balance * 0.10).toFixed(2);
+          walletData.balance_cents = Math.round(wallet.nova_balance * 10);
+        }
+        if (wallet.reputation_score) {
+          walletData.reputation_score = wallet.reputation_score;
+        }
       }
-
-      // Merge with demo state if demo has higher balance
-      if (demo && demo.wallet_nova_balance > walletData.nova_balance) {
-        walletData.nova_balance = demo.wallet_nova_balance;
-        walletData.balance_dollars = (demo.wallet_nova_balance * 0.10).toFixed(2);
-        walletData.balance_cents = Math.round(demo.wallet_nova_balance * 10);
-      }
-
-      if (wallet.reputation_score) {
-        walletData.reputation_score = wallet.reputation_score;
-      }
+    } catch (e) {
+      console.warn('[Wallet] Failed to load wallet from API:', e.message);
     }
-  } catch (e) {
-    console.warn('[Wallet] Failed to load wallet from API:', e.message);
   }
 
   // Update balance display

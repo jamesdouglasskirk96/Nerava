@@ -11,7 +11,7 @@ import uuid
 
 from app.db import get_db
 from app.models import User
-from app.models_domain import DomainMerchant, NovaTransaction, MerchantFeeLedger
+from app.models.domain import DomainMerchant, NovaTransaction, MerchantFeeLedger
 from app.services.auth_service import AuthService
 from app.services.nova_service import NovaService
 from app.services.merchant_share_card import generate_share_card
@@ -73,7 +73,7 @@ def register_merchant(
 ):
     """Register a new merchant (creates user + merchant)"""
     # Validate zone exists and location is within zone bounds
-    from app.models_domain import Zone
+    from app.models.domain import Zone
     zone = db.query(Zone).filter(Zone.slug == request.zone_slug).first()
     if not zone:
         raise HTTPException(

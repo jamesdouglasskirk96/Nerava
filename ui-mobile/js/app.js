@@ -3,7 +3,6 @@
 // No need to set localStorage.NERAVA_URL unless explicitly overriding
 
 import { loadDemoState } from './core/demo.js';
-import { ensureDemoBanner } from './components/demoBanner.js';
 import { apiGet, apiPost } from './core/api.js';
 import { ensureMap, drawRoute, clearRoute, getMap } from './core/map.js';
 
@@ -504,9 +503,8 @@ async function initApp() {
   
   console.log('[BOOT] Using canonical /v1 backend (no pilot endpoints)');
   
-  // Load demo state and show banner if enabled
+  // Load demo state (banner removed - trigger demo from Swagger)
   await loadDemoState();
-  ensureDemoBanner();
   
   // Add keyboard shortcut for dev tab
   document.addEventListener('keydown', (e)=>{ 

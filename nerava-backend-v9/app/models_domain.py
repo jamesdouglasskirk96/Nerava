@@ -8,6 +8,9 @@ from .models.domain import (
     NovaTransaction,
     DomainChargingSession,
     StripePayment,
+    MerchantRedemption,
+    MerchantReward,
+    MerchantFeeLedger,
 )
 
 __all__ = [
@@ -18,4 +21,7 @@ __all__ = [
     "NovaTransaction",
     "DomainChargingSession",
     "StripePayment",
+    "MerchantRedemption",
+    "MerchantReward",
+    "MerchantFeeLedger",
 ]

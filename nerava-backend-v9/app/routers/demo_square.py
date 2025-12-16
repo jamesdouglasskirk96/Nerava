@@ -4,11 +4,12 @@ Demo Square Endpoints
 Swagger-driven demo endpoints for creating Square sandbox orders and payments.
 Only enabled when DEMO_MODE=true and requires X-Demo-Admin-Key header.
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Header, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
 import logging
+import httpx
 
 from ..db import get_db
 from ..models.domain import DomainMerchant
@@ -16,10 +17,11 @@ from ..services.square_orders import (
     create_order,
     create_payment_for_order,
     SquareNotConnectedError,
-    SquareError
+    SquareError,
+    get_square_token_for_merchant,
+    _get_square_base_url
 )
 from ..core.config import settings
-import os
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +41,13 @@ def verify_demo_admin_key(x_demo_admin_key: Optional[str] = Header(None)) -> Non
             detail="Demo mode is not enabled"
         )
     
-    demo_admin_key = os.getenv("DEMO_ADMIN_KEY", "")
-    if not demo_admin_key:
+    if not settings.DEMO_ADMIN_KEY:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="DEMO_ADMIN_KEY not configured"
         )
     
-    if not x_demo_admin_key or x_demo_admin_key != demo_admin_key:
+    if not x_demo_admin_key or x_demo_admin_key != settings.DEMO_ADMIN_KEY:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing X-Demo-Admin-Key header"
@@ -78,6 +79,15 @@ class CreatePaymentResponse(BaseModel):
     """Response from payment creation"""
     payment_id: str
     status: str
+
+
+class VerifyResponse(BaseModel):
+    """Response from Square token verification"""
+    ok: bool
+    location_id: Optional[str] = None
+    merchant_name: Optional[str] = None
+    error: Optional[str] = None
+    message: Optional[str] = None
 
 
 @router.post("/orders/create", response_model=CreateOrderResponse)
@@ -207,4 +217,174 @@ async def create_square_payment(
                 "message": str(e)
             }
         )
+
+
+@router.get("/verify", response_model=VerifyResponse)
+async def verify_square_token(
+    merchant_id: str = Query(..., description="Merchant ID to verify"),
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_demo_admin_key)
+):
+    """
+    Verify Square token decryption and API access (demo-only).
+    
+    This endpoint:
+    1. Decrypts the merchant's Square access token
+    2. Calls Square API GET /v2/locations to verify token works
+    3. Returns structured response with verification status
+    
+    Requires:
+    - DEMO_MODE=true
+    - X-Demo-Admin-Key header with valid key
+    
+    Args:
+        merchant_id: Merchant ID to verify
+        db: Database session
+        
+    Returns:
+        VerifyResponse with ok status, location_id, merchant_name, or error details
+    """
+    # Get merchant
+    merchant = db.query(DomainMerchant).filter(
+        DomainMerchant.id == merchant_id
+    ).first()
+    
+    if not merchant:
+        return VerifyResponse(
+            ok=False,
+            error="MERCHANT_NOT_FOUND",
+            message=f"Merchant {merchant_id} not found"
+        )
+    
+    # Check if merchant has Square token
+    if not merchant.square_access_token:
+        return VerifyResponse(
+            ok=False,
+            error="SQUARE_NOT_CONNECTED",
+            message="Merchant is not connected to Square"
+        )
+    
+    try:
+        # Decrypt token
+        access_token = get_square_token_for_merchant(merchant)
+        
+        # Get Square base URL
+        base_url = _get_square_base_url()
+        
+        # Call Square API to verify token
+        locations_url = f"{base_url}/v2/locations"
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                locations_url,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Square-Version": "2024-01-18",
+                }
+            )
+            
+            if response.status_code != 200:
+                error_detail = response.text
+                logger.error(f"Square Locations API failed: {response.status_code} - {error_detail}")
+                return VerifyResponse(
+                    ok=False,
+                    error="SQUARE_API_ERROR",
+                    message=f"Square API returned {response.status_code}: {error_detail[:200]}"
+                )
+            
+            data = response.json()
+            locations = data.get("locations", [])
+            
+            if not locations:
+                return VerifyResponse(
+                    ok=False,
+                    error="NO_LOCATIONS",
+                    message="No Square locations found for merchant"
+                )
+            
+            # Get first location and merchant name
+            location = locations[0]
+            location_id = location.get("id")
+            merchant_name = merchant.name
+            
+            logger.info(f"Successfully verified Square token for merchant {merchant_id}, location: {location_id}")
+            
+            return VerifyResponse(
+                ok=True,
+                location_id=location_id,
+                merchant_name=merchant_name
+            )
+            
+    except SquareNotConnectedError as e:
+        return VerifyResponse(
+            ok=False,
+            error="SQUARE_NOT_CONNECTED",
+            message=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error verifying Square token for merchant {merchant_id}: {e}", exc_info=True)
+        return VerifyResponse(
+            ok=False,
+            error="VERIFICATION_ERROR",
+            message=f"Failed to verify token: {str(e)}"
+        )
+
+
+# ============== Demo Orders (works without Square) ==============
+
+class DemoOrder(BaseModel):
+    order_id: str
+    created_at: str
+    total_cents: int
+    currency: str = "USD"
+    display: str
+
+
+class DemoOrdersResponse(BaseModel):
+    merchant_id: str
+    merchant_name: str
+    orders: list[DemoOrder]
+
+
+@router.get("/demo-orders", response_model=DemoOrdersResponse)
+async def get_demo_orders(
+    token: str = Query(..., description="Merchant QR token"),
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_demo_admin_key)
+):
+    """
+    Get mock demo orders for testing checkout flow without Square.
+    
+    This returns hardcoded demo orders that can be used for testing
+    the redemption flow when Square is not connected.
+    """
+    # Find merchant by QR token
+    merchant = db.query(DomainMerchant).filter(
+        DomainMerchant.qr_token == token
+    ).first()
+    
+    if not merchant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "MERCHANT_NOT_FOUND", "message": "Merchant not found for this QR token"}
+        )
+    
+    from datetime import datetime, timedelta
+    
+    # Generate single demo order with consistent ID for the session
+    now = datetime.utcnow()
+    demo_orders = [
+        DemoOrder(
+            order_id="demo-order-001",
+            created_at=(now - timedelta(minutes=2)).isoformat() + "Z",
+            total_cents=1250,
+            display="$12.50 - Coffee & Pastry"
+        ),
+    ]
+    
+    return DemoOrdersResponse(
+        merchant_id=merchant.id,
+        merchant_name=merchant.name,
+        orders=demo_orders
+    )
 

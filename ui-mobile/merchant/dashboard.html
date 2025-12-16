@@ -342,8 +342,8 @@
                 
                 document.getElementById('novaRedeemed').textContent = formatCurrency(billingSummary.nova_redeemed_cents || 0);
                 document.getElementById('platformFeePercent').textContent = '15%';
-                document.getElementById('platformFee').textContent = formatCurrency(billingSummary.fee_cents || 0);
-                document.getElementById('totalOwed').textContent = formatCurrency(billingSummary.fee_cents || 0);
+                document.getElementById('platformFee').textContent = formatCurrency(billingSummary.platform_fee_cents || 0);
+                document.getElementById('totalOwed').textContent = formatCurrency(billingSummary.platform_fee_cents || 0);
                 document.getElementById('billingPeriod').textContent = periodStr;
                 document.getElementById('settlementMethod').textContent = 'Invoice';
                 document.getElementById('billingStatus').textContent = billingSummary.status || 'accruing';

@@ -44,6 +44,7 @@ class Settings(BaseModel):
     
     # Demo Mode Settings
     DEMO_MODE: bool = os.getenv("DEMO_MODE", "false").lower() == "true"
+    DEMO_ADMIN_KEY: str = os.getenv("DEMO_ADMIN_KEY", "")
     
     # Environment and Debug Settings
     ENV: str = os.getenv("ENV", "dev")  # dev, staging, prod

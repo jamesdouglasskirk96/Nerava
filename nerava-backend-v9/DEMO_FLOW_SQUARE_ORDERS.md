@@ -2,6 +2,35 @@
 
 This document describes the complete demo flow for Square Order Lookup + Select Your Order + Apply 300 Nova + Merchant Fee Ledger.
 
+## Setup: Stable Encryption Key
+
+**CRITICAL:** Before running the demo, you must set a stable `TOKEN_ENCRYPTION_KEY` in your `.env` file. This key encrypts Square access tokens at rest. If the key changes, existing tokens cannot be decrypted.
+
+1. **Set the encryption key in `.env`:**
+   ```bash
+   TOKEN_ENCRYPTION_KEY=TaHJDO442DD22r5y-jQYw_ig0MUouqbA0LjCS7e9C2M=
+   ```
+   - This key must be exactly 44 characters (base64-encoded 32-byte Fernet key)
+   - **Do not change this key** after setting it, or you'll need to re-onboard merchants
+
+2. **Set the demo admin key:**
+   ```bash
+   DEMO_ADMIN_KEY=demo-admin-key
+   ```
+
+3. **Restart the backend** after setting these variables.
+
+4. **Re-onboard Square sandbox merchant** (if tokens were encrypted with a different key):
+   - Visit: `GET /v1/merchants/square/sandbox/connect`
+   - Complete the Square OAuth flow
+   - This will store a fresh token encrypted with the current key
+
+5. **Verify token works:**
+   - Call: `GET /v1/demo/square/verify?merchant_id=<merchant_id>`
+   - Add header: `X-Demo-Admin-Key: <DEMO_ADMIN_KEY>`
+   - Should return: `{"ok": true, "location_id": "...", "merchant_name": "..."}`
+   - If verification fails, redo the Square OAuth flow
+
 ## Prerequisites
 
 1. **Environment Variables:**
@@ -10,7 +39,7 @@ This document describes the complete demo flow for Square Order Lookup + Select 
    DEMO_MODE=true
    DEMO_ADMIN_KEY=<your-secure-key>
    PUBLIC_BASE_URL=<your-tunnel-url>
-   TOKEN_ENCRYPTION_KEY=<your-encryption-key>
+   TOKEN_ENCRYPTION_KEY=TaHJDO442DD22r5y-jQYw_ig0MUouqbA0LjCS7e9C2M=
    ```
 
 2. **Merchant Setup:**
@@ -192,18 +221,36 @@ pytest tests/integration/test_checkout_square.py
 
 ## Troubleshooting
 
-1. **Orders not showing:**
+1. **Token decryption fails / "SQUARE_NOT_CONNECTED" errors:**
+   - **Root cause:** Token was encrypted with a different `TOKEN_ENCRYPTION_KEY` than the one currently set
+   - **Solution:** 
+     - Ensure `TOKEN_ENCRYPTION_KEY` is set in `.env` and matches the key used when the token was stored
+     - If you don't have the original key, you must re-onboard the merchant:
+       1. Call `GET /v1/merchants/square/sandbox/connect`
+       2. Complete Square OAuth flow
+       3. Verify with `GET /v1/demo/square/verify?merchant_id=<merchant_id>`
+   - **Prevention:** Never change `TOKEN_ENCRYPTION_KEY` after setting it
+
+2. **Orders not showing:**
    - Check merchant is connected to Square (`square_access_token` set)
    - Verify `SQUARE_ENV=sandbox`
    - Check order was created within last 10 minutes
+   - Verify token works: `GET /v1/demo/square/verify?merchant_id=<merchant_id>`
 
-2. **Redemption fails:**
+3. **Redemption fails:**
    - Verify driver has sufficient Nova balance
    - Check order hasn't been redeemed already
    - Ensure merchant location matches order location
+   - Verify Square token is working (use verify endpoint)
 
-3. **Fee not recording:**
+4. **Fee not recording:**
    - Check `merchant_fee_ledger` table exists (migration 027)
    - Verify `record_merchant_fee` is called after redemption
    - Check logs for errors
+
+5. **Verify endpoint returns error:**
+   - If `ok: false` with `SQUARE_NOT_CONNECTED` or `VERIFICATION_ERROR`:
+     - Token may be encrypted with wrong key → redo OAuth
+     - Token may be expired → redo OAuth
+     - Square API may be down → check Square status
 

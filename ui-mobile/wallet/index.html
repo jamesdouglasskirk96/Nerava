@@ -216,7 +216,8 @@
         <div id="chargingBanner" class="charging-banner">Charging detected. Nova is accruing.</div>
         
         <div id="walletContent" style="display: none;">
-            <div id="demoControls" class="demo-controls">
+            <!-- Demo controls hidden to prevent accidental Nova accrual -->
+            <div id="demoControls" class="demo-controls" style="display: none;">
                 <h3>Demo Controls</h3>
                 <div class="demo-buttons">
                     <button class="demo-button start" onclick="startChargingDemo()">Simulate Charging Start</button>
@@ -413,8 +414,8 @@
                 
                 renderWallet(balanceData, timelineData);
                 
-                // Check if demo mode is enabled (try demo endpoint)
-                checkDemoMode();
+                // Demo controls disabled - uncomment to re-enable
+                // checkDemoMode();
                 
             } catch (error) {
                 console.error('Error loading wallet:', error);
@@ -492,12 +493,57 @@
             document.getElementById('balanceValue').textContent = `$${balanceDollars}`;
             document.getElementById('balanceNova').textContent = `${novaBalance} Nova`;
             
-            // Render timeline
+            // Render timeline - group Nova earned by day, show individual redemptions
             const timelineList = document.getElementById('timelineList');
             if (timelineData.length === 0) {
                 timelineList.innerHTML = '<div class="empty-timeline">No activity yet. Start earning Nova!</div>';
             } else {
-                timelineList.innerHTML = timelineData.map(event => {
+                // Separate earned vs spent, group earned by day
+                const earnedByDay = {};
+                const redemptions = [];
+                
+                timelineData.forEach(event => {
+                    if (event.type === 'EARNED') {
+                        // Group by date (use subtitle which usually has date info, or created_at)
+                        const dateKey = event.created_at ? event.created_at.split('T')[0] : 'Today';
+                        if (!earnedByDay[dateKey]) {
+                            earnedByDay[dateKey] = { total_cents: 0, count: 0 };
+                        }
+                        earnedByDay[dateKey].total_cents += event.amount_cents || 0;
+                        earnedByDay[dateKey].count += 1;
+                    } else {
+                        // Redemptions shown individually
+                        redemptions.push(event);
+                    }
+                });
+                
+                // Build combined timeline: daily earnings + individual redemptions
+                const combinedItems = [];
+                
+                // Add daily earnings summaries
+                Object.entries(earnedByDay).forEach(([date, data]) => {
+                    const displayDate = formatDateForDisplay(date);
+                    combinedItems.push({
+                        type: 'EARNED',
+                        title: `Nova Earned`,
+                        subtitle: `${displayDate} · ${data.count} session${data.count > 1 ? 's' : ''}`,
+                        amount_cents: data.total_cents,
+                        sortDate: date
+                    });
+                });
+                
+                // Add individual redemptions
+                redemptions.forEach(event => {
+                    combinedItems.push({
+                        ...event,
+                        sortDate: event.created_at ? event.created_at.split('T')[0] : '0000-00-00'
+                    });
+                });
+                
+                // Sort by date descending (most recent first)
+                combinedItems.sort((a, b) => (b.sortDate || '').localeCompare(a.sortDate || ''));
+                
+                timelineList.innerHTML = combinedItems.map(event => {
                     const amount = (event.amount_cents / 100).toFixed(2);
                     const sign = event.type === 'EARNED' ? '+' : '-';
                     const amountClass = event.type === 'EARNED' ? 'earned' : 'spent';
@@ -568,6 +614,24 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+        
+        function formatDateForDisplay(dateStr) {
+            if (!dateStr || dateStr === 'Today') return 'Today';
+            try {
+                const date = new Date(dateStr + 'T00:00:00');
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const yesterday = new Date(today);
+                yesterday.setDate(yesterday.getDate() - 1);
+                
+                if (date.toDateString() === today.toDateString()) return 'Today';
+                if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+                
+                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            } catch (e) {
+                return dateStr;
+            }
         }
     </script>
 </body>

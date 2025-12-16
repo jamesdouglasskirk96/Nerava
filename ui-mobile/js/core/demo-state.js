@@ -36,9 +36,9 @@ export function saveDemoRedemption(update) {
     merged.wallet_nova_balance = prev.wallet_nova_balance || 0;
   }
   
-  // If nova_awarded is provided, add it to cumulative balance
+  // If nova_awarded is provided, set it as the balance (replace, don't accumulate)
   if (typeof merged.nova_awarded === 'number') {
-    merged.wallet_nova_balance = (prev.wallet_nova_balance || 0) + merged.nova_awarded;
+    merged.wallet_nova_balance = merged.nova_awarded;
   }
   
   // Default reputation score (small positive bump)
