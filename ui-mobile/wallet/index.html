@@ -382,15 +382,25 @@
         
         async function loadWallet() {
             try {
+                // In demo mode (no auth), use user_id=1; otherwise use "current"
+                const userId = authToken ? 'current' : '1';
+                
                 // Get balance from existing endpoint
-                const balanceResponse = await fetch(`${API_BASE}/v1/wallet?user_id=current`, {
-                    headers: {
-                        'Authorization': `Bearer ${authToken || ''}`
-                    }
+                const balanceResponse = await fetch(`${API_BASE}/v1/wallet?user_id=${userId}`, {
+                    headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
                 });
                 
                 if (balanceResponse.status === 401 || balanceResponse.status === 403) {
-                    showError('Please sign in to view your wallet.');
+                    // Try again with demo user
+                    const demoResponse = await fetch(`${API_BASE}/v1/wallet?user_id=1`);
+                    if (!demoResponse.ok) {
+                        showError('Please sign in to view your wallet.');
+                        return;
+                    }
+                    const balanceData = await demoResponse.json();
+                    const timelineResponse = await fetch(`${API_BASE}/v1/wallet/timeline?user_id=1&limit=20`);
+                    const timelineData = timelineResponse.ok ? await timelineResponse.json() : [];
+                    renderWallet(balanceData, timelineData);
                     return;
                 }
                 
@@ -401,10 +411,8 @@
                 const balanceData = await balanceResponse.json();
                 
                 // Get timeline
-                const timelineResponse = await fetch(`${API_BASE}/v1/wallet/timeline?limit=20`, {
-                    headers: {
-                        'Authorization': `Bearer ${authToken || ''}`
-                    }
+                const timelineResponse = await fetch(`${API_BASE}/v1/wallet/timeline?user_id=${userId}&limit=20`, {
+                    headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
                 });
                 
                 let timelineData = [];

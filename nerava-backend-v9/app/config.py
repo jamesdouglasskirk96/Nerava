@@ -1,8 +1,10 @@
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
 from typing import Optional
 import os
 
 class Settings(BaseSettings):
+    model_config = ConfigDict(extra="ignore", case_sensitive=False)
     # Database
     database_url: str = "sqlite:///./nerava.db"
     read_database_url: Optional[str] = None
@@ -39,6 +41,13 @@ class Settings(BaseSettings):
     
     # Feature flags
     enable_sync_credit: bool = False
+    
+    # Emergency kill-switches and business feature flags (P1 stability fix)
+    nova_earn_enabled: bool = os.getenv("NOVA_EARN_ENABLED", "true").lower() == "true"
+    nova_redeem_enabled: bool = os.getenv("NOVA_REDEEM_ENABLED", "true").lower() == "true"
+    payouts_enabled: bool = os.getenv("PAYOUTS_ENABLED", "true").lower() == "true"
+    emergency_readonly_mode: bool = os.getenv("EMERGENCY_READONLY_MODE", "false").lower() == "true"
+    block_all_money_movement: bool = os.getenv("BLOCK_ALL_MONEY_MOVEMENT", "false").lower() == "true"
     
     # JWT
     jwt_secret: str = os.getenv("JWT_SECRET", "dev-secret")
@@ -142,10 +151,6 @@ class Settings(BaseSettings):
             self.smartcar_client_secret and 
             self.smartcar_redirect_uri
         )
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
 
 # Global settings instance
 settings = Settings()
@@ -156,7 +161,7 @@ def get_square_sandbox_config():
     Get Square SANDBOX configuration.
     
     Returns:
-        Dict with application_id, application_secret, redirect_url, and base_url
+        Dict with application_id, application_secret, redirect_url, base_url, and auth_base_url
         Redirect URL defaults to PUBLIC_BASE_URL + callback path if not explicitly set
     """
     redirect_url = settings.square_redirect_url_sandbox
@@ -168,5 +173,6 @@ def get_square_sandbox_config():
         "application_id": settings.square_application_id_sandbox,
         "application_secret": settings.square_application_secret_sandbox,
         "redirect_url": redirect_url,
-        "base_url": "https://connect.squareupsandbox.com"
+        "base_url": "https://connect.squareupsandbox.com",  # For API calls
+        "auth_base_url": "https://squareupsandbox.com"       # For OAuth authorize page
     }

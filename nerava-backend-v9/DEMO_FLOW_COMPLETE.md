@@ -155,3 +155,4 @@ uvicorn app.main_simple:app --reload --port 8001
 - Apple pass charging status is visible but doesn't affect signing/installability
 - Wallet UI banner/buttons are demo-only and don't break normal wallet UI
 
+

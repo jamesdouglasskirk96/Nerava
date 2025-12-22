@@ -37,8 +37,9 @@ class VehicleToken(Base):
     
     id = Column(String, primary_key=True)  # UUID as string
     vehicle_account_id = Column(String, ForeignKey("vehicle_accounts.id"), nullable=False, index=True)
-    access_token = Column(String, nullable=False)  # Encrypted in production
-    refresh_token = Column(String, nullable=False)  # Encrypted in production
+    access_token = Column(String, nullable=False)  # Encrypted at rest (P0 security fix)
+    refresh_token = Column(String, nullable=False)  # Encrypted at rest (P0 security fix)
+    encryption_version = Column(Integer, nullable=False, default=1)  # Track encryption version for migration
     expires_at = Column(DateTime, nullable=False)
     scope = Column(Text, nullable=True)  # Space-separated scopes
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

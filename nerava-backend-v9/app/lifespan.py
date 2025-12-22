@@ -47,6 +47,28 @@ async def lifespan(app):
             conn.execute("SELECT 1")
         logger.info("Database connection verified")
         
+        # Check for missing migrations (local-only, non-blocking)
+        import os
+        env = os.getenv("ENV", "dev").lower()
+        is_local = env == "local" or settings.region.lower() == "local"
+        
+        if is_local:
+            try:
+                from sqlalchemy import text
+                with engine.connect() as conn:
+                    # Lightweight schema check: try to query encryption_version column
+                    conn.execute(text("SELECT encryption_version FROM vehicle_tokens LIMIT 1"))
+                logger.debug("Migration schema check passed")
+            except Exception as e:
+                error_msg = str(e).lower()
+                if "no such column" in error_msg or "encryption_version" in error_msg:
+                    logger.warning(
+                        "⚠️ Local database schema is behind. Run: cd nerava-backend-v9 && alembic upgrade head"
+                    )
+                else:
+                    # Other errors (table doesn't exist, etc.) are fine - just log debug
+                    logger.debug(f"Migration check skipped (expected in some setups): {e}")
+        
         logger.info("Application startup completed successfully")
         
     except Exception as e:

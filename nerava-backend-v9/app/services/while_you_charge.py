@@ -721,7 +721,7 @@ async def get_domain_hub_view_async(db: Session) -> Dict:
             # Create default perk if none exists (so merchants always have a reward)
             if not perk:
                 logger.info(f"[DomainHub] No perk for merchant {merchant.id} ({merchant.name}), creating default...")
-                from app.models_while_you_charge import MerchantPerk
+                # MerchantPerk is imported at module level (line 11)
                 default_perk = MerchantPerk(
                     merchant_id=merchant.id,
                     nova_reward=10,  # Default 10 Nova

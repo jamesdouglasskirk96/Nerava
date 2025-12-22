@@ -20,11 +20,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 
   <link rel="stylesheet" href="css/tokens.css?v=20250131" />
-  <link rel="stylesheet" href="css/style.css?v=20250203" />
+  <link rel="stylesheet" href="css/style.css?v=20251222d" />
     <link rel="stylesheet" href="css/animations.css" />
     <link rel="stylesheet" href="css/appleish.css" />
     <link rel="stylesheet" href="css/demo.css" />
     <link rel="stylesheet" href="css/modal.css" />
+    <link rel="stylesheet" href="css/login.css" />
+    <link rel="stylesheet" href="css/merchant-detail.css" />
     <style>
       /* Pages sit above fixed tabbar and can scroll */
       .page{
@@ -73,12 +75,20 @@
   <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 </head>
 <body>
+  <!-- App Loading Screen - hidden by default, shown by JS if needed -->
+  <div id="app-loading-screen" class="app-loading-screen" style="display: none;">
+    <div class="app-loading-content">
+      <div class="app-loading-spinner"></div>
+      <div class="app-loading-text">Loading...</div>
+    </div>
+  </div>
+  
   <p style="display: none;">Impact-Site-Verification: undefined</p>
   <div id="app" class="app-root">
-    <header class="topbar">
-      <h1 class="brand-logo" aria-label="Nerava">
-        <span class="brand-word">NERAVA</span>
-        <span class="brand-bolt" style="color: #FFD700 !important;">⚡</span>
+    <header class="topbar" style="display: flex !important; visibility: visible !important; opacity: 1 !important; z-index: 1000 !important; background: #fff !important;">
+      <h1 class="brand-logo" aria-label="Nerava" style="display: flex; align-items: center; justify-content: center; gap: 4px;">
+        <span class="brand-word" style="font-size: 18px; font-weight: 700; letter-spacing: 0.35em; color: #111827;">NERAVA</span>
+        <img src="assets/bolt-blue.svg" alt="⚡" class="brand-bolt" style="height: 20px; width: auto;" />
       </h1>
     </header>
 
@@ -88,8 +98,6 @@
                     <section id="page-explore" class="page page-explore-fullscreen" aria-label="Explore">
                       <!-- Full-screen map background -->
                       <div id="map" class="explore-map-fullscreen discover-map-container" style="position: relative;">
-                        <!-- Center map button -->
-                        <button id="map-center-btn" class="map-center-btn">⦿</button>
                       </div>
                       
                       <!-- Top overlay: Search + Suggestions -->
@@ -122,8 +130,7 @@
                         <div class="explore-suggestions-row" id="explore-suggestions">
                           <button class="suggestion-chip" data-category="coffee">Coffee</button>
                           <button class="suggestion-chip" data-category="food">Food</button>
-                          <button class="suggestion-chip" data-category="groceries">Groceries</button>
-                          <button class="suggestion-chip" data-category="gym">Gym</button>
+                          <button class="suggestion-chip" data-filter="while_you_charge">While you charge</button>
                         </div>
                         
                       </div>
@@ -139,21 +146,20 @@
                         <div id="discover-merchant-scroller" class="discover-merchant-scroller">
                           <!-- JS will inject merchant cards here -->
                         </div>
-                        <div class="list-view-text">List View</div>
+                        <div class="list-view-text" id="btn-list-view">List View</div>
                       </section>
                       
-                      <!-- AirDrop-style merchant popover -->
-                      <div class="merchant-popover" id="merchant-popover" style="display: none;">
-                        <div class="popover-content">
-                          <img id="popover-merchant-logo" class="popover-logo" src="" alt="Merchant">
-                          <h3 id="popover-merchant-name" class="popover-name"></h3>
-                          <p id="popover-merchant-text" class="popover-text"></p>
-                          <div class="popover-actions">
-                            <button class="btn btn-primary" id="popover-start-session">Start session</button>
-                            <button class="btn btn-secondary" id="popover-cancel">Cancel</button>
-                          </div>
+                      <!-- List View Bottom Sheet -->
+                      <div id="explore-list-sheet" class="list-sheet">
+                        <div class="list-sheet-handle"></div>
+                        <div class="list-sheet-header">
+                          <div class="list-sheet-title">Merchants</div>
+                          <button id="btn-map-view" class="link-btn">Map View</button>
                         </div>
+                        <div id="explore-list" class="list-sheet-content"></div>
                       </div>
+                      
+                      <!-- AirDrop-style merchant popover -->
                     </section>
 
       <!-- Charge / Wallet / Profile now padded pages (not overlay sheets) -->
@@ -176,48 +182,18 @@
                         <!-- Content will be rendered by showCode.js -->
                       </section>
 
-                      <!-- Merchant Dashboard page -->
-                      <section id="page-merchant-dashboard" class="page page-padded" style="display: none;">
-                        <!-- Content will be rendered by merchantDashboard.js -->
-                      </section>
+      <!-- Merchant Dashboard page -->
+      <section id="page-merchant-dashboard" class="page page-padded" style="display: none;">
+        <!-- Content will be rendered by merchantDashboard.js -->
+      </section>
+
+      <!-- Merchant Detail page (full-page overlay) -->
+      <section id="page-merchant-detail" class="page" style="display: none;">
+        <!-- Content will be rendered by merchant-detail.js -->
+      </section>
 
       <section id="page-wallet" class="page page-padded">
-        <section class="card content-card">
-          <h2 class="section-title">Wallet</h2>
-          <div class="balance" id="wallet-balance">$19.00</div>
-          <div class="muted">Ways you earned</div>
-          
-          <!-- Progress bar toward next tier -->
-          <div class="wallet-progress" style="margin:8px 0 12px;">
-            <div class="bar" style="width:0"></div>
-            <div class="progress-text">$6 more to reach Gold tier</div>
-          </div>
-          
-          <!-- Streak indicator -->
-          <div class="streak-indicator" style="margin: 8px 0; padding: 8px; background: var(--color-orange); border-radius: var(--radius); text-align: center;">
-            <span class="streak-text">7-day charging streak 🔥</span>
-          </div>
-
-          <!-- Quick Actions -->
-          <div class="wallet-actions" style="margin: 16px 0; display: flex; gap: 8px;">
-            <button class="btn btn-secondary" style="flex: 1;">Add Funds</button>
-            <button id="withdrawBtn" class="btn btn-secondary" style="flex: 1;">Withdraw</button>
-          </div>
-          
-          <!-- Payout History -->
-          <div class="payout-history" style="margin: 16px 0;">
-            <h3 style="margin: 0 0 8px 0; font-size: 16px;">Recent Withdrawals</h3>
-            <div id="payoutHistory" class="payout-list">
-              <!-- Payout history will be loaded here -->
-            </div>
-          </div>
-          
-          <ul class="list" id="wallet-activity">
-            <li><span>You saved $3.73 during Green Hour 🌞</span><strong>+$3.73</strong></li>
-            <li><span>Earned $0.75 from Starbucks co-fund ☕</span><strong>+$0.75</strong></li>
-            <li><span>Off-peak award</span><strong>+$0.50</strong></li>
-          </ul>
-        </section>
+        <!-- Wallet content is dynamically generated by wallet-new.js -->
       </section>
 
       <section id="page-claim" class="page page-padded">
@@ -353,6 +329,12 @@
   </nav>
 
 
+  <!-- Login page -->
+  <section id="page-login" class="page" style="display: none;"></section>
+  
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  
   <!-- Demo state helper (must load before pages that use it) -->
   <script type="module" src="js/core/demo-state.js"></script>
   

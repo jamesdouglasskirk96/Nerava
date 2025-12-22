@@ -116,7 +116,9 @@ async def get_square_oauth_authorize_url(state: str) -> str:
         "state": state
     }
     
-    return f'{cfg["base_url"]}/oauth2/authorize?' + urlencode(query_params)
+    # Use auth_base_url for OAuth authorize page (squareupsandbox.com, not connect.squareupsandbox.com)
+    auth_base = cfg.get("auth_base_url", cfg["base_url"])
+    return f'{auth_base}/oauth2/authorize?' + urlencode(query_params)
 
 
 async def exchange_square_oauth_code(code: str) -> SquareOAuthResult:
@@ -425,29 +427,43 @@ def validate_oauth_state(db: Session, state: str) -> None:
     if not state:
         raise OAuthStateInvalidError("OAuth state is required")
     
-    # Look up state
-    oauth_state = db.query(SquareOAuthState).filter(
-        SquareOAuthState.state == state
-    ).first()
+    # Atomic update: only mark as used if not already used and not expired
+    # This prevents race conditions where two callbacks could consume the same state (P0 security fix)
+    from sqlalchemy import text
     
-    if not oauth_state:
-        logger.warning(f"OAuth state not found: {state[:8]}...")
-        raise OAuthStateInvalidError("OAuth state not found")
-    
-    # Check if already used
-    if oauth_state.used:
-        logger.warning(f"OAuth state already used: {state[:8]}...")
-        raise OAuthStateInvalidError("OAuth state has already been used")
-    
-    # Check if expired
     now = datetime.utcnow()
-    if oauth_state.expires_at < now:
-        logger.warning(f"OAuth state expired: {state[:8]}... (expired at {oauth_state.expires_at})")
-        raise OAuthStateInvalidError("OAuth state has expired")
+    result = db.execute(text("""
+        UPDATE square_oauth_states
+        SET used = TRUE
+        WHERE state = :state
+        AND used = FALSE
+        AND expires_at > :now
+    """), {
+        "state": state,
+        "now": now
+    })
     
-    # Mark as used
-    oauth_state.used = True
+    if result.rowcount == 0:
+        # State not found, expired, or already used - get details for error message
+        oauth_state = db.query(SquareOAuthState).filter(
+            SquareOAuthState.state == state
+        ).first()
+        
+        if not oauth_state:
+            logger.warning(f"OAuth state not found: {state[:8]}...")
+            raise OAuthStateInvalidError("OAuth state not found")
+        
+        if oauth_state.used:
+            logger.warning(f"OAuth state already used: {state[:8]}...")
+            raise OAuthStateInvalidError("OAuth state has already been used")
+        
+        if oauth_state.expires_at < now:
+            logger.warning(f"OAuth state expired: {state[:8]}... (expired at {oauth_state.expires_at})")
+            raise OAuthStateInvalidError("OAuth state has expired")
+        
+        # Should not reach here, but raise generic error
+        raise OAuthStateInvalidError("OAuth state validation failed")
+    
     db.commit()
-    
-    logger.info(f"Validated and marked OAuth state as used: {state[:8]}...")
+    logger.info(f"Validated and marked OAuth state as used (atomic): {state[:8]}...")
 

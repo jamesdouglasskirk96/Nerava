@@ -26,6 +26,7 @@ class Settings(BaseModel):
     SMARTCAR_BASE_URL: str = os.getenv("SMARTCAR_BASE_URL", "https://api.smartcar.com")
     SMARTCAR_AUTH_URL: str = os.getenv("SMARTCAR_AUTH_URL", "https://auth.smartcar.com")
     SMARTCAR_CONNECT_URL: str = os.getenv("SMARTCAR_CONNECT_URL", "https://connect.smartcar.com")
+    SMARTCAR_STATE_SECRET: str = os.getenv("SMARTCAR_STATE_SECRET", "")  # Distinct secret for Smartcar state JWT
     
     @property
     def smartcar_enabled(self) -> bool:
@@ -42,9 +43,27 @@ class Settings(BaseModel):
     # Platform fee configuration (in basis points, 1500 = 15%)
     PLATFORM_FEE_BPS: int = int(os.getenv("PLATFORM_FEE_BPS", "1500"))
     
+    # Auth Provider Configuration
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    APPLE_CLIENT_ID: str = os.getenv("APPLE_CLIENT_ID", "")
+    APPLE_TEAM_ID: str = os.getenv("APPLE_TEAM_ID", "")
+    APPLE_KEY_ID: str = os.getenv("APPLE_KEY_ID", "")
+    APPLE_PRIVATE_KEY: str = os.getenv("APPLE_PRIVATE_KEY", "")
+    
+    # Phone OTP Configuration (Twilio)
+    TWILIO_ACCOUNT_SID: str = os.getenv("TWILIO_ACCOUNT_SID", "")
+    TWILIO_AUTH_TOKEN: str = os.getenv("TWILIO_AUTH_TOKEN", "")
+    
+    # Refresh Token Configuration
+    REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30"))
+    
     # Demo Mode Settings
     DEMO_MODE: bool = os.getenv("DEMO_MODE", "false").lower() == "true"
     DEMO_ADMIN_KEY: str = os.getenv("DEMO_ADMIN_KEY", "")
+    
+    # Wallet and Nova Settings
+    DEFAULT_TIMEZONE: str = os.getenv("DEFAULT_TIMEZONE", "America/Chicago")
+    NOVA_TO_USD_CONVERSION_RATE_CENTS: int = int(os.getenv("NOVA_TO_USD_CONVERSION_RATE_CENTS", "10"))
     
     # Environment and Debug Settings
     ENV: str = os.getenv("ENV", "dev")  # dev, staging, prod
@@ -72,6 +91,7 @@ class Settings(BaseModel):
     feature_esg_finance_gateway: bool = False
     feature_ai_growth_automation: bool = False
     feature_dual_radius_verification: bool = False
+    feature_virtual_card: bool = False  # Virtual card generation feature
 
 settings = Settings()
 ACCESS_TOKEN_EXPIRE = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)

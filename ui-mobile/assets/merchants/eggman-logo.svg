@@ -1,0 +1,51 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer black border -->
+  <circle cx="100" cy="100" r="98" fill="none" stroke="#000" stroke-width="4"/>
+  
+  <!-- Orange outer band -->
+  <circle cx="100" cy="100" r="94" fill="#ff6b35"/>
+  
+  <!-- Stars in orange band (left side) -->
+  <g fill="#d45a2a" opacity="0.9">
+    <!-- Left stars -->
+    <path d="M 30 100 L 32 92 L 34 100 L 32 108 L 30 100 M 32 100 L 38 100" stroke="#d45a2a" stroke-width="0.5" fill="#d45a2a"/>
+    <path d="M 30 85 L 32 77 L 34 85 L 32 93 L 30 85 M 32 85 L 38 85" stroke="#d45a2a" stroke-width="0.5" fill="#d45a2a"/>
+    <path d="M 30 115 L 32 107 L 34 115 L 32 123 L 30 115 M 32 115 L 38 115" stroke="#d45a2a" stroke-width="0.5" fill="#d45a2a"/>
+    
+    <!-- Right stars -->
+    <path d="M 170 100 L 172 92 L 174 100 L 172 108 L 170 100 M 172 100 L 168 100" stroke="#d45a2a" stroke-width="0.5" fill="#d45a2a"/>
+    <path d="M 170 85 L 172 77 L 174 85 L 172 93 L 170 85 M 172 85 L 168 85" stroke="#d45a2a" stroke-width="0.5" fill="#d45a2a"/>
+    <path d="M 170 115 L 172 107 L 174 115 L 172 123 L 170 115 M 172 115 L 168 115" stroke="#d45a2a" stroke-width="0.5" fill="#d45a2a"/>
+  </g>
+  
+  <!-- Cream/beige inner background -->
+  <circle cx="100" cy="100" r="85" fill="#f5e6d3"/>
+  
+  <!-- Waffle pattern overlay -->
+  <defs>
+    <pattern id="waffle" x="0" y="0" width="10" height="10" patternUnits="userSpaceOnUse">
+      <path d="M 0 5 L 10 5 M 5 0 L 5 10" stroke="#e8d4b8" stroke-width="0.5" opacity="0.5"/>
+    </pattern>
+  </defs>
+  <circle cx="100" cy="100" r="85" fill="url(#waffle)"/>
+  
+  <!-- Egg white (oval) -->
+  <ellipse cx="100" cy="60" rx="32" ry="45" fill="#fffef0" stroke="#000" stroke-width="2.5"/>
+  
+  <!-- Orange yolk (circle in center of egg) -->
+  <circle cx="100" cy="60" r="18" fill="#ff6b35"/>
+  
+  <!-- Egg face - eyes -->
+  <circle cx="92" cy="55" r="2.5" fill="#000"/>
+  <circle cx="108" cy="55" r="2.5" fill="#000"/>
+  
+  <!-- Egg face - mouth -->
+  <line x1="95" y1="68" x2="105" y2="68" stroke="#000" stroke-width="2" stroke-linecap="round"/>
+  
+  <!-- EGGMAN text (white with black outline) -->
+  <text x="100" y="135" font-family="Arial, sans-serif" font-size="26" font-weight="bold" fill="#fff" text-anchor="middle" stroke="#000" stroke-width="2.5" paint-order="stroke fill" letter-spacing="1">EGGMAN</text>
+  
+  <!-- NYC BREAKFAST ALL DAY text -->
+  <text x="100" y="155" font-family="Arial, sans-serif" font-size="9" fill="#000" text-anchor="middle" letter-spacing="0.5">NYC BREAKFAST ALL DAY</text>
+  <text x="175" y="152" font-family="Arial, sans-serif" font-size="7" fill="#000">™</text>
+</svg>

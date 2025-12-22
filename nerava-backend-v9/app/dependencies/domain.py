@@ -17,16 +17,29 @@ from ..core.config import settings
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 # Dev-only flag: allow anonymous user access in local dev
-# DO NOT enable in production
-DEV_ALLOW_ANON_USER = os.getenv("NERAVA_DEV_ALLOW_ANON_USER", "false").lower() == "true"
+# DO NOT enable in production - gated by environment check
+def _is_local_env() -> bool:
+    """Check if running in local environment"""
+    env = os.getenv("ENV", "dev").lower()
+    region = os.getenv("REGION", "local").lower()
+    return env == "local" or region == "local"
+
+DEV_ALLOW_ANON_USER_ENABLED = (
+    os.getenv("NERAVA_DEV_ALLOW_ANON_USER", "false").lower() == "true"
+    and _is_local_env()
+)
 
 
-def get_current_user_id(
+def get_current_user_public_id(
     request: Request,
     token: Optional[str] = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
-) -> int:
-    """Get current user ID from token or cookie"""
+) -> str:
+    """
+    Get current user public_id (UUID string) from JWT token.
+    
+    JWT sub claim now contains user.public_id (UUID string), not integer id.
+    """
     # Try to get token from Authorization header first
     if not token:
         auth_header = request.headers.get("Authorization")
@@ -37,14 +50,14 @@ def get_current_user_id(
     if not token:
         token = request.cookies.get("access_token")
     
-    # If we have a token, decode it and extract user_id
+    # If we have a token, decode it and extract public_id
     if token:
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-            user_id_str = payload.get("sub")
-            if user_id_str:
-                user_id = int(user_id_str)
-                return user_id
+            public_id = payload.get("sub")
+            if public_id:
+                # public_id is now a UUID string, not an integer
+                return public_id
         except jwt.ExpiredSignatureError:
             # Token expired - fall through to dev fallback or raise
             pass
@@ -52,10 +65,15 @@ def get_current_user_id(
             # Invalid token - fall through to dev fallback or raise
             pass
     
-    # Dev fallback: if NERAVA_DEV_ALLOW_ANON_USER=true, use default user
-    if DEV_ALLOW_ANON_USER:
-        print("[AUTH][DEV] NERAVA_DEV_ALLOW_ANON_USER=true -> using user_id=1")
-        return 1
+    # Dev fallback: if NERAVA_DEV_ALLOW_ANON_USER=true AND in local env, use default user
+    if DEV_ALLOW_ANON_USER_ENABLED:
+        print("[AUTH][DEV] NERAVA_DEV_ALLOW_ANON_USER=true -> using default user")
+        # Try to get user with id=1 and return its public_id
+        user = AuthService.get_user_by_id(db, 1)
+        if user:
+            return user.public_id
+        # If user doesn't exist, create it (will be handled in get_current_user)
+        return "dev-user-public-id"  # Placeholder, will be replaced in get_current_user
     
     # Production: authentication required
     raise HTTPException(
@@ -66,19 +84,21 @@ def get_current_user_id(
 
 
 def get_current_user(
-    user_id: int = Depends(get_current_user_id),
+    public_id: str = Depends(get_current_user_public_id),
     db: Session = Depends(get_db)
 ) -> User:
-    """Get current user object"""
-    user = AuthService.get_user_by_id(db, user_id)
+    """Get current user object by public_id"""
+    user = AuthService.get_user_by_public_id(db, public_id)
     
     # Dev fallback: create default user if it doesn't exist
-    if not user and DEV_ALLOW_ANON_USER and user_id == 1:
+    if not user and DEV_ALLOW_ANON_USER_ENABLED:
         try:
             from ..models import User as UserModel
+            import uuid
             # Create a default user for dev
             default_user = UserModel(
                 id=1,
+                public_id=str(uuid.uuid4()),
                 email="dev@nerava.local",
                 password_hash="dev",  # Not used in dev mode
                 is_active=True,
@@ -88,12 +108,13 @@ def get_current_user(
             db.add(default_user)
             db.commit()
             db.refresh(default_user)
-            print(f"[AUTH][DEV] Created default user (id=1)")
+            print(f"[AUTH][DEV] Created default user (id=1, public_id={default_user.public_id})")
             user = default_user
         except Exception as e:
             # If creation fails (e.g., user already exists), try to fetch again
             db.rollback()
-            user = AuthService.get_user_by_id(db, user_id)
+            # Try by id=1 as fallback
+            user = AuthService.get_user_by_id(db, 1)
             if not user:
                 print(f"[AUTH][DEV] Failed to create/fetch dev user: {e}")
                 raise HTTPException(
@@ -112,6 +133,15 @@ def get_current_user(
             detail="User is inactive"
         )
     return user
+
+
+# Backward compatibility: keep get_current_user_id for legacy code
+# But it now returns the integer id from the User object
+def get_current_user_id(
+    user: User = Depends(get_current_user)
+) -> int:
+    """Get current user ID (integer) - for backward compatibility"""
+    return user.id
 
 
 def require_role(role: str):

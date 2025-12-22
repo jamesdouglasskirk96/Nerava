@@ -1,4 +1,4 @@
-import { apiMe, apiLogout, getCurrentUser, apiGetSmartcarConnectUrl, apiGetVehicleTelemetry } from '../core/api.js';
+import { apiMe, apiLogout, getCurrentUser, apiGetSmartcarConnectUrl, apiGetVehicleTelemetry, apiSendTelemetryEvent } from '../core/api.js';
 import { loadDemoRedemption } from '../core/demo-state.js';
 
 // Safe MetaMask/Ethereum provider detection and connection
@@ -58,18 +58,28 @@ export async function initMePage(rootEl) {
     // Silently ignore - MetaMask connection is optional
   });
 
-  // Get user info
-  let user = getCurrentUser();
-  if (!user) {
-    try {
-      user = await apiMe();
-    } catch (e) {
-      console.warn('[Profile] Could not load user:', e.message);
+  // Get user info from /me endpoint
+  let user = null;
+  try {
+    user = await apiMe();
+  } catch (e) {
+    console.warn('[Profile] Could not load user:', e.message);
+    // If not authenticated, redirect to login
+    if (e.message && (e.message.includes('401') || e.message.includes('Unauthorized'))) {
+      window.location.hash = '#/login';
+      return;
     }
   }
 
-  const userName = user?.name || user?.display_name || 'User';
-  const userEmail = user?.email || 'user@example.com';
+  if (!user) {
+    console.error('[Profile] No user data available');
+    return;
+  }
+
+  const userName = user?.display_name || user?.email || user?.phone || 'User';
+  const userEmail = user?.email || null;
+  const userPhone = user?.phone || null;
+  const authProvider = user?.auth_provider || 'unknown';
 
   // Get reputation score (from demo or API)
   const demo = loadDemoRedemption();
@@ -79,22 +89,23 @@ export async function initMePage(rootEl) {
   rootEl.innerHTML = `
     <div style="padding: 20px; background: white; min-height: calc(100vh - 140px);">
       <!-- Profile Header -->
-      <div style="background: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 20px; text-align: center;">
+      <div style="background: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 20px; text-align: center; position: relative;">
+        <button id="settings-btn" class="settings-btn" aria-label="Settings" style="position: absolute; top: 16px; right: 16px;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+          </svg>
+        </button>
         <div style="width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; font-size: 28px; font-weight: bold; color: white;">
           ${userName.charAt(0).toUpperCase()}
         </div>
         <div style="font-size: 20px; font-weight: 700; color: #111827; margin-bottom: 4px;" id="me-name">${userName}</div>
-        <div style="font-size: 14px; color: #64748b; margin-bottom: 12px;" id="me-email">${userEmail}</div>
+        ${userPhone ? `<div style="font-size: 14px; color: #64748b; margin-bottom: 12px;" id="me-phone">${userPhone}</div>` : ''}
+        <div style="font-size: 12px; color: #9ca3af; margin-bottom: 12px;">Signed in as "${userName}"</div>
         
         <!-- Badge Tier -->
         <div style="display: inline-block; background: ${tierInfo.current.color}20; color: ${tierInfo.current.color}; padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; margin-bottom: 8px;" id="me-tier-badge">
           ${tierInfo.current.name}
-        </div>
-        
-        <!-- Reputation Summary -->
-        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e2e8f0;">
-          <div style="font-size: 12px; color: #64748b; margin-bottom: 4px;">Energy Reputation</div>
-          <div style="font-size: 18px; font-weight: 700; color: #111827;" id="me-rep-score">${repScore}</div>
         </div>
       </div>
 
@@ -122,8 +133,8 @@ export async function initMePage(rootEl) {
       <div style="background: white; border-radius: 12px; margin-bottom: 20px; border: 1px solid #e2e8f0;">
         <div style="padding: 16px;">
           <h3 style="font-size: 16px; font-weight: 600; color: #111827; margin: 0 0 12px 0;">Account</h3>
-          <button id="me-notifications-btn" style="width: 100%; background: none; border: none; text-align: left; padding: 12px 0; color: #374151; font-size: 14px; cursor: pointer;">
-            Notifications (placeholder)
+          <button id="me-settings-btn" style="width: 100%; background: #f1f5f9; border: none; text-align: center; padding: 12px; border-radius: 8px; color: #374151; font-size: 14px; font-weight: 600; cursor: pointer;">
+            Settings
           </button>
         </div>
       </div>
@@ -135,36 +146,101 @@ export async function initMePage(rootEl) {
         </button>
       </div>
     </div>
+    
+    <!-- Settings Bottom Sheet -->
+    <div id="settings-sheet" class="settings-sheet">
+      <div class="settings-sheet-backdrop"></div>
+      <div class="settings-sheet-content">
+        <div class="settings-sheet-header">
+          <h3 class="settings-sheet-title">Settings</h3>
+          <button id="settings-close-btn" class="settings-sheet-close" aria-label="Close">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <div class="settings-sheet-body">
+          <div class="settings-row">
+            <div class="settings-label">
+              <span class="settings-title">Push Notifications</span>
+              <span class="settings-desc">Get alerts for rewards and charging</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="settings-notifications-toggle">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
   `;
 
   // Wire sign out button
   rootEl.querySelector('#me-signout-btn')?.addEventListener('click', async () => {
     console.log('[Profile] Sign out clicked');
     try {
-      await apiLogout();
-      // Clear local storage
-      if (typeof window !== 'undefined') {
-        window.NERAVA_USER = null;
-        localStorage.removeItem('NERAVA_USER_ID');
-        localStorage.removeItem('NERAVA_USER');
-      }
-      // Reload to show login screen
+      // Get refresh token for logout
+      const { getRefreshToken } = await import('../core/auth.js');
+      const refreshToken = getRefreshToken();
+      
+      await apiLogout(refreshToken);
+      
+      // Redirect to login
+      window.location.hash = '#/login';
       window.location.reload();
     } catch (e) {
       console.error('[Profile] Sign out failed:', e);
-      // Clear local storage anyway
-      if (typeof window !== 'undefined') {
-        window.NERAVA_USER = null;
-        localStorage.removeItem('NERAVA_USER_ID');
-        localStorage.removeItem('NERAVA_USER');
-      }
+      // Clear tokens and redirect anyway
+      const { clearTokens } = await import('../core/auth.js');
+      clearTokens();
+      window.location.hash = '#/login';
       window.location.reload();
     }
   });
 
-  // Wire notifications button (placeholder)
-  rootEl.querySelector('#me-notifications-btn')?.addEventListener('click', () => {
-    alert('Notifications settings coming soon');
+  // Settings sheet functions
+  function openSettingsSheet() {
+    const sheet = document.getElementById('settings-sheet');
+    if (sheet) {
+      sheet.classList.add('open');
+      // Load saved preference (default: enabled)
+      const notifEnabled = localStorage.getItem('nerava_notifications') !== 'false';
+      const toggle = document.getElementById('settings-notifications-toggle');
+      if (toggle) {
+        toggle.checked = notifEnabled;
+      }
+    }
+  }
+  
+  function closeSettingsSheet() {
+    const sheet = document.getElementById('settings-sheet');
+    if (sheet) {
+      sheet.classList.remove('open');
+    }
+  }
+  
+  // Wire settings button (gear icon in header)
+  rootEl.querySelector('#settings-btn')?.addEventListener('click', openSettingsSheet);
+  
+  // Wire settings button (in Account section - keep for backward compatibility)
+  rootEl.querySelector('#me-settings-btn')?.addEventListener('click', openSettingsSheet);
+  
+  // Wire close button
+  const closeBtn = rootEl.querySelector('#settings-close-btn');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', closeSettingsSheet);
+  }
+  
+  // Wire backdrop click to close
+  const backdrop = rootEl.querySelector('.settings-sheet-backdrop');
+  if (backdrop) {
+    backdrop.addEventListener('click', closeSettingsSheet);
+  }
+  
+  // Save notification preference on toggle
+  rootEl.querySelector('#settings-notifications-toggle')?.addEventListener('change', (e) => {
+    localStorage.setItem('nerava_notifications', e.target.checked ? 'true' : 'false');
+    console.log('[Settings] Notifications:', e.target.checked ? 'enabled' : 'disabled');
   });
 
   // Check vehicle connection status
@@ -192,6 +268,15 @@ export async function initMePage(rootEl) {
         testBtn.style.display = 'none';
         return false;
       }
+      // Send telemetry event for failure
+      apiSendTelemetryEvent({
+        event: 'TELEMETRY_FETCH_FAILED',
+        ts: Date.now(),
+        page: '#/me',
+        meta: {
+          error: err.message ? err.message.substring(0, 200) : 'Unknown error' // No secrets
+        }
+      }).catch(() => {});
       console.warn('[Profile][EV] Status check failed:', err);
     }
     return false;
@@ -201,6 +286,14 @@ export async function initMePage(rootEl) {
   async function handleConnectEvClick() {
     const btn = rootEl.querySelector('#me-connect-ev-btn');
     const originalText = btn.textContent;
+    
+    // Send telemetry event
+    apiSendTelemetryEvent({
+      event: 'EV_CONNECT_CLICKED',
+      ts: Date.now(),
+      page: '#/me',
+      meta: {}
+    }).catch(() => {});
     
     try {
       btn.disabled = true;
@@ -283,3 +376,4 @@ export async function initMePage(rootEl) {
     window.history.replaceState({}, '', window.location.pathname);
   }
 }
+

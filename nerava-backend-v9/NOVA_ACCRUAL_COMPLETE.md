@@ -64,3 +64,4 @@ Each accrual creates a `NovaTransaction` with:
 - Multiple wallets can accrue simultaneously
 - Each accrual triggers wallet pass refresh (Apple Wallet + Google Wallet)
 
+

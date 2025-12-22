@@ -2,3 +2,24 @@
 .fade-up{animation:fade-up .22s ease-out both}
 @keyframes fade-in{ from{opacity:.0} to{opacity:1} }
 @keyframes fade-up{ from{opacity:.0; transform:translateY(6px)} to{opacity:1; transform:none} }
+
+/* Wallet charging glow animation */
+@keyframes wallet-glow {
+  0%, 100% {
+    box-shadow: 0 0 18px rgba(30, 64, 255, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 28px rgba(30, 64, 255, 0.6);
+  }
+}
+
+.wallet-card-charging {
+  animation: wallet-glow 2s ease-in-out infinite;
+}
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .wallet-card-charging {
+    animation: none;
+  }
+}

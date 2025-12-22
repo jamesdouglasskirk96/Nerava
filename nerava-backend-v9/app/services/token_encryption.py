@@ -1,18 +1,16 @@
 """
-Token Encryption Service
-Encrypts and decrypts sensitive tokens (e.g., Square access tokens) at rest.
-Uses Fernet symmetric encryption from the cryptography library.
+Token encryption utility for OAuth tokens (Smartcar, Square, etc.)
+Uses Fernet symmetric encryption for at-rest encryption.
+
+Backward compatibility: Supports decryption of tokens encrypted with legacy hash/pad-derived keys.
+New encryption always uses validated Fernet keys (fail-fast in non-local).
 """
 import os
 import logging
 from typing import Optional
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.backends import default_backend
+from cryptography.fernet import Fernet, InvalidToken
+from app.utils.env import is_local_env
 import base64
-
-from ..config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -22,123 +20,195 @@ class TokenDecryptionError(Exception):
     pass
 
 
-# Global Fernet instance (lazy-loaded)
-_fernet_instance: Optional[Fernet] = None
-
-
 def _get_encryption_key() -> bytes:
     """
-    Get or generate encryption key from environment.
-    
-    In production, TOKEN_ENCRYPTION_KEY must be set.
-    In dev, if missing, generates a key and logs a warning.
+    Get encryption key from environment variable for NEW encryption.
+    In production, this must be a valid Fernet key. In local dev, allows deterministic key with warning.
     
     Returns:
-        bytes: Encryption key (32 bytes for Fernet)
+        Valid Fernet key bytes
         
     Raises:
-        ValueError: In production if key is missing
+        ValueError: If key is missing/invalid in non-local environment
+    """
+    from app.utils.env import is_local_env
+    
+    key_str = os.getenv("TOKEN_ENCRYPTION_KEY", "")
+    
+    if not key_str:
+        if is_local_env():
+            # In local dev, use a deterministic key (NOT for production)
+            logger.warning("Using deterministic dev encryption key (NOT SECURE FOR PRODUCTION)")
+            key_str = "dev-token-encryption-key-32-bytes!!"  # 32 bytes
+        else:
+            # Production: require key
+            env = os.getenv("ENV", "dev").lower()
+            region = os.getenv("REGION", "local").lower()
+            raise ValueError(
+                "TOKEN_ENCRYPTION_KEY environment variable is required in non-local environment. "
+                f"ENV={env}, REGION={region}. Generate with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
+            )
+    
+    # Validate key by constructing Fernet instance (fail-fast)
+    try:
+        # Try to use as-is (might already be base64-encoded Fernet key)
+        key_bytes = key_str.encode() if isinstance(key_str, str) else key_str
+        # Validate by constructing Fernet (will raise if invalid)
+        Fernet(key_bytes)
+        return key_bytes
+    except Exception:
+        # If not valid Fernet key, try base64 decoding
+        try:
+            key_bytes = base64.urlsafe_b64decode(key_str)
+            Fernet(key_bytes)  # Validate
+            return key_bytes
+        except Exception as e:
+            if not is_local_env():
+                raise ValueError(
+                    f"TOKEN_ENCRYPTION_KEY is not a valid Fernet key. "
+                    f"Generate with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
+                ) from e
+            # In local, allow and warn
+            logger.warning(f"Invalid Fernet key format in local env, attempting to use as-is: {e}")
+            return key_str.encode()[:44]  # Truncate to max Fernet key length
+
+
+def _get_legacy_key() -> bytes:
+    """
+    Get legacy encryption key using old hash/pad derivation method.
+    Used ONLY for backward-compatible decryption of existing ciphertext.
+    
+    Returns:
+        Legacy-derived key bytes
     """
     key_str = os.getenv("TOKEN_ENCRYPTION_KEY", "")
     
     if not key_str:
-        # In production, this is a hard error
-        is_prod = os.getenv("ENVIRONMENT", "").lower() in ("production", "prod")
-        if is_prod:
-            raise ValueError(
-                "TOKEN_ENCRYPTION_KEY is required in production. "
-                "Generate a key with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
-            )
-        
-        # In dev, generate a key and warn
-        logger.warning(
-            "TOKEN_ENCRYPTION_KEY not set. Generating a temporary key for local development only. "
-            "This key will change on restart. For persistent encryption, set TOKEN_ENCRYPTION_KEY in .env"
-        )
-        # Generate a key from a fixed salt for dev (not secure, but consistent for testing)
-        # In production, use Fernet.generate_key() and store securely
-        dev_key = Fernet.generate_key()
-        logger.warning(f"Generated dev key (first 8 chars): {dev_key[:8].decode()}...")
-        logger.warning("Set TOKEN_ENCRYPTION_KEY in .env to use a persistent key")
-        return dev_key
+        # Fallback to dev key for legacy compatibility
+        key_str = "dev-token-encryption-key-32-bytes!!"
     
-    # Key should be base64-encoded Fernet key (44 chars)
+    # Legacy hash/pad logic (for backward compatibility)
+    import hashlib as h
+    if len(key_str) < 32:
+        key_bytes = h.sha256(key_str.encode()).digest()
+        key_str = base64.urlsafe_b64encode(key_bytes).decode()
+    elif len(key_str) > 44:
+        key_bytes = h.sha256(key_str.encode()).digest()
+        key_str = base64.urlsafe_b64encode(key_bytes).decode()
+    
     try:
-        # Validate it's a valid Fernet key
-        key_bytes = key_str.encode() if isinstance(key_str, str) else key_str
-        # Fernet keys are 32 bytes base64-encoded (44 chars)
-        if len(key_bytes) != 44:
-            raise ValueError(f"TOKEN_ENCRYPTION_KEY must be 44 characters (base64-encoded 32-byte key), got {len(key_bytes)}")
-        
-        # Try to create a Fernet instance to validate the key
-        Fernet(key_bytes)
-        return key_bytes
-    except Exception as e:
-        raise ValueError(f"Invalid TOKEN_ENCRYPTION_KEY: {e}")
+        return key_str.encode()
+    except Exception:
+        return base64.urlsafe_b64encode(key_str.encode()[:32])
 
 
-def get_fernet() -> Fernet:
+_fernet_instance: Optional[Fernet] = None
+_legacy_fernet_instance: Optional[Fernet] = None
+
+
+def _get_fernet() -> Fernet:
     """
-    Get or create Fernet instance for encryption/decryption.
-    
-    Returns:
-        Fernet: Configured Fernet instance
+    Get Fernet instance for encryption/decryption.
+    Fail-fast validation in non-local environments.
     """
     global _fernet_instance
-    
     if _fernet_instance is None:
         key = _get_encryption_key()
-        _fernet_instance = Fernet(key)
-    
+        # Validate key by constructing Fernet (fail-fast)
+        try:
+            _fernet_instance = Fernet(key)
+        except Exception as e:
+            if not is_local_env():
+                raise ValueError(
+                    f"Failed to construct Fernet instance with provided key. "
+                    f"Generate valid key with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
+                ) from e
+            # In local, allow and warn
+            logger.warning(f"Invalid Fernet key in local env, attempting to use anyway: {e}")
+            _fernet_instance = Fernet(key)
     return _fernet_instance
 
 
-def encrypt_token(raw: str) -> str:
+def _get_legacy_fernet() -> Fernet:
+    """Get legacy Fernet instance for backward-compatible decryption"""
+    global _legacy_fernet_instance
+    if _legacy_fernet_instance is None:
+        key = _get_legacy_key()
+        _legacy_fernet_instance = Fernet(key)
+    return _legacy_fernet_instance
+
+
+def encrypt_token(plaintext_token: str) -> str:
     """
     Encrypt a token for storage at rest.
     
+    Uses ONLY the current validated Fernet key (never legacy).
+    Fail-fast in non-local if key is missing/invalid.
+    
     Args:
-        raw: Plain text token to encrypt
+        plaintext_token: Plaintext token to encrypt
         
     Returns:
-        str: Encrypted token (base64-encoded)
+        Encrypted token (base64-encoded)
         
     Raises:
-        ValueError: If encryption fails
+        ValueError: If encryption key is not configured (in production)
+        TokenDecryptionError: If encryption fails
     """
-    if not raw:
-        raise ValueError("Cannot encrypt empty token")
+    if not plaintext_token:
+        return plaintext_token
     
     try:
-        fernet = get_fernet()
-        encrypted_bytes = fernet.encrypt(raw.encode('utf-8'))
-        return encrypted_bytes.decode('utf-8')
+        fernet = _get_fernet()  # Uses validated key only
+        encrypted = fernet.encrypt(plaintext_token.encode())
+        return encrypted.decode()
     except Exception as e:
         logger.error(f"Token encryption failed: {e}", exc_info=True)
-        raise ValueError(f"Token encryption failed: {e}")
+        raise TokenDecryptionError(f"Failed to encrypt token: {str(e)}") from e
 
 
-def decrypt_token(cipher: str) -> str:
+def decrypt_token(encrypted_token: str) -> str:
     """
-    Decrypt a token from storage.
+    Decrypt a token for use.
+    
+    Backward compatibility: Tries current key first, then legacy key on InvalidToken.
+    This allows existing ciphertext encrypted with legacy hash/pad-derived keys to be decrypted.
     
     Args:
-        cipher: Encrypted token (base64-encoded)
+        encrypted_token: Encrypted token (base64-encoded) or plaintext
         
     Returns:
-        str: Decrypted plain text token
+        Plaintext token
         
     Raises:
-        TokenDecryptionError: If decryption fails (invalid cipher, wrong key, etc.)
+        TokenDecryptionError: If decryption fails with both keys
     """
-    if not cipher:
-        raise TokenDecryptionError("Cannot decrypt empty cipher")
+    if not encrypted_token:
+        return encrypted_token
     
+    # Check if token is already plaintext (for migration compatibility)
+    # If it doesn't start with Fernet's base64 prefix, assume it's plaintext
+    if not encrypted_token.startswith("gAAAAA"):
+        # Might be plaintext from before encryption was added
+        logger.warning("Token appears to be plaintext (not encrypted). Consider migrating.")
+        return encrypted_token
+    
+    # Try current validated key first
     try:
-        fernet = get_fernet()
-        decrypted_bytes = fernet.decrypt(cipher.encode('utf-8'))
-        return decrypted_bytes.decode('utf-8')
+        fernet = _get_fernet()
+        decrypted = fernet.decrypt(encrypted_token.encode())
+        return decrypted.decode()
+    except InvalidToken:
+        # Current key failed, try legacy key for backward compatibility
+        try:
+            legacy_fernet = _get_legacy_fernet()
+            decrypted = legacy_fernet.decrypt(encrypted_token.encode())
+            logger.debug("Decrypted token using legacy key (backward compatibility)")
+            return decrypted.decode()
+        except InvalidToken:
+            # Both keys failed
+            logger.error("Token decryption failed with both current and legacy keys")
+            raise TokenDecryptionError("Failed to decrypt token: invalid key or corrupted data")
     except Exception as e:
         logger.error(f"Token decryption failed: {e}", exc_info=True)
-        raise TokenDecryptionError(f"Token decryption failed: {e}")
-
+        raise TokenDecryptionError(f"Failed to decrypt token: {str(e)}") from e

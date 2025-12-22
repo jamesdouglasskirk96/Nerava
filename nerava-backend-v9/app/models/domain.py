@@ -228,6 +228,12 @@ class NovaTransaction(Base):
     # Database column name remains 'metadata' for backward compatibility
     transaction_meta = Column("metadata", JSON, nullable=True)  # Flexible JSON for additional context
     
+    # Idempotency key for deduplication (P0 race condition fix)
+    idempotency_key = Column(String, nullable=True, index=True)
+    
+    # Payload hash for conflict detection (same idempotency_key + different payload → 409)
+    payload_hash = Column(String, nullable=True)
+    
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     
     # Relationships

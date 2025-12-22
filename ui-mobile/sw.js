@@ -1,5 +1,5 @@
 // Service Worker for Nerava PWA
-const CACHE_VERSION = 'v8';
+const CACHE_VERSION = 'v9'; // Updated to force refresh after removing "Found closest" toast
 const CACHE_NAME = `nerava-${CACHE_VERSION}`;
 const OFFLINE_URL = './offline.html';
 
@@ -93,6 +93,10 @@ self.addEventListener('fetch', (event) => {
                         });
                     });
                 } else if (response.status >= 400) {
+                    // For 404s on assets, return without logging (not an error)
+                    if (response.status === 404 && request.url.includes('/assets/')) {
+                        return response; // Don't log or cache 404s
+                    }
                     // For error responses, try to get from cache if available, but don't cache the error
                     console.warn('Service Worker: Error response', response.status, 'for', request.url);
                     return caches.match(request).then(async (cachedResponse) => {

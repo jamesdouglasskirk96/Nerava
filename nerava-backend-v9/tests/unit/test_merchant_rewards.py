@@ -167,3 +167,4 @@ class TestMerchantRewards:
         assert reward.nova_amount == 300
         assert reward.is_active is True
 
+

@@ -251,3 +251,4 @@ def downgrade() -> None:
         op.drop_column("driver_wallets", "apple_authentication_token")
 
 
+

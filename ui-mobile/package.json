@@ -4,7 +4,7 @@
   "description": "1) Make sure your FastAPI backend is running at http://127.0.0.1:8000 2) Serve this folder statically:    python3 -m http.server 8080 3) Open http://localhost:8080/index.html",
   "main": "app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "jest",
     "test:ui": "playwright test",
     "test:ui:headed": "playwright test --headed",
     "test:ui:report": "playwright show-report",
@@ -16,6 +16,8 @@
   "type": "commonjs",
   "devDependencies": {
     "@playwright/test": "^1.56.1",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
     "sharp": "^0.34.4"
   },
   "dependencies": {

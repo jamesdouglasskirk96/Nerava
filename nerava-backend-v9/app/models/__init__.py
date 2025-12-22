@@ -3,6 +3,8 @@ Models package - organized by domain
 """
 # Re-export all models for backward compatibility
 from .user import User, UserPreferences
+from .refresh_token import RefreshToken
+from .otp_challenge import OTPChallenge
 from .domain import (
     Zone,
     EnergyEvent,
@@ -66,6 +68,8 @@ __all__ = [
     # User models
     "User",
     "UserPreferences",
+    "RefreshToken",
+    "OTPChallenge",
     # Domain models
     "Zone",
     "EnergyEvent",

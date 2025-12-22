@@ -388,3 +388,56 @@ async def get_demo_orders(
         orders=demo_orders
     )
 
+
+# ============== Set Sandbox Token (for testing) ==============
+
+class SetTokenRequest(BaseModel):
+    merchant_id: str
+    access_token: str
+    location_id: str
+
+
+class SetTokenResponse(BaseModel):
+    ok: bool
+    message: str
+
+
+@router.post("/set-sandbox-token", response_model=SetTokenResponse)
+async def set_sandbox_token(
+    request: SetTokenRequest,
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_demo_admin_key)
+):
+    """
+    Set Square sandbox access token directly for a merchant.
+    
+    This bypasses OAuth flow for demo/testing purposes.
+    Only works when DEMO_MODE=true.
+    
+    Get your sandbox access token from:
+    https://developer.squareup.com/apps -> Your App -> Credentials -> Sandbox Access Token
+    """
+    from ..services.token_encryption import encrypt_token
+    
+    merchant = db.query(DomainMerchant).filter(
+        DomainMerchant.id == request.merchant_id
+    ).first()
+    
+    if not merchant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "MERCHANT_NOT_FOUND", "message": f"Merchant {request.merchant_id} not found"}
+        )
+    
+    # Encrypt and save the token
+    merchant.square_access_token = encrypt_token(request.access_token)
+    merchant.square_location_id = request.location_id
+    db.commit()
+    
+    logger.info(f"Set sandbox token for merchant {merchant.id}, location: {request.location_id}")
+    
+    return SetTokenResponse(
+        ok=True,
+        message=f"Sandbox token set for merchant {merchant.name}"
+    )
+

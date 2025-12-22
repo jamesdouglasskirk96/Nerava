@@ -1,7 +1,7 @@
 """
 Stripe Connect API endpoints for payouts and webhooks
 """
-from fastapi import APIRouter, Depends, HTTPException, Request, Header
+from fastapi import APIRouter, Depends, HTTPException, Request, Header, Response, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from pydantic import BaseModel
@@ -10,11 +10,13 @@ from datetime import datetime, timedelta
 import uuid
 import hmac
 import hashlib
+import json
 
 from app.db import get_db
 from app.config import settings
 from app.clients.stripe_client import get_stripe, create_transfer, create_express_account_if_needed
 from app.utils.log import get_logger, log_reward_event
+from app.services.nova_service import compute_payload_hash
 
 router = APIRouter(prefix="/v1", tags=["stripe"])
 
@@ -56,13 +58,13 @@ async def create_payout(
             detail=f"Amount too high: {request.amount_cents} cents (maximum: {settings.payout_max_cents})"
         )
     
-    # Check daily cap
+    # Check daily cap (normalize old 'paid' to 'succeeded')
     day_start = now - timedelta(hours=24)
     daily_total_result = db.execute(text("""
         SELECT COALESCE(SUM(amount_cents), 0) FROM payments
         WHERE user_id = :user_id 
         AND created_at >= :day_start
-        AND status IN ('pending', 'paid')
+        AND status IN ('pending', 'succeeded', 'paid')
     """), {
         "user_id": request.user_id,
         "day_start": day_start
@@ -75,63 +77,162 @@ async def create_payout(
             detail=f"Daily cap exceeded: {daily_total} + {request.amount_cents} > {settings.payout_daily_cap_cents} cents"
         )
     
-    # Check idempotency via client_token (stored in metadata)
+    # Require idempotency key in non-local environments
+    from app.utils.env import is_local_env
+    
+    if not request.client_token:
+        if not is_local_env():
+            raise HTTPException(
+                status_code=400,
+                detail="client_token (idempotency key) is required in non-local environment"
+            )
+        # In local, generate deterministic fallback for dev only
+        client_token = f"payout_{request.user_id}_{request.amount_cents}_{request.method}"
+    else:
+        client_token = request.client_token
+    
+    # Compute payload hash for conflict detection
+    payload = {
+        "user_id": request.user_id,
+        "amount_cents": request.amount_cents,
+        "method": request.method
+    }
+    payload_hash = compute_payload_hash(payload)
+    
+    # Check existing payment by idempotency_key (state machine handling)
     if request.client_token:
         existing_payment = db.execute(text("""
-            SELECT id, status, metadata FROM payments
-            WHERE user_id = :user_id 
-            AND metadata LIKE :pattern
+            SELECT id, status, metadata, payload_hash, no_transfer_confirmed FROM payments
+            WHERE idempotency_key = :client_token
             LIMIT 1
         """), {
-            "user_id": request.user_id,
-            "pattern": f'%{request.client_token}%'
+            "client_token": client_token
         }).first()
         
         if existing_payment:
-            # Extract provider_ref from metadata if available
-            import json
-            metadata_str = existing_payment[2] if len(existing_payment) > 2 else "{}"
-            try:
-                meta = json.loads(metadata_str) if isinstance(metadata_str, str) else metadata_str
-                provider_ref = meta.get("provider_ref", None)
-            except:
-                provider_ref = None
+            payment_id_existing = existing_payment[0]
+            status_existing = existing_payment[1]
+            existing_hash = existing_payment[3] if len(existing_payment) > 3 else None
+            no_transfer_confirmed = existing_payment[4] if len(existing_payment) > 4 else False
             
-            return {
-                "ok": True,
-                "payment_id": str(existing_payment[0]),  # Convert to string for consistency
-                "status": existing_payment[1],
-                "provider_ref": provider_ref,
-                "message": "Idempotent: returning existing payment"
-            }
+            # Check payload_hash conflict
+            if existing_hash and existing_hash != payload_hash:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Idempotency key conflict: same key with different payload"
+                )
+            
+            # Normalize old status: 'paid' -> 'succeeded'
+            if status_existing == "paid":
+                status_existing = "succeeded"
+            
+            # State machine replay logic
+            if status_existing == "succeeded":
+                # Extract provider_ref from metadata
+                metadata_str = existing_payment[2] if len(existing_payment) > 2 else "{}"
+                try:
+                    meta = json.loads(metadata_str) if isinstance(metadata_str, str) else metadata_str
+                    provider_ref = meta.get("provider_ref", None)
+                except:
+                    provider_ref = None
+                return {
+                    "ok": True,
+                    "payment_id": str(payment_id_existing),
+                    "status": "succeeded",
+                    "provider_ref": provider_ref,
+                    "message": "Idempotent: returning existing payment"
+                }
+            elif status_existing == "pending":
+                return Response(
+                    content=json.dumps({
+                        "ok": True,
+                        "payment_id": str(payment_id_existing),
+                        "status": "pending",
+                        "message": "Payment pending"
+                    }),
+                    status_code=202,
+                    media_type="application/json"
+                )
+            elif status_existing == "unknown":
+                return Response(
+                    content=json.dumps({
+                        "ok": True,
+                        "payment_id": str(payment_id_existing),
+                        "status": "unknown",
+                        "message": "Payment pending reconciliation"
+                    }),
+                    status_code=202,
+                    media_type="application/json"
+                )
+            elif status_existing == "failed":
+                # Allow retry ONLY if reconciliation confirmed NO Stripe transfer exists
+                if no_transfer_confirmed:
+                    # Allow retry - continue to create new payment
+                    pass
+                else:
+                    return Response(
+                        content=json.dumps({
+                            "ok": True,
+                            "payment_id": str(payment_id_existing),
+                            "status": "failed",
+                            "message": "Payment failed, pending reconciliation"
+                        }),
+                        status_code=202,
+                        media_type="application/json"
+                    )
     
-    # Fetch wallet balance
-    wallet_result = db.execute(text("""
-        SELECT COALESCE(SUM(amount_cents), 0) FROM wallet_ledger
-        WHERE user_id = :user_id
-    """), {"user_id": request.user_id}).scalar()
-    wallet_balance = int(wallet_result) if wallet_result else 0
-    
-    # Check sufficient funds
-    if wallet_balance < request.amount_cents:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Insufficient funds: balance={wallet_balance} cents, requested={request.amount_cents} cents"
-        )
-    
-    # Generate payment ID (use integer if table expects integer, else UUID string)
-    # Check if payments.id is INTEGER or TEXT/VARCHAR
-    # For now, use integer ID (auto-increment) - but we'll insert with a generated integer
-    # Actually, let's use UUID stored as string for id if it's INTEGER, we need to use a different approach
-    # Check: payments table uses INTEGER id, so we'll let SQLite auto-generate it
-    client_token = request.client_token or f"payout_{uuid.uuid4()}"
-    payment_id = None  # Will be set after insert
+    # ============================================
+    # PHASE A: DB Transaction (NO Stripe call)
+    # ============================================
+    payment_id = None
+    transfer_result = None
+    stripe_error = None
     
     try:
-        # Start transaction
-        # 1. Insert payments row (adapt to actual schema)
-        # Payments table: id (INTEGER auto-increment), user_id, merchant_id, amount_cents, payment_method, status, transaction_id, metadata, created_at
-        # Let SQLite auto-generate id, then retrieve it
+        # 1. Upsert wallet lock row
+        is_sqlite = settings.database_url.startswith("sqlite")
+        if is_sqlite:
+            # SQLite: ON CONFLICT DO NOTHING (no column list needed)
+            db.execute(text("""
+                INSERT OR IGNORE INTO wallet_locks (user_id) VALUES (:user_id)
+            """), {"user_id": request.user_id})
+        else:
+            # Postgres: ON CONFLICT (user_id) DO NOTHING
+            db.execute(text("""
+                INSERT INTO wallet_locks (user_id) VALUES (:user_id)
+                ON CONFLICT (user_id) DO NOTHING
+            """), {"user_id": request.user_id})
+        
+        # 2. Acquire lock with FOR UPDATE
+        # SQLite lacks FOR UPDATE; transaction provides the necessary write lock for this path.
+        is_sqlite = settings.database_url.startswith("sqlite")
+        for_update = "" if is_sqlite else " FOR UPDATE"
+        lock_result = db.execute(text(f"""
+            SELECT user_id FROM wallet_locks WHERE user_id = :user_id{for_update}
+        """), {"user_id": request.user_id}).first()
+        
+        if not lock_result:
+            raise HTTPException(status_code=500, detail="Failed to acquire wallet lock")
+        
+        # 3. Compute balance under lock
+        wallet_result = db.execute(text("""
+            SELECT COALESCE(SUM(amount_cents), 0) FROM wallet_ledger
+            WHERE user_id = :user_id
+        """), {"user_id": request.user_id}).scalar()
+        wallet_balance = int(wallet_result) if wallet_result else 0
+        
+        # 4. Check sufficient funds
+        if wallet_balance < request.amount_cents:
+            db.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail=f"Insufficient funds: balance={wallet_balance} cents, requested={request.amount_cents} cents"
+            )
+        
+        # 5. Calculate new balance
+        new_balance = wallet_balance - request.amount_cents
+        
+        # 6. Create payment row (status='pending')
         is_sqlite = settings.database_url.startswith("sqlite")
         
         log_reward_event(logger, "payout_start", client_token, request.user_id, True, {
@@ -140,33 +241,33 @@ async def create_payout(
             "client_token": client_token
         })
         
+        metadata_dict = {
+            "payment_id_placeholder": client_token,
+            "user_id": request.user_id,
+            "provider": "stripe",
+            "client_token": client_token
+        }
+        
         if is_sqlite:
-            # SQLite: let auto-increment handle id
             db.execute(text("""
                 INSERT INTO payments (
                     user_id, amount_cents, payment_method, status,
-                    transaction_id, metadata, created_at
+                    transaction_id, metadata, created_at, idempotency_key, payload_hash
                 ) VALUES (
                     :user_id, :amount_cents, :payment_method, 'pending',
-                    NULL, :metadata, :created_at
+                    NULL, :metadata, :created_at, :idempotency_key, :payload_hash
                 )
             """), {
                 "user_id": request.user_id,
                 "amount_cents": request.amount_cents,
                 "payment_method": request.method,
-                "metadata": f'{{"payment_id_placeholder":"{client_token}","user_id":{request.user_id},"provider":"stripe","client_token":"{client_token}"}}',
-                "created_at": now
+                "metadata": json.dumps(metadata_dict),
+                "created_at": now,
+                "idempotency_key": client_token,
+                "payload_hash": payload_hash
             })
-            # Get the last insert id
             payment_id = db.execute(text("SELECT last_insert_rowid()")).scalar()
-            # Update metadata with actual payment_id
-            import json
-            metadata_dict = {
-                "payment_id": str(payment_id),
-                "user_id": request.user_id,
-                "provider": "stripe",
-                "client_token": client_token
-            }
+            metadata_dict["payment_id"] = str(payment_id)
             db.execute(text("""
                 UPDATE payments SET metadata = :metadata WHERE id = :payment_id
             """), {
@@ -174,35 +275,30 @@ async def create_payout(
                 "metadata": json.dumps(metadata_dict)
             })
         else:
-            # Postgres: use UUID
             payment_id = str(uuid.uuid4())
+            metadata_dict["payment_id"] = payment_id
             db.execute(text("""
                 INSERT INTO payments (
                     id, user_id, amount_cents, payment_method, status,
-                    transaction_id, metadata, created_at
+                    transaction_id, metadata, created_at, idempotency_key, payload_hash
                 ) VALUES (
                     :id, :user_id, :amount_cents, :payment_method, 'pending',
-                    NULL, :metadata, :created_at
+                    NULL, :metadata, :created_at, :idempotency_key, :payload_hash
                 )
             """), {
                 "id": payment_id,
                 "user_id": request.user_id,
                 "amount_cents": request.amount_cents,
                 "payment_method": request.method,
-                "metadata": f'{{"payment_id":"{payment_id}","user_id":{request.user_id},"provider":"stripe","client_token":"{client_token}"}}',
-                "created_at": now
+                "metadata": json.dumps(metadata_dict),
+                "created_at": now,
+                "idempotency_key": client_token,
+                "payload_hash": payload_hash
             })
         
         log_reward_event(logger, "payout_payment_created", payment_id, request.user_id, True)
         
-        # 2. Debit wallet_ledger
-        balance_result = db.execute(text("""
-            SELECT COALESCE(SUM(amount_cents), 0) FROM wallet_ledger
-            WHERE user_id = :user_id
-        """), {"user_id": request.user_id}).scalar()
-        new_balance = int(balance_result) if balance_result else 0
-        new_balance -= request.amount_cents
-        
+        # 7. Insert wallet_ledger debit
         db.execute(text("""
             INSERT INTO wallet_ledger (
                 user_id, amount_cents, transaction_type,
@@ -213,10 +309,10 @@ async def create_payout(
             )
         """), {
             "user_id": request.user_id,
-            "amount_cents": -request.amount_cents,  # Negative for debit
+            "amount_cents": -request.amount_cents,
             "reference_id": payment_id,
             "balance_cents": new_balance,
-            "metadata": f'{{"payment_id":"{payment_id}","type":"payout"}}',
+            "metadata": json.dumps({"payment_id": str(payment_id), "type": "payout", "client_token": client_token}),
             "created_at": now
         })
         
@@ -225,55 +321,37 @@ async def create_payout(
             "new_balance": new_balance
         })
         
-        # 3. Handle Stripe transfer (or simulate)
-        stripe_client = get_stripe()
+        # 8. COMMIT Phase A
+        db.commit()
         
-        if not stripe_client or not settings.stripe_secret:
-            # Simulation mode: mark as paid immediately
-            # Update metadata with provider_ref (SQLite compatible)
-            import json
-            # Get existing metadata
-            existing_meta_result = db.execute(text("""
-                SELECT metadata FROM payments WHERE id = :payment_id
-            """), {"payment_id": payment_id}).first()
-            
-            if existing_meta_result:
-                try:
-                    meta_str = existing_meta_result[0] if existing_meta_result else "{}"
-                    metadata_dict = json.loads(meta_str) if isinstance(meta_str, str) else meta_str
-                except:
-                    metadata_dict = {"payment_id": str(payment_id), "user_id": request.user_id}
-            else:
-                metadata_dict = {"payment_id": str(payment_id), "user_id": request.user_id}
-            
-            metadata_dict["provider"] = "stripe"
-            metadata_dict["client_token"] = client_token
-            metadata_dict["provider_ref"] = "simulated"
-            db.execute(text("""
-                UPDATE payments
-                SET status = 'paid', metadata = :metadata
-                WHERE id = :payment_id
-            """), {
-                "payment_id": payment_id,
-                "metadata": json.dumps(metadata_dict)
-            })
-            
-            db.commit()
-            
-            log_reward_event(logger, "payout_stripe_transfer", payment_id, request.user_id, True, {
-                "simulated": True,
-                "status": "paid"
-            })
-            
-            return {
-                "ok": True,
-                "payment_id": str(payment_id),  # Convert to string for consistency
-                "status": "paid",
-                "provider_ref": "simulated",
-                "message": "Simulated payout (Stripe keys not configured)"
-            }
-        else:
-            # Real Stripe mode
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        log_reward_event(logger, "payout_phase_a_failed", payment_id or "unknown", request.user_id, False, {
+            "error": str(e),
+            "error_type": type(e).__name__
+        })
+        raise HTTPException(status_code=500, detail=f"Payout Phase A failed: {str(e)}")
+    
+    # ============================================
+    # PHASE B: Stripe Transfer (OUTSIDE TX)
+    # ============================================
+    transfer_result = None
+    stripe_error = None
+    
+    stripe_client = get_stripe()
+    
+    if not stripe_client or not settings.stripe_secret:
+        # Simulation mode: mark as succeeded immediately
+        transfer_result = {
+            "id": f"tr_sim_{payment_id}",
+            "status": "paid",
+            "simulated": True
+        }
+    else:
+        # Real Stripe mode: call Stripe API OUTSIDE transaction
+        try:
             # Get or create Stripe account for user
             user_account_result = db.execute(text("""
                 SELECT stripe_account_id FROM users WHERE id = :user_id
@@ -282,10 +360,7 @@ async def create_payout(
             stripe_account_id = user_account_result[0] if user_account_result and user_account_result[0] else None
             
             if not stripe_account_id:
-                # Create or get test account
                 stripe_account_id = create_express_account_if_needed(request.user_id)
-                
-                # Update user record
                 db.execute(text("""
                     UPDATE users
                     SET stripe_account_id = :stripe_account_id, stripe_onboarded = 1
@@ -294,71 +369,190 @@ async def create_payout(
                     "user_id": request.user_id,
                     "stripe_account_id": stripe_account_id
                 })
+                db.commit()
             
-            # Create transfer
-            transfer_result = create_transfer(
-                connected_account_id=stripe_account_id,
-                amount_cents=request.amount_cents,
-                metadata={
-                    "payment_id": payment_id,
-                    "user_id": str(request.user_id),
-                    "client_token": client_token
-                }
-            )
-            
-            # Update payment metadata with transfer ID (SQLite compatible)
-            import json
-            # First get existing metadata
-            existing_meta_result = db.execute(text("""
-                SELECT metadata FROM payments WHERE id = :payment_id
-            """), {"payment_id": payment_id}).first()
-            
-            if existing_meta_result:
-                try:
-                    meta_str = existing_meta_result[0] if existing_meta_result else "{}"
-                    meta = json.loads(meta_str) if isinstance(meta_str, str) else meta_str
-                except:
-                    meta = {}
-                meta["provider_ref"] = transfer_result.get("id")
-                
-                db.execute(text("""
-                    UPDATE payments
-                    SET metadata = :metadata
-                    WHERE id = :payment_id
-                """), {
-                    "payment_id": payment_id,
-                    "metadata": json.dumps(meta)
-                })
-            
-            # If simulated transfer returned paid, update status
-            if transfer_result.get("simulated") or transfer_result.get("status") == "paid":
-                db.execute(text("""
-                    UPDATE payments
-                    SET status = 'paid'
-                    WHERE id = :payment_id
-                """), {"payment_id": payment_id})
-            
+            # Call Stripe transfer (OUTSIDE transaction)
+            try:
+                transfer_result = create_transfer(
+                    connected_account_id=stripe_account_id,
+                    amount_cents=request.amount_cents,
+                    metadata={
+                        "payment_id": str(payment_id),
+                        "user_id": str(request.user_id),
+                        "idempotency_key": client_token
+                    }
+                )
+            except Exception as e:
+                # Timeout/network error or Stripe error - mark as unknown
+                stripe_error = str(e)
+                transfer_result = None
+        except Exception as e:
+            # Account creation/update error - mark as unknown
+            stripe_error = str(e)
+            transfer_result = None
+    
+    # ============================================
+    # PHASE C: Finalize Payment Status (NEW DB TX)
+    # ============================================
+    try:
+        # Lock payment row FOR UPDATE
+        # SQLite lacks FOR UPDATE; transaction provides the necessary write lock for this path.
+        is_sqlite = settings.database_url.startswith("sqlite")
+        for_update = "" if is_sqlite else " FOR UPDATE"
+        payment_row = db.execute(text(f"""
+            SELECT id, status FROM payments WHERE id = :payment_id{for_update}
+        """), {"payment_id": payment_id}).first()
+        
+        if not payment_row:
+            raise HTTPException(status_code=500, detail="Payment not found after creation")
+        
+        if transfer_result and transfer_result.get("simulated"):
+            # Simulation success
+            db.execute(text("""
+                UPDATE payments
+                SET status = 'succeeded',
+                    stripe_transfer_id = :transfer_id,
+                    stripe_status = :stripe_status,
+                    reconciled_at = :reconciled_at,
+                    no_transfer_confirmed = FALSE
+                WHERE id = :payment_id
+            """), {
+                "payment_id": payment_id,
+                "transfer_id": transfer_result.get("id"),
+                "stripe_status": "paid",
+                "reconciled_at": datetime.utcnow()
+            })
             db.commit()
             
             log_reward_event(logger, "payout_stripe_transfer", payment_id, request.user_id, True, {
-                "transfer_id": transfer_result.get("id"),
-                "status": transfer_result.get("status")
+                "simulated": True,
+                "status": "succeeded"
             })
             
             return {
                 "ok": True,
-                "payment_id": str(payment_id),  # Convert to string for consistency
-                "status": "paid" if (transfer_result.get("simulated") or transfer_result.get("status") == "paid") else "pending",
+                "payment_id": str(payment_id),
+                "status": "succeeded",
+                "provider_ref": transfer_result.get("id"),
+                "message": "Simulated payout (Stripe keys not configured)"
+            }
+        elif transfer_result and transfer_result.get("status") == "paid":
+            # Stripe success
+            db.execute(text("""
+                UPDATE payments
+                SET status = 'succeeded',
+                    stripe_transfer_id = :transfer_id,
+                    stripe_status = :stripe_status,
+                    reconciled_at = :reconciled_at,
+                    no_transfer_confirmed = FALSE
+                WHERE id = :payment_id
+            """), {
+                "payment_id": payment_id,
+                "transfer_id": transfer_result.get("id"),
+                "stripe_status": transfer_result.get("status"),
+                "reconciled_at": datetime.utcnow()
+            })
+            db.commit()
+            
+            log_reward_event(logger, "payout_stripe_transfer", payment_id, request.user_id, True, {
+                "transfer_id": transfer_result.get("id"),
+                "status": "succeeded"
+            })
+            
+            return {
+                "ok": True,
+                "payment_id": str(payment_id),
+                "status": "succeeded",
                 "provider_ref": transfer_result.get("id")
             }
+        elif transfer_result:
+            # Stripe returned error (definitive failure)
+            error_msg = transfer_result.get("error", "Stripe transfer failed")
+            db.execute(text("""
+                UPDATE payments
+                SET status = 'failed',
+                    error_message = :error_message,
+                    reconciled_at = :reconciled_at,
+                    no_transfer_confirmed = TRUE
+                WHERE id = :payment_id
+            """), {
+                "payment_id": payment_id,
+                "error_message": error_msg,
+                "reconciled_at": datetime.utcnow()
+            })
             
+            # Insert reversal credit
+            current_balance_result = db.execute(text("""
+                SELECT COALESCE(SUM(amount_cents), 0) FROM wallet_ledger
+                WHERE user_id = :user_id
+            """), {"user_id": request.user_id}).scalar()
+            reversal_balance = int(current_balance_result) + request.amount_cents
+            
+            db.execute(text("""
+                INSERT INTO wallet_ledger (
+                    user_id, amount_cents, transaction_type,
+                    reference_id, reference_type, balance_cents, metadata, created_at
+                ) VALUES (
+                    :user_id, :amount_cents, 'credit',
+                    :reference_id, 'payout_reversal', :balance_cents, :metadata, :created_at
+                )
+            """), {
+                "user_id": request.user_id,
+                "amount_cents": request.amount_cents,  # Positive for credit
+                "reference_id": payment_id,
+                "balance_cents": reversal_balance,
+                "metadata": json.dumps({"payment_id": str(payment_id), "type": "payout_reversal", "reason": "stripe_failed"}),
+                "created_at": datetime.utcnow()
+            })
+            
+            db.commit()
+            
+            log_reward_event(logger, "payout_stripe_transfer", payment_id, request.user_id, False, {
+                "error": error_msg,
+                "status": "failed"
+            })
+            
+            raise HTTPException(status_code=400, detail=f"Stripe transfer failed: {error_msg}")
+        else:
+            # Timeout/network error - mark as unknown (DO NOT reverse)
+            db.execute(text("""
+                UPDATE payments
+                SET status = 'unknown',
+                    error_message = :error_message,
+                    reconciled_at = NULL,
+                    no_transfer_confirmed = FALSE
+                WHERE id = :payment_id
+            """), {
+                "payment_id": payment_id,
+                "error_message": stripe_error or "Stripe timeout/network error"
+            })
+            db.commit()
+            
+            log_reward_event(logger, "payout_stripe_transfer", payment_id, request.user_id, False, {
+                "error": stripe_error or "timeout",
+                "status": "unknown"
+            })
+            
+            return Response(
+                content=json.dumps({
+                    "ok": True,
+                    "payment_id": str(payment_id),
+                    "status": "unknown",
+                    "message": "Payment pending reconciliation"
+                }),
+                status_code=202,
+                media_type="application/json"
+            )
+            
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
-        log_reward_event(logger, "payout_stripe_transfer", payment_id, request.user_id, False, {
+        log_reward_event(logger, "payout_phase_c_failed", payment_id, request.user_id, False, {
             "error": str(e),
             "error_type": type(e).__name__
         })
-        raise HTTPException(status_code=500, detail=f"Payout creation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Payout Phase C failed: {str(e)}")
 
 
 @router.post("/stripe/webhook")
@@ -369,12 +563,42 @@ async def stripe_webhook(
     """
     Handle Stripe webhook events to finalize payouts.
     
-    Verifies webhook signature if STRIPE_WEBHOOK_SECRET is set.
+    Verifies webhook signature (required in non-local environments).
+    Deduplicates events using stripe_webhook_events table.
     """
+    import os
+    import json
+    from datetime import datetime
+    
+    # Check feature flags (P1 stability fix)
+    if settings.emergency_readonly_mode:
+        # In readonly mode, still process webhooks but don't update balances
+        logger.warning("Emergency readonly mode: webhook received but not processing")
+        return {"ok": True, "message": "Readonly mode - webhook logged but not processed"}
+    
+    # Check if in local environment
+    env = os.getenv("ENV", "dev").lower()
+    region = settings.region.lower()
+    is_local = env == "local" or region == "local"
+    
     body = await request.body()
     signature = request.headers.get("stripe-signature")
     
-    # Verify signature if secret is configured
+    # Require webhook secret in non-local environments (P0 security fix)
+    if not is_local:
+        if not settings.stripe_webhook_secret:
+            error_msg = (
+                "CRITICAL: STRIPE_WEBHOOK_SECRET is required in non-local environment. "
+                f"ENV={env}, REGION={region}. Set STRIPE_WEBHOOK_SECRET environment variable."
+            )
+            logger.error(error_msg)
+            raise HTTPException(status_code=500, detail="Webhook secret not configured")
+        
+        if not signature:
+            logger.error("Missing stripe-signature header in non-local environment")
+            raise HTTPException(status_code=400, detail="Missing webhook signature")
+    
+    # Verify signature
     if settings.stripe_webhook_secret and signature:
         try:
             stripe_client = get_stripe()
@@ -383,53 +607,133 @@ async def stripe_webhook(
                     body, signature, settings.stripe_webhook_secret
                 )
             else:
-                # In simulation, skip verification
-                import json
+                # In simulation/local, skip verification
                 event = json.loads(body)
         except Exception as e:
+            logger.error(f"Webhook signature verification failed: {e}")
             raise HTTPException(status_code=400, detail=f"Webhook signature verification failed: {str(e)}")
     else:
-        # No secret configured, parse body directly (dev/simulation)
-        import json
+        # No secret configured (local dev only)
+        if not is_local:
+            raise HTTPException(status_code=500, detail="Webhook secret required in non-local environment")
         try:
             event = json.loads(body)
         except:
             raise HTTPException(status_code=400, detail="Invalid webhook body")
     
+    event_id = event.get("id")
     event_type = event.get("type")
     event_data = event.get("data", {}).get("object", {})
     
-    log_reward_event(logger, "payout_webhook_received", "webhook", 0, True, {
+    if not event_id:
+        raise HTTPException(status_code=400, detail="Missing event ID")
+    
+    # Check for duplicate event (idempotency)
+    existing_event = db.execute(text("""
+        SELECT event_id, status, processed_at FROM stripe_webhook_events
+        WHERE event_id = :event_id
+    """), {"event_id": event_id}).first()
+    
+    if existing_event:
+        # Event already processed - return success without reprocessing
+        logger.info(f"Stripe webhook event {event_id} already processed (status: {existing_event[1]})")
+        return {
+            "ok": True,
+            "event_id": event_id,
+            "status": "duplicate",
+            "message": "Event already processed"
+        }
+    
+    # Record event as received
+    db.execute(text("""
+        INSERT INTO stripe_webhook_events (
+            event_id, event_type, received_at, status, event_data
+        ) VALUES (
+            :event_id, :event_type, :received_at, 'pending', :event_data
+        )
+    """), {
+        "event_id": event_id,
         "event_type": event_type,
-        "event_id": event.get("id")
+        "received_at": datetime.utcnow(),
+        "event_data": json.dumps(event) if event else None
+    })
+    db.commit()
+    
+    log_reward_event(logger, "payout_webhook_received", event_id, 0, True, {
+        "event_type": event_type,
+        "event_id": event_id
     })
     
     # Handle transfer/payout success events
-    if event_type in ["transfer.paid", "payout.paid", "balance.available"]:
-        # Extract payment_id from metadata
-        metadata = event_data.get("metadata", {})
-        payment_id = metadata.get("payment_id")
-        
-        if payment_id:
-            # Update payment status to paid
-            result = db.execute(text("""
-                UPDATE payments
-                SET status = 'paid'
-                WHERE id = :payment_id AND status = 'pending'
-            """), {"payment_id": payment_id})
+    try:
+        if event_type in ["transfer.paid", "payout.paid", "balance.available"]:
+            # Extract payment_id from metadata
+            metadata = event_data.get("metadata", {})
+            payment_id = metadata.get("payment_id")
             
-            db.commit()
-            
-            if result.rowcount > 0:
-                log_reward_event(logger, "payout_webhook_update", payment_id, 0, True, {
-                    "new_status": "paid",
-                    "event_type": event_type
-                })
+            if payment_id:
+                # Update payment status to succeeded
+                result = db.execute(text("""
+                    UPDATE payments
+                    SET status = 'succeeded'
+                    WHERE id = :payment_id AND status = 'pending'
+                """), {"payment_id": payment_id})
                 
-                return {"ok": True, "payment_id": payment_id, "status": "paid"}
-            else:
-                return {"ok": True, "message": "Payment already processed or not found"}
-    
-    # Unknown event types: return 200 but don't process
-    return {"ok": True, "message": f"Ignored event type: {event_type}"}
+                db.commit()
+                
+                if result.rowcount > 0:
+                    log_reward_event(logger, "payout_webhook_update", payment_id, 0, True, {
+                        "new_status": "succeeded",
+                        "event_type": event_type
+                    })
+                    
+                    # Mark event as processed
+                    db.execute(text("""
+                        UPDATE stripe_webhook_events
+                        SET status = 'processed', processed_at = :processed_at
+                        WHERE event_id = :event_id
+                    """), {
+                        "event_id": event_id,
+                        "processed_at": datetime.utcnow()
+                    })
+                    db.commit()
+                    
+                    return {"ok": True, "payment_id": payment_id, "status": "succeeded"}
+                else:
+                    # Payment already processed or not found - mark event as processed anyway
+                    db.execute(text("""
+                        UPDATE stripe_webhook_events
+                        SET status = 'processed', processed_at = :processed_at
+                        WHERE event_id = :event_id
+                    """), {
+                        "event_id": event_id,
+                        "processed_at": datetime.utcnow()
+                    })
+                    db.commit()
+                    return {"ok": True, "message": "Payment already processed or not found"}
+        
+        # Unknown event types: mark as processed but don't process
+        db.execute(text("""
+            UPDATE stripe_webhook_events
+            SET status = 'processed', processed_at = :processed_at
+            WHERE event_id = :event_id
+        """), {
+            "event_id": event_id,
+            "processed_at": datetime.utcnow()
+        })
+        db.commit()
+        return {"ok": True, "message": f"Ignored event type: {event_type}"}
+    except Exception as e:
+        # Mark event as failed
+        logger.error(f"Error processing Stripe webhook event {event_id}: {e}", exc_info=True)
+        db.execute(text("""
+            UPDATE stripe_webhook_events
+            SET status = 'failed', processed_at = :processed_at
+            WHERE event_id = :event_id
+        """), {
+            "event_id": event_id,
+            "processed_at": datetime.utcnow()
+        })
+        db.commit()
+        raise HTTPException(status_code=500, detail=f"Failed to process webhook event: {str(e)}")
 

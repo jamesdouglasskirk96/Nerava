@@ -43,6 +43,7 @@ Local Testing Flow:
    - /v1/ev/me/telemetry/latest returns 200 with telemetry data or clean 404 if unavailable
 """
 import logging
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
@@ -57,10 +58,11 @@ from app.db import get_db
 from app.models import User
 from app.models_vehicle import VehicleAccount, VehicleToken
 from app.dependencies_domain import get_current_user, get_current_user_id
-from app.config import settings
+from app.core.config import settings
 from app.services.smartcar_service import (
     exchange_code_for_tokens,
     list_vehicles,
+    SmartcarTokenExpiredError,
 )
 from app.services.ev_telemetry import poll_vehicle_telemetry_for_account
 
@@ -82,36 +84,23 @@ class TelemetryResponse(BaseModel):
     longitude: Optional[float]
 
 
-# Helper: Create signed state token
-def create_state_token(user_id: int) -> str:
-    """Create a cryptographically signed state token for OAuth flow"""
-    expires_delta = timedelta(minutes=15)
-    expire = datetime.utcnow() + expires_delta
-    
-    payload = {
-        "user_id": str(user_id),
-        "purpose": "smartcar_oauth",
-        "exp": expire,
-        "iat": datetime.utcnow(),
-    }
-    
-    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_alg)
+# Helper: Create signed state token using SMARTCAR_STATE_SECRET
+def create_state_token(user_public_id: str) -> str:
+    """Create a cryptographically signed state token for OAuth flow using user public_id"""
+    from ..core.security import create_smartcar_state_jwt
+    return create_smartcar_state_jwt(user_public_id)
 
 
 # Helper: Verify and decode state token
-def verify_state_token(token: str) -> int:
-    """Verify state token and return user_id"""
+def verify_state_token(token: str) -> str:
+    """Verify state token and return user_public_id"""
+    from ..core.security import verify_smartcar_state_jwt
     try:
-        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_alg])
-        
-        if payload.get("purpose") != "smartcar_oauth":
-            raise ValueError("Invalid token purpose")
-        
-        user_id_str = payload.get("user_id")
-        if not user_id_str:
-            raise ValueError("Missing user_id in token")
-        
-        return int(user_id_str)
+        payload = verify_smartcar_state_jwt(token)
+        user_public_id = payload.get("user_public_id")
+        if not user_public_id:
+            raise ValueError("Missing user_public_id in token")
+        return user_public_id
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -134,27 +123,32 @@ async def connect_vehicle(
     Returns a URL that the frontend should redirect the user to.
     After OAuth, Smartcar will redirect to /oauth/smartcar/callback.
     """
-    if not settings.smartcar_enabled():
+    if not settings.smartcar_enabled:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Smartcar integration is not configured. Set SMARTCAR_CLIENT_ID, SMARTCAR_CLIENT_SECRET, and SMARTCAR_REDIRECT_URI."
         )
     
-    # Create signed state token
-    state = create_state_token(current_user.id)
+    # Create signed state token using user public_id
+    import uuid
+    nonce = str(uuid.uuid4())
+    state = create_state_token(current_user.public_id)
+    
+    # Log for debugging
+    logger.info(f"smartcar_connect_started user_public_id={current_user.public_id} nonce={nonce}")
     
     # Build Smartcar Connect URL
-    base_url = f"{settings.smartcar_connect_url}/oauth/authorize"
+    base_url = f"{settings.SMARTCAR_CONNECT_URL}/oauth/authorize"
     
     # Default scope - can be extended later
     scope = "read_vehicle_info read_location read_charge"
     
     params = {
         "response_type": "code",
-        "client_id": settings.smartcar_client_id,
-        "redirect_uri": settings.smartcar_redirect_uri,
+        "client_id": settings.SMARTCAR_CLIENT_ID,
+        "redirect_uri": settings.SMARTCAR_REDIRECT_URI,
         "scope": scope,
-        "mode": settings.smartcar_mode,
+        "mode": settings.SMARTCAR_MODE,
         "state": state,
     }
     
@@ -163,7 +157,7 @@ async def connect_vehicle(
     # Log mode and redirect_uri (but NOT client_secret)
     logger.info(
         f"Generated Smartcar Connect URL for user {current_user.id} "
-        f"(mode={settings.smartcar_mode}, redirect_uri={settings.smartcar_redirect_uri})"
+        f"(mode={settings.SMARTCAR_MODE}, redirect_uri={settings.SMARTCAR_REDIRECT_URI})"
     )
     
     return ConnectResponse(url=connect_url)
@@ -202,9 +196,9 @@ async def smartcar_callback(
             detail="Missing state parameter"
         )
     
-    # Verify state token and get user_id
+    # Verify state token and get user_public_id (stateless - no session required)
     try:
-        user_id = verify_state_token(state)
+        user_public_id = verify_state_token(state)
     except HTTPException:
         raise
     except Exception as e:
@@ -214,13 +208,15 @@ async def smartcar_callback(
             detail="Invalid state token"
         )
     
-    # Fetch user
-    user = db.query(User).filter(User.id == user_id).first()
+    # Fetch user by public_id (stateless callback - no session)
+    user = db.query(User).filter(User.public_id == user_public_id).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
+    
+    user_id = user.id  # Use integer id for vehicle_account linkage
     
     try:
         # Exchange code for tokens
@@ -278,12 +274,18 @@ async def smartcar_callback(
         
         db.flush()  # Get account.id
         
-        # Create token record
+        # Encrypt tokens before storing (P0 security fix)
+        from app.services.token_encryption import encrypt_token
+        encrypted_access_token = encrypt_token(access_token)
+        encrypted_refresh_token = encrypt_token(refresh_token)
+        
+        # Create token record with encrypted tokens
         token_record = VehicleToken(
             id=str(uuid.uuid4()),
             vehicle_account_id=account.id,
-            access_token=access_token,
-            refresh_token=refresh_token,
+            access_token=encrypted_access_token,
+            refresh_token=encrypted_refresh_token,
+            encryption_version=1,  # Mark as encrypted
             expires_at=datetime.utcnow() + timedelta(seconds=expires_in),
             scope=scope,
         )
@@ -291,7 +293,7 @@ async def smartcar_callback(
         db.add(token_record)
         db.commit()
         
-        logger.info(f"Connected vehicle {vehicle_id} for user {user_id}")
+        logger.info(f"smartcar_linked user_public_id={user.public_id} vehicle_count={len(vehicles)}")
         
         # Redirect to frontend account page with success indicator
         frontend_url = f"{settings.frontend_url.rstrip('/')}/#profile?vehicle=connected"
@@ -348,6 +350,40 @@ async def get_latest_telemetry(
             longitude=telemetry.longitude,
         )
         
+    except SmartcarTokenExpiredError:
+        # Refresh token expired - user needs to re-authenticate
+        logger.warning(f"Smartcar token expired for user {current_user.id}, re-auth required")
+        raise HTTPException(
+            status_code=status.HTTP_424_FAILED_DEPENDENCY,
+            detail={
+                "error": "VEHICLE_REAUTH_REQUIRED",
+                "message": "Your vehicle connection has expired. Please reconnect via Profile → Connect EV.",
+                "action": "reauth"
+            }
+        )
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 400:
+            # Smartcar returned 400 - likely token/credential issue
+            logger.error(f"Smartcar token error for user {current_user.id}: {e.response.status_code}")
+            raise HTTPException(
+                status_code=status.HTTP_424_FAILED_DEPENDENCY,
+                detail={
+                    "error": "SMARTCAR_TOKEN_EXCHANGE_FAILED",
+                    "status": 400,
+                    "hint": "Check SMARTCAR_CLIENT_ID/SECRET and redirect URI configuration"
+                }
+            )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Smartcar API error: {e.response.status_code}"
+        )
+    except ValueError as e:
+        # No token found - user not connected
+        logger.error(f"No token found for user {current_user.id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No connected vehicle found"
+        )
     except Exception as e:
         logger.error(f"Error polling telemetry for user {current_user.id}: {e}", exc_info=True)
         raise HTTPException(

@@ -11,11 +11,19 @@ function getApiBase() {
   const forceProd = urlParams.get('force_prod') === 'true';
   
   if (isLocalhost && !forceProd) {
-    // Clear any localStorage overrides that might interfere
-    // Use empty string for same-origin requests (relative paths)
-    // This makes fetch('/v1/...') resolve to http://localhost:8001/v1/...
-    console.log('[API] Local dev detected - using same origin (no CORS):', origin);
-    return '';
+    // For localhost, check if we're on port 8080 (frontend) or 8001 (backend)
+    // If on 8080, route API calls to 8001
+    const port = window.location.port;
+    if (port === '8080' || port === '') {
+      // Frontend is on 8080 or default port, route to backend on 8001
+      const backendUrl = `http://${hostname}:8001`;
+      console.log('[API] Local dev detected - frontend on port', port, '- routing to backend:', backendUrl);
+      return backendUrl;
+    } else {
+      // Backend is serving frontend (same origin)
+      console.log('[API] Local dev detected - using same origin (no CORS):', origin);
+      return '';
+    }
   }
   
   // PRIORITY 2: Explicit production backend override (for testing prod from local)
@@ -69,18 +77,51 @@ const BASE = getApiBase();
 export const EVENT_SLUG = 'domain_jan_2025';
 export const ZONE_SLUG = 'domain_austin';
 
-async function _req(path, opts = {}) {
+// Track if we're currently refreshing to avoid infinite loops
+let isRefreshing = false;
+let refreshPromise = null;
+
+async function _req(path, opts = {}, retryOn401 = true) {
   const headers = { 
     Accept: 'application/json',
     'Content-Type': 'application/json',
     ...opts.headers 
   };
   
-  const r = await fetch(BASE + path, {
+  // Add Authorization header if access token exists
+  const { getAccessToken } = await import('./auth.js');
+  const accessToken = getAccessToken();
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+    console.log('[API] Request headers: Authorization header added (token present)');
+  } else {
+    console.log('[API] Request headers: No auth token available');
+  }
+  
+  const url = BASE + path;
+  console.log('[API] Making request to:', url, { method: opts.method || 'GET', headers });
+  
+  // Add cache control for GET requests to prevent stale data
+  const fetchOpts = {
     headers,
     credentials: 'include',
     ...opts,
-  });
+  };
+  
+  // For GET requests, add cache: 'no-store' to ensure fresh data
+  if ((opts.method || 'GET').toUpperCase() === 'GET' && !opts.cache) {
+    fetchOpts.cache = 'no-store';
+  }
+  
+  const r = await fetch(url, fetchOpts);
+  
+  console.log('[API] Response status:', r.status, r.statusText);
+  
+  // Capture X-Request-ID from response
+  const requestId = r.headers.get('X-Request-ID');
+  if (requestId) {
+    console.log(`[API] Request ID: ${requestId}`);
+  }
   
   // Handle 404 gracefully - return null for missing resources
   if (r.status === 404) {
@@ -88,8 +129,82 @@ async function _req(path, opts = {}) {
     return null;
   }
   
+  // Handle 401: try to refresh token and retry once
+  if (r.status === 401 && retryOn401 && accessToken) {
+    const errorText = await r.text().catch(() => 'Unknown error');
+    const errorCode = r.headers.get('X-Error-Code');
+    
+    // If refresh_reuse_detected, clear tokens and redirect to login
+    if (errorCode === 'refresh_reuse_detected') {
+      const { clearTokens } = await import('./auth.js');
+      clearTokens();
+      window.location.hash = '#/login';
+      throw new Error('Session expired. Please sign in again.');
+    }
+    
+    // Try to refresh token
+    if (!isRefreshing) {
+      isRefreshing = true;
+      refreshPromise = (async () => {
+        try {
+          const { refreshAccessToken } = await import('./auth.js');
+          const newToken = await refreshAccessToken();
+          if (newToken) {
+            return newToken;
+          }
+        } finally {
+          isRefreshing = false;
+          refreshPromise = null;
+        }
+        return null;
+      })();
+    }
+    
+    const newToken = await refreshPromise;
+    
+    if (newToken) {
+      // Retry original request with new token
+      headers['Authorization'] = `Bearer ${newToken}`;
+      const retryResponse = await fetch(BASE + path, {
+        headers,
+        credentials: 'include',
+        ...opts,
+      });
+      
+      if (retryResponse.status === 404) {
+        return null;
+      }
+      
+      if (!retryResponse.ok) {
+        const retryErrorText = await retryResponse.text().catch(() => 'Unknown error');
+        throw new Error(`${retryResponse.status} ${path}: ${retryErrorText}`);
+      }
+      
+      return retryResponse.json();
+    } else {
+      // Refresh failed - clear tokens and redirect to login
+      const { clearTokens } = await import('./auth.js');
+      clearTokens();
+      window.location.hash = '#/login';
+      throw new Error('Session expired. Please sign in again.');
+    }
+  }
+  
   if (!r.ok) {
     const errorText = await r.text().catch(() => 'Unknown error');
+    
+    // Send telemetry event for API errors (best-effort, swallow errors)
+    apiSendTelemetryEvent({
+      event: 'API_ERROR',
+      ts: Date.now(),
+      page: window.location.hash || '/',
+      meta: {
+        path: path,
+        status: r.status,
+        error_preview: errorText.substring(0, 200) // No secrets
+      }
+    }).catch(() => {}); // Swallow errors
+    
     throw new Error(`${r.status} ${path}: ${errorText}`);
   }
   return r.json();
@@ -171,45 +286,6 @@ export async function apiLogin(email, password) {
 }
 
 /**
- * Request magic link for email-only authentication
- */
-export async function apiRequestMagicLink(email) {
-  try {
-    const res = await _req('/v1/auth/magic_link/request', {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    });
-    
-    console.log('[Auth][MagicLink] Request sent for:', email);
-    return res;
-  } catch (e) {
-    console.error('[Auth][MagicLink] Request failed:', e.message);
-    throw e;
-  }
-}
-
-/**
- * Verify magic link token and create session
- */
-export async function apiVerifyMagicLink(token) {
-  try {
-    const res = await _req('/v1/auth/magic_link/verify', {
-      method: 'POST',
-      body: JSON.stringify({ token }),
-    });
-    
-    console.log('[Auth][MagicLink] Verify success');
-    
-    // Token is in HTTP-only cookie, refresh current user
-    const user = await apiMe();
-    return { ...res, user };
-  } catch (e) {
-    console.error('[Auth][MagicLink] Verify failed:', e.message);
-    throw e;
-  }
-}
-
-/**
  * Get Smartcar Connect URL for EV integration
  */
 export async function apiGetSmartcarConnectUrl() {
@@ -239,41 +315,72 @@ export async function apiGetVehicleTelemetry() {
   }
 }
 
-/**
- * Logout user
- */
-export async function apiLogout() {
-  try {
-    await _req('/v1/auth/logout', { method: 'POST' });
-    console.log('[API][Auth] Logged out');
-    
-    // Clear local user state
-    if (typeof window !== 'undefined') {
-      window.NERAVA_USER = null;
-      localStorage.removeItem('NERAVA_USER_ID');
-    }
-  } catch (e) {
-    console.warn('[API][Auth] Logout failed:', e.message);
-    // Clear local state anyway
-    if (typeof window !== 'undefined') {
-      window.NERAVA_USER = null;
-      localStorage.removeItem('NERAVA_USER_ID');
+// Client telemetry event queue (throttled)
+let _telemetryQueue = [];
+let _telemetryFlushTimer = null;
+let _telemetryEnabled = true;
+
+export async function apiSendTelemetryEvent(eventData) {
+  // Add to queue
+  _telemetryQueue.push(eventData);
+  
+  // Throttle: flush at most once per 5 seconds
+  if (!_telemetryFlushTimer) {
+    _telemetryFlushTimer = setTimeout(async () => {
+      await _flushTelemetryQueue();
+      _telemetryFlushTimer = null;
+    }, 5000);
+  }
+}
+
+async function _flushTelemetryQueue() {
+  if (_telemetryQueue.length === 0) return;
+  if (!navigator.onLine) {
+    _telemetryQueue = []; // Drop if offline
+    return;
+  }
+  
+  if (!_telemetryEnabled) {
+    _telemetryQueue = []; // Disabled, clear queue
+    return;
+  }
+  
+  const batch = [..._telemetryQueue];
+  _telemetryQueue = [];
+  
+  // Send each event (best-effort)
+  for (const event of batch) {
+    try {
+      await _req('/v1/telemetry/events', {
+        method: 'POST',
+        body: JSON.stringify(event),
+      }, false); // Don't retry on 401
+    } catch (e) {
+      // If 404, disable telemetry to stop spamming
+      if (e.message && e.message.includes('404')) {
+        console.warn('[Telemetry] Endpoint not available (404), disabling telemetry');
+        _telemetryEnabled = false;
+        return;
+      }
+      // Swallow other errors - telemetry is best-effort
+      console.debug('[Telemetry] Failed to send event:', e.message);
     }
   }
 }
+
 
 /**
  * Get current user info
  */
 export async function apiMe() {
   try {
-    const user = await _req('/v1/auth/me');
+    const user = await _req('/auth/me');
     
     // Store globally
     if (typeof window !== 'undefined') {
       window.NERAVA_USER = user;
-      if (user.id) {
-        localStorage.setItem('NERAVA_USER_ID', String(user.id));
+      if (user.public_id) {
+        localStorage.setItem('NERAVA_USER_PUBLIC_ID', user.public_id);
       }
     }
     
@@ -283,13 +390,184 @@ export async function apiMe() {
     if (e.message.includes('401') || e.message.includes('Unauthorized')) {
       if (typeof window !== 'undefined') {
         window.NERAVA_USER = null;
-        localStorage.removeItem('NERAVA_USER_ID');
+        localStorage.removeItem('NERAVA_USER_PUBLIC_ID');
       }
       return null;
     }
     console.error('[API][Auth] Failed to get current user:', e.message);
     throw e;
   }
+}
+
+/**
+ * Google SSO login
+ */
+export async function apiGoogleLogin(idToken) {
+  try {
+    const response = await _req('/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ id_token: idToken }),
+    });
+    
+    // Store tokens
+    const { setTokens } = await import('./auth.js');
+    setTokens(response.access_token, response.refresh_token);
+    
+    return response;
+  } catch (e) {
+    console.error('[API][Auth] Google login failed:', e.message);
+    throw e;
+  }
+}
+
+/**
+ * Apple SSO login
+ */
+export async function apiAppleLogin(idToken) {
+  try {
+    const response = await _req('/auth/apple', {
+      method: 'POST',
+      body: JSON.stringify({ id_token: idToken }),
+    });
+    
+    // Store tokens
+    const { setTokens } = await import('./auth.js');
+    setTokens(response.access_token, response.refresh_token);
+    
+    return response;
+  } catch (e) {
+    console.error('[API][Auth] Apple login failed:', e.message);
+    throw e;
+  }
+}
+
+/**
+ * Start phone OTP flow
+ */
+export async function apiOtpStart(phone) {
+  try {
+    const response = await _req('/auth/otp/start', {
+      method: 'POST',
+      body: JSON.stringify({ phone }),
+    });
+    return response;
+  } catch (e) {
+    console.error('[API][Auth] OTP start failed:', e.message);
+    throw e;
+  }
+}
+
+/**
+ * Verify phone OTP
+ */
+export async function apiOtpVerify(phone, code) {
+  try {
+    const response = await _req('/auth/otp/verify', {
+      method: 'POST',
+      body: JSON.stringify({ phone, code }),
+    });
+    
+    // Store tokens
+    const { setTokens } = await import('./auth.js');
+    setTokens(response.access_token, response.refresh_token);
+    
+    return response;
+  } catch (e) {
+    console.error('[API][Auth] OTP verify failed:', e.message);
+    throw e;
+  }
+}
+
+/**
+ * Dev mode login - auto-login as dev@nerava.local
+ * Only works when DEMO_MODE is enabled on backend
+ */
+export async function apiDevLogin() {
+  try {
+    console.log('[API][Auth] Attempting dev login...');
+    
+    // Use fetch directly to get better error handling (don't return null for 404)
+    const BASE = getApiBase();
+    const url = BASE + '/auth/dev/login';
+    console.log('[API][Auth] Dev login URL:', url);
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+    });
+    
+    console.log('[API][Auth] Dev login response status:', response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      console.error('[API][Auth] Dev login failed:', response.status, errorText);
+      throw new Error(`Dev login failed: ${response.status} ${errorText}`);
+    }
+    
+    const data = await response.json();
+    console.log('[API][Auth] Dev login successful:', data);
+    
+    // Store tokens
+    const { setTokens } = await import('./auth.js');
+    setTokens(data.access_token, data.refresh_token);
+    
+    return data;
+  } catch (e) {
+    console.error('[API][Auth] Dev login failed:', e);
+    console.error('[API][Auth] Error details:', {
+      message: e.message,
+      stack: e.stack
+    });
+    throw e;
+  }
+}
+
+/**
+ * Refresh access token
+ */
+export async function apiRefresh(refreshToken) {
+  try {
+    const response = await _req('/auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    }, false); // Don't retry on 401 for refresh endpoint
+    return response;
+  } catch (e) {
+    console.error('[API][Auth] Refresh failed:', e.message);
+    throw e;
+  }
+}
+
+/**
+ * Logout
+ */
+export async function apiLogout(refreshToken = null) {
+  try {
+    const body = refreshToken ? { refresh_token: refreshToken } : {};
+    await _req('/auth/logout', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }, false); // Don't retry on 401 for logout
+    
+    // Clear local tokens
+    const { clearTokens } = await import('./auth.js');
+    clearTokens();
+  } catch (e) {
+    console.warn('[API][Auth] Logout failed:', e.message);
+    // Clear tokens anyway
+    const { clearTokens } = await import('./auth.js');
+    clearTokens();
+  }
+}
+
+// Export setTokens for use in login page
+export async function setTokens(accessToken, refreshToken) {
+  const { setTokens: _setTokens } = await import('./auth.js');
+  _setTokens(accessToken, refreshToken);
 }
 
 /**
@@ -487,19 +765,46 @@ export async function apiJoinChargeEvent({ eventSlug, chargerId = null, merchant
 /**
  * Get nearby merchants in a zone
  */
-export async function apiNearbyMerchants({ lat, lng, zoneSlug, radiusM = 5000 }) {
+export async function apiNearbyMerchants({ 
+  lat, 
+  lng, 
+  zoneSlug, 
+  radiusM = 5000,
+  q = null,
+  category = null,
+  novaOnly = true,
+  maxDistanceToChargerM = null
+}) {
+  console.log('[API] Calling nearby merchants:', { lat, lng, zoneSlug, radiusM, q, category, novaOnly, maxDistanceToChargerM });
   try {
     const params = new URLSearchParams({
       lat: String(lat),
       lng: String(lng),
       zone_slug: zoneSlug,
       radius_m: String(radiusM),
+      nova_only: String(novaOnly),
     });
     
-    const res = await _req(`/v1/drivers/merchants/nearby?${params.toString()}`);
+    if (q) {
+      params.append('q', q);
+    }
+    if (category) {
+      params.append('category', category);
+    }
+    if (maxDistanceToChargerM !== null) {
+      params.append('max_distance_to_charger_m', String(maxDistanceToChargerM));
+    }
+
+    const url = `/v1/drivers/merchants/nearby?${params.toString()}`;
+    console.log('[API] Request URL:', url);
+
+    const res = await _req(url);
+    console.log('[API] Response:', res);
+    console.log('[API] Response type:', typeof res, Array.isArray(res));
     console.log('[API][Drivers] Nearby merchants:', res?.length || 0);
     return res || [];
   } catch (e) {
+    console.error('[API] Nearby merchants error:', e);
     console.error('[API][Drivers] Failed to get nearby merchants:', e.message);
     return []; // Return empty array on error
   }
@@ -515,6 +820,52 @@ export async function apiDriverWallet() {
     return res;
   } catch (e) {
     console.error('[API][Drivers] Failed to get wallet:', e.message);
+    throw e;
+  }
+}
+
+/**
+ * Get driver wallet summary (comprehensive wallet data for UI)
+ */
+export async function apiWalletSummary(forceRefresh = false) {
+  try {
+    // Add cache-busting timestamp if forceRefresh is true
+    let path = '/v1/drivers/me/wallet/summary';
+    if (forceRefresh) {
+      const timestamp = Date.now();
+      path += `?t=${timestamp}`;
+    }
+    const res = await _req(path);
+    console.log('[API][Drivers] Wallet Summary:', res);
+    return res;
+  } catch (e) {
+    console.error('[API][Drivers] Failed to get wallet summary:', e.message);
+    throw e;
+  }
+}
+
+/**
+ * Redeem Nova from driver to merchant
+ */
+export async function apiRedeemNova(merchantId, amount, sessionId = null, idempotencyKey = null) {
+  try {
+    const body = {
+      merchant_id: merchantId,
+      amount: amount,
+    };
+    if (sessionId) body.session_id = sessionId;
+    if (idempotencyKey) body.idempotency_key = idempotencyKey;
+
+    const res = await _req('/v1/drivers/nova/redeem', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    console.log('[API][Nova] Redeem result:', res);
+    return res;
+  } catch (e) {
+    console.error('[API][Nova] Failed to redeem Nova:', e.message);
     throw e;
   }
 }
@@ -638,9 +989,11 @@ if (typeof window !== 'undefined') {
   window.NeravaAPI.apiJoinChargeEvent = apiJoinChargeEvent;
   window.NeravaAPI.apiNearbyMerchants = apiNearbyMerchants;
   window.NeravaAPI.apiDriverWallet = apiDriverWallet;
+  window.NeravaAPI.apiWalletSummary = apiWalletSummary;
   window.NeravaAPI.apiDriverActivity = apiDriverActivity;
   window.NeravaAPI.apiSessionPing = apiSessionPing;
   window.NeravaAPI.apiCancelSession = apiCancelSession;
+  window.NeravaAPI.apiRedeemNova = apiRedeemNova;
   window.NeravaAPI.apiGetSmartcarConnectUrl = apiGetSmartcarConnectUrl;
   window.NeravaAPI.apiGetVehicleTelemetry = apiGetVehicleTelemetry;
   
@@ -662,9 +1015,11 @@ const Api = {
   apiJoinChargeEvent,
   apiNearbyMerchants,
   apiDriverWallet,
+  apiWalletSummary,
   apiDriverActivity,
   apiSessionPing,
   apiCancelSession,
+  apiRedeemNova,
   
   // Utils
   apiGet,

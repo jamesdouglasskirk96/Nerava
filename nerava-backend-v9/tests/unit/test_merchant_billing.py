@@ -158,3 +158,4 @@ class TestMerchantBilling:
         assert summary["period_start"] == expected_start
         assert summary["period_end"] == expected_end
 
+

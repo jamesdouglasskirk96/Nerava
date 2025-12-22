@@ -52,6 +52,7 @@
 
 *{box-sizing:border-box}
 html,body,#app{height:100%;margin:0;overflow:hidden}
+#app { position: relative; }
 body{
 font-family: -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
 -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
@@ -68,7 +69,7 @@ overflow:hidden;
 .app-top{position:fixed; top:0; left:0; right:0; z-index:3}
 .brandbar{display:flex; align-items:center; justify-content:center; gap:.75rem; height:56px; background:var(--surface); border-bottom:1px solid rgba(0,0,0,.06)}
 .brand-word{letter-spacing:.35rem;font-weight:800}
-.brand-bolt{width:20px;height:20px;filter:invert(1)}
+.brand-bolt{width:20px;height:20px}
 .deal-banner{background:var(--green); color:#0b1a26; font-weight:800; text-align:center; padding:.6rem 1rem}
 
 .main-layer{padding-top:108px; padding-bottom:100px}
@@ -102,8 +103,26 @@ overflow:hidden;
   visibility: visible !important;
   opacity: 1 !important;
   position: relative !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
   z-index: 1 !important;
   height: auto !important;
+}
+
+/* Ensure Login page is visible when active and positioned above everything */
+#page-login.active {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  z-index: 10000 !important;
+  height: 100vh !important;
+  width: 100vw !important;
+  overflow-y: auto !important;
   overflow: visible !important;
 }
 
@@ -120,6 +139,12 @@ overflow:hidden;
   overflow: hidden;
   padding: 0;
   background: #f6f7f9;
+}
+
+/* Hide explore page when merchant detail is active */
+#page-merchant-detail.active ~ #page-explore {
+  display: none !important;
+  visibility: hidden !important;
 }
 
 /* Full-screen map background */
@@ -340,6 +365,78 @@ overflow:hidden;
   pointer-events: auto;
   padding: 0 2%;
   width: 100%;
+  cursor: pointer;
+}
+
+/* List View Bottom Sheet */
+.list-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  transform: translateY(70%);
+  height: 75%;
+  transition: transform 220ms ease, height 220ms ease;
+  display: flex;
+  flex-direction: column;
+  pointer-events: auto;
+}
+
+.list-sheet.expanded {
+  transform: translateY(0);
+  height: 75%;
+}
+
+.list-sheet.collapsed {
+  transform: translateY(70%);
+  height: 25%;
+}
+
+.list-sheet-handle {
+  width: 40px;
+  height: 4px;
+  background: #d1d5db;
+  border-radius: 2px;
+  margin: 8px auto;
+  cursor: grab;
+}
+
+.list-sheet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.list-sheet-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.list-sheet-header .link-btn {
+  font-size: 14px;
+  color: #1e40af;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.list-sheet-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  padding-bottom: calc(32px + env(safe-area-inset-bottom, 0px)); /* Extra bottom padding + safe area for mobile */
+  -webkit-overflow-scrolling: touch;
+  /* Ensure content can scroll to show last item */
+  scroll-padding-bottom: 20px;
 }
 
 /* Discover merchant cards */
@@ -357,15 +454,15 @@ overflow:hidden;
   z-index: 500;
 }
 
-/* Horizontal merchant carousel: one full card per "page" */
+/* Single merchant card: no scrolling */
 .discover-merchant-scroller {
   display: flex;
   flex-direction: row;
-  overflow-x: auto;
+  overflow-x: hidden; /* Changed from auto to hidden - single card, no scrolling */
   padding: 0 2% 5px;
   gap: 16px;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
+  /* scroll-snap-type: x mandatory; */ /* Removed - no scrolling needed */
+  /* -webkit-overflow-scrolling: touch; */ /* Removed - no scrolling needed */
   pointer-events: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -379,9 +476,9 @@ overflow:hidden;
 /* Merchant Card - Resy-style with image on right */
 .discover-merchant-card,
 .merchant-card {
-  flex: 0 0 99%;
-  max-width: 99%;
-  scroll-snap-align: center;
+  flex: 1 1 100%; /* Changed to take full width since there's only one card */
+  max-width: 100%; /* Changed from 99% to 100% for single card */
+  /* scroll-snap-align: center; */ /* Removed - no scrolling needed */
   display: flex;
   justify-content: space-between;
   align-items: stretch;
@@ -544,6 +641,12 @@ overflow:hidden;
   cursor: pointer;
   transition: transform 0.2s;
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+  margin-bottom: 16px; /* Ensure spacing between cards and bottom visibility */
+}
+
+/* Ensure last card in list is fully visible */
+#explore-list .perk-card--resy:last-child {
+  margin-bottom: 24px; /* Extra margin for last card */
 }
 
 .perk-card--resy:hover {
@@ -556,6 +659,7 @@ overflow:hidden;
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+  order: 1; /* Explicitly set order to ensure it's on the left */
 }
 
 .perk-card__name {
@@ -614,6 +718,8 @@ overflow:hidden;
   flex-shrink: 0;
   display: flex;
   align-items: center;
+  justify-content: flex-end; /* Ensure image stays on the right */
+  order: 2; /* Explicitly set order to ensure it's on the right */
 }
 
 .perk-card__image {
@@ -1089,9 +1195,17 @@ overflow:hidden;
 
 /* Header */
 .topbar{
-  height:52px; display:flex; align-items:center; justify-content:center;
-  background:#fff; position:sticky; top:0; z-index:100;
-  box-shadow:0 2px 8px rgba(0,0,0,.05);
+  height:52px !important; 
+  display:flex !important; 
+  align-items:center !important; 
+  justify-content:center !important;
+  background:#fff !important; 
+  position:sticky !important; 
+  top:0 !important; 
+  z-index:1000 !important;
+  box-shadow:0 2px 8px rgba(0,0,0,.05) !important;
+  visibility: visible !important;
+  opacity: 1 !important;
 }
 .brand-logo{
   font-weight: 600; 
@@ -1103,6 +1217,16 @@ overflow:hidden;
   align-items: center;
   justify-content: center;
   gap: 4px;
+}
+.brand-logo .brand-word,
+.brand-logo .brand-bolt {
+  display: inline-block;
+  height: 24px;
+  width: auto;
+}
+.brand-logo .brand-bolt {
+  height: 20px;
+  margin-left: 4px;
 }
 .brand-logo .bolt{ 
   color: #F5B400;
@@ -1316,11 +1440,20 @@ overflow:hidden;
 
 /* ---------- Tabbar (same height, bigger icons) ---------- */
 .tabbar{
-  position: sticky; bottom:0; z-index: 30;
-  height: var(--tabbar-height); display:flex; align-items:center; justify-content:space-between;
+  position: fixed !important; 
+  bottom: 0 !important; 
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 1000 !important;
+  height: var(--tabbar-height, 76px); 
+  display: flex !important; 
+  align-items: center; 
+  justify-content: space-between;
   backdrop-filter: blur(10px);
-  background: rgba(255,255,255,.85); border-top: 1px solid rgba(0,0,0,.06);
+  background: rgba(255,255,255,.95) !important; 
+  border-top: 1px solid rgba(0,0,0,.06);
   padding: 8px 0;
+  box-shadow: 0 -2px 10px rgba(0,0,0,.05);
 }
 .tab{
   display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -1465,17 +1598,23 @@ overflow:hidden;
 
 /* --- Tab bar --- */
 .tabbar{
-  position: fixed; left: 0; right: 0; bottom: 0;
-  height: var(--nav-height);
-  display: grid; grid-template-columns: repeat(5,1fr);
-  align-items: center;
+  position: fixed !important; 
+  left: 0 !important; 
+  right: 0 !important; 
+  bottom: 0 !important;
+  height: var(--tabbar-height, 76px) !important;
+  display: flex !important; 
+  align-items: center; 
+  justify-content: space-between;
   padding: 10px 18px calc(10px + env(safe-area-inset-bottom));
   backdrop-filter: blur(16px);
-  background: linear-gradient(180deg, rgba(255,255,255,0.86), rgba(255,255,255,0.96));
+  background: linear-gradient(180deg, rgba(255,255,255,0.86), rgba(255,255,255,0.96)) !important;
   box-shadow: 0 -10px 25px rgba(17,24,39,0.10);
   border-top-left-radius: var(--radius-xxl);
   border-top-right-radius: var(--radius-xxl);
-  z-index: 20;
+  z-index: 1000 !important;
+  visibility: visible !important;
+  opacity: 1 !important;
 }
 .tabbar .tab{
   flex: 1;
@@ -2082,6 +2221,82 @@ overflow:hidden;
 .page { padding: 12px 12px 96px; }                 /* bottom room for tabbar */
 .stack { display: grid; gap: 12px; }
 
+/* Wallet card content - centered */
+.wallet-card-content {
+  text-align: center;
+  padding: 24px;
+}
+
+/* Recent Activity styles */
+#wallet-activity-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.activity-item {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding: 12px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.activity-item:last-child {
+  border-bottom: none;
+}
+
+.activity-left {
+  flex: 1;
+}
+
+.activity-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.activity-subtitle {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.activity-amount {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.activity-amount.credit {
+  color: #22c55e;
+}
+
+.activity-amount.debit {
+  color: #ef4444;
+}
+
+.tier-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.charging-indicator {
+  display: none;
+  font-size: 12px;
+  color: #22c55e;
+  align-items: center;
+  gap: 6px;
+}
+
+.charging-dot {
+  width: 8px;
+  height: 8px;
+  background: #22c55e;
+  border-radius: 50%;
+}
+
 /* Base text */
 body { color: #111827; }
 
@@ -2307,9 +2522,14 @@ body {
 
   background: #ffffff !important;
   border-top: 1px solid #e5e7eb !important;
-  padding: 4px 0 !important;
-  z-index: 1000 !important;
+  padding: 4px 0 calc(4px + env(safe-area-inset-bottom, 0px)) !important;
+  z-index: 10000 !important;
   border-radius: 20px 20px 0 0 !important;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.1) !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  display: flex !important;
 }
 
 /* Each tab takes equal space and is centered */
@@ -2383,4 +2603,230 @@ body {
 
 .tabbar .tab.active .label {
   font-weight: 600 !important;
+}
+
+/* ========= App Loading Screen ========= */
+.app-loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s ease-out;
+}
+
+.app-loading-screen.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.app-loading-screen.removed {
+  display: none;
+}
+
+.app-loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.app-loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.app-loading-text {
+  margin-top: 12px;
+  font-size: 14px;
+  color: #64748b;
+}
+
+/* ========= Settings Bottom Sheet ========= */
+.settings-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.settings-sheet.open {
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.settings-sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.settings-sheet.open .settings-sheet-backdrop {
+  opacity: 1;
+}
+
+.settings-sheet-content {
+  position: absolute;
+  top: 100vh;
+  left: 0;
+  right: 0;
+  bottom: 80px;
+  background: white;
+  border-radius: 16px 16px 16px 16px;
+  min-height: 200px;
+  transform: translateY(0);
+  transition: top 0.25s ease-out, bottom 0.25s ease-out;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-sheet.open .settings-sheet-content {
+  top: 50vh;
+  bottom: 80px;
+}
+
+.settings-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.settings-sheet-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.settings-sheet-close {
+  background: none;
+  border: none;
+  padding: 4px;
+  color: #6b7280;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-sheet-close:hover {
+  color: #111827;
+}
+
+.settings-sheet-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Safe-area padding for settings sheet on mobile */
+#settings-sheet .settings-sheet-content {
+  padding-bottom: env(safe-area-inset-bottom, 20px);
+}
+
+/* Settings Row */
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+}
+
+.settings-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.settings-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: #111827;
+}
+
+.settings-desc {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* Toggle Switch */
+.toggle-switch {
+  position: relative;
+  width: 48px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: #e2e8f0;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  left: 3px;
+  top: 3px;
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  transition: transform 0.2s;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: #3b82f6;
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(20px);
+}
+
+/* Settings Button */
+.settings-btn {
+  background: none;
+  border: none;
+  padding: 8px;
+  color: #6b7280;
+  cursor: pointer;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-btn:hover {
+  background: #f1f5f9;
 }

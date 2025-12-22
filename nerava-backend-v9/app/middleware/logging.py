@@ -30,6 +30,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                 "path": request.url.path,
                 "status_code": response.status_code,
                 "duration_ms": round(duration_ms, 2),
+                "user_id": getattr(request.state, "user_id", None),  # From AuthMiddleware
                 "user_agent": request.headers.get("user-agent", ""),
                 "remote_addr": request.client.host if request.client else None
             }

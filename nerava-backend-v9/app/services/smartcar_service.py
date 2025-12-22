@@ -14,6 +14,11 @@ from ..models.vehicle import VehicleAccount, VehicleToken
 
 logger = logging.getLogger(__name__)
 
+
+class SmartcarTokenExpiredError(Exception):
+    """Raised when Smartcar refresh token is expired and re-auth is required"""
+    pass
+
 # Timeout for Smartcar API calls
 SMARTCAR_TIMEOUT = 30.0
 
@@ -40,6 +45,9 @@ async def exchange_code_for_tokens(code: str) -> Dict[str, Any]:
         "client_id": settings.smartcar_client_id,
         "client_secret": settings.smartcar_client_secret,
     }
+    
+    # Log validation info (no secrets)
+    logger.debug(f"Token exchange request: grant_type={data['grant_type']}, redirect_uri={data['redirect_uri']}, client_id={data['client_id'][:8]}...")
     
     async with httpx.AsyncClient(timeout=SMARTCAR_TIMEOUT) as client:
         try:
@@ -88,12 +96,23 @@ async def refresh_tokens(db: Session, vehicle_account: VehicleAccount) -> Vehicl
     # Refresh the token
     url = f"{settings.smartcar_auth_url}/oauth/token"
     
+    # Decrypt refresh token before using (P0 security fix)
+    from app.services.token_encryption import decrypt_token
+    try:
+        decrypted_refresh_token = decrypt_token(latest_token.refresh_token)
+    except Exception:
+        # If decryption fails, assume it's plaintext (migration compatibility)
+        decrypted_refresh_token = latest_token.refresh_token
+    
     data = {
         "grant_type": "refresh_token",
-        "refresh_token": latest_token.refresh_token,
+        "refresh_token": decrypted_refresh_token,
         "client_id": settings.smartcar_client_id,
         "client_secret": settings.smartcar_client_secret,
     }
+    
+    # Log validation info (no secrets)
+    logger.debug(f"Token refresh request: grant_type={data['grant_type']}, client_id={data['client_id'][:8]}...")
     
     async with httpx.AsyncClient(timeout=SMARTCAR_TIMEOUT) as client:
         try:
@@ -101,20 +120,63 @@ async def refresh_tokens(db: Session, vehicle_account: VehicleAccount) -> Vehicl
             response.raise_for_status()
             token_data = response.json()
         except httpx.HTTPStatusError as e:
+            # Check if it's an expired refresh token
+            if e.response.status_code in (400, 401):
+                try:
+                    error_body = e.response.json() if e.response.headers.get("content-type", "").startswith("application/json") else {}
+                    error_description = str(error_body).lower() if error_body else ""
+                    error_code = error_body.get("error", "").lower() if isinstance(error_body, dict) else ""
+                    
+                    # Check for expired/invalid token indicators
+                    if any(keyword in error_description or keyword in error_code for keyword in ["expired", "invalid", "revoked", "invalid_grant"]):
+                        logger.warning(f"Smartcar refresh token expired for vehicle account {vehicle_account.id}")
+                        raise SmartcarTokenExpiredError("Refresh token expired, re-auth required")
+                except SmartcarTokenExpiredError:
+                    raise
+                except Exception:
+                    # If we can't parse the error, still raise SmartcarTokenExpiredError for 400/401
+                    logger.warning(f"Smartcar token refresh failed with {e.response.status_code}, assuming expired token")
+                    raise SmartcarTokenExpiredError("Refresh token expired, re-auth required")
+            
             # Don't log response body - may contain tokens/secrets
             logger.error(f"Smartcar token refresh failed: {e.response.status_code}")
+            raise
+        except SmartcarTokenExpiredError:
             raise
         except Exception as e:
             logger.error(f"Unexpected error during token refresh: {e}")
             raise
     
-    # Create new token record
+    # Encrypt tokens before storing (P0 security fix)
+    from app.services.token_encryption import encrypt_token
+    
+    # Validate access_token is present
+    if "access_token" not in token_data:
+        raise ValueError("Smartcar response missing access_token")
+    
+    # Use refresh_token from response, or fallback to decrypted_refresh_token (plaintext)
+    # Note: decrypted_refresh_token is already plaintext from line 94
+    new_refresh_token = token_data.get("refresh_token")
+    if not new_refresh_token:
+        # If response doesn't include refresh_token, use the one we already decrypted
+        new_refresh_token = decrypted_refresh_token
+        if not new_refresh_token:
+            raise ValueError("Both Smartcar response refresh_token and decrypted_refresh_token are missing")
+    
+    new_access_token = token_data["access_token"]
+    
+    # Encrypt new tokens
+    encrypted_access_token = encrypt_token(new_access_token)
+    encrypted_refresh_token = encrypt_token(new_refresh_token)
+    
+    # Create new token record with encrypted tokens
     import uuid
     new_token = VehicleToken(
         id=str(uuid.uuid4()),
         vehicle_account_id=vehicle_account.id,
-        access_token=token_data["access_token"],
-        refresh_token=token_data.get("refresh_token", latest_token.refresh_token),  # May not be returned
+        access_token=encrypted_access_token,
+        refresh_token=encrypted_refresh_token,
+        encryption_version=1,  # Mark as encrypted
         expires_at=datetime.utcnow() + timedelta(seconds=token_data.get("expires_in", 3600)),
         scope=token_data.get("scope", latest_token.scope),
     )

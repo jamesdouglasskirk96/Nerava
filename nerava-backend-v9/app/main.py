@@ -49,6 +49,11 @@ UI_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "ui-mobil
 if os.path.isdir(UI_DIR):
     app.mount("/app", StaticFiles(directory=UI_DIR, html=True), name="ui")
 
+# Mount assets directory
+ASSETS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "ui-mobile", "assets"))
+if os.path.isdir(ASSETS_DIR):
+    app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
+
 # Create tables on startup (SQLite dev)
 Base.metadata.create_all(bind=engine)
 
@@ -62,7 +67,20 @@ app.add_middleware(CanaryRoutingMiddleware, canary_percentage=0.0)  # Disabled b
 app.add_middleware(AuthMiddleware)
 app.add_middleware(AuditMiddleware)
 
-# CORS configuration
+# CORS configuration (P1 security fix)
+# Validate CORS origins in non-local environments
+import os
+env = os.getenv("ENV", "dev").lower()
+region = settings.region.lower()
+is_local = env == "local" or region == "local"
+
+if not is_local and settings.cors_allow_origins == "*":
+    error_msg = (
+        "CRITICAL SECURITY ERROR: CORS wildcard (*) is not allowed in non-local environment. "
+        f"ENV={env}, REGION={region}. Set ALLOWED_ORIGINS environment variable to explicit origins."
+    )
+    raise ValueError(error_msg)
+
 # Allow localhost for local dev UI testing against production backend
 cors_origins = [
     "http://localhost:8001",
@@ -79,6 +97,9 @@ if settings.cors_allow_origins and settings.cors_allow_origins != "*":
     cors_origins.extend(env_origins)
     # Remove duplicates
     cors_origins = list(dict.fromkeys(cors_origins))
+elif settings.cors_allow_origins == "*" and is_local:
+    # In local dev, allow wildcard
+    cors_origins = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -126,7 +147,9 @@ from .routers import (
     stripe_domain,
     admin_domain,
     nova_domain,
-    ev_smartcar
+    ev_smartcar,
+    virtual_cards,
+    client_telemetry
 )
 
 # These are now the canonical /v1/* endpoints (no /domain/ prefix)
@@ -137,5 +160,7 @@ app.include_router(stripe_domain.router)  # /v1/stripe/*
 app.include_router(admin_domain.router)  # /v1/admin/*
 app.include_router(nova_domain.router)  # /v1/nova/*
 app.include_router(ev_smartcar.router)  # /v1/ev/* and /oauth/smartcar/callback
+app.include_router(virtual_cards.router)  # /v1/virtual_cards/*
+app.include_router(client_telemetry.router)  # /v1/telemetry/*
 
 # Lifespan events are now handled in lifespan.py

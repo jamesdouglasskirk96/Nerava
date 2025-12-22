@@ -87,7 +87,7 @@ class JWTManager:
             )
 
 # Global JWT manager (in production, use proper secret management)
-jwt_manager = JWTManager(secret_key=settings.database_url)  # Use a proper secret in production
+jwt_manager = JWTManager(secret_key=settings.jwt_secret)
 
 def get_current_user(token: str) -> str:
     """Get current user from JWT token"""

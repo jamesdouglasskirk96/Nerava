@@ -413,18 +413,7 @@
                     return;
                 }
                 
-                // Check localStorage for last created demo order
-                const lastDemoOrderId = localStorage.getItem('lastDemoOrderId');
-                if (lastDemoOrderId && !recentOrders.find(o => o.order_id === lastDemoOrderId)) {
-                    // Add cached order if not in recent orders
-                    recentOrders.unshift({
-                        order_id: lastDemoOrderId,
-                        display: 'Last demo order',
-                        total_cents: 850,
-                        created_at: new Date().toISOString()
-                    });
-                }
-                
+                // Real Square orders found - render them
                 renderOrdersList();
                 
             } catch (error) {
@@ -479,16 +468,17 @@
             
             if (ordersList) {
                 ordersList.innerHTML = recentOrders.map(order => {
-                    const isSelected = selectedOrderId === order.order_id ? 'checked' : '';
-                    const displayText = order.display || `$${(order.total_cents / 100).toFixed(2)}`;
+                    const isSelected = selectedOrderId === order.order_id;
+                    const amount = `$${(order.total_cents / 100).toFixed(2)}`;
+                    const time = formatOrderTime(order.created_at);
                     return `
-                        <label style="display: flex; align-items: center; padding: 12px; margin-bottom: 8px; background: white; border-radius: 8px; cursor: pointer; border: 2px solid ${isSelected ? '#007AFF' : '#e0e0e0'};" onclick="selectOrder('${order.order_id}', ${order.total_cents})">
-                            <input type="radio" name="order" value="${order.order_id}" ${isSelected} style="margin-right: 12px; flex-shrink: 0;">
-                            <div style="flex: 1; min-width: 0;">
-                                <div style="font-weight: 600; color: #333; margin-bottom: 4px; white-space: nowrap;">${escapeHtml(displayText)}</div>
-                                <div style="font-size: 12px; color: #666;">${formatOrderTime(order.created_at)}</div>
+                        <div style="display: flex; align-items: center; padding: 14px 16px; margin-bottom: 8px; background: white; border-radius: 12px; cursor: pointer; border: 2px solid ${isSelected ? '#007AFF' : '#e0e0e0'}; box-shadow: 0 1px 3px rgba(0,0,0,0.08);" onclick="selectOrder('${order.order_id}', ${order.total_cents})">
+                            <input type="radio" name="order" value="${order.order_id}" ${isSelected ? 'checked' : ''} style="width: 20px; height: 20px; margin-right: 14px; flex-shrink: 0; accent-color: #007AFF;">
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; font-size: 17px; color: #1a1a1a;">${amount}</div>
+                                <div style="font-size: 13px; color: #666; margin-top: 2px;">${time}</div>
                             </div>
-                        </label>
+                        </div>
                     `;
                 }).join('');
             }

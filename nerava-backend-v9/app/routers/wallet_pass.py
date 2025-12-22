@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
 
 from app.db import get_db
@@ -29,6 +29,55 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/wallet", tags=["wallet-pass"])
+
+
+def _validate_apple_wallet_config() -> Tuple[bool, Optional[str], List[str]]:
+    """
+    Validate Apple Wallet signing configuration.
+    
+    Returns:
+        Tuple of (is_valid, error_code, missing_keys)
+        - is_valid: True if configuration is valid
+        - error_code: Error code if invalid (APPLE_WALLET_SIGNING_DISABLED or APPLE_WALLET_SIGNING_MISCONFIGURED)
+        - missing_keys: List of missing environment variable keys
+    """
+    signing_enabled = os.getenv("APPLE_WALLET_SIGNING_ENABLED", "false").lower() == "true"
+    
+    if not signing_enabled:
+        return (False, "APPLE_WALLET_SIGNING_DISABLED", [])
+    
+    missing = []
+    
+    # Required env vars
+    required = ["APPLE_WALLET_PASS_TYPE_ID", "APPLE_WALLET_TEAM_ID"]
+    for key in required:
+        if not os.getenv(key):
+            missing.append(key)
+    
+    # Check cert/key or P12
+    has_p12 = bool(os.getenv("APPLE_WALLET_CERT_P12_PATH"))
+    has_pem = bool(os.getenv("APPLE_WALLET_CERT_PATH") and os.getenv("APPLE_WALLET_KEY_PATH"))
+    
+    if not (has_p12 or has_pem):
+        missing.append("APPLE_WALLET_CERT_P12_PATH (or APPLE_WALLET_CERT_PATH + APPLE_WALLET_KEY_PATH)")
+    
+    # Check if files exist
+    if has_p12:
+        p12_path = os.getenv("APPLE_WALLET_CERT_P12_PATH")
+        if p12_path and not os.path.exists(p12_path):
+            missing.append(f"APPLE_WALLET_CERT_P12_PATH file not found: {p12_path}")
+    elif has_pem:
+        cert_path = os.getenv("APPLE_WALLET_CERT_PATH")
+        key_path = os.getenv("APPLE_WALLET_KEY_PATH")
+        if cert_path and not os.path.exists(cert_path):
+            missing.append(f"APPLE_WALLET_CERT_PATH file not found: {cert_path}")
+        if key_path and not os.path.exists(key_path):
+            missing.append(f"APPLE_WALLET_KEY_PATH file not found: {key_path}")
+    
+    if missing:
+        return (False, "APPLE_WALLET_SIGNING_MISCONFIGURED", missing)
+    
+    return (True, None, [])
 
 
 class TimelineEvent(BaseModel):
@@ -403,7 +452,7 @@ def create_apple_pass(
     
     Returns:
     - 200: Signed .pkpass file (if signing enabled)
-    - 501: Structured error if signing disabled
+    - 501: Structured error if signing disabled/misconfigured
     
     Eligibility:
     - Driver must have VehicleAccount (Smartcar connected)
@@ -423,18 +472,19 @@ def create_apple_pass(
             }
         )
     
-    # Check if signing is enabled
-    signing_enabled = os.getenv("APPLE_WALLET_SIGNING_ENABLED", "false").lower() == "true"
-    cert_path = os.getenv("APPLE_WALLET_CERT_PATH")
-    key_path = os.getenv("APPLE_WALLET_KEY_PATH")
+    # Validate signing configuration
+    is_valid, error_code, missing_keys = _validate_apple_wallet_config()
     
-    if not signing_enabled or not cert_path or not key_path or not os.path.exists(cert_path) or not os.path.exists(key_path):
-        # Return 501 structured error (Approach A)
+    if not is_valid:
+        error_message = "Apple Wallet pass signing is not enabled on this environment."
+        if missing_keys:
+            error_message = f"Missing required configuration: {', '.join(missing_keys)}"
+        
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail={
-                "error": "APPLE_WALLET_SIGNING_DISABLED",
-                "message": "Apple Wallet pass signing is not enabled on this environment."
+                "error": error_code,
+                "message": error_message
             }
         )
     
@@ -467,6 +517,18 @@ def create_apple_pass(
             }
         )
         
+    except ValueError as e:
+        # Asset validation error
+        error_msg = str(e)
+        if "Missing required pass assets" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail={
+                    "error": "APPLE_WALLET_ASSETS_MISSING",
+                    "message": error_msg
+                }
+            )
+        raise
     except HTTPException:
         raise
     except Exception as e:
@@ -562,39 +624,39 @@ def refresh_apple_pass(
 
 @router.get("/pass/apple/preview")
 def preview_apple_pass(
-    request: Request,
     user: User = Depends(get_current_driver),
     db: Session = Depends(get_db),
 ):
     """
-    DEV ONLY: Preview Apple Wallet pass without requiring signing.
+    Preview Apple Wallet pass without requiring signing.
     
-    Requirements:
-    - Header: x-nerava-pass-preview=true
-    - Never used as an installable pass (content-type is application/zip)
+    Returns unsigned ZIP bundle (pass.json + images, no signature).
+    Cannot be added to Wallet, but useful for debugging pass structure.
     """
-    preview_header = request.headers.get("x-nerava-pass-preview", "").lower()
-    if preview_header != "true":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "APPLE_WALLET_PREVIEW_HEADER_REQUIRED",
-                "message": "x-nerava-pass-preview=true header required for preview.",
-            },
-        )
-
     try:
         bundle_bytes, is_signed = create_pkpass_bundle(db, user.id)
-        # For preview, we do not care if it's signed, but we must not pretend it's installable.
+        # For preview, return as ZIP (not installable)
         return Response(
             content=bundle_bytes,
             media_type="application/zip",
             headers={
-                "Content-Disposition": 'attachment; filename="nerava-wallet-preview.pkpass"',
+                "Content-Disposition": 'attachment; filename="nerava-wallet-preview.zip"',
                 "X-Nerava-Pass-Preview": "true",
                 "X-Nerava-Pass-Signed": "true" if is_signed else "false",
             },
         )
+    except ValueError as e:
+        # Asset validation error
+        error_msg = str(e)
+        if "Missing required pass assets" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail={
+                    "error": "APPLE_WALLET_ASSETS_MISSING",
+                    "message": error_msg
+                }
+            )
+        raise
     except Exception as e:
         logger.error(f"Failed to generate Apple Wallet preview pass: {e}", exc_info=True)
         raise HTTPException(

@@ -79,3 +79,4 @@ def ensure_eggman_demo_reward(db: Session) -> Optional[MerchantReward]:
     
     return reward
 
+

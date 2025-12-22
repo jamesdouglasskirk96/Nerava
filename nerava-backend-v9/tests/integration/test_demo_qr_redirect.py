@@ -39,3 +39,4 @@ def test_demo_qr_redirect_missing_token(client, monkeypatch):
     assert body["error"] == "DEMO_QR_TOKEN_MISSING"
 
 
+

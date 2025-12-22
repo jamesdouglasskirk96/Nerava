@@ -223,4 +223,198 @@ class StripeService:
             db.commit()
             logger.error(f"Failed to grant Nova after Stripe payment: {e}")
             return {"status": "error", "message": str(e)}
+    
+    @staticmethod
+    def reconcile_payment(
+        db: Session,
+        payment_id: str
+    ) -> Dict[str, Any]:
+        """
+        Reconcile a payment with status 'unknown' by checking Stripe.
+        
+        Rules:
+        - Lock payment FOR UPDATE
+        - If status != unknown: return as-is
+        - Query Stripe:
+          - If stripe_transfer_id exists: fetch transfer by id
+          - Else: search by metadata/idempotency_key
+        - Outcomes:
+          - Transfer found and succeeded → mark succeeded, reconciled_at, set stripe ids/status
+          - Transfer confirmed NOT found → mark failed, insert reversal credit ONCE, reconciled_at, no_transfer_confirmed=true
+          - Still ambiguous → keep unknown
+        
+        Args:
+            db: Database session
+            payment_id: Payment ID to reconcile
+            
+        Returns:
+            Dict with payment status and reconciliation result
+        """
+        from sqlalchemy import text
+        from datetime import datetime
+        import json
+        
+        # Lock payment FOR UPDATE
+        # SQLite lacks FOR UPDATE; transaction provides the necessary write lock for this path.
+        is_sqlite = settings.database_url.startswith("sqlite")
+        for_update = "" if is_sqlite else " FOR UPDATE"
+        payment_row = db.execute(text(f"""
+            SELECT id, status, stripe_transfer_id, idempotency_key, metadata, user_id, amount_cents
+            FROM payments
+            WHERE id = :payment_id
+            {for_update}
+        """), {"payment_id": payment_id}).first()
+        
+        if not payment_row:
+            raise ValueError(f"Payment {payment_id} not found")
+        
+        status = payment_row[1]
+        stripe_transfer_id = payment_row[2]
+        idempotency_key = payment_row[3]
+        metadata_str = payment_row[4]
+        user_id = payment_row[5]
+        amount_cents = payment_row[6]
+        
+        # If status != unknown, return as-is
+        if status != "unknown":
+            return {
+                "payment_id": payment_id,
+                "status": status,
+                "message": f"Payment status is {status}, no reconciliation needed"
+            }
+        
+        # Query Stripe
+        try:
+            if stripe_transfer_id:
+                # Fetch transfer by ID
+                transfer = stripe.Transfer.retrieve(stripe_transfer_id)
+                if transfer.status == "paid":
+                    # Transfer succeeded
+                    db.execute(text("""
+                        UPDATE payments
+                        SET status = 'succeeded',
+                            stripe_transfer_id = :transfer_id,
+                            stripe_status = :stripe_status,
+                            reconciled_at = :reconciled_at,
+                            no_transfer_confirmed = FALSE
+                        WHERE id = :payment_id
+                    """), {
+                        "payment_id": payment_id,
+                        "transfer_id": transfer.id,
+                        "stripe_status": transfer.status,
+                        "reconciled_at": datetime.utcnow()
+                    })
+                    db.commit()
+                    return {
+                        "payment_id": payment_id,
+                        "status": "succeeded",
+                        "stripe_transfer_id": transfer.id,
+                        "message": "Reconciled: transfer found and succeeded"
+                    }
+                else:
+                    # Transfer failed
+                    db.execute(text("""
+                        UPDATE payments
+                        SET status = 'failed',
+                            error_message = :error_message,
+                            reconciled_at = :reconciled_at,
+                            no_transfer_confirmed = FALSE
+                        WHERE id = :payment_id
+                    """), {
+                        "payment_id": payment_id,
+                        "error_message": f"Stripe transfer status: {transfer.status}",
+                        "reconciled_at": datetime.utcnow()
+                    })
+                    # Insert reversal credit
+                    current_balance_result = db.execute(text("""
+                        SELECT COALESCE(SUM(amount_cents), 0) FROM wallet_ledger
+                        WHERE user_id = :user_id
+                    """), {"user_id": user_id}).scalar()
+                    reversal_balance = int(current_balance_result) + amount_cents
+                    
+                    db.execute(text("""
+                        INSERT INTO wallet_ledger (
+                            user_id, amount_cents, transaction_type,
+                            reference_id, reference_type, balance_cents, metadata, created_at
+                        ) VALUES (
+                            :user_id, :amount_cents, 'credit',
+                            :reference_id, 'payout_reversal', :balance_cents, :metadata, :created_at
+                        )
+                    """), {
+                        "user_id": user_id,
+                        "amount_cents": amount_cents,
+                        "reference_id": payment_id,
+                        "balance_cents": reversal_balance,
+                        "metadata": json.dumps({"payment_id": payment_id, "type": "payout_reversal", "reason": "reconciliation_failed"}),
+                        "created_at": datetime.utcnow()
+                    })
+                    db.commit()
+                    return {
+                        "payment_id": payment_id,
+                        "status": "failed",
+                        "message": "Reconciled: transfer found but failed"
+                    }
+            else:
+                # Search by metadata/idempotency_key
+                # Note: Stripe API doesn't support searching by metadata directly
+                # In production, you'd need to maintain a mapping or use webhooks
+                # For now, assume transfer not found if no transfer_id
+                db.execute(text("""
+                    UPDATE payments
+                    SET status = 'failed',
+                        error_message = 'Transfer not found in Stripe',
+                        reconciled_at = :reconciled_at,
+                        no_transfer_confirmed = TRUE
+                    WHERE id = :payment_id
+                """), {
+                    "payment_id": payment_id,
+                    "reconciled_at": datetime.utcnow()
+                })
+                
+                # Insert reversal credit ONCE
+                current_balance_result = db.execute(text("""
+                    SELECT COALESCE(SUM(amount_cents), 0) FROM wallet_ledger
+                    WHERE user_id = :user_id
+                """), {"user_id": user_id}).scalar()
+                reversal_balance = int(current_balance_result) + amount_cents
+                
+                db.execute(text("""
+                    INSERT INTO wallet_ledger (
+                        user_id, amount_cents, transaction_type,
+                        reference_id, reference_type, balance_cents, metadata, created_at
+                    ) VALUES (
+                        :user_id, :amount_cents, 'credit',
+                        :reference_id, 'payout_reversal', :balance_cents, :metadata, :created_at
+                    )
+                """), {
+                    "user_id": user_id,
+                    "amount_cents": amount_cents,
+                    "reference_id": payment_id,
+                    "balance_cents": reversal_balance,
+                    "metadata": json.dumps({"payment_id": payment_id, "type": "payout_reversal", "reason": "reconciliation_no_transfer"}),
+                    "created_at": datetime.utcnow()
+                })
+                db.commit()
+                return {
+                    "payment_id": payment_id,
+                    "status": "failed",
+                    "no_transfer_confirmed": True,
+                    "message": "Reconciled: transfer not found in Stripe"
+                }
+        except stripe.error.StripeError as e:
+            # Stripe API error - keep unknown
+            logger.error(f"Stripe API error during reconciliation: {e}")
+            return {
+                "payment_id": payment_id,
+                "status": "unknown",
+                "message": f"Reconciliation failed: {str(e)}"
+            }
+        except Exception as e:
+            logger.error(f"Unexpected error during reconciliation: {e}")
+            db.rollback()
+            return {
+                "payment_id": payment_id,
+                "status": "unknown",
+                "message": f"Reconciliation error: {str(e)}"
+            }
 

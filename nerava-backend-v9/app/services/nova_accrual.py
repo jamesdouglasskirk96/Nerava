@@ -102,6 +102,9 @@ class NovaAccrualService:
                 for wallet in charging_wallets:
                     wallet.nova_balance += 1
                     
+                    # Increment reputation points (1 Nova = 1 reputation point for charging rewards)
+                    wallet.energy_reputation_score = (wallet.energy_reputation_score or 0) + 1
+                    
                     # Create Nova transaction record (1 Nova = 0.01 USD equivalent)
                     transaction = NovaTransaction(
                         id=str(uuid.uuid4()),

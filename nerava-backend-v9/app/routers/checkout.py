@@ -218,7 +218,7 @@ async def list_recent_orders(
 @router.post("/redeem", response_model=RedeemResponse)
 async def redeem_nova(
     request: RedeemRequest,
-    user: User = Depends(get_current_driver),
+    user: Optional[User] = Depends(get_current_driver_optional),
     db: Session = Depends(get_db)
 ):
     """
@@ -237,11 +237,29 @@ async def redeem_nova(
     
     Args:
         request: RedeemRequest with qr_token, order_total_cents, and optional square_order_id
-        user: Authenticated driver
+        user: Authenticated driver (optional in demo mode - uses user ID 1)
         
     Returns:
         RedeemResponse with redemption details including merchant_fee_cents
     """
+    # In demo mode, allow unauthenticated requests using demo user (ID 1)
+    import os
+    demo_mode = os.getenv("DEMO_MODE", "false").lower() == "true"
+    
+    if not user:
+        if demo_mode:
+            # Use demo user (ID 1) for unauthenticated demo requests
+            user = db.query(User).filter(User.id == 1).first()
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail={"error": "DEMO_USER_NOT_FOUND", "message": "Demo user not configured"}
+                )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={"error": "UNAUTHORIZED", "message": "Authentication required"}
+            )
     # Resolve merchant
     merchant = resolve_merchant_qr_token(db, request.qr_token)
     if not merchant:

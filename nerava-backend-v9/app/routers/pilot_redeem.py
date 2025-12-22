@@ -56,8 +56,15 @@ def redeem_code(
     Auth: Currently open for pilot (TODO: add merchant/auth guard)
     """
     try:
-        # Fetch the code
-        offer_code = fetch_code(db, request.code)
+        # Fetch the code with row lock (P0 race condition fix)
+        # Use SELECT ... FOR UPDATE to prevent concurrent redemption
+        from sqlalchemy import text
+        from app.models_while_you_charge import MerchantOfferCode
+        
+        # Lock the row for update to prevent race conditions
+        offer_code = db.query(MerchantOfferCode).filter(
+            MerchantOfferCode.code == request.code
+        ).with_for_update().first()
         
         if not offer_code:
             raise HTTPException(status_code=404, detail=f"Code {request.code} not found")
@@ -69,7 +76,7 @@ def redeem_code(
                 detail=f"Code {request.code} does not belong to merchant {request.merchant_id}"
             )
         
-        # Validate code is not already redeemed
+        # Validate code is not already redeemed (now safe due to row lock)
         if offer_code.is_redeemed:
             raise HTTPException(
                 status_code=400,
@@ -102,8 +109,9 @@ def redeem_code(
             # Insufficient balance or other validation error
             raise HTTPException(status_code=400, detail=str(e))
         
-        # Mark code as redeemed
+        # Mark code as redeemed (atomic within locked transaction)
         offer_code.is_redeemed = True
+        offer_code.redeemed_at = datetime.utcnow()  # Set redemption timestamp if column exists
         db.commit()
         db.refresh(offer_code)
         

@@ -92,9 +92,17 @@ async def refresh_tokens(db: Session, vehicle_account: VehicleAccount) -> Vehicl
     # Refresh the token
     url = f"{settings.smartcar_auth_url}/oauth/token"
     
+    # Decrypt refresh token before using (P0 security fix)
+    from app.services.token_encryption import decrypt_token
+    try:
+        decrypted_refresh_token = decrypt_token(latest_token.refresh_token)
+    except Exception:
+        # If decryption fails, assume it's plaintext (migration compatibility)
+        decrypted_refresh_token = latest_token.refresh_token
+    
     data = {
         "grant_type": "refresh_token",
-        "refresh_token": latest_token.refresh_token,
+        "refresh_token": decrypted_refresh_token,
         "client_id": settings.smartcar_client_id,
         "client_secret": settings.smartcar_client_secret,
     }
@@ -118,7 +126,7 @@ async def refresh_tokens(db: Session, vehicle_account: VehicleAccount) -> Vehicl
         id=str(uuid.uuid4()),
         vehicle_account_id=vehicle_account.id,
         access_token=token_data["access_token"],
-        refresh_token=token_data.get("refresh_token", latest_token.refresh_token),  # May not be returned
+        refresh_token=encrypted_refresh_token,  # Already encrypted above
         expires_at=datetime.utcnow() + timedelta(seconds=token_data.get("expires_in", 3600)),
         scope=token_data.get("scope", latest_token.scope),
     )

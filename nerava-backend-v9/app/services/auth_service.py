@@ -88,12 +88,18 @@ class AuthService:
         """Create JWT token for user session"""
         if expires_delta is None:
             expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-        return create_access_token(str(user.id), expires_delta)
+        # Use public_id (UUID string) as subject, not integer id
+        return create_access_token(user.public_id, expires_delta, auth_provider=user.auth_provider)
     
     @staticmethod
     def get_user_by_id(db: Session, user_id: int) -> Optional[User]:
-        """Get user by ID"""
+        """Get user by ID (integer primary key)"""
         return db.query(User).filter(User.id == user_id).first()
+    
+    @staticmethod
+    def get_user_by_public_id(db: Session, public_id: str) -> Optional[User]:
+        """Get user by public_id (UUID string)"""
+        return db.query(User).filter(User.public_id == public_id).first()
     
     @staticmethod
     def get_user_roles(user: User) -> List[str]:

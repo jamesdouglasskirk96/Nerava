@@ -148,20 +148,28 @@ def shape_merchant(merchant: Dict[str, Any], user_lat: Optional[float] = None, u
         # If it's not already a full URL, convert it using Google Places photo API
         if photo_ref and str(photo_ref).strip():
             photo_ref_str = str(photo_ref).strip()
-            if not photo_ref_str.startswith("http"):
-                # Convert photo reference to full URL
-                logo_url = google_photo_url(photo_ref_str)
-            else:
+            if photo_ref_str.startswith("http"):
                 # Already a full URL
                 logo_url = photo_ref_str
-    
+            elif photo_ref_str.startswith("/"):
+                # Local asset path - use as-is (don't transform to Google Places URL)
+                logo_url = photo_ref_str
+            else:
+                # Assume Google Places photo reference - convert to full URL
+                logo_url = google_photo_url(photo_ref_str)
+
     # If no photo_url, try logo_url (might be a custom logo or icon)
-    # Temporarily show ALL logos (even generic icons) for debugging
     if not logo_url and "logo_url" in merchant and merchant.get("logo_url"):
         logo_url_val = merchant.get("logo_url", "")
         # Only use if it's a valid URL (not just empty string or None)
         if logo_url_val and str(logo_url_val).strip():
-            logo_url = str(logo_url_val).strip()
+            logo_url_str = str(logo_url_val).strip()
+            if logo_url_str.startswith("http") or logo_url_str.startswith("/"):
+                # Full URL or local asset path - use as-is
+                logo_url = logo_url_str
+            else:
+                # Assume Google Places photo reference - convert to full URL
+                logo_url = google_photo_url(logo_url_str)
     
     # If still no logo, try icon (Google Places generic icon) as last resort
     # For now, include even generic icons so we can see what merchants have

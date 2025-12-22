@@ -15,8 +15,17 @@ from .domain import oauth2_scheme
 from ..services.auth_service import AuthService
 
 # Dev-only flag: allow anonymous driver access in local dev
-# DO NOT enable in production
-DEV_ALLOW_ANON_DRIVER = os.getenv("NERAVA_DEV_ALLOW_ANON_DRIVER", "false").lower() == "true"
+# DO NOT enable in production - gated by environment check
+def _is_local_env() -> bool:
+    """Check if running in local environment"""
+    env = os.getenv("ENV", "dev").lower()
+    region = os.getenv("REGION", "local").lower()
+    return env == "local" or region == "local"
+
+DEV_ALLOW_ANON_DRIVER_ENABLED = (
+    os.getenv("NERAVA_DEV_ALLOW_ANON_DRIVER", "false").lower() == "true" 
+    and _is_local_env()
+)
 
 
 def get_current_driver_id(
@@ -51,14 +60,17 @@ def get_current_driver_id(
     if not token:
         token = request.cookies.get("access_token")
     
-    # 3. If we have a token, decode it and extract user_id
+    # 3. If we have a token, decode it and extract public_id (UUID string)
     if token:
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-            user_id_str = payload.get("sub")
-            if user_id_str:
-                user_id = int(user_id_str)
-                return user_id
+            public_id = payload.get("sub")
+            if public_id:
+                # public_id is a UUID string, not an integer
+                # Lookup user by public_id to get integer id
+                user = AuthService.get_user_by_public_id(db, public_id)
+                if user:
+                    return user.id
         except jwt.ExpiredSignatureError:
             # Token expired - fall through to dev fallback or raise
             pass
@@ -67,9 +79,9 @@ def get_current_driver_id(
             print(f"[AUTH] Token decode failed: {e}")
             pass
     
-    # 4. Dev fallback: if NERAVA_DEV_ALLOW_ANON_DRIVER=true, use default driver
-    if DEV_ALLOW_ANON_DRIVER:
-        print("[AUTH][DEV] NERAVA_DEV_ALLOW_ANON_DRIVER=true -> using driver_id=1")
+    # 4. Dev fallback: if NERAVA_DEV_ALLOW_ANON_DRIVER=true AND in local env, use default driver
+    if DEV_ALLOW_ANON_DRIVER_ENABLED:
+        print("[AUTH][DEV] NERAVA_DEV_ALLOW_ANON_DRIVER=true (local env) -> using driver_id=1")
         return 1
     
     # 5. Production: authentication required
@@ -108,7 +120,7 @@ def get_current_driver(
     user = AuthService.get_user_by_id(db, driver_id)
     
     # Dev fallback: create default driver user if it doesn't exist
-    if not user and DEV_ALLOW_ANON_DRIVER and driver_id == 1:
+    if not user and DEV_ALLOW_ANON_DRIVER_ENABLED and driver_id == 1:
         try:
             from ..models import User as UserModel
             # Create a default driver user for dev

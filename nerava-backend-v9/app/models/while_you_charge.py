@@ -82,6 +82,11 @@ class Merchant(Base):
     # Google Places types (array)
     place_types = Column(JSON, default=list)
     
+    # Category and charger proximity (cached for filtering)
+    primary_category = Column(String(32), nullable=True, index=True)  # "coffee", "food", or "other"
+    nearest_charger_id = Column(String(64), nullable=True)  # FK to charger
+    nearest_charger_distance_m = Column(Integer, nullable=True, index=True)  # Cached distance in meters
+    
     # Metadata
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

@@ -1,5 +1,6 @@
 from datetime import datetime, time
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Time
+import uuid
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Time, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.sqlite import JSON as SQLITE_JSON
 from ..db import Base
@@ -9,11 +10,25 @@ try:
 except Exception:
     JSON = SQLITE_JSON  # fallback for sqlite
 
+try:
+    from sqlalchemy.dialects import postgresql
+    UUID_TYPE = postgresql.UUID(as_uuid=False)
+except Exception:
+    UUID_TYPE = String(36)  # SQLite fallback
+
+
+def generate_public_id():
+    """Generate a UUID string for public_id"""
+    return str(uuid.uuid4())
+
+
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True)
-    email = Column(String, unique=True, index=True, nullable=False)
-    password_hash = Column(String, nullable=False)
+    public_id = Column(UUID_TYPE, unique=True, nullable=False, index=True, default=generate_public_id)  # External identifier for JWT sub
+    email = Column(String, nullable=True, index=True)  # Nullable for phone-only users
+    phone = Column(String, nullable=True, index=True)  # E.164 format, nullable for email-only users
+    password_hash = Column(String, nullable=True)  # Nullable for OAuth users
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     preferences = relationship("UserPreferences", uselist=False, back_populates="user", cascade="all, delete")
@@ -21,9 +36,16 @@ class User(Base):
     # Domain Charge Party MVP fields
     display_name = Column(String, nullable=True)
     role_flags = Column(String, nullable=True, default="driver")  # comma-separated: "driver,merchant_admin,admin"
-    auth_provider = Column(String, nullable=False, default="local")  # local, google, apple
-    oauth_sub = Column(String, nullable=True)  # OAuth subject ID
+    auth_provider = Column(String, nullable=False, default="local")  # local, google, apple, phone
+    provider_sub = Column(String, nullable=True)  # OAuth subject ID (renamed from oauth_sub)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=True)
+    
+    # Unique constraints enforced at application level (SQLite doesn't support partial unique indexes)
+    __table_args__ = (
+        # Unique constraint on (auth_provider, provider_sub) where provider_sub is not null
+        # Enforced in application code for SQLite compatibility
+        Index('ix_users_auth_provider_sub', 'auth_provider', 'provider_sub'),
+    )
 
 class UserPreferences(Base):
     __tablename__ = "user_preferences"

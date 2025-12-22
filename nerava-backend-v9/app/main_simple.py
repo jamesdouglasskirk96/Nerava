@@ -29,19 +29,96 @@ logger.info("Starting Nerava Backend v9")
 print(">>>> Nerava main_simple.py LOADED <<<<", flush=True)
 logger.info(">>>> Nerava main_simple.py LOADED <<<<")
 
-# CRITICAL: Run migrations FIRST before importing any routers that might import models
-# This ensures Base.metadata is clean and models are registered in the correct order
-# Note: models_domain will be imported during migrations (via env.py) and again when routers load
-# Python's module cache should prevent re-execution, but if duplicate table errors occur,
-# it means models are being registered twice in the same metadata instance
+# Validate JWT secret configuration (P0 security fix)
+def validate_jwt_secret():
+    """Validate JWT secret is not database URL in non-local environments"""
+    import os
+    env = os.getenv("ENV", "dev").lower()
+    region = settings.region.lower()
+    is_local = env == "local" or region == "local"
+    
+    if not is_local:
+        if settings.jwt_secret == settings.database_url:
+            error_msg = (
+                "CRITICAL SECURITY ERROR: JWT secret cannot equal database_url in non-local environment. "
+                f"ENV={env}, REGION={region}. Set JWT_SECRET environment variable to a secure random value."
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        if not settings.jwt_secret or settings.jwt_secret == "dev-secret":
+            error_msg = (
+                "CRITICAL SECURITY ERROR: JWT secret must be set and not use default value in non-local environment. "
+                f"ENV={env}, REGION={region}. Set JWT_SECRET environment variable."
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        logger.info("JWT secret validation passed (not equal to database_url)")
+
+def check_schema_payload_hash():
+    """Check if payload_hash column exists in nova_transactions (local dev only)."""
+    import os
+    env = os.getenv("ENV", "dev").lower()
+    region = settings.region.lower()
+    is_local = env == "local" or region == "local"
+    
+    if not is_local:
+        return  # Skip check in non-local environments
+    
+    try:
+        from sqlalchemy import text
+        from .db import SessionLocal
+        
+        db = SessionLocal()
+        try:
+            # Try to query payload_hash column
+            db.execute(text("SELECT payload_hash FROM nova_transactions LIMIT 1"))
+            logger.info("Schema check passed: payload_hash column exists")
+        except Exception as e:
+            if "no such column" in str(e).lower() and "payload_hash" in str(e).lower():
+                logger.error("=" * 80)
+                logger.error("DATABASE SCHEMA IS OUT OF DATE")
+                logger.error("=" * 80)
+                logger.error("The payload_hash column is missing from nova_transactions table.")
+                logger.error("")
+                logger.error("To fix, run:")
+                logger.error("  cd nerava-backend-v9")
+                logger.error("  alembic upgrade head")
+                logger.error("")
+                logger.error("=" * 80)
+            else:
+                # Other error (table might not exist, etc.) - just log, don't fail startup
+                logger.debug(f"Schema check skipped (table may not exist yet): {e}")
+        finally:
+            db.close()
+    except Exception as e:
+        # Don't fail startup if check fails
+        logger.debug(f"Schema check failed (non-critical): {e}")
+
+# Run validation before migrations
 try:
-    logger.info("Running database migrations on startup (before router imports)...")
-    run_migrations()
-    logger.info("Database migrations completed successfully")
-except Exception as e:
-    logger.error(f"Failed to run migrations on startup: {e}", exc_info=True)
-    # Don't fail startup if migrations fail - let the app start and log the error
-    # This prevents the app from being completely broken if migrations have issues
+    validate_jwt_secret()
+except ValueError as e:
+    logger.error(f"Startup validation failed: {e}")
+    sys.exit(1)
+
+# Check schema in local dev (non-blocking)
+check_schema_payload_hash()
+
+# CRITICAL: Migrations removed from startup (P1 stability fix)
+# Migrations must be run manually before deployment:
+#   alembic upgrade head
+# 
+# This prevents:
+# - Race conditions during startup
+# - Migrations running on every instance (multi-instance deployments)
+# - Startup failures due to migration issues
+# 
+# Deployment checklist:
+# 1. Run migrations: alembic upgrade head
+# 2. Verify migration status: alembic current
+# 3. Start application
 
 from .middleware.logging import LoggingMiddleware
 from .middleware.metrics import MetricsMiddleware
@@ -115,7 +192,7 @@ from .routers import debug_verify
 from .routers import debug_pool
 from .routers import discover_api, affiliate_api, insights_api
 from .routers import while_you_charge, pilot, pilot_debug, merchant_reports, merchant_balance, pilot_redeem
-from .routers import ev_smartcar, checkout, wallet_pass, demo_qr, demo_charging, demo_square
+from .routers import ev_smartcar, checkout, wallet_pass, demo_qr, demo_charging, demo_square, virtual_cards
 from .services.nova_accrual import nova_accrual_service
 
 # Auth + JWT preferences
@@ -371,6 +448,20 @@ app.add_middleware(ReadWriteRoutingMiddleware)
 app.add_middleware(CanaryRoutingMiddleware, canary_percentage=0.0)  # Disabled by default
 app.add_middleware(DemoBannerMiddleware)
 
+# CORS validation (P1 security fix)
+# Validate CORS origins in non-local environments
+env = os.getenv("ENV", "dev").lower()
+region = settings.region.lower()
+is_local = env == "local" or region == "local"
+
+if not is_local and settings.cors_allow_origins == "*":
+    error_msg = (
+        "CRITICAL SECURITY ERROR: CORS wildcard (*) is not allowed in non-local environment. "
+        f"ENV={env}, REGION={region}. Set ALLOWED_ORIGINS environment variable to explicit origins."
+    )
+    logger.error(error_msg)
+    raise ValueError(error_msg)
+
 # CORS (tighten in prod)
 # Parse ALLOWED_ORIGINS from env or use defaults
 allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "*")
@@ -465,6 +556,7 @@ app.include_router(recommend.router, prefix="/v1", tags=["recommend"])
 app.include_router(reservations.router, prefix="/v1/reservations", tags=["reservations"])
 app.include_router(wallet.router)
 app.include_router(wallet_pass.router)
+app.include_router(virtual_cards.router)  # /v1/virtual_cards/*
 app.include_router(demo_charging.router)
 app.include_router(chargers.router, prefix="/v1/chargers", tags=["chargers"])
 app.include_router(webhooks.router)

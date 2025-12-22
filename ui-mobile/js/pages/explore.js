@@ -23,10 +23,14 @@ import Api, {
   getCurrentUser,
   EVENT_SLUG,
   ZONE_SLUG,
+  apiRedeemNova,
+  apiWalletSummary,
 } from '../core/api.js';
 import { ensureMap, clearStations, addStationDot, fitToStations, getMap } from '../core/map.js';
 import { setTab } from '../app.js';
 import { getOptimalChargingTime, getChargingStateDisplay, getChargingState } from '../core/charging-state.js';
+import { createModal, showModal } from '../components/modal.js';
+import { openMerchantDetail } from './merchant-detail.js';
 
 // Leaflet reference (assumes L is global from Leaflet script)
 const L = window.L;
@@ -96,13 +100,23 @@ function toMapCharger(charger) {
 }
 
 function toMapMerchant(merchant) {
-  if (!merchant) return null;
+  console.log('[Explore] Mapping merchant:', merchant);
+  if (!merchant) {
+    console.warn('[Explore] Merchant is null/undefined, skipping');
+    return null;
+  }
+  
+  // Check for lat/lng - these are required
+  if (merchant.lat === undefined || merchant.lat === null || merchant.lng === undefined || merchant.lng === null) {
+    console.warn('[Explore] Merchant missing lat/lng:', { id: merchant.id, name: merchant.name, lat: merchant.lat, lng: merchant.lng });
+  }
+  
   const walkTime = normalizeNumber(merchant.walk_time_s || merchant.walk_seconds || 0);
   
   // Preserve logo_url from API response (could be null, empty, or a URL)
   const logoUrl = merchant.logo_url || merchant.logo || null;
   
-  return {
+  const mappedMerchant = {
     id: merchant.id || merchant.merchant_id || `merchant_${Math.random().toString(36).slice(2)}`,
     name: merchant.name || 'Merchant',
     lat: Number(merchant.lat),
@@ -115,6 +129,9 @@ function toMapMerchant(merchant) {
     logo_url: logoUrl, // Also preserve as logo_url for compatibility
     raw: merchant,
   };
+  
+  console.log('[Explore] Mapped merchant result:', mappedMerchant);
+  return mappedMerchant;
 }
 
 function merchantToPerkCard(merchant) {
@@ -163,6 +180,66 @@ function renderChargerPins(chargers) {
   }
 }
 
+function renderMerchantPins(merchants) {
+  clearStations();
+  if (!merchants || merchants.length === 0) {
+    return;
+  }
+  
+  merchants.forEach(merchant => {
+    // Use merchant lat/lng for pin location
+    if (merchant.lat && merchant.lng) {
+      const merchantStation = {
+        lat: merchant.lat,
+        lng: merchant.lng,
+        network: 'merchant',
+        status: 'available',
+        name: merchant.name,
+        id: merchant.id
+      };
+      addStationDot(merchantStation, { 
+        onClick: () => selectMerchant(merchant) 
+      });
+    }
+  });
+  
+  // Fit map to show all merchants with padding
+  if (_map && merchants.length > 0 && typeof L !== 'undefined') {
+    const merchantPositions = merchants
+      .filter(m => m.lat && m.lng)
+      .map(m => [m.lat, m.lng]);
+    
+    if (merchantPositions.length > 0) {
+      const bounds = L.latLngBounds(merchantPositions);
+      _map.fitBounds(bounds, {
+        paddingTopLeft: [16, 16],
+        paddingBottomRight: [16, 32],
+        maxZoom: 17
+      });
+    }
+  } else if (merchants.length > 0) {
+    const stations = merchants
+      .filter(m => m.lat && m.lng)
+      .map(m => ({ lat: m.lat, lng: m.lng }));
+    fitToStations(stations);
+  }
+}
+
+function selectMerchant(merchant) {
+  _selectedMerchantId = merchant.id;
+  _selectedMerchant = merchant;
+  
+  console.log('Merchant tapped:', merchant.id, merchant.name);
+  
+  // Center map on merchant
+  if (_map && merchant.lat && merchant.lng) {
+    _map.setView([merchant.lat, merchant.lng], 15);
+  }
+  
+  // Don't show popover - navigate directly to merchant detail instead
+  openMerchantDetail(merchant);
+}
+
 // === State Management ======================================================
 let _chargers = [];
 let _merchants = [];
@@ -171,6 +248,7 @@ let _selectedMerchantId = null;
 let _selectedMerchant = null; // Store full merchant object
 let _selectedCharger = null; // Store selected charger object
 let _selectedCategory = null;
+let _selectedWhileYouCharge = false; // For "While you charge" filter
 let _userLocation = null;
 let _map = null;
 let _pilotBootstrap = null;
@@ -189,32 +267,48 @@ function fallbackChargers() {
   }));
 }
 
+// Default Domain Austin location (near Eggman at 1720 Barton Springs Rd)
+const DEFAULT_LAT = 30.2634382;
+const DEFAULT_LNG = -97.7628908;
+
 async function loadPilotData() {
   showLoadingState();
   try {
     // Get user location for nearby merchants query
-    let userLat = 30.4021; // Domain default
-    let userLng = -97.7266;
+    // Default Domain Austin location (near Eggman)
+    let userLat = DEFAULT_LAT;
+    let userLng = DEFAULT_LNG;
     
-    if (_userLocation) {
-      userLat = _userLocation.lat;
-      userLng = _userLocation.lng;
+    try {
+      if (_userLocation?.lat && _userLocation?.lng) {
+        userLat = _userLocation.lat;
+        userLng = _userLocation.lng;
+        console.log('[Explore] Using user location:', { lat: userLat, lng: userLng });
+      } else {
+        console.warn('[Explore] Using default location:', { lat: DEFAULT_LAT, lng: DEFAULT_LNG });
+      }
+    } catch (e) {
+      console.warn('[Explore] Error getting user location, using default:', e);
+      console.warn('[Explore] Using default location:', { lat: DEFAULT_LAT, lng: DEFAULT_LNG });
     }
     
     // Load chargers - use fallback for now (can be migrated to v1 endpoint later)
     _chargers = fallbackChargers();
-    renderChargerPins(_chargers);
     
     // Load nearby merchants using v1 API
-    console.log('[Explore] Fetching nearby merchants (v1)...');
+    // Use a larger radius to include all merchants in the zone (Domain area spans ~15km)
+    console.log('[Explore] Loading merchants with params:', { lat: userLat, lng: userLng, zoneSlug: ZONE_SLUG, radiusM: 20000, novaOnly: true });
     let merchantsRaw;
     try {
       const merchantsRes = await apiNearbyMerchants({
         zoneSlug: ZONE_SLUG,
         lat: userLat,
         lng: userLng,
+        radiusM: 20000, // Increased to 20km to include all Domain area merchants
+        novaOnly: true, // Always fetch Nova-accepting merchants
       });
-      console.log('[Explore] Nearby merchants (v1) response:', merchantsRes);
+      console.log('[Explore] Raw API response:', merchantsRes);
+      console.log('[Explore] Response type:', typeof merchantsRes, Array.isArray(merchantsRes));
       merchantsRaw = Array.isArray(merchantsRes) ? merchantsRes : [];
     } catch (err) {
       console.error('[Explore] Error fetching nearby merchants:', err);
@@ -236,7 +330,17 @@ async function loadPilotData() {
     }
     
     _merchants = merchantsRaw.map(toMapMerchant).filter(Boolean);
-    console.log('[Explore] Mapped merchants:', _merchants.length, 'merchants');
+    console.log('[Explore] Mapped merchants:', _merchants.length, _merchants);
+    
+    // Sort merchants by distance_to_charger_m ascending
+    _merchants.sort((a, b) => {
+      const distA = a.distance_to_charger_m ?? Infinity;
+      const distB = b.distance_to_charger_m ?? Infinity;
+      return distA - distB;
+    });
+    
+    // Render merchant pins on map (using merchant locations, not charger locations)
+    renderMerchantPins(_merchants);
     
     // Convert merchants to Resy-style format and render
     if (_merchants.length > 0) {
@@ -261,11 +365,22 @@ async function loadPilotData() {
       console.log('[Explore] === END FIRST MAPPED MERCHANT DEBUG ===');
     }
     
-    // Sort merchants by nova_reward descending (Bakery Lorraine with 2 Nova should appear at top)
-    _merchants.sort((a, b) => (b.nova_reward || 0) - (a.nova_reward || 0));
+    // Merchants already sorted by distance_to_charger_m above
+
+    // Check if coming from Wallet redeem flow - AFTER merchants are loaded
+    const hasRedeemIntent = sessionStorage.getItem('nerava_redeem_intent') === 'true';
+    if (hasRedeemIntent && _merchants.length > 0) {
+      sessionStorage.removeItem('nerava_redeem_intent');
+      console.log('[Explore] Redeem intent detected, auto-selecting from', _merchants.length, 'merchants');
+      autoSelectClosestMerchant();
+    } else if (hasRedeemIntent && _merchants.length === 0) {
+      console.warn('[Explore] Redeem intent but no merchants loaded!');
+      showToast('No merchants available');
+      sessionStorage.removeItem('nerava_redeem_intent');
+    }
 
     if (_merchants.length) {
-      applyMerchantFilter('');
+      // Merchants already loaded and sorted, no need to filter
     } else {
       // Fallback to default perks if no merchants found
       _merchants = _recommendedPerks.map(perk => ({
@@ -295,7 +410,6 @@ async function loadPilotData() {
   } catch (err) {
     console.error('[Explore] Failed to load merchants (v1):', err);
     _chargers = fallbackChargers();
-    renderChargerPins(_chargers);
     _merchants = _recommendedPerks.map(perk => ({
       id: perk.id,
       name: perk.name,
@@ -323,37 +437,90 @@ async function loadPilotData() {
   }
 }
 
-function filterMerchants(list, query, category) {
-  const needle = (query || '').trim().toLowerCase();
-  return list.filter((m) => {
-    const categoryMatch = category ? (m.category || '').toLowerCase() === category : true;
-    if (!categoryMatch) return false;
-    if (!needle) return true;
-    return (m.name || '').toLowerCase().includes(needle);
-  });
-}
-
-function applyMerchantFilter(query = '') {
-  _activeQuery = query;
-  if (!_merchants.length) {
-    showEmptyState('No pilot merchants yet');
-    return;
+// Fetch merchants with filters from backend
+async function fetchMerchantsWithFilters(query = '', category = null, whileYouCharge = false) {
+  showLoadingState();
+  
+  try {
+    // Get user location
+    let userLat = DEFAULT_LAT;
+    let userLng = DEFAULT_LNG;
+    
+    if (_userLocation?.lat && _userLocation?.lng) {
+      userLat = _userLocation.lat;
+      userLng = _userLocation.lng;
+    }
+    
+    // Build API params
+    const params = {
+      zoneSlug: ZONE_SLUG,
+      lat: userLat,
+      lng: userLng,
+      radiusM: 20000, // Increased to 20km to include all Domain area merchants
+      novaOnly: true,
+    };
+    
+    if (query && query.trim()) {
+      params.q = query.trim();
+    }
+    
+    if (category) {
+      params.category = category;
+    }
+    
+    if (whileYouCharge) {
+      params.while_you_charge = true;
+    }
+    
+    console.log('[Explore] Fetching merchants with filters:', params);
+    
+    const merchantsRes = await apiNearbyMerchants(params);
+    const merchantsRaw = Array.isArray(merchantsRes) ? merchantsRes : [];
+    
+    _merchants = merchantsRaw.map(toMapMerchant).filter(Boolean);
+    
+    // Sort by distance_to_charger_m ascending
+    _merchants.sort((a, b) => {
+      const distA = a.distance_to_charger_m ?? Infinity;
+      const distB = b.distance_to_charger_m ?? Infinity;
+      return distA - distB;
+    });
+    
+    // Update map pins
+    renderMerchantPins(_merchants);
+    
+    // Update UI
+    if (_merchants.length > 0) {
+      const merchantCards = _merchants.map(m => ({
+        ...m,
+        rating: m.rating || 4.6,
+        rating_count: m.rating_count || 2500,
+        price_tier: m.price_tier || '$$',
+        distance_text: m.distance_text || (m.walk_time_s ? `${Math.round(m.walk_time_s / 60)} min` : '0.1 mi'),
+        image_url: m.image_url || m.photo_url || m.logo_url,
+      }));
+      
+      // Center map on first merchant (the one that will be shown in the bottom card)
+      const firstMerchant = _merchants[0];
+      if (_map && firstMerchant && firstMerchant.lat && firstMerchant.lng) {
+        _map.setView([firstMerchant.lat, firstMerchant.lng], 15);
+        console.log('[Explore] Centered map on first merchant after search/filter:', firstMerchant.name);
+      }
+      
+      updateRecommendedPerks(merchantCards);
+      
+      // Update list view if expanded
+      const sheet = $('#explore-list-sheet');
+      if (sheet && sheet.classList.contains('expanded')) {
+        renderMerchantList(_merchants);
+      }
+    } else {
+      showEmptyState('No matching merchants');
+    }
+  } catch (err) {
+    console.error('[Explore] Failed to fetch merchants with filters:', err);
+    showEmptyState('Failed to load merchants – please try again.');
   }
-  const filtered = filterMerchants(_merchants, query, _selectedCategory);
-  if (!filtered.length) {
-    showEmptyState('No matching merchants');
-    return;
-  }
-  // Convert merchants to format expected by Resy-style cards
-  const merchantCards = filtered.map(m => ({
-    ...m,
-    rating: m.rating || 4.6,
-    rating_count: m.rating_count || 2500,
-    price_tier: m.price_tier || '$$',
-    distance_text: m.distance_text || (m.walk_time_s ? `${Math.round(m.walk_time_s / 60)} min` : '0.1 mi'),
-    image_url: m.image_url || m.photo_url || m.logo_url,
-  }));
-  updateRecommendedPerks(merchantCards);
 }
 
 // Toast helper
@@ -383,17 +550,12 @@ function initSearchBar() {
       clearTimeout(_searchTimeout);
     }
     
-    // If empty, reset to default "coffee" search
-    if (query.length === 0) {
-      applyMerchantFilter('');
-      return;
-    }
-    
-    // Debounce: wait 500ms after user stops typing
+    // Debounce: wait 300ms after user stops typing
     _searchTimeout = setTimeout(async () => {
-      console.log(`[WhileYouCharge] Filtering merchants by query: "${query}"`);
-      applyMerchantFilter(query);
-    }, 500);
+      console.log(`[Explore] Searching merchants by query: "${query}"`);
+      _activeQuery = query;
+      await fetchMerchantsWithFilters(query, _selectedCategory, _selectedWhileYouCharge);
+    }, 300);
   });
   
   // Enter key triggers immediate search
@@ -405,14 +567,15 @@ function initSearchBar() {
       }
       
       const query = searchInput.value.trim();
-      applyMerchantFilter(query);
+      _activeQuery = query;
+      await fetchMerchantsWithFilters(query, _selectedCategory, _selectedWhileYouCharge);
     }
   });
   
   // Voice search (TODO: implement voice recognition)
   if (voiceBtn) {
     voiceBtn.addEventListener('click', () => {
-      console.log('[WhileYouCharge] Voice search clicked');
+      console.log('[Explore] Voice search clicked');
       showToast('Voice search coming soon');
     });
   }
@@ -423,35 +586,35 @@ function initSuggestions() {
   const chips = $$('.suggestion-chip');
   
   chips.forEach(chip => {
-    chip.addEventListener('click', () => {
+    chip.addEventListener('click', async () => {
       // Toggle active state
+      const wasActive = chip.classList.contains('active');
       chips.forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
       
       const category = chip.dataset.category;
-      _selectedCategory = category === _selectedCategory ? null : category;
+      const filter = chip.dataset.filter;
       
-      if (!_selectedCategory) {
-        chip.classList.remove('active');
+      if (wasActive) {
+        // Deselecting
+        _selectedCategory = null;
+        _selectedWhileYouCharge = false;
+      } else {
+        // Selecting
+        chip.classList.add('active');
+        
+        if (filter === 'while_you_charge') {
+          _selectedCategory = null;
+          _selectedWhileYouCharge = true;
+        } else if (category) {
+          _selectedCategory = category;
+          _selectedWhileYouCharge = false;
+        }
       }
       
-      // Filter merchants/chargers
-      filterByCategory(_selectedCategory);
+      // Fetch merchants with new filters
+      await fetchMerchantsWithFilters(_activeQuery, _selectedCategory, _selectedWhileYouCharge);
     });
   });
-}
-
-async function filterByCategory(category) {
-  console.log('Filtering by category:', category);
-  
-  const categoryMap = {
-    'coffee': 'coffee',
-    'food': 'food',
-    'groceries': 'groceries',
-    'gym': 'gym'
-  };
-  _selectedCategory = categoryMap[category] || category || null;
-  applyMerchantFilter(_activeQuery);
 }
 
 // === Charge Chip ==============================================
@@ -521,13 +684,14 @@ function centerMapOnUser() {
   console.log('[Explore] Map centered on:', loc);
 }
 
-function initMapCenterButton() {
-  const btn = $('#map-center-btn');
-  if (!btn) return;
-
-  btn.addEventListener('click', centerMapOnUser);
-  console.log('[Explore] Center map button initialized');
-}
+// Map center button removed
+// function initMapCenterButton() {
+//   const btn = $('#map-center-btn');
+//   if (!btn) return;
+//
+//   btn.addEventListener('click', centerMapOnUser);
+//   console.log('[Explore] Center map button initialized');
+// }
 
 // === Merchant Popover ======================================================
 function initMerchantPopover() {
@@ -599,6 +763,252 @@ function hideMerchantPopover() {
   _selectedMerchantId = null;
   _selectedMerchant = null;
   _selectedCharger = null;
+}
+
+// === Auto-select closest merchant for redeem flow =====================================
+function autoSelectClosestMerchant() {
+  if (!_merchants || _merchants.length === 0) {
+    showToast('No merchants available');
+    return;
+  }
+
+  // Get user location (try geolocation API first, then fallback)
+  let userLat = _userLocation?.lat;
+  let userLng = _userLocation?.lng;
+  
+  // If no user location, try to get it from geolocation API
+  if (!userLat || !userLng) {
+    if (navigator.geolocation) {
+      // Try to get current location synchronously (with timeout)
+      const positionPromise = new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+          reject,
+          { timeout: 2000, maximumAge: 60000 }
+        );
+      });
+      
+      // Use async approach - if we can't get location quickly, use default
+      positionPromise.then(loc => {
+        userLat = loc.lat;
+        userLng = loc.lng;
+        selectClosestMerchantToLocation(userLat, userLng);
+      }).catch(() => {
+        // Fallback to default location
+        selectClosestMerchantToLocation(30.4021, -97.7266);
+      });
+      return; // Will continue in promise callback
+    } else {
+      // No geolocation API, use default
+      userLat = 30.4021;
+      userLng = -97.7266;
+    }
+  }
+  
+  selectClosestMerchantToLocation(userLat, userLng);
+}
+
+function selectClosestMerchantToLocation(userLat, userLng) {
+  // Haversine distance function (more accurate than Euclidean for lat/lng)
+  function haversineDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371000; // Earth radius in meters
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c; // Distance in meters
+  }
+
+  // Find closest merchant to user location
+  let closest = null;
+  let minDist = Infinity;
+
+  for (const m of _merchants) {
+    const lat = m.lat;
+    const lng = m.lng;
+    if (lat && lng) {
+      const dist = haversineDistance(userLat, userLng, lat, lng);
+      if (dist < minDist) {
+        minDist = dist;
+        closest = m;
+      }
+    }
+  }
+
+  if (!closest) {
+    showToast('No merchants found');
+    return;
+  }
+
+  console.log('[Explore] Selected closest merchant:', closest.name, 'distance:', Math.round(minDist), 'm');
+  // NOTE: Toast notification "Found closest" has been removed - no showToast call here
+
+  // Store selection state (for highlighting)
+  _selectedMerchant = closest;
+  _selectedMerchantId = closest.id;
+
+  // Pan map to merchant location and highlight it
+  if (_map && closest.lat && closest.lng) {
+    _map.setView([closest.lat, closest.lng], 15);
+    // Wait a bit for map to pan, then highlight the merchant pin
+    setTimeout(() => {
+      // Re-render pins to highlight the selected one
+      if (_merchants.length > 0) {
+        renderMerchantPins(_merchants);
+      }
+    }, 500);
+  }
+  
+  // Do NOT open merchant detail page - let user click on it if they want
+}
+
+// === Show merchant popover with redeem button =====================================
+function showMerchantPopoverWithRedeem(merchant) {
+  const popover = $('#merchant-popover');
+  if (!popover) return;
+
+  const logoEl = popover.querySelector('#popover-merchant-logo');
+  const nameEl = popover.querySelector('#popover-merchant-name');
+  const textEl = popover.querySelector('#popover-merchant-text');
+  const actionBtn = popover.querySelector('#popover-start-session');
+
+  const merchantLogo = merchant.logo_url || merchant.logo || '/icons/merchant-default.png';
+  const merchantName = merchant.name || 'Merchant';
+
+  if (logoEl) logoEl.src = merchantLogo;
+  if (nameEl) nameEl.textContent = merchantName;
+  if (textEl) textEl.textContent = `Redeem your Nova at ${merchantName}`;
+
+  // Change button to "Redeem Nova"
+  if (actionBtn) {
+    // Clone button to remove existing event listeners
+    const newBtn = actionBtn.cloneNode(true);
+    actionBtn.parentNode.replaceChild(newBtn, actionBtn);
+    newBtn.textContent = 'Redeem Nova';
+    newBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openRedeemConfirmModal(merchant);
+    };
+  }
+
+  _selectedMerchant = merchant;
+  _selectedMerchantId = merchant.id;
+
+  popover.style.display = 'block';
+}
+
+// === Open redeem confirmation modal =====================================
+async function openRedeemConfirmModal(merchant) {
+  // Get current Nova balance from sessionStorage or fetch
+  let novaBalance = parseInt(sessionStorage.getItem('nerava_nova_balance') || '0', 10);
+
+  // If no cached balance, try to get from wallet summary
+  if (!novaBalance) {
+    try {
+      const summary = await apiWalletSummary();
+      novaBalance = summary.nova_balance || 0;
+      sessionStorage.setItem('nerava_nova_balance', novaBalance.toString());
+    } catch (e) {
+      console.error('Failed to get balance:', e);
+      showToast('Unable to load balance');
+      return;
+    }
+  }
+
+  // Calculate redemption amount (min of balance and merchant max, default 300 Nova)
+  const maxRedeem = merchant.max_nova_redeem || 300;
+  const novaToRedeem = Math.min(novaBalance, maxRedeem);
+  const conversionRate = 10; // cents per Nova
+  const usdValue = (novaToRedeem * conversionRate / 100).toFixed(2);
+
+  if (novaToRedeem <= 0) {
+    showToast('No Nova available to redeem');
+    return;
+  }
+
+  // Create modal content
+  const content = `
+    <div style="text-align: center; padding: 16px 0;">
+      <div style="font-size: 14px; color: #64748b; margin-bottom: 8px;">Redeeming at</div>
+      <div style="font-size: 18px; font-weight: 600; color: #111827; margin-bottom: 24px;">${merchant.name}</div>
+      
+      <div style="background: #f1f5f9; border-radius: 12px; padding: 16px; margin-bottom: 24px;">
+        <div style="font-size: 14px; color: #64748b;">You're redeeming</div>
+        <div style="font-size: 32px; font-weight: 700; color: #1e40af;">${novaToRedeem} Nova</div>
+        <div style="font-size: 16px; color: #22c55e; font-weight: 600;">Worth $${usdValue}</div>
+      </div>
+      
+      <div style="font-size: 12px; color: #64748b; margin-bottom: 16px;">
+        Show the confirmation screen to the merchant
+      </div>
+      
+      <button id="confirm-redeem-btn" style="width: 100%; padding: 16px; background: #1e40af; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer;">
+        Accept
+      </button>
+      <button id="cancel-redeem-btn" style="width: 100%; padding: 12px; background: transparent; color: #64748b; border: none; font-size: 14px; cursor: pointer; margin-top: 8px;">
+        Cancel
+      </button>
+    </div>
+  `;
+
+  const modal = createModal('Confirm Redemption', content);
+  modal.id = 'redeem-confirm-modal';
+  showModal(modal);
+
+  // Wire buttons
+  modal.querySelector('#confirm-redeem-btn').onclick = async () => {
+    await executeRedemption(merchant, novaToRedeem, modal);
+  };
+
+  modal.querySelector('#cancel-redeem-btn').onclick = () => {
+    modal.close();
+    modal.remove();
+  };
+}
+
+// === Execute redemption =====================================
+async function executeRedemption(merchant, novaAmount, modal) {
+  const btn = modal.querySelector('#confirm-redeem-btn');
+  btn.disabled = true;
+  btn.textContent = 'Processing...';
+
+  try {
+    // Generate idempotency key
+    const idempotencyKey = `redeem_${Date.now()}_${merchant.id}_${novaAmount}`;
+
+    // Call redeem API
+    const result = await apiRedeemNova(merchant.id, novaAmount, null, idempotencyKey);
+
+    // Close modal
+    modal.close();
+    modal.remove();
+
+    // Hide merchant popover
+    hideMerchantPopover();
+
+    // Dispatch wallet refresh event
+    window.dispatchEvent(new CustomEvent('nerava:wallet:invalidate'));
+
+    // Navigate to success/show-code page
+    sessionStorage.setItem('nerava_redeem_success', JSON.stringify({
+      merchant_name: merchant.name,
+      nova_redeemed: novaAmount,
+      new_balance: result.driver_balance,
+      transaction_id: result.transaction_id
+    }));
+
+    window.location.hash = '#/code?merchant_id=' + merchant.id;
+
+  } catch (error) {
+    console.error('Redemption failed:', error);
+    btn.disabled = false;
+    btn.textContent = 'Accept';
+    showToast('Redemption failed: ' + (error.message || 'Unknown error'));
+  }
 }
 
 // === Perk Card Start Session Handler ======================================
@@ -844,7 +1254,7 @@ function hideLoadingState() {
 }
 
 function showEmptyState(message = 'No perks available') {
-  // Always show at least JuiceLand card
+  // Always show at least Eggman ATX card
   updateRecommendedPerks([]);
 }
 
@@ -894,13 +1304,13 @@ function renderMerchantCard(merchant) {
   if (button) {
     button.addEventListener('click', (e) => {
       e.stopPropagation();
-      handlePerkCardStartSession(merchant);
+      openMerchantDetail(merchant);
     });
   }
 
   // Card click also triggers view details
   card.addEventListener('click', () => {
-    handlePerkCardStartSession(merchant);
+    openMerchantDetail(merchant);
   });
 
   return card;
@@ -923,28 +1333,12 @@ function renderDiscoverMerchants(merchants) {
 
   scroller.innerHTML = '';
 
-  // Create JuiceLand @ Domain card as first (featured)
-  const juicelandMerchant = {
-    id: 'merchant_juiceland_domain',
-    display_name: 'JuiceLand – The Domain',
-    name: 'JuiceLand – The Domain',
-    rating: 4.7,
-    rating_count: '3,200',
-    category: 'Smoothies',
-    price_tier: '$$',
-    distance_text: '0.1 mi walk to charger',
-    image_url: MERCHANT_LOGO_PLACEHOLDER,
-    logo_url: MERCHANT_LOGO_PLACEHOLDER,
-    lat: 30.4021,
-    lng: -97.7266,
-  };
-
-  // Combine JuiceLand with other merchants
-  const allMerchants = [juicelandMerchant];
+  // Use the merchants passed in (from search/filter results)
+  let allMerchants = [];
   
   if (merchants && merchants.length > 0) {
-    // Convert perk objects to merchant objects if needed
-    const merchantList = merchants.map(m => {
+    // Convert merchant objects to display format
+    allMerchants = merchants.map(m => {
       if (m.name && m.category) {
         // Already a merchant object
         return {
@@ -971,12 +1365,36 @@ function renderDiscoverMerchants(merchants) {
         };
       }
     });
-    
-    allMerchants.push(...merchantList);
   }
 
-  // Render all merchants
-  allMerchants.forEach((merchant) => {
+  // Render the first merchant from the results (or show empty state)
+  const merchant = allMerchants[0];
+  if (merchant) {
+    // Center map on the first merchant (the one shown in the bottom card)
+    // First try to get lat/lng from the merchant object itself
+    let merchantLat = merchant.lat;
+    let merchantLng = merchant.lng;
+    
+    // If not available, try to find the merchant in _merchants array by ID/name
+    if ((!merchantLat || !merchantLng) && _merchants.length > 0) {
+      const fullMerchant = _merchants.find(m => 
+        (m.id && merchant.id && m.id === merchant.id) ||
+        (m.merchant_id && merchant.merchant_id && m.merchant_id === merchant.merchant_id) ||
+        (m.name && merchant.name && m.name === merchant.name) ||
+        (m.display_name && merchant.display_name && m.display_name === merchant.display_name)
+      );
+      if (fullMerchant) {
+        merchantLat = fullMerchant.lat;
+        merchantLng = fullMerchant.lng;
+      }
+    }
+    
+    // Center map if we have coordinates
+    if (_map && merchantLat && merchantLng) {
+      _map.setView([merchantLat, merchantLng], 15);
+      console.log('[Explore] Centered map on merchant card:', merchant.name || merchant.display_name);
+    }
+    
     const card = document.createElement('article');
     card.className = 'merchant-card';
 
@@ -984,9 +1402,10 @@ function renderDiscoverMerchants(merchants) {
     const distance = merchant.distance_text || '0.1 mi walk to charger';
     const rating = merchant.rating || 4.7;
     const ratingCount = merchant.rating_count || '3,200';
-    const category = merchant.category || 'Smoothies';
+    const category = merchant.category || 'Coffee';
     const priceTier = merchant.price_tier || '$$';
-    const logoUrl = merchant.logo_url || merchant.image_url || './img/juiceland-logo.png';
+    // Use merchant's logo_url or fallback to a placeholder
+    const logoUrl = merchant.logo_url || merchant.image_url || merchant.photo_url || 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
     card.innerHTML = `
       <div class="merchant-card__left">
@@ -1019,21 +1438,19 @@ function renderDiscoverMerchants(merchants) {
     `;
 
     scroller.appendChild(card);
-  });
-
-  // Attach click handlers for "View details"
-  scroller.querySelectorAll('.merchant-card__button').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const merchantId = e.currentTarget.getAttribute('data-merchant-id');
-      if (!merchantId) return;
-      // Reuse existing view-merchant logic
-      const merchant = allMerchants.find(m => m.id === merchantId);
-      if (merchant) {
-        handlePerkCardStartSession(merchant);
-      }
-    });
-  });
+    
+    // Attach click handler for "View details"
+    const btn = card.querySelector('.merchant-card__button');
+    if (btn) {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openMerchantDetail(merchant);
+      });
+    }
+  } else {
+    // Show empty state if no merchants
+    scroller.innerHTML = '<div style="text-align: center; padding: 40px; color: #6b7280;">No merchants found</div>';
+  }
 
   // Show the section
   const section = document.getElementById('discover-merchants-section');
@@ -1041,7 +1458,7 @@ function renderDiscoverMerchants(merchants) {
     section.style.display = 'block';
   }
 
-  console.log('[Discover][Merchants] Rendered horizontal carousel with', allMerchants.length, 'merchants');
+  console.log('[Discover][Merchants] Rendered merchant card:', allMerchants[0]?.name || 'none');
 }
 
 // === Recommended Perks Management ==================================================
@@ -1063,6 +1480,76 @@ async function selectCharger(charger) {
   if (_map) {
     _map.setView([charger.lat, charger.lng], 15);
   }
+}
+
+// === List View Bottom Sheet ===============================================
+function initListViewSheet() {
+  const listViewBtn = $('#btn-list-view');
+  const mapViewBtn = $('#btn-map-view');
+  const sheet = $('#explore-list-sheet');
+  
+  if (!sheet) return;
+  
+  // Start collapsed
+  sheet.classList.add('collapsed');
+  sheet.classList.remove('expanded');
+  
+  // List View button expands sheet
+  if (listViewBtn) {
+    listViewBtn.addEventListener('click', () => {
+      expandListViewSheet();
+    });
+  }
+  
+  // Map View button collapses sheet
+  if (mapViewBtn) {
+    mapViewBtn.addEventListener('click', () => {
+      collapseListViewSheet();
+    });
+  }
+}
+
+function expandListViewSheet() {
+  const sheet = $('#explore-list-sheet');
+  const listContent = $('#explore-list');
+  
+  if (!sheet) return;
+  
+  sheet.classList.remove('collapsed');
+  sheet.classList.add('expanded');
+  
+  // Render merchant cards in list
+  if (listContent && _merchants.length > 0) {
+    renderMerchantList(_merchants);
+  }
+}
+
+function collapseListViewSheet() {
+  const sheet = $('#explore-list-sheet');
+  
+  if (!sheet) return;
+  
+  sheet.classList.remove('expanded');
+  sheet.classList.add('collapsed');
+}
+
+function renderMerchantList(merchants) {
+  const listContent = $('#explore-list');
+  if (!listContent) return;
+  
+  listContent.innerHTML = '';
+  
+  if (merchants.length === 0) {
+    listContent.innerHTML = '<div style="text-align: center; padding: 40px; color: #6b7280;">No merchants found</div>';
+    return;
+  }
+  
+  merchants.forEach(merchant => {
+    const card = renderMerchantCard(merchant);
+    if (card) {
+      listContent.appendChild(card);
+    }
+  });
 }
 
 // === Main Initialization ===================================================
@@ -1093,9 +1580,23 @@ export async function initExplore(){
   initSearchBar();
   initSuggestions();
   initChargeChip();
-  initMapCenterButton();
+  // initMapCenterButton(); // Map center button removed
   
   initMerchantPopover();
+  initListViewSheet();
+  
+  // Listen for redeem_start event from Wallet
+  window.addEventListener('nerava:discover:redeem_start', async () => {
+    console.log('[Explore] Redeem start event received');
+    // Refresh merchants if needed
+    if (_merchants.length === 0) {
+      await loadPilotData();
+    }
+    // Auto-select closest merchant and open detail page
+    if (_merchants.length > 0) {
+      autoSelectClosestMerchant();
+    }
+  });
   
   // Initialize off-peak indicator
   updateDiscoverSubheader();

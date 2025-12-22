@@ -32,6 +32,21 @@ export async function initShowCode(params = {}) {
     params.merchant_name = sessionStorage.getItem(`merchant_name_${merchantId}`);
   }
   
+  // Check for redemption success data
+  let redeemSuccess = null;
+  if (typeof sessionStorage !== 'undefined') {
+    const successData = sessionStorage.getItem('nerava_redeem_success');
+    if (successData) {
+      try {
+        redeemSuccess = JSON.parse(successData);
+        // Clear it after reading
+        sessionStorage.removeItem('nerava_redeem_success');
+      } catch (e) {
+        console.warn('Failed to parse redeem success data:', e);
+      }
+    }
+  }
+  
   const container = $('#page-show-code');
   
   if (!container) {
@@ -55,13 +70,13 @@ export async function initShowCode(params = {}) {
         merchant_id: merchantId,
         expires_at: params.expires_at
       };
-      renderCode();
+      renderCode(redeemSuccess);
     } else {
       // Fetch merchant name first
       const merchantName = await fetchMerchantName(merchantId);
       
       // Generate new offer code
-      await generateAndShowCode(merchantId, merchantName);
+      await generateAndShowCode(merchantId, merchantName, redeemSuccess);
     }
 
     // Start expiration check interval
@@ -115,7 +130,7 @@ async function fetchMerchantName(merchantId) {
 /**
  * Generate a new offer code and display it
  */
-async function generateAndShowCode(merchantId, merchantName) {
+async function generateAndShowCode(merchantId, merchantName, redeemSuccess = null) {
   try {
     const { fetchMerchantOffer } = await import('../core/api.js');
     const response = await fetchMerchantOffer(merchantId, 500);  // Default $5 discount
@@ -137,7 +152,7 @@ async function generateAndShowCode(merchantId, merchantName) {
       sessionStorage.setItem(`offer_${merchantId}`, JSON.stringify(currentOffer));
     }
 
-    renderCode();
+    renderCode(redeemSuccess);
   } catch (error) {
     console.error('Failed to generate offer code:', error);
     throw error;
@@ -147,7 +162,7 @@ async function generateAndShowCode(merchantId, merchantName) {
 /**
  * Render the discount code UI
  */
-function renderCode() {
+function renderCode(redeemSuccess = null) {
   const container = $('#page-show-code');
   if (!container || !currentOffer) return;
 
@@ -157,6 +172,27 @@ function renderCode() {
   
   container.innerHTML = `
     <div class="page-content" style="padding: 24px; max-width: 500px; margin: 0 auto;">
+      ${redeemSuccess ? `
+        <!-- Redemption Success Banner -->
+        <div style="
+          background: #dcfce7;
+          border: 1px solid #22c55e;
+          color: #166534;
+          padding: 16px;
+          border-radius: 12px;
+          margin-bottom: 24px;
+          text-align: center;
+        ">
+          <div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">
+            ✅ Redemption Successful!
+          </div>
+          <div style="font-size: 14px; color: #166534;">
+            Redeemed ${redeemSuccess.nova_redeemed} Nova at ${redeemSuccess.merchant_name}
+            ${redeemSuccess.new_balance !== undefined ? `<br>New balance: ${redeemSuccess.new_balance} Nova` : ''}
+          </div>
+        </div>
+      ` : ''}
+      
       <!-- Header -->
       <div style="text-align: center; margin-bottom: 32px;">
         <h1 style="font-size: 24px; font-weight: 700; color: #111827; margin-bottom: 8px;">

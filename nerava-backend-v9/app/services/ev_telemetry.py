@@ -8,12 +8,13 @@ from typing import List
 from sqlalchemy.orm import Session
 import uuid
 
-from app.models_vehicle import VehicleAccount, VehicleTelemetry
+from app.models_vehicle import VehicleAccount, VehicleTelemetry, VehicleToken
 from app.services.smartcar_service import (
     refresh_tokens,
     get_vehicle_charge,
     get_vehicle_location,
 )
+from sqlalchemy import desc
 
 logger = logging.getLogger(__name__)
 
@@ -34,12 +35,30 @@ async def poll_vehicle_telemetry_for_account(
     Raises:
         Exception: If polling fails
     """
+    # Check if account has any tokens before attempting refresh
+    latest_token = (
+        db.query(VehicleToken)
+        .filter(VehicleToken.vehicle_account_id == account.id)
+        .order_by(desc(VehicleToken.created_at))
+        .first()
+    )
+    if not latest_token:
+        raise ValueError(f"No token found for vehicle account {account.id}")
+    
     # Get valid access token (refresh if needed)
     token = await refresh_tokens(db, account)
     
+    # Decrypt access token before using (P0 security fix)
+    from app.services.token_encryption import decrypt_token
+    try:
+        decrypted_access_token = decrypt_token(token.access_token)
+    except Exception:
+        # If decryption fails, assume it's plaintext (migration compatibility)
+        decrypted_access_token = token.access_token
+    
     # Poll charge and location
-    charge_data = await get_vehicle_charge(token.access_token, account.provider_vehicle_id)
-    location_data = await get_vehicle_location(token.access_token, account.provider_vehicle_id)
+    charge_data = await get_vehicle_charge(decrypted_access_token, account.provider_vehicle_id)
+    location_data = await get_vehicle_location(decrypted_access_token, account.provider_vehicle_id)
     
     # Map Smartcar fields to our schema
     # Smartcar charge API returns: stateOfCharge (0-100), isPluggedIn, state (CHARGING, FULLY_CHARGED, NOT_CHARGING)

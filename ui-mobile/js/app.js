@@ -6,9 +6,6 @@ import { loadDemoState } from './core/demo.js';
 import { apiGet, apiPost } from './core/api.js';
 import { ensureMap, drawRoute, clearRoute, getMap } from './core/map.js';
 
-// Import magic-link auth functions
-let apiRequestMagicLink, apiVerifyMagicLink;
-
 window.Nerava = window.Nerava || {};
 
 // Toast helper function
@@ -21,126 +18,42 @@ function showToast(message) {
   setTimeout(() => { toast.style.opacity = 0; toast.addEventListener('transitionend', () => toast.remove()); }, 3000);
 }
 
-// === Magic-link auth flow ===
-function getUser(){ return localStorage.NERAVA_USER || null; }
-function setUser(email){ localStorage.NERAVA_USER = email; const b = document.getElementById('auth-badge'); if(b) b.textContent=email; }
+// === Auth flow (production auth v1) ===
+// Demo mode auto-login is now gated behind DEMO_MODE env flag
 
-// Render magic-link email-only auth UI
-function renderMagicLinkAuth(){ 
-  if(document.getElementById('sso-overlay')) return;
-  
-  const wrap = document.createElement('div'); 
-  wrap.id='sso-overlay';
-  wrap.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.72);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:100000;';
-  
-  wrap.innerHTML = `<div id="sso-card" style="width:clamp(320px,90vw,420px);background:#fff;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,.25);padding:24px">
-    <h2 style="margin:0 0 8px;font:700 20px/1.2 -apple-system,system-ui">Sign in to Nerava</h2>
-    <p style="margin:0 0 20px;color:#64748b;font-size:14px">Enter your email and we'll send you a magic link to sign in.</p>
-    
-    <form id="magic-link-form" style="margin-bottom:16px">
-      <input 
-        type="email" 
-        id="magic-email-input" 
-        placeholder="you@example.com" 
-        required
-        autocomplete="email"
-        style="width:100%;padding:12px;border:1px solid #e2e8f0;border-radius:8px;font-size:16px;margin-bottom:12px;box-sizing:border-box"
-      />
-      <button 
-        type="submit" 
-        id="magic-link-submit"
-        style="width:100%;padding:12px;background:#1e40af;color:#fff;border:none;border-radius:8px;font-weight:600;font-size:16px;cursor:pointer"
-      >Send Magic Link</button>
-    </form>
-    
-    <div id="magic-link-success" style="display:none;text-align:center;padding:20px 0">
-      <div style="font-size:48px;margin-bottom:12px">✉️</div>
-      <h3 style="margin:0 0 8px;font:600 18px/1.2 -apple-system,system-ui">Check your email</h3>
-      <p style="margin:0 0 16px;color:#64748b;font-size:14px">We've sent a magic link to <strong id="sent-email"></strong></p>
-      <p style="margin:0;color:#94a3b8;font-size:12px">Click the link in your email to sign in. It expires in 15 minutes.</p>
-      <p id="dev-mode-notice" style="margin-top:12px;padding:12px;background:#fef3c7;border-radius:8px;color:#92400e;font-size:12px;display:none">
-        <strong>Dev Mode:</strong> Check backend console for magic link URL.
-      </p>
-      <button 
-        id="magic-link-back"
-        style="margin-top:16px;padding:8px 16px;background:transparent;color:#64748b;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;cursor:pointer"
-      >Back</button>
-    </div>
-    
-    <div id="magic-link-error" style="display:none;padding:12px;background:#fee2e2;border-radius:8px;color:#dc2626;font-size:14px;margin-bottom:16px"></div>
-    
-    <p style="margin:16px 0 0;color:#94a3b8;font-size:12px;text-align:center">By continuing you agree to the Terms &amp; Privacy.</p>
-  </div>`;
-  
-  document.body.appendChild(wrap);
-  
-  const form = wrap.querySelector('#magic-link-form');
-  const emailInput = wrap.querySelector('#magic-email-input');
-  const submitBtn = wrap.querySelector('#magic-link-submit');
-  const successDiv = wrap.querySelector('#magic-link-success');
-  const errorDiv = wrap.querySelector('#magic-link-error');
-  const sentEmailSpan = wrap.querySelector('#sent-email');
-  const backBtn = wrap.querySelector('#magic-link-back');
-  
-  // Show dev mode notice if on localhost
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    wrap.querySelector('#dev-mode-notice').style.display = 'block';
+async function checkAuth() {
+  // Check if user is authenticated
+  const { isAuthenticated } = await import('./core/auth.js');
+  return isAuthenticated();
+}
+
+async function ensureAuth() {
+  // Auth guard: redirect to login if not authenticated
+  // Skip for login page itself
+  if (window.location.hash === '#/login' || window.location.hash.startsWith('#/login')) {
+    return true;
   }
   
-  form.onsubmit = async (e) => {
-    e.preventDefault();
+  const authenticated = await checkAuth();
+  
+  if (!authenticated) {
+    // Check if DEMO_MODE is enabled (via URL param or localStorage flag)
+    const urlParams = new URLSearchParams(window.location.search);
+    const demoMode = urlParams.get('demo') === '1' || localStorage.getItem('nerava_demo') === '1';
     
-    const email = emailInput.value.trim().toLowerCase();
-    if (!email) return;
-    
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Sending...';
-    errorDiv.style.display = 'none';
-    
-    try {
-      console.log('[Auth][MagicLink] Requesting magic link for:', email);
-      
-      const { apiRequestMagicLink } = await import('./core/api.js');
-      await apiRequestMagicLink(email);
-      
-      // Show success state
-      form.style.display = 'none';
-      sentEmailSpan.textContent = email;
-      successDiv.style.display = 'block';
-      
-      console.log('[Auth][MagicLink] Magic link request successful');
-    } catch (err) {
-      console.error('[Auth][MagicLink] Request failed:', err);
-      errorDiv.textContent = err.message || 'Failed to send magic link. Please try again.';
-      errorDiv.style.display = 'block';
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'Send Magic Link';
+    if (demoMode) {
+      // Demo mode: allow access but log warning
+      console.warn('[Auth] DEMO_MODE enabled - skipping auth check');
+      return true;
     }
-  };
+    
+    // Redirect to login
+    console.log('[Auth] Not authenticated - redirecting to login');
+    window.location.hash = '#/login';
+    return false;
+  }
   
-  backBtn.onclick = () => {
-    successDiv.style.display = 'none';
-    form.style.display = 'block';
-    emailInput.value = '';
-  };
-  
-  // Focus email input
-  setTimeout(() => emailInput.focus(), 100);
-}
-
-// Legacy renderSSO for backward compatibility (fallback)
-function renderSSO() {
-  renderMagicLinkAuth();
-}
-
-function ensureAuth(){ 
-  if(!getUser()){ 
-    renderMagicLinkAuth(); 
-    return false; 
-  } 
-  const b=document.getElementById('auth-badge'); 
-  if(b) b.textContent=getUser(); 
-  return true; 
+  return true;
 }
 function triggerDemoPush(){
   if(document.getElementById('demo-push')) return;
@@ -194,8 +107,86 @@ const tabs = ['Explore','Charge','Claim','Wallet','Me'];
 const inited = {};
 
 // Handle hash routing
-function handleHashRoute() {
+async function handleHashRoute() {
   const hash = location.hash;
+  console.log('[App] handleHashRoute called with hash:', hash);
+  
+  // Send telemetry event for tab switch
+  if (hash && typeof window !== 'undefined') {
+    try {
+      const { apiSendTelemetryEvent } = await import('./core/api.js');
+      apiSendTelemetryEvent({
+        event: 'TAB_SWITCHED',
+        ts: Date.now(),
+        page: hash,
+        meta: {}
+      }).catch(() => {});
+    } catch (e) {
+      // Swallow errors - telemetry is optional
+    }
+  }
+  
+  // Handle login page
+  if (hash === '#/login' || hash.startsWith('#/login')) {
+    console.log('[App] Login route detected, showing login page...');
+    document.querySelectorAll('.page').forEach(p => {
+      p.classList.remove('active');
+      p.style.display = 'none';
+    });
+    
+    let loginPage = document.getElementById('page-login');
+    if (!loginPage) {
+      console.log('[App] Creating login page element...');
+      loginPage = document.createElement('section');
+      loginPage.id = 'page-login';
+      loginPage.className = 'page';
+      const appEl = document.getElementById('app');
+      if (appEl) {
+        appEl.appendChild(loginPage);
+      } else {
+        console.error('[App] Cannot find #app element to append login page');
+        return;
+      }
+    }
+    
+    // Ensure login page is visible - CSS will handle the rest with !important
+    loginPage.classList.add('active');
+    loginPage.style.display = 'block';
+    loginPage.style.visibility = 'visible';
+    loginPage.style.opacity = '1';
+    loginPage.style.zIndex = '10000';
+    loginPage.style.position = 'fixed';
+    loginPage.style.top = '0';
+    loginPage.style.left = '0';
+    loginPage.style.right = '0';
+    loginPage.style.bottom = '0';
+    loginPage.style.width = '100vw';
+    loginPage.style.height = '100vh';
+    console.log('[App] Login page element shown, initializing...');
+    
+    // Initialize login page if not already initialized
+    if (!loginPage.dataset.initialized) {
+      try {
+        const { initLoginPage } = await import('./pages/login.js');
+        console.log('[App] Login page module loaded, calling initLoginPage...');
+        await initLoginPage(loginPage);
+        loginPage.dataset.initialized = 'true';
+        console.log('[App] Login page initialized successfully');
+      } catch (error) {
+        console.error('[App] Failed to initialize login page:', error);
+      }
+    } else {
+      console.log('[App] Login page already initialized');
+    }
+    
+    return;
+  }
+  
+  // Auth guard for other routes
+  const authOk = await ensureAuth();
+  if (!authOk) {
+    return; // Redirected to login
+  }
   
   // Handle Smartcar callback - redirect to profile tab
   if (hash.includes('#profile') || hash.includes('vehicle=connected') || hash.includes('error=')) {
@@ -216,55 +207,6 @@ function handleHashRoute() {
     
     // The profile page will handle the query params
     return;
-  }
-  
-  // Handle magic-link callback
-  if (hash.startsWith('#/auth/magic')) {
-    const params = new URLSearchParams(hash.split('?')[1] || '');
-    const token = params.get('token');
-    
-    if (token) {
-      console.log('[Auth][MagicLink] Processing magic link callback');
-      
-      // Import and verify token
-      import('./core/api.js').then(async ({ apiVerifyMagicLink, apiMe }) => {
-        try {
-          await apiVerifyMagicLink(token);
-          
-          // Get user info to set in localStorage
-          const user = await apiMe();
-          if (user && user.email) {
-            setUser(user.email);
-            console.log('[Auth][MagicLink] Session created for:', user.email);
-          }
-          
-          // Navigate to Wallet tab
-          location.hash = '#/wallet';
-          window.location.reload();
-        } catch (err) {
-          console.error('[Auth][MagicLink] Verification failed:', err);
-          
-          // Show error state
-          const wrap = document.createElement('div');
-          wrap.id = 'magic-link-error';
-          wrap.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.92);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:100000;';
-          wrap.innerHTML = `<div style="width:clamp(320px,90vw,420px);background:#fff;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,.25);padding:24px;text-align:center">
-            <h2 style="margin:0 0 12px;font:700 18px/1.2 -apple-system,system-ui;color:#dc2626">Link Expired or Invalid</h2>
-            <p style="margin:0 0 20px;color:#64748b">This magic link has expired or is invalid. Please request a new one.</p>
-            <button id="retry-magic-link" style="width:100%;padding:12px;background:#1e40af;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer">Request New Link</button>
-          </div>`;
-          document.body.appendChild(wrap);
-          
-          wrap.querySelector('#retry-magic-link').onclick = () => {
-            wrap.remove();
-            location.hash = '#/';
-            renderMagicLinkAuth();
-          };
-        }
-      });
-      
-      return;
-    }
   }
   
   // Handle show code page
@@ -354,6 +296,58 @@ function handleHashRoute() {
     }
   }
   
+  // Handle virtual card page
+  if (hash.startsWith('#/virtual-card')) {
+    document.querySelectorAll('.page').forEach(p => {
+      p.classList.remove('active');
+      p.style.display = 'none';
+    });
+    
+    let virtualCardPage = document.getElementById('page-virtual-card');
+    if (!virtualCardPage) {
+      virtualCardPage = document.createElement('section');
+      virtualCardPage.id = 'page-virtual-card';
+      virtualCardPage.className = 'page page-padded';
+      document.getElementById('app').appendChild(virtualCardPage);
+    }
+    
+    virtualCardPage.style.display = 'block';
+    virtualCardPage.classList.add('active');
+    
+    import('./pages/virtual-card.js').then(module => {
+      module.initVirtualCardPage(virtualCardPage);
+    }).catch(err => {
+      console.error('[App] Error loading virtual card page:', err);
+    });
+    return;
+  }
+  
+  // Handle wallet pass page
+  if (hash.startsWith('#/wallet-pass')) {
+    document.querySelectorAll('.page').forEach(p => {
+      p.classList.remove('active');
+      p.style.display = 'none';
+    });
+    
+    let walletPassPage = document.getElementById('page-wallet-pass');
+    if (!walletPassPage) {
+      walletPassPage = document.createElement('section');
+      walletPassPage.id = 'page-wallet-pass';
+      walletPassPage.className = 'page page-padded';
+      document.getElementById('app').appendChild(walletPassPage);
+    }
+    
+    walletPassPage.style.display = 'block';
+    walletPassPage.classList.add('active');
+    
+    import('./pages/wallet-pass.js').then(module => {
+      module.initWalletPassPage(walletPassPage);
+    }).catch(err => {
+      console.error('[App] Error loading wallet pass page:', err);
+    });
+    return;
+  }
+  
   if (hash === '#/dev') {
     // Show dev page
     document.getElementById('pageDev')?.classList.remove('hidden');
@@ -371,12 +365,34 @@ function handleHashRoute() {
 let _activeTab = 'explore';
 
 export async function setTab(tab){
+  // Don't switch tabs if we're on the login page
+  if (window.location.hash === '#/login' || window.location.hash.startsWith('#/login')) {
+    console.log('[App] setTab() called but login route is active, ignoring');
+    return;
+  }
+  
   // Clean up Earn session if leaving Earn tab
   if (_activeTab === 'earn' && tab !== 'earn') {
     // Import cleanup function dynamically to avoid circular dependencies
     import('./pages/earn.js').then(module => {
       if (module.cleanupEarnSession) {
         module.cleanupEarnSession();
+      }
+    }).catch(() => {
+      // Ignore import errors
+    });
+  }
+  
+  // Clean up wallet timers if leaving wallet tab
+  if (_activeTab === 'wallet' && tab !== 'wallet') {
+    const walletEl = document.getElementById('page-wallet');
+    if (walletEl?._walletCleanup) {
+      walletEl._walletCleanup();
+    }
+    // Also call module-level cleanup if exported
+    import('./pages/wallet-new.js').then(module => {
+      if (module.stopWalletTimers) {
+        module.stopWalletTimers();
       }
     }).catch(() => {
       // Ignore import errors
@@ -393,11 +409,19 @@ export async function setTab(tab){
   };
   
   const targetPageId = pageMap[tab] || `page-${tab}`;
-  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active', p.id===targetPageId));
+  const targetPage = document.getElementById(targetPageId);
+  
+  // Remove active from all pages FIRST (prevents flash of old content)
+  document.querySelectorAll('.page').forEach(p => {
+    p.classList.remove('active');
+  });
+  
+  // Update tab indicators
   document.querySelectorAll('.tabbar .tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===tab));
   
   console.log(`[Nav][Tabs] Switched to ${tab}`);
   
+  // Initialize page content BEFORE marking as active (prevents flash)
   if(tab==='explore' || tab==='discover') {
     ensureMap();
     if(tab==='discover') {
@@ -409,15 +433,37 @@ export async function setTab(tab){
         exploreEl.dataset.initialized = 'true';
       }
     }
-  }
-  if(tab==='activity') await initActivity();
-  if(tab==='earn') await initEarn();
-  if(tab==='wallet') {
+    // Mark page active after initialization
+    if (targetPage) targetPage.classList.add('active');
+  } else if(tab==='activity') {
+    await initActivity();
+    if (targetPage) targetPage.classList.add('active');
+  } else if(tab==='earn') {
+    await initEarn();
+    if (targetPage) targetPage.classList.add('active');
+  } else if(tab==='wallet') {
     await initWallet();
-  }
-  if(tab==='profile') {
+    
+    // If wallet should refresh (e.g., after redemption), trigger immediate refresh
+    const walletEl = document.getElementById('page-wallet');
+    if (sessionStorage.getItem('nerava_wallet_should_refresh') === 'true') {
+      sessionStorage.removeItem('nerava_wallet_should_refresh');
+      if (walletEl && walletEl.dataset.initialized === 'true') {
+        // Dispatch refresh event immediately to trigger wallet refresh
+        window.dispatchEvent(new CustomEvent('nerava:wallet:invalidate'));
+      }
+    }
+    if (targetPage) targetPage.classList.add('active');
+  } else if(tab==='profile') {
     await initMe();
+    if (targetPage) targetPage.classList.add('active');
+  } else {
+    // Fallback: mark page active if no specific initialization
+    if (targetPage) targetPage.classList.add('active');
   }
+  
+  // Hide loading screen if still visible (e.g., on first tab switch)
+  hideLoadingScreen();
 }
 
 // Wire tab buttons and FAB
@@ -497,36 +543,67 @@ async function initAuth() {
   }
 }
 
+// Hide loading screen after app is ready
+function hideLoadingScreen() {
+  const loadingScreen = document.getElementById('app-loading-screen');
+  if (loadingScreen) {
+    loadingScreen.style.display = 'none';
+    loadingScreen.classList.add('hidden', 'removed');
+  }
+}
+
+// Show loading screen (call this at start of slow operations if needed)
+function showLoadingScreen() {
+  const loadingScreen = document.getElementById('app-loading-screen');
+  if (loadingScreen) {
+    loadingScreen.classList.remove('hidden', 'removed');
+    loadingScreen.style.display = 'flex';
+  }
+}
+
 async function initApp() {
-  // Check authentication status
-  await initAuth();
+  console.log('[App] initApp() called');
   
-  console.log('[BOOT] Using canonical /v1 backend (no pilot endpoints)');
-  
-  // Load demo state (banner removed - trigger demo from Swagger)
-  await loadDemoState();
-  
-  // Add keyboard shortcut for dev tab
-  document.addEventListener('keydown', (e)=>{ 
-    if(e.key==='d' || e.key==='D'){ 
-      location.hash='#/dev'; 
-    } 
-  });
-  
-  // Handle hash routing
+  // Handle hash routing FIRST - this is critical for login page
+  console.log('[App] Registering hashchange handler and calling handleHashRoute');
   window.addEventListener('hashchange', handleHashRoute);
   handleHashRoute();  // Handle initial hash if present
   
-  // Only set default tab if no hash route
-  if (!location.hash || location.hash === '#') {
-    setTab('wallet');
+  try {
+    // Check authentication status
+    await initAuth();
+    
+    console.log('[BOOT] Using canonical /v1 backend (no pilot endpoints)');
+    
+    // Load demo state (banner removed - trigger demo from Swagger)
+    await loadDemoState();
+    
+    // Add keyboard shortcut for dev tab
+    document.addEventListener('keydown', (e)=>{ 
+      if(e.key==='d' || e.key==='D'){ 
+        location.hash='#/dev'; 
+      } 
+    });
+    
+    // Only set default tab if no hash route
+    if (!location.hash || location.hash === '#') {
+      setTab('wallet');
+    }
+    
+    // Add bottom padding to all pages
+    const pages = document.querySelectorAll('.page, #pageExplore, #pageCharge, #pageWallet, #pageMe, #pageClaim');
+    pages.forEach(p => { 
+      p.style.paddingBottom = `calc(84px + env(safe-area-inset-bottom, 12px))`; 
+    });
+    
+    // Hide loading screen after initialization is complete
+    hideLoadingScreen();
+  } catch (error) {
+    console.error('[App] initApp() failed:', error);
+    // Even if init fails, hash routing should still work
+    // Still hide loading screen on error
+    hideLoadingScreen();
   }
-  
-  // Add bottom padding to all pages
-  const pages = document.querySelectorAll('.page, #pageExplore, #pageCharge, #pageWallet, #pageMe, #pageClaim');
-  pages.forEach(p => { 
-    p.style.paddingBottom = `calc(84px + env(safe-area-inset-bottom, 12px))`; 
-  });
 }
 
 // Start when DOM is ready
@@ -557,8 +634,11 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   if (!location.hash || location.hash === '#') {
     setTab('wallet');
   }
-  // Gate on SSO; after SSO completes, it calls the loaders again.
-  if (typeof ensureAuth === 'function' && !ensureAuth()) return;
+  // Auth guard - check authentication
+  const authOk = await ensureAuth();
+  if (!authOk) {
+    return; // Redirected to login
+  }
   await loadBanner();
   await loadRecommendation();
   await loadWallet();
@@ -772,14 +852,21 @@ async function checkBackend() {
 }
 
 window.addEventListener('load', async ()=>{
+  // Initialize app (this sets up hash routing)
+  await initApp();
+  
   // Check backend connectivity
   await checkBackend();
   
   // Log tab layout initialization
   console.log('[Nav][Tabs] Layout: flex spacing enabled');
   
-  // Start with wallet tab by default
-  setTab('wallet');
+  // Don't set default tab if we're on login route
+  if (window.location.hash !== '#/login' && !window.location.hash.startsWith('#/login')) {
+    // Start with wallet tab by default
+    setTab('wallet');
+  }
+  
   // lazy import to avoid cyclic loads
   const { initExplore } = await import('./pages/explore.js');
   initExplore();
@@ -831,12 +918,28 @@ async function initEarn() {
 async function initWallet() {
   const walletEl = document.getElementById('page-wallet');
   console.log('initWallet called, walletEl:', walletEl);
-  if (walletEl && !walletEl.dataset.initialized) {
-    console.log('Initializing wallet page...');
-    const { initWalletPage } = await import('./pages/wallet-new.js');
-    await initWalletPage(walletEl);
-    walletEl.dataset.initialized = 'true';
-    console.log('Wallet page initialized');
+  if (walletEl) {
+    // Cleanup previous intervals if wallet was already initialized
+    if (walletEl._walletCleanup) {
+      walletEl._walletCleanup();
+    }
+    // Also call module-level cleanup
+    try {
+      const { stopWalletTimers } = await import('./pages/wallet-new.js');
+      if (stopWalletTimers) {
+        stopWalletTimers();
+      }
+    } catch {
+      // Ignore import errors
+    }
+    
+    if (!walletEl.dataset.initialized) {
+      console.log('Initializing wallet page...');
+      const { initWalletPage } = await import('./pages/wallet-new.js');
+      await initWalletPage(walletEl);
+      walletEl.dataset.initialized = 'true';
+      console.log('Wallet page initialized');
+    }
   }
 }
 
