@@ -47,11 +47,73 @@ async def lifespan(app):
             conn.execute("SELECT 1")
         logger.info("Database connection verified")
         
-        # Check for missing migrations (local-only, non-blocking)
+        # P1-G: Prevent SQLite in production
+        import re
+        database_url = os.getenv("DATABASE_URL", settings.database_url)
+        if not is_local and re.match(r'^sqlite:', database_url, re.IGNORECASE):
+            error_msg = (
+                f"CRITICAL: SQLite database is not supported in production. "
+                f"DATABASE_URL={database_url[:50]}..., ENV={env}. "
+                f"Please use PostgreSQL (e.g., RDS, managed Postgres)."
+            )
+            print(f"[Startup] Refusing to start in {env} with SQLite database_url=sqlite:///... Use PostgreSQL instead.", flush=True)
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+        
+        # Validate required secrets in production (P0-1: secrets hardening)
         import os
         env = os.getenv("ENV", "dev").lower()
-        is_local = env == "local" or settings.region.lower() == "local"
+        # P0-C: DO NOT check REGION - can be spoofed in production
+        is_local = env in {"local", "dev"}
         
+        # P0-C: Prevent dev flags in non-local environments
+        if not is_local:
+            if os.getenv("NERAVA_DEV_ALLOW_ANON_USER", "false").lower() == "true":
+                error_msg = (
+                    "CRITICAL: NERAVA_DEV_ALLOW_ANON_USER cannot be enabled in non-local environment. "
+                    f"ENV={env}. This is a security risk."
+                )
+                print(f"[Startup] Dev flag violation in {env}: NERAVA_DEV_ALLOW_ANON_USER is enabled (security risk)", flush=True)
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
+            if os.getenv("NERAVA_DEV_ALLOW_ANON_DRIVER", "false").lower() == "true":
+                error_msg = (
+                    "CRITICAL: NERAVA_DEV_ALLOW_ANON_DRIVER cannot be enabled in non-local environment. "
+                    f"ENV={env}. This is a security risk."
+                )
+                print(f"[Startup] Dev flag violation in {env}: NERAVA_DEV_ALLOW_ANON_DRIVER is enabled (security risk)", flush=True)
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
+        
+        if not is_local and env == "prod":
+            # Production: validate required secrets are present
+            missing_secrets = []
+            
+            # Required secrets for production
+            if not os.getenv("JWT_SECRET") or os.getenv("JWT_SECRET") == "dev-secret":
+                missing_secrets.append("JWT_SECRET (must be a secure random value)")
+            
+            if not os.getenv("TOKEN_ENCRYPTION_KEY"):
+                missing_secrets.append("TOKEN_ENCRYPTION_KEY (required for secure token storage)")
+            
+            if not os.getenv("STRIPE_WEBHOOK_SECRET"):
+                missing_secrets.append("STRIPE_WEBHOOK_SECRET (required for webhook verification)")
+            
+            if missing_secrets:
+                # Extract just the env var names for the print statement (security: don't print full descriptions)
+                missing_names = [s.split(" ")[0] for s in missing_secrets]
+                error_msg = (
+                    f"CRITICAL: Missing required secrets in production environment. "
+                    f"Missing: {', '.join(missing_secrets)}. "
+                    f"Set these environment variables before starting the application."
+                )
+                print(f"[Startup] Missing required env vars in prod: {', '.join(missing_names)}", flush=True)
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
+            
+            logger.info("Production secrets validation passed")
+        
+        # Check for missing migrations (local-only, non-blocking)
         if is_local:
             try:
                 from sqlalchemy import text

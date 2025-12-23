@@ -43,6 +43,7 @@ def validate_jwt_secret():
                 "CRITICAL SECURITY ERROR: JWT secret cannot equal database_url in non-local environment. "
                 f"ENV={env}, REGION={region}. Set JWT_SECRET environment variable to a secure random value."
             )
+            print(f"[Startup] {error_msg}", flush=True)
             logger.error(error_msg)
             raise ValueError(error_msg)
         
@@ -51,10 +52,63 @@ def validate_jwt_secret():
                 "CRITICAL SECURITY ERROR: JWT secret must be set and not use default value in non-local environment. "
                 f"ENV={env}, REGION={region}. Set JWT_SECRET environment variable."
             )
+            print(f"[Startup] Missing required env var in {env}: JWT_SECRET (must be a secure random value, not 'dev-secret')", flush=True)
             logger.error(error_msg)
             raise ValueError(error_msg)
         
         logger.info("JWT secret validation passed (not equal to database_url)")
+
+def validate_database_url():
+    """Validate database URL is not SQLite in non-local environments"""
+    import os
+    import re
+    env = os.getenv("ENV", "dev").lower()
+    region = settings.region.lower()
+    is_local = env == "local" or region == "local"
+    
+    if not is_local:
+        database_url = os.getenv("DATABASE_URL", settings.database_url)
+        if re.match(r'^sqlite:', database_url, re.IGNORECASE):
+            # Extract scheme only for logging (security: don't print full URL)
+            db_scheme = "sqlite:///..." if "sqlite" in database_url.lower() else "unknown"
+            error_msg = (
+                "CRITICAL: SQLite database is not supported in production. "
+                f"DATABASE_URL={database_url[:50]}..., ENV={env}, REGION={region}. "
+                "Please use PostgreSQL (e.g., RDS, managed Postgres)."
+            )
+            print(f"[Startup] Refusing to start in {env} with SQLite database_url={db_scheme}. Use PostgreSQL instead.", flush=True)
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        logger.info("Database URL validation passed (not SQLite)")
+
+def validate_dev_flags():
+    """Validate dev-only flags are not enabled in non-local environments"""
+    import os
+    env = os.getenv("ENV", "dev").lower()
+    region = settings.region.lower()
+    is_local = env == "local" or region == "local"
+    
+    if not is_local:
+        if os.getenv("NERAVA_DEV_ALLOW_ANON_USER", "false").lower() == "true":
+            error_msg = (
+                "CRITICAL: NERAVA_DEV_ALLOW_ANON_USER cannot be enabled in non-local environment. "
+                f"ENV={env}, REGION={region}. This is a security risk."
+            )
+            print(f"[Startup] Dev flag violation in {env}: NERAVA_DEV_ALLOW_ANON_USER is enabled (security risk)", flush=True)
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        if os.getenv("NERAVA_DEV_ALLOW_ANON_DRIVER", "false").lower() == "true":
+            error_msg = (
+                "CRITICAL: NERAVA_DEV_ALLOW_ANON_DRIVER cannot be enabled in non-local environment. "
+                f"ENV={env}, REGION={region}. This is a security risk."
+            )
+            print(f"[Startup] Dev flag violation in {env}: NERAVA_DEV_ALLOW_ANON_DRIVER is enabled (security risk)", flush=True)
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        logger.info("Dev flags validation passed (no dev flags enabled)")
 
 def check_schema_payload_hash():
     """Check if payload_hash column exists in nova_transactions (local dev only)."""
@@ -99,6 +153,8 @@ def check_schema_payload_hash():
 # Run validation before migrations
 try:
     validate_jwt_secret()
+    validate_database_url()
+    validate_dev_flags()
 except ValueError as e:
     logger.error(f"Startup validation failed: {e}")
     sys.exit(1)
@@ -529,6 +585,24 @@ app.include_router(analytics.router)
 
 # Health first
 app.include_router(health.router, prefix="/v1", tags=["health"])
+
+# Root-level health check for App Runner (expects /healthz at root, not /v1/healthz)
+@app.get("/healthz")
+async def root_healthz():
+    """Root-level health check for App Runner deployment.
+
+    App Runner expects the health check at the root path /healthz.
+    This endpoint provides a simple health response without database checks
+    to ensure fast startup and reliable health checks.
+    """
+    import os
+    env = os.getenv("ENV", "dev")
+    return {
+        "ok": True,
+        "service": "nerava-backend",
+        "env": env,
+        "version": "0.9.0"
+    }
 
 # Meta routes (health, version, debug)
 app.include_router(meta.router)
