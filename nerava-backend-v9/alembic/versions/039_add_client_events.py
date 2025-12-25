@@ -40,3 +40,4 @@ def downgrade() -> None:
     op.drop_index('idx_client_events_user_id', 'client_events')
     op.drop_table('client_events')
 
+

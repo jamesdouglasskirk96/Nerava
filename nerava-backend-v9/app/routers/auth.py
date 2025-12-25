@@ -73,6 +73,7 @@ class UserMeResponse(BaseModel):
     auth_provider: str
     email: Optional[str] = None
     phone: Optional[str] = None
+    display_name: Optional[str] = None
     created_at: datetime
     
     class Config:
@@ -93,6 +94,7 @@ async def get_me(
         auth_provider=current_user.auth_provider,
         email=current_user.email,
         phone=current_user.phone,
+        display_name=current_user.display_name,
         created_at=current_user.created_at
     )
 
@@ -223,6 +225,20 @@ async def auth_google(
             db.add(UserPreferences(user_id=user.id))
             db.commit()
             db.refresh(user)
+            
+            # Emit driver_signed_up event (non-blocking)
+            try:
+                from ..events.domain import DriverSignedUpEvent
+                from ..events.outbox import store_outbox_event
+                event = DriverSignedUpEvent(
+                    user_id=str(user.id),
+                    email=email or "",
+                    auth_provider="google",
+                    created_at=datetime.utcnow()
+                )
+                store_outbox_event(db, event)
+            except Exception as e:
+                logger.warning(f"Failed to emit driver_signed_up event: {e}")
         
         # Create tokens
         access_token = create_access_token(user.public_id, auth_provider=user.auth_provider)
@@ -428,13 +444,21 @@ async def dev_login(
     # Try to get region safely (may not exist in all config classes)
     region = getattr(settings, 'region', None) or getattr(settings, 'REGION', None) or "local"
     
+    # Check if frontend URL is S3 staging site
+    frontend_url_lower = str(settings.FRONTEND_URL).lower()
+    is_s3_staging = (
+        "s3-website" in frontend_url_lower or
+        ".s3." in frontend_url_lower or
+        "nerava-ui-prod" in frontend_url_lower
+    )
+    
     is_localhost = (
         settings.ENV == "dev" or 
         settings.ENV == "local" or
         settings.ENV.lower() == "dev" or
         settings.ENV.lower() == "local" or
-        "localhost" in str(settings.FRONTEND_URL).lower() or 
-        "127.0.0.1" in str(settings.FRONTEND_URL).lower() or
+        "localhost" in frontend_url_lower or 
+        "127.0.0.1" in frontend_url_lower or
         (region and (region == "local" or str(region).lower() == "local"))
     )
     
@@ -442,11 +466,11 @@ async def dev_login(
     import logging
     logger = logging.getLogger("nerava")
     region = getattr(settings, 'region', None) or getattr(settings, 'REGION', None) or "unknown"
-    logger.info(f"Dev login attempt - DEMO_MODE: {settings.DEMO_MODE}, is_localhost: {is_localhost}, ENV: {settings.ENV}, region: {region}, FRONTEND_URL: {settings.FRONTEND_URL}")
+    logger.info(f"Dev login attempt - DEMO_MODE: {settings.DEMO_MODE}, is_localhost: {is_localhost}, is_s3_staging: {is_s3_staging}, ENV: {settings.ENV}, region: {region}, FRONTEND_URL: {settings.FRONTEND_URL}")
     
-    # Always allow in dev/local environments, or if DEMO_MODE is enabled
-    if not settings.DEMO_MODE and not is_localhost:
-        logger.warning("Dev login rejected - not in DEMO_MODE and not localhost")
+    # Always allow in dev/local environments, S3 staging sites, or if DEMO_MODE is enabled
+    if not settings.DEMO_MODE and not is_localhost and not is_s3_staging:
+        logger.warning("Dev login rejected - not in DEMO_MODE, not localhost, and not S3 staging")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Dev login endpoint not available"

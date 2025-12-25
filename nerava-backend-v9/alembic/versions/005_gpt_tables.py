@@ -47,12 +47,14 @@ def upgrade():
         text_type = sa.Text
     
     # Users table (if not exists, add handle field)
-    try:
-        op.add_column('users', sa.Column('handle', sa.String(50), nullable=True, unique=True))
-        op.create_index('idx_users_handle', 'users', ['handle'])
-    except Exception:
-        pass  # Column might already exist
-    
+    # Skip if users table doesn't exist - it will be created later by migration d0dc1d5111a3
+    if _table_exists(conn, 'users', is_postgres):
+        try:
+            op.add_column('users', sa.Column('handle', sa.String(50), nullable=True, unique=True))
+            op.create_index('idx_users_handle', 'users', ['handle'])
+        except Exception:
+            pass  # Column might already exist
+
     # Follows table
     if not _table_exists(conn, 'follows', is_postgres):
         op.create_table('follows',

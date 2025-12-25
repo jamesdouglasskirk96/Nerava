@@ -422,16 +422,23 @@ export async function setTab(tab){
   console.log(`[Nav][Tabs] Switched to ${tab}`);
   
   // Initialize page content BEFORE marking as active (prevents flash)
-  if(tab==='explore' || tab==='discover') {
+  if(tab==='explore') {
     ensureMap();
-    if(tab==='discover') {
-      // Initialize explore page when switching to discover tab
-      const exploreEl = document.getElementById('page-explore');
-      if (exploreEl && !exploreEl.dataset.initialized) {
-        const { initExplore } = await import('./pages/explore.js');
-        initExplore();
-        exploreEl.dataset.initialized = 'true';
-      }
+    const exploreEl = document.getElementById('page-explore');
+    if (exploreEl && !exploreEl.dataset.initialized) {
+      const { initExplore } = await import('./pages/explore.js');
+      initExplore();
+      exploreEl.dataset.initialized = 'true';
+    }
+    // Mark page active after initialization
+    if (targetPage) targetPage.classList.add('active');
+  } else if(tab==='discover') {
+    // Initialize discover page (list view, no map)
+    const discoverEl = document.getElementById('page-discover');
+    if (discoverEl && !discoverEl.dataset.initialized) {
+      const { initDiscover } = await import('./pages/discover.js');
+      await initDiscover();
+      discoverEl.dataset.initialized = 'true';
     }
     // Mark page active after initialization
     if (targetPage) targetPage.classList.add('active');
@@ -490,9 +497,14 @@ if ('serviceWorker' in navigator) {
 }
 
 // Global demo mode flag
+// Enable demo mode for: ?demo=1, localStorage, or S3 staging site
+const isS3StagingSite = window.location.hostname.includes('s3-website') ||
+                        window.location.hostname.includes('.s3.') ||
+                        window.location.hostname.includes('nerava-ui-prod');
 const DEMO_MODE =
   new URLSearchParams(window.location.search).get('demo') === '1' ||
-  localStorage.getItem('nerava_demo') === '1';
+  localStorage.getItem('nerava_demo') === '1' ||
+  isS3StagingSite;
 
 // Expose to window for console access
 window.__neravaSetDemo = (on) => {

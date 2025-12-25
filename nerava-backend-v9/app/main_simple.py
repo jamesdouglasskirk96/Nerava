@@ -1,15 +1,44 @@
+# CRITICAL: Early startup logging BEFORE any other imports
+# This helps diagnose container startup issues in App Runner
+import sys
+print("=" * 60, flush=True)
+print("[STARTUP] Nerava Backend - Python interpreter started", flush=True)
+print(f"[STARTUP] Python version: {sys.version}", flush=True)
+print(f"[STARTUP] sys.path: {sys.path[:3]}...", flush=True)
+print("=" * 60, flush=True)
+
+import os
+print(f"[STARTUP] ENV={os.getenv('ENV', 'not set')}", flush=True)
+print(f"[STARTUP] PORT={os.getenv('PORT', 'not set')}", flush=True)
+print(f"[STARTUP] DATABASE_URL set: {bool(os.getenv('DATABASE_URL'))}", flush=True)
+print("[STARTUP] Importing FastAPI...", flush=True)
+
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import logging
-import sys
+import asyncio
 from dotenv import load_dotenv
+
+print("[STARTUP] FastAPI imported successfully", flush=True)
 
 # Load environment variables from .env file
 load_dotenv()
 
-from .db import Base, engine
+print("[STARTUP] Loading config...", flush=True)
 from .config import settings
+print(f"[STARTUP] Config loaded. database_url starts with: {settings.database_url[:20]}...", flush=True)
+
+print("[STARTUP] Loading database module (lazy init)...", flush=True)
+try:
+    from .db import Base, get_engine, SessionLocal
+    print("[STARTUP] Database module loaded (engine not yet created)", flush=True)
+except Exception as e:
+    print(f"[STARTUP ERROR] Failed to import database module: {e}", flush=True)
+    import traceback
+    traceback.print_exc()
+    raise
+
 from .run_migrations import run_migrations
 
 # Configure logging for production visibility
@@ -25,23 +54,21 @@ logging.basicConfig(
 logger = logging.getLogger("nerava")
 logger.info("Starting Nerava Backend v9")
 
-# CRITICAL DEBUG: Confirm this file is being loaded
-print(">>>> Nerava main_simple.py LOADED <<<<", flush=True)
-logger.info(">>>> Nerava main_simple.py LOADED <<<<")
+print("[STARTUP] Logging configured, continuing initialization...", flush=True)
 
 # Validate JWT secret configuration (P0 security fix)
 def validate_jwt_secret():
     """Validate JWT secret is not database URL in non-local environments"""
     import os
     env = os.getenv("ENV", "dev").lower()
-    region = settings.region.lower()
-    is_local = env == "local" or region == "local"
+    # P0-4: Only check ENV, not REGION (REGION can be spoofed)
+    is_local = env in {"local", "dev"}
     
     if not is_local:
         if settings.jwt_secret == settings.database_url:
             error_msg = (
                 "CRITICAL SECURITY ERROR: JWT secret cannot equal database_url in non-local environment. "
-                f"ENV={env}, REGION={region}. Set JWT_SECRET environment variable to a secure random value."
+                f"ENV={env}. Set JWT_SECRET environment variable to a secure random value."
             )
             print(f"[Startup] {error_msg}", flush=True)
             logger.error(error_msg)
@@ -50,7 +77,7 @@ def validate_jwt_secret():
         if not settings.jwt_secret or settings.jwt_secret == "dev-secret":
             error_msg = (
                 "CRITICAL SECURITY ERROR: JWT secret must be set and not use default value in non-local environment. "
-                f"ENV={env}, REGION={region}. Set JWT_SECRET environment variable."
+                f"ENV={env}. Set JWT_SECRET environment variable."
             )
             print(f"[Startup] Missing required env var in {env}: JWT_SECRET (must be a secure random value, not 'dev-secret')", flush=True)
             logger.error(error_msg)
@@ -63,8 +90,8 @@ def validate_database_url():
     import os
     import re
     env = os.getenv("ENV", "dev").lower()
-    region = settings.region.lower()
-    is_local = env == "local" or region == "local"
+    # P0-4: Only check ENV, not REGION (REGION can be spoofed)
+    is_local = env in {"local", "dev"}
     
     if not is_local:
         database_url = os.getenv("DATABASE_URL", settings.database_url)
@@ -73,7 +100,7 @@ def validate_database_url():
             db_scheme = "sqlite:///..." if "sqlite" in database_url.lower() else "unknown"
             error_msg = (
                 "CRITICAL: SQLite database is not supported in production. "
-                f"DATABASE_URL={database_url[:50]}..., ENV={env}, REGION={region}. "
+                f"DATABASE_URL={database_url[:50]}..., ENV={env}. "
                 "Please use PostgreSQL (e.g., RDS, managed Postgres)."
             )
             print(f"[Startup] Refusing to start in {env} with SQLite database_url={db_scheme}. Use PostgreSQL instead.", flush=True)
@@ -82,18 +109,40 @@ def validate_database_url():
         
         logger.info("Database URL validation passed (not SQLite)")
 
+def validate_redis_url():
+    """Validate Redis URL is configured in non-local environments"""
+    import os
+    env = os.getenv("ENV", "dev").lower()
+    # P0-4: Only check ENV, not REGION (REGION can be spoofed)
+    is_local = env in {"local", "dev"}
+    
+    if not is_local:
+        redis_url = os.getenv("REDIS_URL", settings.redis_url)
+        # Check if Redis URL is set and not the default localhost value
+        if not redis_url or redis_url == "redis://localhost:6379/0":
+            error_msg = (
+                "CRITICAL: REDIS_URL must be configured in non-local environment. "
+                f"ENV={env}. Redis is required for rate limiting in production. "
+                "Please set REDIS_URL environment variable to a valid Redis connection string."
+            )
+            print(f"[Startup] Redis URL validation failed in {env}: REDIS_URL not configured", flush=True)
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        logger.info("Redis URL validation passed (REDIS_URL is configured)")
+
 def validate_dev_flags():
     """Validate dev-only flags are not enabled in non-local environments"""
     import os
     env = os.getenv("ENV", "dev").lower()
-    region = settings.region.lower()
-    is_local = env == "local" or region == "local"
+    # P0-4: Only check ENV, not REGION (REGION can be spoofed)
+    is_local = env in {"local", "dev"}
     
     if not is_local:
         if os.getenv("NERAVA_DEV_ALLOW_ANON_USER", "false").lower() == "true":
             error_msg = (
                 "CRITICAL: NERAVA_DEV_ALLOW_ANON_USER cannot be enabled in non-local environment. "
-                f"ENV={env}, REGION={region}. This is a security risk."
+                f"ENV={env}. This is a security risk."
             )
             print(f"[Startup] Dev flag violation in {env}: NERAVA_DEV_ALLOW_ANON_USER is enabled (security risk)", flush=True)
             logger.error(error_msg)
@@ -102,20 +151,97 @@ def validate_dev_flags():
         if os.getenv("NERAVA_DEV_ALLOW_ANON_DRIVER", "false").lower() == "true":
             error_msg = (
                 "CRITICAL: NERAVA_DEV_ALLOW_ANON_DRIVER cannot be enabled in non-local environment. "
-                f"ENV={env}, REGION={region}. This is a security risk."
+                f"ENV={env}. This is a security risk."
             )
             print(f"[Startup] Dev flag violation in {env}: NERAVA_DEV_ALLOW_ANON_DRIVER is enabled (security risk)", flush=True)
             logger.error(error_msg)
             raise ValueError(error_msg)
         
+        # P0-4: Check DEMO_MODE - if it bypasses auth, fail in prod
+        demo_mode = os.getenv("DEMO_MODE", "false").lower() == "true"
+        if demo_mode:
+            # DEMO_MODE is allowed in local, but warn if it's enabled in prod
+            # (It's already gated by is_local_env() in checkout.py, but we should still warn)
+            logger.warning(
+                f"DEMO_MODE is enabled in {env} environment. "
+                "Ensure it does not bypass authentication in production code paths."
+            )
+        
         logger.info("Dev flags validation passed (no dev flags enabled)")
+
+def validate_token_encryption_key():
+    """Validate TOKEN_ENCRYPTION_KEY is set and valid in non-local environments"""
+    import os
+    env = os.getenv("ENV", "dev").lower()
+    # P0-5: Only check ENV, not REGION (REGION can be spoofed)
+    is_local = env in {"local", "dev"}
+    
+    if not is_local:
+        token_key = os.getenv("TOKEN_ENCRYPTION_KEY", "")
+        if not token_key:
+            error_msg = (
+                "CRITICAL SECURITY ERROR: TOKEN_ENCRYPTION_KEY environment variable is required in non-local environment. "
+                f"ENV={env}. This key is used to encrypt vehicle and Square tokens. "
+                "Generate with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
+            )
+            print(f"[Startup] {error_msg}", flush=True)
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        # Validate key format (Fernet keys are 44-char base64)
+        if len(token_key) != 44:
+            error_msg = (
+                "CRITICAL SECURITY ERROR: TOKEN_ENCRYPTION_KEY must be a valid Fernet key (44 characters base64). "
+                f"ENV={env}, key length={len(token_key)}. "
+                "Generate with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
+            )
+            print(f"[Startup] {error_msg}", flush=True)
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        # Validate key is valid Fernet key by attempting to construct Fernet instance
+        try:
+            from cryptography.fernet import Fernet
+            Fernet(token_key.encode('utf-8'))
+            logger.info("TOKEN_ENCRYPTION_KEY validation passed (valid Fernet key)")
+        except Exception as e:
+            error_msg = (
+                "CRITICAL SECURITY ERROR: TOKEN_ENCRYPTION_KEY is not a valid Fernet key. "
+                f"ENV={env}, error={str(e)}. "
+                "Generate with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
+            )
+            print(f"[Startup] {error_msg}", flush=True)
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+def validate_cors_origins():
+    """Validate CORS origins are not wildcard (*) in non-local environments"""
+    import os
+    env = os.getenv("ENV", "dev").lower()
+    # P0-2: Only check ENV, not REGION (REGION can be spoofed)
+    is_local = env in {"local", "dev"}
+    
+    if not is_local:
+        allowed_origins = os.getenv("ALLOWED_ORIGINS", settings.cors_allow_origins)
+        if allowed_origins == "*" or (allowed_origins and "*" in allowed_origins):
+            error_msg = (
+                "CRITICAL SECURITY ERROR: CORS wildcard (*) is not allowed in non-local environment. "
+                f"ENV={env}, ALLOWED_ORIGINS={allowed_origins[:50]}... "
+                "Set ALLOWED_ORIGINS environment variable to explicit origins (comma-separated list). "
+                "Example: ALLOWED_ORIGINS=https://app.nerava.com,https://www.nerava.com"
+            )
+            print(f"[Startup] {error_msg}", flush=True)
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        logger.info("CORS origins validation passed (no wildcard in prod)")
 
 def check_schema_payload_hash():
     """Check if payload_hash column exists in nova_transactions (local dev only)."""
     import os
     env = os.getenv("ENV", "dev").lower()
-    region = settings.region.lower()
-    is_local = env == "local" or region == "local"
+    # P0-4: Only check ENV, not REGION (REGION can be spoofed)
+    is_local = env in {"local", "dev"}
     
     if not is_local:
         return  # Skip check in non-local environments
@@ -151,13 +277,86 @@ def check_schema_payload_hash():
         logger.debug(f"Schema check failed (non-critical): {e}")
 
 # Run validation before migrations
+# CRITICAL: Make validations non-fatal to allow /healthz to serve even if validation fails
+# P0-4: Default STRICT_STARTUP_VALIDATION to true in prod, false in local
+env = os.getenv("ENV", "dev").lower()
+is_local = env in {"local", "dev"}
+strict_validation_default = "true" if not is_local else "false"
+strict_validation = os.getenv("STRICT_STARTUP_VALIDATION", strict_validation_default).lower() == "true"
+
 try:
+    print("[STARTUP] Running validation checks...", flush=True)
     validate_jwt_secret()
+    print("[STARTUP] JWT secret validation passed", flush=True)
     validate_database_url()
+    print("[STARTUP] Database URL validation passed", flush=True)
+    validate_redis_url()
+    print("[STARTUP] Redis URL validation passed", flush=True)
     validate_dev_flags()
+    print("[STARTUP] Dev flags validation passed", flush=True)
+    validate_token_encryption_key()
+    print("[STARTUP] TOKEN_ENCRYPTION_KEY validation passed", flush=True)
+    validate_cors_origins()
+    print("[STARTUP] CORS origins validation passed", flush=True)
+    from .core.config import validate_config
+    validate_config()
+    print("[STARTUP] Config validation passed", flush=True)
+    logger.info("All startup validations passed")
 except ValueError as e:
-    logger.error(f"Startup validation failed: {e}")
-    sys.exit(1)
+    error_msg = f"Startup validation failed: {e}"
+    print(f"[STARTUP ERROR] {error_msg}", flush=True)
+    # Log safe env var values for debugging (no secrets)
+    print(f"[STARTUP ERROR] ENV={os.getenv('ENV', 'not set')}", flush=True)
+    print(f"[STARTUP ERROR] REGION={settings.region}", flush=True)
+    db_url = os.getenv('DATABASE_URL', 'not set')
+    if db_url != 'not set':
+        # Only log scheme, not full URL (which may contain credentials)
+        scheme = db_url.split('://')[0] if '://' in db_url else 'unknown'
+        print(f"[STARTUP ERROR] DATABASE_URL scheme: {scheme}", flush=True)
+    else:
+        print(f"[STARTUP ERROR] DATABASE_URL: not set", flush=True)
+    redis_url = os.getenv('REDIS_URL', 'not set')
+    if redis_url != 'not set' and '://' in redis_url:
+        # Extract host from Redis URL (e.g., redis://host:port/db)
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(redis_url)
+            redis_host = f"{parsed.scheme}://{parsed.hostname}:{parsed.port or 6379}" if parsed.hostname else "unknown"
+            print(f"[STARTUP ERROR] REDIS_URL host: {redis_host}", flush=True)
+        except Exception:
+            print(f"[STARTUP ERROR] REDIS_URL: set (cannot parse)", flush=True)
+    else:
+        print(f"[STARTUP ERROR] REDIS_URL: {redis_url}", flush=True)
+    logger.error(error_msg, exc_info=True)
+    _startup_validation_failed = True
+    _startup_validation_errors.append(error_msg)
+    if strict_validation:
+        print("[STARTUP] STRICT_STARTUP_VALIDATION enabled - exiting due to validation failure", flush=True)
+        sys.exit(1)
+    else:
+        print("[STARTUP] WARNING: Validation failed but continuing startup (STRICT_STARTUP_VALIDATION=false)", flush=True)
+        print("[STARTUP] /readyz endpoint will return 503 until validation issues are resolved", flush=True)
+except Exception as e:
+    error_msg = f"Unexpected error during startup validation: {e}"
+    print(f"[STARTUP ERROR] {error_msg}", flush=True)
+    # Log safe env var values for debugging (no secrets)
+    print(f"[STARTUP ERROR] ENV={os.getenv('ENV', 'not set')}", flush=True)
+    print(f"[STARTUP ERROR] REGION={settings.region}", flush=True)
+    db_url = os.getenv('DATABASE_URL', 'not set')
+    if db_url != 'not set':
+        scheme = db_url.split('://')[0] if '://' in db_url else 'unknown'
+        print(f"[STARTUP ERROR] DATABASE_URL scheme: {scheme}", flush=True)
+    else:
+        print(f"[STARTUP ERROR] DATABASE_URL: not set", flush=True)
+    logger.error(error_msg, exc_info=True)
+    _startup_validation_failed = True
+    _startup_validation_errors.append(error_msg)
+    if strict_validation:
+        print("[STARTUP] STRICT_STARTUP_VALIDATION enabled - exiting due to validation failure", flush=True)
+        sys.exit(1)
+    else:
+        print("[STARTUP] WARNING: Validation failed but continuing startup (STRICT_STARTUP_VALIDATION=false)", flush=True)
+        print("[STARTUP] /readyz endpoint will return 503 until validation issues are resolved", flush=True)
 
 # Check schema in local dev (non-blocking)
 check_schema_payload_hash()
@@ -197,6 +396,7 @@ from .routers import (
     chargers,
     wallet,
     merchants as merchants_router,
+    config as config_router,
     users_register,
     merchants_local,
     webhooks,
@@ -257,9 +457,148 @@ from .routers.user_prefs import router as prefs_router
 
 app = FastAPI(title="Nerava Backend v9", version="0.9.0")
 
+# Global flag to track startup validation status
+_startup_validation_failed = False
+_startup_validation_errors = []
+
 # CRITICAL DEBUG: Confirm app object is created
-print(">>>> Nerava REAL APP MODULE LOADED - app object created <<<<", flush=True)
-logger.info(">>>> Nerava REAL APP MODULE LOADED - app object created <<<<")
+print("=" * 60, flush=True)
+print("[STARTUP] FastAPI app object created", flush=True)
+print(f"[STARTUP] App title: Nerava Backend v9", flush=True)
+print(f"[STARTUP] App version: 0.9.0", flush=True)
+print("=" * 60, flush=True)
+logger.info("=" * 60)
+logger.info("[STARTUP] FastAPI app object created")
+logger.info("[STARTUP] App title: Nerava Backend v9")
+logger.info("[STARTUP] App version: 0.9.0")
+logger.info("=" * 60)
+
+# CRITICAL: Define /healthz and /readyz IMMEDIATELY after app creation
+# This ensures they are registered before any routers that might conflict
+@app.get("/healthz")
+async def root_healthz():
+    """Root-level health check for App Runner deployment (liveness probe).
+
+    App Runner expects the health check at the root path /healthz.
+    This endpoint provides a simple health response without database checks
+    to ensure fast startup and reliable health checks.
+    
+    This is a LIVENESS check - it only verifies the HTTP server is running.
+    For dependency checks, use /readyz (readiness probe).
+    
+    This endpoint is designed to NEVER fail - it always returns 200.
+    """
+    # Ultra-simple response - no imports, no dependencies, no exceptions
+    # This must return 200 as soon as the HTTP server can respond
+    return {
+        "ok": True,
+        "service": "nerava-backend",
+        "version": "0.9.0",
+        "status": "healthy"
+    }
+
+@app.get("/readyz")
+async def root_readyz():
+    """Readiness check - verifies database and Redis connectivity with timeouts.
+    
+    Returns 200 if all dependencies are reachable, 503 otherwise.
+    App Runner can use this to determine if the service is ready to accept traffic.
+    Uses short timeouts (2s DB, 1s Redis) to prevent hanging.
+    
+    Also checks startup validation status - if validation failed during startup,
+    returns 503 with validation errors.
+    """
+    from fastapi.responses import JSONResponse
+    from sqlalchemy import text
+    
+    checks = {
+        "startup_validation": {"status": "ok", "error": None},
+        "database": {"status": "unknown", "error": None},
+        "redis": {"status": "unknown", "error": None}
+    }
+    
+    # Check startup validation status first
+    if _startup_validation_failed:
+        checks["startup_validation"]["status"] = "error"
+        checks["startup_validation"]["error"] = "; ".join(_startup_validation_errors)
+        logger.warning(f"[READYZ] Startup validation failed: {checks['startup_validation']['error']}")
+    
+    # Check database with 2s timeout
+    async def check_database():
+        """Check database connectivity with timeout"""
+        try:
+            engine = get_engine()
+            # Run in thread pool since SQLAlchemy is synchronous
+            loop = asyncio.get_event_loop()
+            await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    lambda: engine.connect().execute(text("SELECT 1")).fetchone()
+                ),
+                timeout=2.0
+            )
+            checks["database"]["status"] = "ok"
+        except asyncio.TimeoutError:
+            error_msg = "Database check timed out after 2s"
+            checks["database"]["status"] = "error"
+            checks["database"]["error"] = error_msg
+            logger.error(f"[READYZ] {error_msg}")
+        except Exception as e:
+            error_msg = str(e)
+            checks["database"]["status"] = "error"
+            checks["database"]["error"] = error_msg
+            logger.error(f"[READYZ] Database check failed: {error_msg}")
+    
+    # Check Redis with 1s timeout (if configured)
+    async def check_redis():
+        """Check Redis connectivity with timeout"""
+        try:
+            redis_url = settings.redis_url
+            if not redis_url or redis_url == "redis://localhost:6379/0":
+                checks["redis"]["status"] = "skipped"  # Not configured
+                return
+            
+            import redis
+            # Run in thread pool since redis client is synchronous
+            loop = asyncio.get_event_loop()
+            await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    lambda: redis.from_url(redis_url, socket_connect_timeout=1).ping()
+                ),
+                timeout=1.0
+            )
+            checks["redis"]["status"] = "ok"
+        except asyncio.TimeoutError:
+            error_msg = "Redis check timed out after 1s"
+            checks["redis"]["status"] = "error"
+            checks["redis"]["error"] = error_msg
+            logger.error(f"[READYZ] {error_msg}")
+        except Exception as e:
+            error_msg = str(e)
+            checks["redis"]["status"] = "error"
+            checks["redis"]["error"] = error_msg
+            logger.error(f"[READYZ] Redis check failed: {error_msg}")
+    
+    # Run checks concurrently
+    await asyncio.gather(check_database(), check_redis(), return_exceptions=True)
+    
+    # Determine overall status
+    # All checks must pass: startup validation, database, and redis (if configured)
+    all_ok = (
+        checks["startup_validation"]["status"] == "ok" and
+        checks["database"]["status"] == "ok" and
+        checks["redis"]["status"] in ("ok", "skipped")
+    )
+    
+    status_code = 200 if all_ok else 503
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "ready": all_ok,
+            "checks": checks
+        }
+    )
 
 # Request/Response logging middleware
 # CRITICAL: This middleware MUST execute for Railway logs to show requests/errors
@@ -506,50 +845,74 @@ app.add_middleware(DemoBannerMiddleware)
 
 # CORS validation (P1 security fix)
 # Validate CORS origins in non-local environments
+# CRITICAL: Make this non-fatal to allow /healthz to serve even if CORS config is wrong
 env = os.getenv("ENV", "dev").lower()
 region = settings.region.lower()
 is_local = env == "local" or region == "local"
 
-if not is_local and settings.cors_allow_origins == "*":
-    error_msg = (
-        "CRITICAL SECURITY ERROR: CORS wildcard (*) is not allowed in non-local environment. "
-        f"ENV={env}, REGION={region}. Set ALLOWED_ORIGINS environment variable to explicit origins."
-    )
-    logger.error(error_msg)
-    raise ValueError(error_msg)
+cors_validation_failed = False
+try:
+    if not is_local and settings.cors_allow_origins == "*":
+        error_msg = (
+            "CRITICAL SECURITY ERROR: CORS wildcard (*) is not allowed in non-local environment. "
+            f"ENV={env}, REGION={region}. Set ALLOWED_ORIGINS environment variable to explicit origins."
+        )
+        logger.error(error_msg)
+        _startup_validation_failed = True
+        _startup_validation_errors.append(error_msg)
+        cors_validation_failed = True
+        # Don't raise - log and use safe defaults
+        print(f"[STARTUP] WARNING: {error_msg}", flush=True)
+        print("[STARTUP] Using safe CORS origins list as default", flush=True)
+except Exception as e:
+    logger.error(f"CORS validation error: {e}", exc_info=True)
+    _startup_validation_failed = True
+    _startup_validation_errors.append(f"CORS validation error: {e}")
+    cors_validation_failed = True
+    # Use safe defaults
+    print(f"[STARTUP] WARNING: CORS validation failed: {e}", flush=True)
 
 # CORS (tighten in prod)
 # Parse ALLOWED_ORIGINS from env or use defaults
-allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "*")
-if allowed_origins_str == "*":
-    # When using credentials, cannot use "*" - allow localhost/127.0.0.1 explicitly for dev
-    # Base list of allowed origins
-    # CRITICAL: Include localhost:8001 for local UI testing against production backend
-    allowed_origins = [
-        "http://localhost:8001",  # Local dev UI
-        "http://127.0.0.1:8001",  # Local dev UI (alternative)
-        "http://localhost:3000",
-        "http://localhost:8080",
-        "http://localhost:5173",  # Vite default
-        "https://app.nerava.app",  # Production frontend
-        "https://www.nerava.app",  # Production frontend (www)
-    ]
-    
-    # CRITICAL: If FRONTEND_URL is set with a path (e.g., "http://localhost:8001/app"),
-    # extract just the origin (scheme://host:port) for CORS
-    # CORS origins must be exactly scheme://host[:port] - NO PATH
-    if hasattr(settings, 'FRONTEND_URL') and settings.FRONTEND_URL:
-        from urllib.parse import urlparse
-        parsed = urlparse(settings.FRONTEND_URL)
-        frontend_origin = f"{parsed.scheme}://{parsed.netloc}"
-        if frontend_origin not in allowed_origins:
-            allowed_origins.append(frontend_origin)
-            logger.info("Added FRONTEND_URL origin to CORS: %s (extracted from %s)", frontend_origin, settings.FRONTEND_URL)
-    
-    # Note: Vercel domains will be handled by custom CORS middleware below
+# If CORS validation failed, use safe defaults (empty list for non-local, localhost for local)
+if cors_validation_failed:
+    # Use safe defaults when validation failed
+    if is_local:
+        allowed_origins = ["http://localhost:8001", "http://127.0.0.1:8001"]
+    else:
+        # Empty list for non-local (will reject all origins, but app will start)
+        allowed_origins = []
 else:
-    # Split by comma and strip whitespace
-    allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",")]
+    allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "*")
+    if allowed_origins_str == "*":
+        # When using credentials, cannot use "*" - allow localhost/127.0.0.1 explicitly for dev
+        # Base list of allowed origins
+        # CRITICAL: Include localhost:8001 for local UI testing against production backend
+        allowed_origins = [
+            "http://localhost:8001",  # Local dev UI
+            "http://127.0.0.1:8001",  # Local dev UI (alternative)
+            "http://localhost:3000",
+            "http://localhost:8080",
+            "http://localhost:5173",  # Vite default
+            "https://app.nerava.app",  # Production frontend
+            "https://www.nerava.app",  # Production frontend (www)
+        ]
+        
+        # CRITICAL: If FRONTEND_URL is set with a path (e.g., "http://localhost:8001/app"),
+        # extract just the origin (scheme://host:port) for CORS
+        # CORS origins must be exactly scheme://host[:port] - NO PATH
+        if hasattr(settings, 'FRONTEND_URL') and settings.FRONTEND_URL:
+            from urllib.parse import urlparse
+            parsed = urlparse(settings.FRONTEND_URL)
+            frontend_origin = f"{parsed.scheme}://{parsed.netloc}"
+            if frontend_origin not in allowed_origins:
+                allowed_origins.append(frontend_origin)
+                logger.info("Added FRONTEND_URL origin to CORS: %s (extracted from %s)", frontend_origin, settings.FRONTEND_URL)
+        
+        # Note: Vercel domains will be handled by custom CORS middleware below
+    else:
+        # Split by comma and strip whitespace
+        allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",")]
 
 # CRITICAL: CORS must be on the real app
 # Log the exact origins we're allowing for debugging
@@ -586,23 +949,11 @@ app.include_router(analytics.router)
 # Health first
 app.include_router(health.router, prefix="/v1", tags=["health"])
 
-# Root-level health check for App Runner (expects /healthz at root, not /v1/healthz)
-@app.get("/healthz")
-async def root_healthz():
-    """Root-level health check for App Runner deployment.
+# Public config endpoint
+app.include_router(config_router.router)
 
-    App Runner expects the health check at the root path /healthz.
-    This endpoint provides a simple health response without database checks
-    to ensure fast startup and reliable health checks.
-    """
-    import os
-    env = os.getenv("ENV", "dev")
-    return {
-        "ok": True,
-        "service": "nerava-backend",
-        "env": env,
-        "version": "0.9.0"
-    }
+# NOTE: /healthz and /readyz are defined at the top of the file (right after app creation)
+# to ensure they take precedence over any router-defined endpoints
 
 # Meta routes (health, version, debug)
 app.include_router(meta.router)
@@ -839,10 +1190,66 @@ app.include_router(dual_zone.router)
 # Start Nova accrual service on startup (demo mode only)
 @app.on_event("startup")
 async def start_nova_accrual():
-    """Start Nova accrual service for demo mode"""
-    await nova_accrual_service.start()
+    """Start Nova accrual service for demo mode - non-blocking startup"""
+    print("[STARTUP] Startup event entered", flush=True)
+    logger.info("[STARTUP] Startup event entered")
+    
+    # Check startup mode (light mode skips optional workers for faster startup)
+    startup_mode = os.getenv("APP_STARTUP_MODE", "light").lower()
+    is_light_mode = startup_mode == "light"
+    
+    if is_light_mode:
+        print("[STARTUP] Light mode: skipping optional background workers", flush=True)
+        logger.info("[STARTUP] Light mode: skipping optional background workers")
+        print("[STARTUP] Startup event completed (non-blocking, light mode)", flush=True)
+        logger.info("[STARTUP] Startup event completed (non-blocking, light mode)")
+        return
+    
+    # Full mode: schedule background services as non-blocking tasks
+    print("[STARTUP] Full mode: starting background services (non-blocking)...", flush=True)
+    logger.info("[STARTUP] Full mode: starting background services (non-blocking)")
+    
+    async def start_background_services():
+        """Background task to start optional services - failures are logged but don't crash startup"""
+        try:
+            print("[STARTUP] Starting Nova accrual service...", flush=True)
+            await nova_accrual_service.start()
+            print("[STARTUP] Nova accrual service started (or skipped if not in demo mode)", flush=True)
+            logger.info("Nova accrual service started")
+        except Exception as e:
+            error_msg = f"Failed to start Nova accrual service: {e}"
+            print(f"[STARTUP WARNING] {error_msg}", flush=True)
+            logger.warning(error_msg, exc_info=True)
+        
+        # Start HubSpot sync worker
+        try:
+            from .workers.hubspot_sync import hubspot_sync_worker
+            print("[STARTUP] Starting HubSpot sync worker...", flush=True)
+            await hubspot_sync_worker.start()
+            print("[STARTUP] HubSpot sync worker started (or skipped if not enabled)", flush=True)
+            logger.info("HubSpot sync worker started")
+        except Exception as e:
+            error_msg = f"Failed to start HubSpot sync worker: {e}"
+            print(f"[STARTUP WARNING] {error_msg}", flush=True)
+            logger.warning(error_msg, exc_info=True)
+        
+        print("[STARTUP] Background services initialization complete", flush=True)
+        logger.info("Background services initialization complete")
+    
+    # Schedule as background task - don't await (non-blocking)
+    asyncio.create_task(start_background_services())
+    
+    print("[STARTUP] Startup event completed (non-blocking, services scheduled)", flush=True)
+    logger.info("[STARTUP] Startup event completed (non-blocking, services scheduled)")
 
 @app.on_event("shutdown")
 async def stop_nova_accrual():
     """Stop Nova accrual service on shutdown"""
     await nova_accrual_service.stop()
+    
+    # Stop HubSpot sync worker
+    try:
+        from .workers.hubspot_sync import hubspot_sync_worker
+        await hubspot_sync_worker.stop()
+    except Exception as e:
+        logger.warning(f"Failed to stop HubSpot sync worker: {e}")

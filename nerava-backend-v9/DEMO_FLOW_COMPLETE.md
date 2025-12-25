@@ -156,3 +156,4 @@ uvicorn app.main_simple:app --reload --port 8001
 - Wallet UI banner/buttons are demo-only and don't break normal wallet UI
 
 
+

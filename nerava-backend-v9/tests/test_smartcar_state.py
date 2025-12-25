@@ -116,3 +116,4 @@ def test_callback_validates_state_and_links_user(test_user, db: Session):
             assert account is not None
             assert account.provider == "smartcar"
 
+

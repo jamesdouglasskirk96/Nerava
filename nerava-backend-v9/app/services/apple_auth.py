@@ -112,3 +112,4 @@ def verify_apple_id_token(id_token: str) -> Dict[str, Any]:
             detail=f"Apple authentication error: {str(e)}"
         )
 
+

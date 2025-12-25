@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="nerava-api-base" content="https://c2khcn8vnk.us-east-1.awsapprunner.com">
     <title>Checkout - Nerava</title>
     <style>
         * {
@@ -335,7 +336,10 @@
     </div>
 
     <script>
-        const API_BASE = window.location.origin;
+        // Use meta tag for production, fallback to origin for local dev
+        const apiBaseMeta = document.querySelector('meta[name="nerava-api-base"]');
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const API_BASE = (!isLocalhost && apiBaseMeta?.content) ? apiBaseMeta.content : window.location.origin;
         
         // Get token from URL
         const urlParams = new URLSearchParams(window.location.search);

@@ -27,3 +27,4 @@ def downgrade():
     op.drop_index('ix_nova_transactions_idempotency_key', table_name='nova_transactions')
     op.drop_column('nova_transactions', 'idempotency_key')
 
+

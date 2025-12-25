@@ -168,3 +168,4 @@ class TestMerchantRewards:
         assert reward.is_active is True
 
 
+

@@ -13,6 +13,10 @@ from datetime import datetime
 import uuid
 
 from app.db import get_db
+from app.models import User
+from app.dependencies.domain import require_merchant_admin
+from app.dependencies.driver import get_current_driver
+from app.services.auth_service import AuthService
 from app.domains.domain_hub import HUB_ID, HUB_NAME, DOMAIN_CHARGERS
 from app.services.verify_dwell import start_session as verify_start_session, ping as verify_ping
 from app.services.while_you_charge import get_domain_hub_view, get_domain_hub_view_async
@@ -581,6 +585,7 @@ async def while_you_charge(
 @router.post("/verify_visit")
 def verify_visit(
     request: VerifyVisitRequest,
+    user: User = Depends(get_current_driver),
     db: Session = Depends(get_db)
 ):
     """
@@ -589,6 +594,8 @@ def verify_visit(
     Runs visit-verification, awards merchant visit Nova if valid,
     and updates wallet.
     PWA-optimized: includes reward_earned flag, integers only.
+    
+    P0-1 Security: Requires authentication. Mutates wallet balance.
     """
     # Get merchant info (handle fallback merchants that may not be in DB)
     merchant = None
@@ -624,23 +631,38 @@ def verify_visit(
         merchant_lat, merchant_lng
     )
     
+    # P0-1: Use authenticated user ID instead of session user_id
+    authenticated_user_id = user.id
+    
+    # Verify session exists and belongs to authenticated user
+    session_row = db.execute(text("""
+        SELECT user_id FROM sessions WHERE id = :session_id
+    """), {"session_id": request.session_id}).first()
+    
+    if not session_row:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    session_user_id = session_row[0]
+    
+    # P0-1: Ensure session belongs to authenticated user
+    if session_user_id != authenticated_user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Session does not belong to authenticated user"
+        )
+    
     if distance_m > 100:
         # Get wallet balance even if too far
-        session_row = db.execute(text("""
-            SELECT user_id FROM sessions WHERE id = :session_id
-        """), {"session_id": request.session_id}).first()
-        
         # Get wallet balance (handle case where credit_ledger table doesn't exist yet)
         wallet_balance_cents = 0
-        if session_row:
-            try:
-                from app.models_extra import CreditLedger
-                ledger_rows = db.query(CreditLedger).filter(CreditLedger.user_ref == str(session_row[0])).all()
-                wallet_balance_cents = sum(r.cents for r in ledger_rows) if ledger_rows else 0
-            except Exception as ledger_err:
-                # Table might not exist yet - return 0 balance
-                logger.warning(f"Could not query wallet balance (table may not exist): {ledger_err}")
-                wallet_balance_cents = 0
+        try:
+            from app.models_extra import CreditLedger
+            ledger_rows = db.query(CreditLedger).filter(CreditLedger.user_ref == str(authenticated_user_id)).all()
+            wallet_balance_cents = sum(r.cents for r in ledger_rows) if ledger_rows else 0
+        except Exception as ledger_err:
+            # Table might not exist yet - return 0 balance
+            logger.warning(f"Could not query wallet balance (table may not exist): {ledger_err}")
+            wallet_balance_cents = 0
         
         return {
             "verified": False,
@@ -652,15 +674,7 @@ def verify_visit(
             "wallet_balance_nova": cents_to_nova(wallet_balance_cents)
         }
     
-    # Get session info for user_id
-    session_row = db.execute(text("""
-        SELECT user_id FROM sessions WHERE id = :session_id
-    """), {"session_id": request.session_id}).first()
-    
-    if not session_row:
-        raise HTTPException(status_code=404, detail="Session not found")
-    
-    user_id = session_row[0]
+    user_id = authenticated_user_id
     
     # Check if visit already rewarded (idempotency)
     existing_reward = db.execute(text("""
@@ -670,7 +684,7 @@ def verify_visit(
         AND meta LIKE :pattern
         LIMIT 1
     """), {
-        "user_id": str(user_id),
+        "user_id": str(authenticated_user_id),
         "pattern": f'%{request.merchant_id}%'
     }).first()
     
@@ -701,13 +715,14 @@ def verify_visit(
     try:
         # Use similar logic to verify bonus but for merchant visit
         from app.utils.dbjson import as_db_json
-        from app.db import engine
-        
+        from app.db import get_engine
+
         meta_dict = {
             "merchant_id": request.merchant_id,
             "session_id": request.session_id,
             "type": "merchant_visit"
         }
+        engine = get_engine()
         meta_json = as_db_json(meta_dict, engine)
         
         # Insert reward event
@@ -718,7 +733,7 @@ def verify_visit(
                 :user_id, 'merchant_visit', :gross, :net, :community, :meta, :created_at
             )
         """), {
-            "user_id": str(user_id),
+            "user_id": str(authenticated_user_id),
             "gross": visit_reward_cents,
             "net": visit_reward_cents,  # Full amount to user for merchant visit
             "community": 0,
@@ -729,7 +744,7 @@ def verify_visit(
         # Update wallet
         from app.routers.wallet import _balance, _add_ledger
         new_balance = _add_ledger(
-            db, str(user_id), visit_reward_cents,
+            db, str(authenticated_user_id), visit_reward_cents,
             "MERCHANT_VISIT", {"merchant_id": request.merchant_id, "session_id": request.session_id}
         )
         
@@ -1142,6 +1157,7 @@ class MerchantOfferResponse(BaseModel):
 @router.post("/merchant_offer", response_model=MerchantOfferResponse)
 def create_merchant_offer(
     request: MerchantOfferRequest,
+    user: User = Depends(require_merchant_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -1149,8 +1165,16 @@ def create_merchant_offer(
     
     Creates a code in the format: PREFIX-MERCHANT-#### (e.g., DOM-SB-4821)
     
-    Auth: Currently open for pilot (TODO: add merchant/auth guard)
+    P0-B Security: Requires merchant_admin role and merchant ownership validation.
     """
+    # P0-B: Validate merchant ownership - user must own the merchant
+    user_merchant = AuthService.get_user_merchant(db, user.id)
+    if not user_merchant or user_merchant.id != request.merchant_id:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Access denied: You do not have permission to create offers for merchant {request.merchant_id}"
+        )
+    
     try:
         # Generate unique code
         code = generate_code(request.merchant_id, db)

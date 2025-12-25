@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 
 from app.db import get_db
+from app.models import User
+from app.dependencies_domain import get_current_user
 from app.services.codes import fetch_code, is_code_valid
 from app.services.merchant_balance import debit_balance
 from app.services.rewards_engine import record_reward_event
@@ -37,6 +39,7 @@ class RedeemCodeResponse(BaseModel):
 @router.post("/redeem_code", response_model=RedeemCodeResponse)
 def redeem_code(
     request: RedeemCodeRequest,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -53,7 +56,7 @@ def redeem_code(
     - Marks code as redeemed
     - Creates RewardEvent for reporting
     
-    Auth: Currently open for pilot (TODO: add merchant/auth guard)
+    Auth: Requires authentication (P0-3: security hardening)
     """
     try:
         # Fetch the code with row lock (P0 race condition fix)

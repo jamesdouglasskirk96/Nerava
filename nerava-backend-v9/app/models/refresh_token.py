@@ -26,3 +26,4 @@ class RefreshToken(Base):
     # Relationship to user
     user = relationship("User", backref="refresh_tokens")
 
+

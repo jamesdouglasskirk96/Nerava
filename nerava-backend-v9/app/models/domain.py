@@ -6,7 +6,7 @@ to support the Domain-specific charge party event system with merchants,
 drivers, Nova transactions, and Stripe integration.
 """
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Date, ForeignKey, Text, Index
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Date, ForeignKey, Text, Index, CheckConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.sqlite import JSON as SQLITE_JSON
 from ..db import Base
@@ -153,6 +153,14 @@ class DriverWallet(Base):
     user = relationship("User", foreign_keys=[user_id])
     # Note: transactions relationship removed - query NovaTransaction directly via driver_user_id
     # transactions = relationship("NovaTransaction", back_populates="driver")  # BROKEN: no direct FK
+    
+    # P0-D Security: CheckConstraint enforced at DB level via migration
+    # For SQLite: Uses triggers (see migration 040)
+    # For PostgreSQL: Uses CHECK constraint
+    __table_args__ = (
+        # Note: CheckConstraint is added via migration for cross-DB compatibility
+        # SQLite doesn't support ALTER TABLE ADD CONSTRAINT, so migration uses triggers
+    )
 
 
 class ApplePassRegistration(Base):
@@ -327,6 +335,9 @@ class MerchantRedemption(Base):
     # Square order ID (for Square POS integration)
     square_order_id = Column(String, nullable=True)
     
+    # P1-F Security: Idempotency key for non-Square redemptions to prevent replay attacks
+    idempotency_key = Column(String, nullable=True, index=True)
+    
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     
     # Relationships
@@ -339,6 +350,8 @@ class MerchantRedemption(Base):
         Index('ix_merchant_redemptions_driver_created', 'driver_user_id', 'created_at'),
         # Unique constraint on (merchant_id, square_order_id) - enforced at application level for nulls
         Index('ix_merchant_redemptions_merchant_square_order', 'merchant_id', 'square_order_id', unique=True),
+        # P1-F: Unique constraint on (merchant_id, idempotency_key) - enforced via migration 041
+        # Note: Allows NULL idempotency_key for backward compatibility, but enforces uniqueness for non-NULL
     )
 
 
@@ -375,10 +388,7 @@ class SquareOAuthState(Base):
     expires_at = Column(DateTime, nullable=False, index=True)  # Default: created_at + 15 minutes
     used = Column(Boolean, nullable=False, default=False, index=True)  # Mark as used after validation
     
-    __table_args__ = (
-        Index('ix_square_oauth_states_state', 'state'),
-        Index('ix_square_oauth_states_expires_at', 'expires_at'),
-    )
+    # Note: indexes are created by index=True on columns, no need for explicit Index() here
 
 
 class MerchantFeeLedger(Base):
@@ -406,9 +416,8 @@ class MerchantFeeLedger(Base):
     merchant = relationship("DomainMerchant", foreign_keys=[merchant_id])
     
     __table_args__ = (
-        Index('ix_merchant_fee_ledger_merchant_id', 'merchant_id'),
-        Index('ix_merchant_fee_ledger_period_start', 'period_start'),
-        # Unique constraint on (merchant_id, period_start)
+        # Note: single-column indexes created by index=True on columns
+        # Unique composite constraint on (merchant_id, period_start)
         Index('uq_merchant_fee_ledger_merchant_period', 'merchant_id', 'period_start', unique=True),
     )
 

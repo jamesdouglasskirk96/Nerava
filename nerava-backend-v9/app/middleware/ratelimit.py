@@ -3,6 +3,7 @@ from typing import Dict, Optional
 from fastapi import Request, HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.config import settings
+from app.security.ratelimit_redis import rate_limit as redis_rate_limit, _get_redis_client
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Rate limiting middleware using token bucket algorithm with endpoint-specific limits"""
@@ -10,6 +11,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     # Endpoint-specific rate limits (P1 security fix)
     # Format: path_prefix -> requests_per_minute
     ENDPOINT_LIMITS = {
+        "/v1/auth/magic_link/request": 3,  # P1-4: Very strict for magic link generation (3/min)
         "/v1/auth/": 10,  # Stricter for auth endpoints
         "/v1/otp/": 5,  # Very strict for OTP
         "/v1/nova/": 30,  # Moderate for Nova operations
@@ -37,7 +39,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return f"ip:{client_ip}"
     
     def _get_limit_for_path(self, path: str) -> int:
-        """Get rate limit for a specific path"""
+        """Get rate limit for a specific path (exact match takes precedence)"""
+        # Check for exact matches first (more specific)
+        if path in self.ENDPOINT_LIMITS:
+            return self.ENDPOINT_LIMITS[path]
+        # Then check prefixes
         for prefix, limit in self.ENDPOINT_LIMITS.items():
             if path.startswith(prefix):
                 return limit
@@ -84,20 +90,49 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         """Process request with rate limiting"""
         client_id = self._get_client_id(request)
         path = request.url.path
-        bucket = self._get_bucket(client_id, path)
-        limit = bucket.get('limit', self.default_requests_per_minute)
+        limit = self._get_limit_for_path(path)
         
-        if not self._consume_token(bucket):
-            raise HTTPException(
-                status_code=429,
-                detail=f"Rate limit exceeded for {path}. Limit: {limit} requests/minute. Please try again later."
-            )
+        # P0-E: Try Redis-backed rate limiting first, fallback to in-memory
+        redis_client = _get_redis_client()
+        use_redis = redis_client is not None
         
-        response = await call_next(request)
+        if use_redis:
+            try:
+                # Use Redis-backed rate limiting
+                # redis_rate_limit returns True if allowed, raises HTTPException if exceeded
+                redis_rate_limit(path, client_id, limit)
+                # If we get here, rate limit passed - continue
+                response = await call_next(request)
+                # Add rate limit headers (approximate - Redis doesn't track remaining easily)
+                response.headers["X-RateLimit-Limit"] = str(limit)
+                response.headers["X-RateLimit-Remaining"] = "N/A"  # Redis doesn't easily provide this
+                response.headers["X-RateLimit-Reset"] = str(int(time.time() // 60) * 60 + 60)
+                return response
+            except HTTPException:
+                # Rate limit exceeded - re-raise
+                raise
+            except Exception as e:
+                # Redis error - fallback to in-memory
+                import os
+                env = os.getenv("ENV", "dev").lower()
+                is_local = env in {"local", "dev"}
+                if not is_local:
+                    # In non-local, fail fast if Redis is required
+                    raise RuntimeError(f"Redis rate limiting failed and not in local env: {e}")
+                # Fall through to in-memory fallback
+                use_redis = False
         
-        # Add rate limit headers
-        response.headers["X-RateLimit-Limit"] = str(limit)
-        response.headers["X-RateLimit-Remaining"] = str(int(bucket['tokens']))
-        response.headers["X-RateLimit-Reset"] = str(int(bucket['last_refill'] + 60))
-        
-        return response
+        if not use_redis:
+            # Fallback to in-memory rate limiting
+            bucket = self._get_bucket(client_id, path)
+            if not self._consume_token(bucket):
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Rate limit exceeded for {path}. Limit: {limit} requests/minute. Please try again later."
+                )
+            response = await call_next(request)
+            # Add rate limit headers
+            response.headers["X-RateLimit-Limit"] = str(limit)
+            response.headers["X-RateLimit-Remaining"] = str(int(bucket['tokens']))
+            response.headers["X-RateLimit-Reset"] = str(int(bucket['last_refill'] + 60))
+            return response

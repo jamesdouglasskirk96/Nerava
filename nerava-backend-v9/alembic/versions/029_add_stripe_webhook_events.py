@@ -42,3 +42,4 @@ def downgrade():
     op.drop_index('ix_stripe_webhook_events_event_type', table_name='stripe_webhook_events')
     op.drop_table('stripe_webhook_events')
 
+

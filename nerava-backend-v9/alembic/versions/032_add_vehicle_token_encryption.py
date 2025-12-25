@@ -24,3 +24,4 @@ def upgrade():
 def downgrade():
     op.drop_column('vehicle_tokens', 'encryption_version')
 
+

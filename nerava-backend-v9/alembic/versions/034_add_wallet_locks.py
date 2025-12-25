@@ -35,3 +35,4 @@ def downgrade():
     op.drop_index('ix_wallet_locks_user_id', table_name='wallet_locks')
     op.drop_table('wallet_locks')
 
+

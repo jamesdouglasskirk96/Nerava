@@ -11,10 +11,12 @@ def is_local_env() -> bool:
     """
     Check if running in local environment.
     
-    Returns True if ENV == "local" OR REGION == "local"
+    P0-C Security: Only checks ENV, not REGION, to prevent spoofing in production.
+    REGION can be set to 'local' in production deployments, which would bypass security.
+    
     Cached to avoid repeated env lookups.
     """
     env = os.getenv("ENV", "dev").lower()
-    region = os.getenv("REGION", "local").lower()
-    return env == "local" or region == "local"
+    # DO NOT check REGION - it can be spoofed in production
+    return env in {"local", "dev"}
 

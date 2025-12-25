@@ -56,7 +56,7 @@ from jose import jwt
 
 from app.db import get_db
 from app.models import User
-from app.models_vehicle import VehicleAccount, VehicleToken
+from app.models_vehicle import VehicleAccount, VehicleToken, VehicleTelemetry
 from app.dependencies_domain import get_current_user, get_current_user_id
 from app.core.config import settings
 from app.services.smartcar_service import (
@@ -308,6 +308,125 @@ async def smartcar_callback(
         frontend_url = f"{settings.frontend_url.rstrip('/')}/#profile?error=connection_failed"
         
         return RedirectResponse(url=frontend_url)
+
+
+class EvStatusResponse(BaseModel):
+    connected: bool
+    vehicle_label: Optional[str] = None
+    last_sync_at: Optional[str] = None
+    status: str  # "connected", "needs_attention", "not_connected"
+
+
+@router.get("/v1/ev/status", response_model=EvStatusResponse)
+async def get_ev_status(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get vehicle connection status for the current user
+    
+    Returns connection status, vehicle label, and last sync timestamp.
+    """
+    # Find user's active vehicle account
+    account = (
+        db.query(VehicleAccount)
+        .filter(
+            VehicleAccount.user_id == current_user.id,
+            VehicleAccount.provider == "smartcar",
+            VehicleAccount.is_active == True
+        )
+        .first()
+    )
+    
+    if not account:
+        return EvStatusResponse(
+            connected=False,
+            vehicle_label=None,
+            last_sync_at=None,
+            status="not_connected"
+        )
+    
+    # Get latest telemetry for last_sync_at
+    from sqlalchemy import desc
+    
+    latest_telemetry = (
+        db.query(VehicleTelemetry)
+        .filter(VehicleTelemetry.vehicle_account_id == account.id)
+        .order_by(desc(VehicleTelemetry.recorded_at))
+        .first()
+    )
+    
+    last_sync_at = None
+    if latest_telemetry and latest_telemetry.recorded_at:
+        last_sync_at = latest_telemetry.recorded_at.isoformat()
+    
+    # Check if token exists and is valid
+    latest_token = (
+        db.query(VehicleToken)
+        .filter(VehicleToken.vehicle_account_id == account.id)
+        .order_by(desc(VehicleToken.created_at))
+        .first()
+    )
+    
+    if not latest_token:
+        return EvStatusResponse(
+            connected=False,
+            vehicle_label=account.display_name,
+            last_sync_at=last_sync_at,
+            status="needs_attention"
+        )
+    
+    # Check if token is expired (with 5 minute buffer)
+    token_expired = latest_token.expires_at < datetime.utcnow() + timedelta(minutes=5)
+    
+    if token_expired:
+        return EvStatusResponse(
+            connected=True,
+            vehicle_label=account.display_name,
+            last_sync_at=last_sync_at,
+            status="needs_attention"
+        )
+    
+    return EvStatusResponse(
+        connected=True,
+        vehicle_label=account.display_name,
+        last_sync_at=last_sync_at,
+        status="connected"
+    )
+
+
+@router.post("/v1/ev/disconnect")
+async def disconnect_vehicle(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Disconnect vehicle by deactivating vehicle account and revoking tokens
+    """
+    # Find all active vehicle accounts for user
+    accounts = (
+        db.query(VehicleAccount)
+        .filter(
+            VehicleAccount.user_id == current_user.id,
+            VehicleAccount.provider == "smartcar",
+            VehicleAccount.is_active == True
+        )
+        .all()
+    )
+    
+    if not accounts:
+        return {"ok": True, "message": "No connected vehicles to disconnect"}
+    
+    # Deactivate all accounts
+    for account in accounts:
+        account.is_active = False
+        account.updated_at = datetime.utcnow()
+    
+    db.commit()
+    
+    logger.info(f"Vehicle disconnected for user {current_user.id}, deactivated {len(accounts)} account(s)")
+    
+    return {"ok": True}
 
 
 @router.get("/v1/ev/me/telemetry/latest", response_model=TelemetryResponse)

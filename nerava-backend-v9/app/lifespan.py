@@ -3,7 +3,10 @@ Application lifespan management for startup and shutdown events
 """
 import asyncio
 import logging
+import os
+import re
 from contextlib import asynccontextmanager
+from sqlalchemy import text
 from app.config import settings
 from app.services.async_wallet import async_wallet
 from app.services.cache import cache
@@ -19,36 +22,17 @@ async def lifespan(app):
     """Manage application lifespan events"""
     # Startup
     logger.info("Starting Nerava Backend v9...")
+    print("[STARTUP] Beginning application startup sequence...", flush=True)
     
     try:
-        # Initialize async wallet processor
-        await async_wallet.start_worker()
-        logger.info("Async wallet processor started")
-        
-        # Start outbox relay
-        await outbox_relay.start()
-        logger.info("Outbox relay started")
-        
-        # Start cache prewarmer
-        await cache_prewarmer.start()
-        logger.info("Cache prewarmer started")
-        
-        # Start analytics batch writer
-        await analytics_batch_writer.start()
-        logger.info("Analytics batch writer started")
-        
-        # Test cache connection
-        await cache.get("health_check")
-        logger.info("Cache connection verified")
-        
-        # Test database connection
-        from app.db import engine
-        with engine.connect() as conn:
-            conn.execute("SELECT 1")
-        logger.info("Database connection verified")
+        # Compute environment variables FIRST (before any code that uses them)
+        print("[STARTUP] Computing environment configuration...", flush=True)
+        env = os.getenv("ENV", "dev").lower()
+        is_local = env in {"local", "dev"}
+        print(f"[STARTUP] ENV={env}, is_local={is_local}", flush=True)
         
         # P1-G: Prevent SQLite in production
-        import re
+        print("[STARTUP] Validating database configuration...", flush=True)
         database_url = os.getenv("DATABASE_URL", settings.database_url)
         if not is_local and re.match(r'^sqlite:', database_url, re.IGNORECASE):
             error_msg = (
@@ -56,15 +40,70 @@ async def lifespan(app):
                 f"DATABASE_URL={database_url[:50]}..., ENV={env}. "
                 f"Please use PostgreSQL (e.g., RDS, managed Postgres)."
             )
-            print(f"[Startup] Refusing to start in {env} with SQLite database_url=sqlite:///... Use PostgreSQL instead.", flush=True)
+            print(f"[STARTUP] Refusing to start in {env} with SQLite database_url=sqlite:///... Use PostgreSQL instead.", flush=True)
             logger.error(error_msg)
             raise RuntimeError(error_msg)
+        print("[STARTUP] Database configuration validated", flush=True)
+        
+        # Initialize async wallet processor
+        print("[STARTUP] Starting async wallet processor...", flush=True)
+        await async_wallet.start_worker()
+        logger.info("Async wallet processor started")
+        print("[STARTUP] Async wallet processor started", flush=True)
+        
+        # Start outbox relay
+        print("[STARTUP] Starting outbox relay...", flush=True)
+        await outbox_relay.start()
+        logger.info("Outbox relay started")
+        print("[STARTUP] Outbox relay started", flush=True)
+        
+        # Start cache prewarmer
+        print("[STARTUP] Starting cache prewarmer...", flush=True)
+        await cache_prewarmer.start()
+        logger.info("Cache prewarmer started")
+        print("[STARTUP] Cache prewarmer started", flush=True)
+        
+        # Start analytics batch writer
+        print("[STARTUP] Starting analytics batch writer...", flush=True)
+        await analytics_batch_writer.start()
+        logger.info("Analytics batch writer started")
+        print("[STARTUP] Analytics batch writer started", flush=True)
+        
+        # Test cache connection
+        print("[STARTUP] Verifying cache connection...", flush=True)
+        try:
+            await cache.get("health_check")
+            logger.info("Cache connection verified")
+            print("[STARTUP] Cache connection verified", flush=True)
+        except Exception as e:
+            if is_local:
+                logger.warning(f"Cache connection failed in local/dev environment: {e}")
+                print(f"[STARTUP] WARNING: Cache connection failed in {env}, continuing anyway", flush=True)
+            else:
+                logger.error(f"Cache connection failed in production: {e}")
+                print(f"[STARTUP] ERROR: Cache connection failed in {env}, failing startup", flush=True)
+                raise
+        
+        # Test database connection
+        print("[STARTUP] Verifying database connection...", flush=True)
+        from app.db import get_engine
+        engine = get_engine()
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            logger.info("Database connection verified")
+            print("[STARTUP] Database connection verified", flush=True)
+        except Exception as e:
+            if is_local:
+                logger.warning(f"Database connection failed in local/dev environment: {e}")
+                print(f"[STARTUP] WARNING: Database connection failed in {env}, continuing anyway", flush=True)
+            else:
+                logger.error(f"Database connection failed in production: {e}")
+                print(f"[STARTUP] ERROR: Database connection failed in {env}, failing startup", flush=True)
+                raise
         
         # Validate required secrets in production (P0-1: secrets hardening)
-        import os
-        env = os.getenv("ENV", "dev").lower()
-        # P0-C: DO NOT check REGION - can be spoofed in production
-        is_local = env in {"local", "dev"}
+        print("[STARTUP] Validating environment security settings...", flush=True)
         
         # P0-C: Prevent dev flags in non-local environments
         if not is_local:
@@ -115,23 +154,26 @@ async def lifespan(app):
         
         # Check for missing migrations (local-only, non-blocking)
         if is_local:
+            print("[STARTUP] Checking database migrations (local only)...", flush=True)
             try:
-                from sqlalchemy import text
                 with engine.connect() as conn:
                     # Lightweight schema check: try to query encryption_version column
                     conn.execute(text("SELECT encryption_version FROM vehicle_tokens LIMIT 1"))
                 logger.debug("Migration schema check passed")
+                print("[STARTUP] Migration schema check passed", flush=True)
             except Exception as e:
                 error_msg = str(e).lower()
                 if "no such column" in error_msg or "encryption_version" in error_msg:
                     logger.warning(
                         "⚠️ Local database schema is behind. Run: cd nerava-backend-v9 && alembic upgrade head"
                     )
+                    print("[STARTUP] WARNING: Database schema may be behind migrations", flush=True)
                 else:
                     # Other errors (table doesn't exist, etc.) are fine - just log debug
                     logger.debug(f"Migration check skipped (expected in some setups): {e}")
         
         logger.info("Application startup completed successfully")
+        print("[STARTUP] Application startup completed successfully", flush=True)
         
     except Exception as e:
         logger.error(f"Startup failed: {e}")
@@ -160,7 +202,8 @@ async def lifespan(app):
         logger.info("Async wallet processor stopped")
         
         # Close database connections
-        from app.db import engine
+        from app.db import get_engine
+        engine = get_engine()
         engine.dispose()
         logger.info("Database connections closed")
         

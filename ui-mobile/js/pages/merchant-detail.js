@@ -532,6 +532,12 @@ export async function openRedeemConfirm(merchant) {
     return;
   }
 
+  // If redemption method is CODE and static code is available, show code modal
+  if (merchant.nova_redemption_method === 'CODE' && merchant.static_discount_code) {
+    showCodeModalFromDetail(merchant);
+    return;
+  }
+
   // Get current wallet balance
   let novaBalance = 0;
   try {
@@ -781,5 +787,72 @@ export function showRedeemSuccess(merchant, amountNova, result) {
     walletBtn.addEventListener('click', handleViewWallet);
     listeners.push({ element: walletBtn, event: 'click', handler: handleViewWallet });
   }
+}
+
+/**
+ * Show discount code modal from merchant detail
+ */
+function showCodeModalFromDetail(merchant) {
+  // Create modal similar to discover.js
+  const modal = document.createElement('div');
+  modal.className = 'discover-code-modal';
+  modal.innerHTML = `
+    <div class="discover-code-backdrop"></div>
+    <div class="discover-code-sheet">
+      <div class="discover-code-header">
+        <h3>${escapeHtml(merchant.name)}</h3>
+        <button class="discover-code-close" aria-label="Close">×</button>
+      </div>
+      <div class="discover-code-content">
+        <p class="discover-code-instructions">Show this code to the cashier:</p>
+        <div class="discover-code-display">${escapeHtml(merchant.static_discount_code)}</div>
+        <p class="discover-code-offer">${escapeHtml(merchant.offer_headline || 'Nova accepted here')}</p>
+        ${merchant.offer_details ? `<p class="discover-code-details">${escapeHtml(merchant.offer_details)}</p>` : ''}
+      </div>
+      <div class="discover-code-actions">
+        <button class="discover-code-wallet-btn" data-action="wallet-pass">Show Wallet Pass</button>
+        <button class="discover-code-close-btn" data-action="close">Close</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  // Animate in
+  setTimeout(() => {
+    modal.classList.add('active');
+  }, 10);
+
+  // Wire handlers
+  const closeBtn = modal.querySelector('.discover-code-close');
+  const closeBtn2 = modal.querySelector('[data-action="close"]');
+  const walletBtn = modal.querySelector('[data-action="wallet-pass"]');
+  const backdrop = modal.querySelector('.discover-code-backdrop');
+
+  const closeModal = () => {
+    modal.classList.remove('active');
+    setTimeout(() => {
+      modal.remove();
+    }, 300);
+  };
+
+  if (closeBtn) closeBtn.addEventListener('click', closeModal);
+  if (closeBtn2) closeBtn2.addEventListener('click', closeModal);
+  if (backdrop) backdrop.addEventListener('click', closeModal);
+
+  if (walletBtn) {
+    walletBtn.addEventListener('click', () => {
+      closeModal();
+      // Navigate to wallet pass screen
+      window.dispatchEvent(new CustomEvent('nerava:navigate', { detail: { tab: 'wallet', page: 'pass' } }));
+    });
+  }
+}
+
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 

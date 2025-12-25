@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from app.db import get_db
+from app.models import User
+from app.dependencies.domain import require_admin
 from app.services.merchant_reports import (
     get_merchant_report,
     MerchantReport,
@@ -47,6 +49,7 @@ def get_merchant_report_endpoint(
     merchant_id: str,
     period: str = Query("week", description="Reporting period: 'week' or '30d'"),
     avg_ticket_cents: Optional[int] = Query(None, description="Average ticket size in cents (overrides default)"),
+    user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -59,7 +62,7 @@ def get_merchant_report_endpoint(
     - Total rewards in cents
     - Implied revenue (if avg_ticket_cents provided)
     
-    Auth: Currently open for pilot (TODO: add admin/auth guard)
+    P0-B Security: Requires admin role.
     """
     # Parse period
     try:

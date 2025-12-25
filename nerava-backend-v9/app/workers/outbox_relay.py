@@ -7,12 +7,31 @@ import logging
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from sqlalchemy import text
-from app.db import get_db
+from contextlib import contextmanager
+from app.db import SessionLocal
 from app.events.bus import event_bus
 from app.events.domain import DomainEvent, EVENT_TYPES
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def get_db_session():
+    """
+    Context manager for database sessions (P1-2: fix session leaks).
+    Ensures sessions are properly closed even on exceptions.
+    """
+    db = SessionLocal()
+    try:
+        yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
 
 class OutboxRelay:
     """Relay service for processing outbox events"""
@@ -82,27 +101,27 @@ class OutboxRelay:
             logger.error(f"Error processing outbox events: {e}")
     
     async def _get_unprocessed_events(self) -> List[Dict[str, Any]]:
-        """Get unprocessed events from the outbox"""
+        """Get unprocessed events from the outbox (P1-2: fixed session leak)"""
         try:
-            db = next(get_db())
-            result = db.execute(text("""
-                SELECT id, event_type, payload_json, created_at
-                FROM outbox_events
-                WHERE processed_at IS NULL
-                ORDER BY created_at ASC
-                LIMIT 100
-            """))
-            
-            events = []
-            for row in result:
-                events.append({
-                    "id": row.id,
-                    "event_type": row.event_type,
-                    "payload_json": row.payload_json,
-                    "created_at": row.created_at
-                })
-            
-            return events
+            with get_db_session() as db:
+                result = db.execute(text("""
+                    SELECT id, event_type, payload_json, created_at
+                    FROM outbox_events
+                    WHERE processed_at IS NULL
+                    ORDER BY created_at ASC
+                    LIMIT 100
+                """))
+                
+                events = []
+                for row in result:
+                    events.append({
+                        "id": row.id,
+                        "event_type": row.event_type,
+                        "payload_json": row.payload_json,
+                        "created_at": row.created_at
+                    })
+                
+                return events
             
         except Exception as e:
             logger.error(f"Error getting unprocessed events: {e}")
@@ -131,52 +150,50 @@ class OutboxRelay:
             raise
     
     async def _mark_event_processed(self, event_id: int):
-        """Mark an event as processed"""
+        """Mark an event as processed (P1-2: fixed session leak)"""
         try:
-            db = next(get_db())
-            db.execute(text("""
-                UPDATE outbox_events
-                SET processed_at = :processed_at
-                WHERE id = :event_id
-            """), {
-                "processed_at": datetime.utcnow(),
-                "event_id": event_id
-            })
-            db.commit()
+            with get_db_session() as db:
+                db.execute(text("""
+                    UPDATE outbox_events
+                    SET processed_at = :processed_at
+                    WHERE id = :event_id
+                """), {
+                    "processed_at": datetime.utcnow(),
+                    "event_id": event_id
+                })
             
         except Exception as e:
             logger.error(f"Error marking event as processed: {e}")
             raise
     
     async def get_outbox_stats(self) -> Dict[str, Any]:
-        """Get statistics about the outbox"""
+        """Get statistics about the outbox (P1-2: fixed session leak)"""
         try:
-            db = next(get_db())
-            
-            # Get total events
-            total_result = db.execute(text("SELECT COUNT(*) as count FROM outbox_events"))
-            total_events = total_result.scalar()
-            
-            # Get unprocessed events
-            unprocessed_result = db.execute(text("""
-                SELECT COUNT(*) as count FROM outbox_events WHERE processed_at IS NULL
-            """))
-            unprocessed_events = unprocessed_result.scalar()
-            
-            # Get events by type
-            type_result = db.execute(text("""
-                SELECT event_type, COUNT(*) as count
-                FROM outbox_events
-                GROUP BY event_type
-            """))
-            events_by_type = {row.event_type: row.count for row in type_result}
-            
-            return {
-                "total_events": total_events,
-                "unprocessed_events": unprocessed_events,
-                "processed_events": total_events - unprocessed_events,
-                "events_by_type": events_by_type
-            }
+            with get_db_session() as db:
+                # Get total events
+                total_result = db.execute(text("SELECT COUNT(*) as count FROM outbox_events"))
+                total_events = total_result.scalar()
+                
+                # Get unprocessed events
+                unprocessed_result = db.execute(text("""
+                    SELECT COUNT(*) as count FROM outbox_events WHERE processed_at IS NULL
+                """))
+                unprocessed_events = unprocessed_result.scalar()
+                
+                # Get events by type
+                type_result = db.execute(text("""
+                    SELECT event_type, COUNT(*) as count
+                    FROM outbox_events
+                    GROUP BY event_type
+                """))
+                events_by_type = {row.event_type: row.count for row in type_result}
+                
+                return {
+                    "total_events": total_events,
+                    "unprocessed_events": unprocessed_events,
+                    "processed_events": total_events - unprocessed_events,
+                    "events_by_type": events_by_type
+                }
             
         except Exception as e:
             logger.error(f"Error getting outbox stats: {e}")

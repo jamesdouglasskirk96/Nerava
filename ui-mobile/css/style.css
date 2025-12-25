@@ -2830,3 +2830,616 @@ body {
 .settings-btn:hover {
   background: #f1f5f9;
 }
+
+/* ===== Discover Page - Nova Merchants List ===== */
+
+.page-padded {
+  padding: 20px 16px;
+  overflow-y: auto;
+  height: calc(100vh - var(--tabbar-height, 76px));
+  background: #ffffff;
+}
+
+/* Discover Header */
+.discover-header {
+  margin-bottom: 24px;
+}
+
+.discover-title {
+  font-size: 32px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 8px 0;
+  letter-spacing: -0.02em;
+}
+
+.discover-subtitle {
+  font-size: 16px;
+  color: #6b7280;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Discover Loading */
+.discover-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.merchant-card-skeleton {
+  height: 120px;
+  background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+  background-size: 200% 100%;
+  border-radius: 12px;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Discover Merchants List */
+.discover-merchants-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Merchant Card (Discover style) */
+.merchant-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.merchant-card:hover {
+  border-color: #d1d5db;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.merchant-card-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.merchant-card-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.merchant-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.merchant-card-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.merchant-card-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #059669;
+  background: #d1fae5;
+  padding: 2px 8px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.merchant-card-category {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0 0 8px 0;
+}
+
+.merchant-card-offer {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 4px 0;
+}
+
+.merchant-card-distance {
+  font-size: 13px;
+  color: #9ca3af;
+  margin: 0;
+}
+
+.merchant-card-cta {
+  background: #111827;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s;
+}
+
+.merchant-card-cta:hover {
+  background: #374151;
+}
+
+.merchant-card-cta:active {
+  background: #1f2937;
+}
+
+/* Discover Empty State */
+.discover-empty-state {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.discover-empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.discover-empty-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 8px 0;
+}
+
+.discover-empty-body {
+  font-size: 16px;
+  color: #6b7280;
+  margin: 0 0 24px 0;
+  line-height: 1.5;
+}
+
+.discover-empty-link {
+  display: inline-block;
+  color: #3b82f6;
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 16px;
+}
+
+.discover-empty-link:hover {
+  text-decoration: underline;
+}
+
+/* Discover Code Modal */
+.discover-code-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: flex-end;
+  pointer-events: none;
+}
+
+.discover-code-modal.active {
+  pointer-events: auto;
+}
+
+.discover-code-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.discover-code-modal.active .discover-code-backdrop {
+  opacity: 1;
+}
+
+.discover-code-sheet {
+  background: #ffffff;
+  border-radius: 20px 20px 0 0;
+  padding: 24px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  transform: translateY(100%);
+  transition: transform 0.3s;
+  position: relative;
+  z-index: 1;
+}
+
+.discover-code-modal.active .discover-code-sheet {
+  transform: translateY(0);
+}
+
+.discover-code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.discover-code-header h3 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.discover-code-close {
+  background: none;
+  border: none;
+  font-size: 28px;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.discover-code-close:hover {
+  background: #f3f4f6;
+}
+
+.discover-code-content {
+  margin-bottom: 24px;
+}
+
+.discover-code-instructions {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0 0 16px 0;
+}
+
+.discover-code-display {
+  font-size: 32px;
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 4px;
+  color: #111827;
+  background: #f9fafb;
+  border: 2px dashed #d1d5db;
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.discover-code-offer {
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 8px 0;
+}
+
+.discover-code-details {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.discover-code-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.discover-code-wallet-btn {
+  background: #111827;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.discover-code-wallet-btn:hover {
+  background: #374151;
+}
+
+.discover-code-close-btn {
+  background: #f3f4f6;
+  color: #111827;
+  border: none;
+  border-radius: 8px;
+  padding: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.discover-code-close-btn:hover {
+  background: #e5e7eb;
+}
+
+/* Profile Page Styles */
+.profile-page {
+  padding: 16px;
+  padding-bottom: 100px;
+  background: #f9fafb;
+  min-height: calc(100vh - var(--tabbar-height, 76px));
+}
+
+.profile-section {
+  margin-bottom: 24px;
+}
+
+.profile-section-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 12px 0;
+  padding: 0 4px;
+}
+
+.profile-section-toggle {
+  background: none;
+  border: none;
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  width: 100%;
+  text-align: left;
+}
+
+.profile-toggle-icon {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.profile-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.profile-field {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.profile-field:last-child {
+  border-bottom: none;
+}
+
+.profile-label {
+  font-size: 14px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.profile-value {
+  font-size: 14px;
+  color: #111827;
+  font-weight: 500;
+  text-align: right;
+}
+
+.profile-status-pill {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.profile-status-pill.status-connected {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.profile-status-pill.status-warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.profile-status-pill.status-disconnected {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.profile-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.profile-btn {
+  background: #1e40af;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex: 1;
+  min-width: 120px;
+}
+
+.profile-btn:hover {
+  background: #1e3a8a;
+}
+
+.profile-btn:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+.profile-btn-secondary {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.profile-btn-secondary:hover {
+  background: #e5e7eb;
+}
+
+.profile-btn-danger {
+  background: #ef4444;
+  color: #fff;
+}
+
+.profile-btn-danger:hover {
+  background: #dc2626;
+}
+
+.profile-btn-full {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.profile-link {
+  display: block;
+  padding: 12px 0;
+  color: #1e40af;
+  text-decoration: none;
+  font-size: 14px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.profile-link:last-child {
+  border-bottom: none;
+}
+
+.profile-link:hover {
+  text-decoration: underline;
+}
+
+.profile-toggle-field {
+  padding: 12px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.profile-toggle-field:last-child {
+  border-bottom: none;
+}
+
+.profile-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.profile-toggle input[type="checkbox"] {
+  width: 44px;
+  height: 24px;
+  appearance: none;
+  background: #d1d5db;
+  border-radius: 12px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.profile-toggle input[type="checkbox"]:checked {
+  background: #1e40af;
+}
+
+.profile-toggle input[type="checkbox"]::before {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.2s;
+}
+
+.profile-toggle input[type="checkbox"]:checked::before {
+  transform: translateX(20px);
+}
+
+.profile-toggle-label {
+  font-size: 14px;
+  color: #111827;
+  font-weight: 500;
+  margin-left: 12px;
+}
+
+.profile-loading {
+  padding: 20px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.profile-error {
+  padding: 20px;
+  text-align: center;
+}
+
+.profile-error-message {
+  color: #dc2626;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.profile-retry-btn {
+  background: #1e40af;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.profile-retry-btn:hover {
+  background: #1e3a8a;
+}
+
+.profile-warning {
+  padding: 12px;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  color: #92400e;
+  font-size: 13px;
+  margin-top: 12px;
+}

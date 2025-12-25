@@ -25,6 +25,13 @@ dist/
 *.db-shm
 *.db-wal
 
+# Environment files and secrets
+.env
+.env.*
+*.pem
+*.p12
+*.key
+
 # OS / IDE
 .DS_Store
 .idea/

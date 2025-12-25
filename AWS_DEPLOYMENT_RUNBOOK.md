@@ -66,6 +66,62 @@ postgresql+psycopg2://nerava_admin:PASSWORD@ENDPOINT:5432/nerava
 
 ### 2. Configure App Runner Environment Variables
 
+#### Apple Wallet Configuration
+
+To enable Apple Wallet pass signing:
+
+```bash
+APPLE_WALLET_SIGNING_ENABLED=true
+APPLE_WALLET_PASS_TYPE_ID=pass.com.nerava.wallet
+APPLE_WALLET_TEAM_ID=YOUR_APPLE_TEAM_ID
+APPLE_WALLET_CERT_P12_PATH=/path/to/cert.p12
+APPLE_WALLET_CERT_P12_PASSWORD=optional_password
+APPLE_WALLET_APNS_KEY_ID=YOUR_APNS_KEY_ID
+APPLE_WALLET_APNS_TEAM_ID=YOUR_APNS_TEAM_ID
+APPLE_WALLET_APNS_AUTH_KEY_PATH=/path/to/auth_key.p8
+```
+
+**Note**: If `APPLE_WALLET_SIGNING_ENABLED=true`, all required certificate variables must be set or the application will fail to start.
+
+#### Google SSO Configuration
+
+To enable Google Sign-In:
+
+```bash
+GOOGLE_CLIENT_ID=YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com
+```
+
+The Google Client ID is exposed via the `/v1/public/config` endpoint for frontend consumption.
+
+#### HubSpot Integration Configuration
+
+HubSpot integration is disabled by default (log-only mode):
+
+```bash
+HUBSPOT_ENABLED=false
+HUBSPOT_SEND_LIVE=false
+HUBSPOT_PRIVATE_APP_TOKEN=
+HUBSPOT_PORTAL_ID=
+```
+
+To enable HubSpot logging (still log-only, no live HTTP calls):
+
+```bash
+HUBSPOT_ENABLED=true
+HUBSPOT_SEND_LIVE=false  # Keep false for log-only mode
+```
+
+To enable live HubSpot API calls (use with caution):
+
+```bash
+HUBSPOT_ENABLED=true
+HUBSPOT_SEND_LIVE=true
+HUBSPOT_PRIVATE_APP_TOKEN=YOUR_HUBSPOT_PRIVATE_APP_TOKEN
+HUBSPOT_PORTAL_ID=YOUR_HUBSPOT_PORTAL_ID
+```
+
+**Note**: If `HUBSPOT_SEND_LIVE=true`, both `HUBSPOT_PRIVATE_APP_TOKEN` and `HUBSPOT_PORTAL_ID` must be set or the application will fail to start.
+
 Update App Runner service with required environment variables:
 
 ```bash

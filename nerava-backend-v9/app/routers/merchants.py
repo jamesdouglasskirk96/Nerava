@@ -29,6 +29,7 @@ from ..services.merchant_reporting import get_merchant_summary, get_shareable_st
 from ..services.merchant_analytics import merchant_billing_summary
 from ..dependencies_domain import require_merchant_admin, get_current_user
 from ..routers.drivers_domain import haversine_distance
+from ..services.verify_dwell import haversine_m
 
 router = APIRouter(prefix="/v1/merchants", tags=["merchants"])
 
@@ -637,3 +638,233 @@ def get_merchant_shareables(
     return {
         "lines": lines
     }
+
+
+# Nova merchants endpoint for Discover page
+class NovaMerchantResponse(BaseModel):
+    id: str
+    name: str
+    category: str
+    address: str
+    lat: float
+    lng: float
+    accepts_nova: bool
+    offer_headline: str
+    offer_details: Optional[str] = None
+    nova_redemption_method: str  # "CODE" for now
+    static_discount_code: Optional[str] = None
+    distance_m: Optional[int] = None
+    is_featured: bool = False
+
+
+@router.get("/nova/nearby", response_model=List[NovaMerchantResponse])
+async def get_nova_merchants_nearby(
+    lat: Optional[float] = Query(None, description="Latitude"),
+    lng: Optional[float] = Query(None, description="Longitude"),
+    radius_m: float = Query(2000, description="Radius in meters"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get nearby merchants that accept Nova, sorted by distance.
+    
+    Returns only merchants that accept Nova (have active perks or DomainMerchant with nova_balance > 0).
+    If location is not provided, returns featured merchants only (no distance).
+    """
+    from datetime import datetime
+    from ..models.while_you_charge import Merchant, MerchantPerk, MerchantOfferCode
+    
+    results = []
+    
+    # For domain_austin zone, use while_you_charge merchants
+    # For other zones, use DomainMerchant
+    zone_slug = "domain_austin"  # Default for Austin pilot
+    
+    if zone_slug == "domain_austin":
+        # Use while_you_charge service to get merchants
+        from ..services.while_you_charge import get_domain_hub_view_async, build_recommended_merchants_from_chargers
+        from ..utils.pwa_responses import shape_merchant
+        
+        try:
+            hub_view = await get_domain_hub_view_async(db)
+            
+            # Get shaped chargers with merchants
+            shaped_chargers = []
+            for charger in hub_view.get("chargers", []):
+                shaped = {
+                    "id": charger.get("id"),
+                    "name": charger.get("name"),
+                    "lat": charger.get("lat"),
+                    "lng": charger.get("lng"),
+                }
+                if "merchants" in charger:
+                    shaped_merchants = []
+                    for merchant in charger["merchants"]:
+                        if "walk_minutes" in merchant and "walk_time_s" not in merchant:
+                            merchant["walk_time_s"] = merchant["walk_minutes"] * 60
+                        shaped_m = shape_merchant(
+                            merchant,
+                            user_lat=lat or 0,
+                            user_lng=lng or 0
+                        )
+                        if "walk_time_s" in shaped_m:
+                            shaped_m["walk_time_seconds"] = shaped_m["walk_time_s"]
+                        if "id" in shaped_m and "merchant_id" not in shaped_m:
+                            shaped_m["merchant_id"] = shaped_m["id"]
+                        shaped_merchants.append(shaped_m)
+                    shaped["merchants"] = shaped_merchants
+                shaped_chargers.append(shaped)
+            
+            # Build recommended merchants
+            recommended_merchants = build_recommended_merchants_from_chargers(shaped_chargers, limit=50)
+            
+            # Get merchant IDs
+            merchant_ids = [m.get("id") or m.get("merchant_id") for m in recommended_merchants if m.get("id") or m.get("merchant_id")]
+            
+            # Get MerchantPerk to determine nova_accepted and get offer info
+            perks = db.query(MerchantPerk).filter(
+                MerchantPerk.merchant_id.in_(merchant_ids),
+                MerchantPerk.is_active == True
+            ).all()
+            
+            # Build perk map: merchant_id -> (has_perk, nova_reward, title, description)
+            perk_map = {}
+            for perk in perks:
+                merchant_id = perk.merchant_id
+                if merchant_id not in perk_map or perk.nova_reward > perk_map[merchant_id][1]:
+                    perk_map[merchant_id] = (True, perk.nova_reward, perk.title, perk.description)
+            
+            # Get MerchantOfferCode for static discount codes
+            offer_codes = db.query(MerchantOfferCode).filter(
+                MerchantOfferCode.merchant_id.in_(merchant_ids),
+                MerchantOfferCode.is_redeemed == False
+            ).all()
+            
+            # Filter to valid codes (not expired)
+            valid_codes = {}
+            now = datetime.utcnow()
+            for code in offer_codes:
+                if code.expires_at is None or code.expires_at > now:
+                    if code.merchant_id not in valid_codes:
+                        valid_codes[code.merchant_id] = code.code
+            
+            # Process merchants
+            for merchant in recommended_merchants:
+                merchant_id = merchant.get("id") or merchant.get("merchant_id")
+                if not merchant_id:
+                    continue
+                
+                # Check if merchant accepts Nova
+                has_perk, nova_reward, perk_title, perk_description = perk_map.get(merchant_id, (False, 0, None, None))
+                if not has_perk or nova_reward <= 0:
+                    continue  # Filter out non-Nova merchants
+                
+                # Calculate distance if location provided
+                distance_m = None
+                if lat is not None and lng is not None:
+                    merchant_lat = merchant.get("lat")
+                    merchant_lng = merchant.get("lng")
+                    if merchant_lat and merchant_lng:
+                        distance = haversine_m(lat, lng, merchant_lat, merchant_lng)
+                        if distance > radius_m:
+                            continue  # Outside radius
+                        distance_m = int(round(distance))
+                
+                # Build address
+                address = merchant.get("address") or ""
+                if not address:
+                    parts = []
+                    if merchant.get("addr_line1"):
+                        parts.append(merchant.get("addr_line1"))
+                    if merchant.get("city"):
+                        parts.append(merchant.get("city"))
+                    if merchant.get("state"):
+                        parts.append(merchant.get("state"))
+                    address = ", ".join(parts) if parts else "Address not available"
+                
+                # Get offer headline
+                offer_headline = perk_title or merchant.get("perk_label") or "Nova accepted here"
+                
+                # Get offer details
+                offer_details = perk_description
+                
+                # Get static discount code
+                static_code = valid_codes.get(merchant_id)
+                
+                # Determine if featured (for now, mark first few as featured)
+                is_featured = merchant.get("is_featured", False) or (distance_m is None)  # Featured if no distance
+                
+                results.append({
+                    "id": merchant_id,
+                    "name": merchant.get("name") or "Merchant",
+                    "category": merchant.get("category") or merchant.get("primary_category") or "Other",
+                    "address": address,
+                    "lat": merchant.get("lat") or 0.0,
+                    "lng": merchant.get("lng") or 0.0,
+                    "accepts_nova": True,
+                    "offer_headline": offer_headline,
+                    "offer_details": offer_details,
+                    "nova_redemption_method": "CODE",
+                    "static_discount_code": static_code,
+                    "distance_m": distance_m,
+                    "is_featured": is_featured
+                })
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error fetching Nova merchants from while_you_charge: {e}")
+            # Fall through to DomainMerchant fallback
+    
+    # Fallback to DomainMerchant for other zones or if while_you_charge fails
+    if not results:
+        domain_merchants = db.query(DomainMerchant).filter(
+            DomainMerchant.zone_slug == zone_slug,
+            DomainMerchant.status == "active",
+            DomainMerchant.nova_balance > 0  # Only merchants with Nova balance
+        ).all()
+        
+        for merchant in domain_merchants:
+            # Calculate distance if location provided
+            distance_m = None
+            if lat is not None and lng is not None:
+                distance = haversine_distance(lat, lng, merchant.lat, merchant.lng)
+                if distance > radius_m:
+                    continue
+                distance_m = int(round(distance))
+            
+            # Build address
+            address = merchant.addr_line1 or ""
+            if merchant.city:
+                address = f"{address}, {merchant.city}, {merchant.state}" if address else f"{merchant.city}, {merchant.state}"
+            
+            # Get offer headline from perk_label
+            offer_headline = merchant.perk_label or "Nova accepted here"
+            
+            # Get static discount code if available
+            static_code = None
+            if merchant.qr_token:
+                # For DomainMerchant, we might not have MerchantOfferCode, so skip for now
+                pass
+            
+            results.append({
+                "id": merchant.id,
+                "name": merchant.name,
+                "category": "Other",  # DomainMerchant doesn't have category
+                "address": address or "Address not available",
+                "lat": merchant.lat,
+                "lng": merchant.lng,
+                "accepts_nova": True,
+                "offer_headline": offer_headline,
+                "offer_details": None,
+                "nova_redemption_method": "CODE",
+                "static_discount_code": static_code,
+                "distance_m": distance_m,
+                "is_featured": distance_m is None  # Featured if no distance
+            })
+    
+    # Sort: featured first (if within radius), then by distance ascending
+    results.sort(key=lambda m: (
+        0 if m["is_featured"] and (m["distance_m"] is None or m["distance_m"] <= radius_m) else 1,
+        m["distance_m"] if m["distance_m"] is not None else float('inf')
+    ))
+    
+    return results

@@ -68,3 +68,4 @@ def verify_google_id_token(id_token: str) -> Dict[str, Any]:
             detail=f"Google token verification failed: {str(e)}"
         )
 
+

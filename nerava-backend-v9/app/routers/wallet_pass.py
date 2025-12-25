@@ -195,6 +195,21 @@ def create_google_wallet_pass(
         logger.warning(f"Failed to generate Google Wallet Add-to-Wallet link: {e}", exc_info=True)
         # Continue without link - object creation succeeded
 
+    # P3: HubSpot tracking (dry run)
+    try:
+        from app.services.hubspot import track_event
+        from app.events.hubspot_adapter import adapt_wallet_pass_install_event
+        hubspot_payload = adapt_wallet_pass_install_event({
+            "user_id": str(user.id),
+            "pass_type": "google",
+            "installed_at": datetime.utcnow().isoformat()
+        })
+        track_event(db, "wallet_pass_install", hubspot_payload)
+        db.commit()
+    except Exception as e:
+        # Don't fail pass creation if HubSpot tracking fails
+        logger.warning(f"HubSpot tracking failed: {e}")
+
     return GoogleWalletLinkResponse(
         object_id=link.object_id,
         state=link.state,
@@ -508,6 +523,21 @@ def create_apple_pass(
             wallet.wallet_pass_last_generated_at = datetime.utcnow()
             db.commit()
         
+        # P3: HubSpot tracking (dry run)
+        try:
+            from app.services.hubspot import track_event
+            from app.events.hubspot_adapter import adapt_wallet_pass_install_event
+            hubspot_payload = adapt_wallet_pass_install_event({
+                "user_id": str(user.id),
+                "pass_type": "apple",
+                "installed_at": datetime.utcnow().isoformat()
+            })
+            track_event(db, "wallet_pass_install", hubspot_payload)
+            db.commit()
+        except Exception as e:
+            # Don't fail pass creation if HubSpot tracking fails
+            logger.warning(f"HubSpot tracking failed: {e}")
+        
         # Return .pkpass file
         return Response(
             content=bundle_bytes,
@@ -618,6 +648,166 @@ def refresh_apple_pass(
             detail={
                 "error": "PASS_GENERATION_FAILED",
                 "message": "Failed to refresh Apple Wallet pass"
+            }
+        )
+
+
+class ReinstallRequest(BaseModel):
+    platform: str  # "apple" or "google"
+
+
+@router.post("/pass/reinstall")
+async def reinstall_wallet_pass(
+    request: ReinstallRequest,
+    user: User = Depends(get_current_driver),
+    db: Session = Depends(get_db),
+):
+    """
+    Reinstall wallet pass for Apple or Google Wallet.
+    
+    This endpoint triggers regeneration of the pass and returns the install URL or file.
+    For Apple: returns the same flow as /pass/apple/create (downloads .pkpass)
+    For Google: returns add_link from /pass/google/create
+    """
+    # Check eligibility (vehicle connected)
+    vehicle_account = db.query(VehicleAccount).filter(
+        VehicleAccount.user_id == user.id,
+        VehicleAccount.is_active == True
+    ).first()
+    
+    if not vehicle_account:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "WALLET_PASS_INELIGIBLE",
+                "message": "Connect your EV first"
+            }
+        )
+    
+    platform = request.platform.lower()
+    
+    if platform == "apple":
+        # Reuse the create endpoint logic
+        # Check signing configuration
+        is_valid, error_code, missing_keys = _validate_apple_wallet_config()
+        
+        if not is_valid:
+            error_message = "Apple Wallet pass signing is not enabled on this environment."
+            if missing_keys:
+                error_message = f"Missing required configuration: {', '.join(missing_keys)}"
+            
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail={
+                    "error": error_code,
+                    "message": error_message
+                }
+            )
+        
+        # Generate pass bundle
+        try:
+            bundle_bytes, is_signed = create_pkpass_bundle(db, user.id)
+            
+            if not is_signed:
+                raise HTTPException(
+                    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                    detail={
+                        "error": "APPLE_WALLET_SIGNING_DISABLED",
+                        "message": "Apple Wallet pass signing failed."
+                    }
+                )
+            
+            # Update wallet_pass_last_generated_at
+            wallet = db.query(DriverWallet).filter(DriverWallet.user_id == user.id).first()
+            if wallet:
+                wallet.wallet_pass_last_generated_at = datetime.utcnow()
+                db.commit()
+            
+            # Return .pkpass file
+            return Response(
+                content=bundle_bytes,
+                media_type="application/vnd.apple.pkpass",
+                headers={
+                    "Content-Disposition": 'attachment; filename="nerava-wallet.pkpass"'
+                }
+            )
+            
+        except ValueError as e:
+            error_msg = str(e)
+            if "Missing required pass assets" in error_msg:
+                raise HTTPException(
+                    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                    detail={
+                        "error": "APPLE_WALLET_ASSETS_MISSING",
+                        "message": error_msg
+                    }
+                )
+            raise
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to reinstall Apple Wallet pass: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    "error": "PASS_GENERATION_FAILED",
+                    "message": "Failed to reinstall Apple Wallet pass"
+                }
+            )
+    
+    elif platform == "google":
+        # Reuse the create endpoint logic
+        wallet = db.query(DriverWallet).filter(DriverWallet.user_id == user.id).first()
+        if not wallet:
+            wallet = DriverWallet(
+                user_id=user.id,
+                nova_balance=0,
+                energy_reputation_score=0,
+            )
+            db.add(wallet)
+            db.flush()
+
+        token = _ensure_wallet_pass_token(db, user.id)
+
+        try:
+            link = create_or_get_google_wallet_object(db, wallet, token)
+        except GoogleWalletNotConfigured:
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail={
+                    "error": "GOOGLE_WALLET_DISABLED",
+                    "message": "Google Wallet is not configured for this environment.",
+                },
+            )
+        except Exception as e:
+            logger.error(f"Failed to reinstall Google Wallet object: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    "error": "GOOGLE_WALLET_CREATION_FAILED",
+                    "message": "Failed to reinstall Google Wallet pass",
+                },
+            )
+
+        # Generate Add-to-Wallet link
+        add_link = None
+        try:
+            add_link = generate_google_wallet_add_link(link.object_id)
+        except Exception as e:
+            logger.warning(f"Failed to generate Google Wallet Add-to-Wallet link: {e}", exc_info=True)
+
+        return GoogleWalletLinkResponse(
+            object_id=link.object_id,
+            state=link.state,
+            add_to_google_wallet_url=add_link,
+        )
+    
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "INVALID_PLATFORM",
+                "message": f"Platform must be 'apple' or 'google', got '{platform}'"
             }
         )
 
@@ -809,6 +999,8 @@ async def register_apple_pass_device(
 
     now = datetime.utcnow()
     import uuid
+    
+    is_new_registration = False
 
     if registration:
         registration.push_token = push_token or registration.push_token
@@ -826,9 +1018,24 @@ async def register_apple_pass_device(
             last_seen_at=now,
             is_active=True,
         )
+        is_new_registration = True
         db.add(registration)
 
     db.commit()
+    
+    # Emit wallet_pass_installed event for new registrations (non-blocking)
+    if is_new_registration:
+        try:
+            from app.events.domain import WalletPassInstalledEvent
+            from app.events.outbox import store_outbox_event
+            event = WalletPassInstalledEvent(
+                user_id=str(wallet.user_id),
+                pass_type="apple",
+                installed_at=datetime.utcnow()
+            )
+            store_outbox_event(db, event)
+        except Exception as e:
+            logger.warning(f"Failed to emit wallet_pass_installed event: {e}")
 
     # Per Apple PassKit spec: POST registration returns HTTP 201 with empty body
     return Response(status_code=status.HTTP_201_CREATED)

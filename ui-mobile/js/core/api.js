@@ -1,3 +1,5 @@
+// P1-1: Logger is imported dynamically in functions to avoid circular dependencies
+
 // Determine API base URL based on environment
 function getApiBase() {
   const origin = window.location.origin;
@@ -54,7 +56,34 @@ function getApiBase() {
     // import.meta not available
   }
   
-  // PRIORITY 5: Production environment - use Railway backend
+  // PRIORITY 5: CloudFront domain - route to App Runner backend
+  // CloudFront domains typically end with .cloudfront.net or custom domain
+  const isCloudFront = hostname.includes('cloudfront.net') || 
+                       hostname.includes('amazonaws.com') ||
+                       (window.location.protocol === 'https:' && !isLocalhost);
+  
+  if (isCloudFront && !isLocalhost) {
+    // Check for App Runner URL in config or environment
+    // Priority: window.NERAVA_API_BASE > environment variable > default App Runner pattern
+    if (window.NERAVA_API_BASE) {
+      console.log('[API] Using App Runner backend from window.NERAVA_API_BASE:', window.NERAVA_API_BASE);
+      return window.NERAVA_API_BASE;
+    }
+    
+    // Try to detect App Runner URL from meta tag or config
+    const apiBaseMeta = document.querySelector('meta[name="nerava-api-base"]');
+    if (apiBaseMeta && apiBaseMeta.content) {
+      console.log('[API] Using App Runner backend from meta tag:', apiBaseMeta.content);
+      return apiBaseMeta.content;
+    }
+    
+    // Default: if we're on CloudFront, we need to set the App Runner URL
+    // This should be set via config.js or meta tag in production
+    console.warn('[API] CloudFront detected but no App Runner URL configured. Using same origin (may cause CORS issues).');
+    console.warn('[API] Set window.NERAVA_API_BASE or add <meta name="nerava-api-base" content="https://your-app-runner-url">');
+  }
+  
+  // PRIORITY 6: Other production environments (Vercel, Railway, etc.)
   const protocol = window.location.protocol;
   const isVercel = hostname.includes('vercel.app');
   const isNeravaNetwork = hostname.includes('nerava.network');
@@ -82,6 +111,9 @@ let isRefreshing = false;
 let refreshPromise = null;
 
 async function _req(path, opts = {}, retryOn401 = true) {
+  // P0-7: Add request timeout (default 10 seconds)
+  const timeoutMs = opts.timeoutMs || 10000;
+  
   const headers = { 
     Accept: 'application/json',
     'Content-Type': 'application/json',
@@ -91,15 +123,17 @@ async function _req(path, opts = {}, retryOn401 = true) {
   // Add Authorization header if access token exists
   const { getAccessToken } = await import('./auth.js');
   const accessToken = getAccessToken();
+  // P1-1: Use logger instead of console.log (sanitizes sensitive data)
+  const logger = await import('./logger.js');
   if (accessToken) {
     headers['Authorization'] = `Bearer ${accessToken}`;
-    console.log('[API] Request headers: Authorization header added (token present)');
+    logger.log('[API] Request headers: Authorization header added (token present)');
   } else {
-    console.log('[API] Request headers: No auth token available');
+    logger.log('[API] Request headers: No auth token available');
   }
   
   const url = BASE + path;
-  console.log('[API] Making request to:', url, { method: opts.method || 'GET', headers });
+  logger.log('[API] Making request to:', url, { method: opts.method || 'GET', headers });
   
   // Add cache control for GET requests to prevent stale data
   const fetchOpts = {
@@ -113,19 +147,37 @@ async function _req(path, opts = {}, retryOn401 = true) {
     fetchOpts.cache = 'no-store';
   }
   
-  const r = await fetch(url, fetchOpts);
+  // P0-7: Wrap fetch with AbortController for timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   
-  console.log('[API] Response status:', r.status, r.statusText);
+  let r;
+  try {
+    r = await fetch(url, { ...fetchOpts, signal: controller.signal });
+    clearTimeout(timeoutId);
+  } catch (e) {
+    clearTimeout(timeoutId);
+    if (e.name === 'AbortError') {
+      throw new Error(`Request timeout after ${timeoutMs}ms: ${path}`);
+    }
+    throw e;
+  }
+  
+  // P1-1: Use logger (already imported above)
+  logger.log('[API] Response status:', r.status, r.statusText);
   
   // Capture X-Request-ID from response
   const requestId = r.headers.get('X-Request-ID');
   if (requestId) {
-    console.log(`[API] Request ID: ${requestId}`);
+    logger.log(`[API] Request ID: ${requestId}`);
   }
   
   // Handle 404 gracefully - return null for missing resources
   if (r.status === 404) {
-    console.warn(`[API] 404 for ${path} - resource not found`);
+    // Only log warning if not silenced (e.g., for telemetry which is best-effort)
+    if (!opts.silent404) {
+      logger.warn(`[API] 404 for ${path} - resource not found`);
+    }
     return null;
   }
   
@@ -163,13 +215,26 @@ async function _req(path, opts = {}, retryOn401 = true) {
     const newToken = await refreshPromise;
     
     if (newToken) {
-      // Retry original request with new token
+      // Retry original request with new token (with timeout)
       headers['Authorization'] = `Bearer ${newToken}`;
-      const retryResponse = await fetch(BASE + path, {
-        headers,
-        credentials: 'include',
-        ...opts,
-      });
+      const retryController = new AbortController();
+      const retryTimeoutId = setTimeout(() => retryController.abort(), timeoutMs);
+      let retryResponse;
+      try {
+        retryResponse = await fetch(BASE + path, {
+          headers,
+          credentials: 'include',
+          ...opts,
+          signal: retryController.signal,
+        });
+        clearTimeout(retryTimeoutId);
+      } catch (e) {
+        clearTimeout(retryTimeoutId);
+        if (e.name === 'AbortError') {
+          throw new Error(`Request timeout after ${timeoutMs}ms: ${path}`);
+        }
+        throw e;
+      }
       
       if (retryResponse.status === 404) {
         return null;
@@ -351,19 +416,19 @@ async function _flushTelemetryQueue() {
   // Send each event (best-effort)
   for (const event of batch) {
     try {
-      await _req('/v1/telemetry/events', {
+      const result = await _req('/v1/telemetry/events', {
         method: 'POST',
         body: JSON.stringify(event),
+        silent404: true, // Don't log 404 warnings for telemetry
       }, false); // Don't retry on 401
-    } catch (e) {
-      // If 404, disable telemetry to stop spamming
-      if (e.message && e.message.includes('404')) {
-        console.warn('[Telemetry] Endpoint not available (404), disabling telemetry');
+
+      // If null returned, endpoint doesn't exist - disable telemetry silently
+      if (result === null) {
         _telemetryEnabled = false;
         return;
       }
-      // Swallow other errors - telemetry is best-effort
-      console.debug('[Telemetry] Failed to send event:', e.message);
+    } catch (e) {
+      // Swallow errors - telemetry is best-effort
     }
   }
 }
@@ -811,6 +876,66 @@ export async function apiNearbyMerchants({
 }
 
 /**
+ * Get nearby Nova-accepting merchants for Discover page
+ */
+export async function apiNovaMerchantsNearby({ lat, lng, radiusM = 2000 }) {
+  try {
+    const params = new URLSearchParams({
+      radius_m: String(radiusM),
+    });
+    
+    if (lat !== null && lat !== undefined) {
+      params.append('lat', String(lat));
+    }
+    if (lng !== null && lng !== undefined) {
+      params.append('lng', String(lng));
+    }
+
+    const url = `/v1/merchants/nova/nearby?${params.toString()}`;
+    console.log('[API] Fetching Nova merchants:', url);
+
+    const res = await _req(url);
+    console.log('[API] Nova merchants response:', res?.length || 0, 'merchants');
+    return res || [];
+  } catch (e) {
+    console.error('[API] Failed to get Nova merchants:', e.message);
+    return []; // Return empty array on error
+  }
+}
+
+/**
+ * Track analytics event
+ */
+export async function trackEvent(event, meta = {}) {
+  try {
+    const BASE = getApiBase();
+    const res = await fetch(`${BASE}/v1/telemetry/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        event,
+        ts: Date.now(),
+        page: window.location.pathname,
+        meta
+      })
+    });
+    
+    if (!res.ok) {
+      console.warn('[Analytics] Failed to track event:', event, res.status);
+      return;
+    }
+    
+    const data = await res.json();
+    console.log('[Analytics] Tracked event:', event, data);
+    return data;
+  } catch (e) {
+    // Silently fail analytics - don't break the app
+    console.warn('[Analytics] Error tracking event:', event, e.message);
+  }
+}
+
+/**
  * Get driver wallet
  */
 export async function apiDriverWallet() {
@@ -974,6 +1099,139 @@ export async function apiCancelSession(sessionId) {
 }
 
 // ============================================
+// EV Status & Management
+// ============================================
+
+/**
+ * Get vehicle connection status
+ */
+export async function apiEvStatus() {
+  try {
+    const res = await _req('/v1/ev/status');
+    return res;
+  } catch (e) {
+    console.error('[API][EV] Failed to get EV status:', e.message);
+    throw e;
+  }
+}
+
+/**
+ * Disconnect vehicle
+ */
+export async function apiEvDisconnect() {
+  try {
+    const res = await _req('/v1/ev/disconnect', {
+      method: 'POST',
+    });
+    return res;
+  } catch (e) {
+    console.error('[API][EV] Failed to disconnect vehicle:', e.message);
+    throw e;
+  }
+}
+
+// ============================================
+// Wallet Pass Management
+// ============================================
+
+/**
+ * Get wallet pass status
+ */
+export async function apiWalletPassStatus() {
+  try {
+    const res = await _req('/v1/wallet/pass/status');
+    return res;
+  } catch (e) {
+    console.error('[API][Wallet] Failed to get wallet pass status:', e.message);
+    throw e;
+  }
+}
+
+/**
+ * Reinstall wallet pass (Apple or Google)
+ */
+export async function apiWalletPassReinstall(platform) {
+  try {
+    const res = await _req('/v1/wallet/pass/reinstall', {
+      method: 'POST',
+      body: JSON.stringify({ platform }),
+    });
+    return res;
+  } catch (e) {
+    console.error('[API][Wallet] Failed to reinstall wallet pass:', e.message);
+    throw e;
+  }
+}
+
+// ============================================
+// Notification Preferences
+// ============================================
+
+/**
+ * Get notification preferences
+ */
+export async function apiNotifPrefsGet() {
+  try {
+    const res = await _req('/v1/notifications/prefs');
+    return res;
+  } catch (e) {
+    console.error('[API][Notifications] Failed to get preferences:', e.message);
+    throw e;
+  }
+}
+
+/**
+ * Update notification preferences
+ */
+export async function apiNotifPrefsPut(prefs) {
+  try {
+    const res = await _req('/v1/notifications/prefs', {
+      method: 'PUT',
+      body: JSON.stringify(prefs),
+    });
+    return res;
+  } catch (e) {
+    console.error('[API][Notifications] Failed to update preferences:', e.message);
+    throw e;
+  }
+}
+
+// ============================================
+// Account Management
+// ============================================
+
+/**
+ * Request account data export
+ */
+export async function apiAccountExport() {
+  try {
+    const res = await _req('/v1/account/export', {
+      method: 'POST',
+    });
+    return res;
+  } catch (e) {
+    console.error('[API][Account] Failed to request export:', e.message);
+    throw e;
+  }
+}
+
+/**
+ * Delete account (requires confirmation)
+ */
+export async function apiAccountDelete() {
+  try {
+    const res = await _req('/v1/account', {
+      method: 'DELETE',
+      body: JSON.stringify({ confirmation: 'DELETE' }),
+    });
+    return res;
+  } catch (e) {
+    console.error('[API][Account] Failed to delete account:', e.message);
+    throw e;
+  }
+}
+
+// ============================================
 // Legacy Pilot Endpoints (DEPRECATED - will be removed)
 // ============================================
 
@@ -988,6 +1246,8 @@ if (typeof window !== 'undefined') {
   window.NeravaAPI.getCurrentUser = getCurrentUser;
   window.NeravaAPI.apiJoinChargeEvent = apiJoinChargeEvent;
   window.NeravaAPI.apiNearbyMerchants = apiNearbyMerchants;
+  window.NeravaAPI.apiNovaMerchantsNearby = apiNovaMerchantsNearby;
+  window.NeravaAPI.trackEvent = trackEvent;
   window.NeravaAPI.apiDriverWallet = apiDriverWallet;
   window.NeravaAPI.apiWalletSummary = apiWalletSummary;
   window.NeravaAPI.apiDriverActivity = apiDriverActivity;
@@ -996,6 +1256,14 @@ if (typeof window !== 'undefined') {
   window.NeravaAPI.apiRedeemNova = apiRedeemNova;
   window.NeravaAPI.apiGetSmartcarConnectUrl = apiGetSmartcarConnectUrl;
   window.NeravaAPI.apiGetVehicleTelemetry = apiGetVehicleTelemetry;
+  window.NeravaAPI.apiEvStatus = apiEvStatus;
+  window.NeravaAPI.apiEvDisconnect = apiEvDisconnect;
+  window.NeravaAPI.apiWalletPassStatus = apiWalletPassStatus;
+  window.NeravaAPI.apiWalletPassReinstall = apiWalletPassReinstall;
+  window.NeravaAPI.apiNotifPrefsGet = apiNotifPrefsGet;
+  window.NeravaAPI.apiNotifPrefsPut = apiNotifPrefsPut;
+  window.NeravaAPI.apiAccountExport = apiAccountExport;
+  window.NeravaAPI.apiAccountDelete = apiAccountDelete;
   
   // Legacy pilot endpoints (deprecated)
   window.NeravaAPI.fetchPilotBootstrap = fetchPilotBootstrap;
@@ -1014,12 +1282,30 @@ const Api = {
   // Drivers
   apiJoinChargeEvent,
   apiNearbyMerchants,
+  apiNovaMerchantsNearby,
+  trackEvent,
   apiDriverWallet,
   apiWalletSummary,
   apiDriverActivity,
   apiSessionPing,
   apiCancelSession,
   apiRedeemNova,
+  
+  // EV Management
+  apiEvStatus,
+  apiEvDisconnect,
+  
+  // Wallet Pass
+  apiWalletPassStatus,
+  apiWalletPassReinstall,
+  
+  // Notifications
+  apiNotifPrefsGet,
+  apiNotifPrefsPut,
+  
+  // Account Management
+  apiAccountExport,
+  apiAccountDelete,
   
   // Utils
   apiGet,

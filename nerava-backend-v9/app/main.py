@@ -149,7 +149,9 @@ from .routers import (
     nova_domain,
     ev_smartcar,
     virtual_cards,
-    client_telemetry
+    client_telemetry,
+    notifications,
+    account,
 )
 
 # These are now the canonical /v1/* endpoints (no /domain/ prefix)
@@ -162,5 +164,7 @@ app.include_router(nova_domain.router)  # /v1/nova/*
 app.include_router(ev_smartcar.router)  # /v1/ev/* and /oauth/smartcar/callback
 app.include_router(virtual_cards.router)  # /v1/virtual_cards/*
 app.include_router(client_telemetry.router)  # /v1/telemetry/*
+app.include_router(notifications.router)  # /v1/notifications/*
+app.include_router(account.router)  # /v1/account/*
 
 # Lifespan events are now handled in lifespan.py

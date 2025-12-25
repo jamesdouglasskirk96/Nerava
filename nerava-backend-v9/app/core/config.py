@@ -69,6 +69,22 @@ class Settings(BaseModel):
     ENV: str = os.getenv("ENV", "dev")  # dev, staging, prod
     DEBUG_RETURN_MAGIC_LINK: bool = os.getenv("DEBUG_RETURN_MAGIC_LINK", "false").lower() == "true"
     
+    # Apple Wallet Configuration
+    APPLE_WALLET_SIGNING_ENABLED: bool = os.getenv("APPLE_WALLET_SIGNING_ENABLED", "false").lower() == "true"
+    APPLE_WALLET_PASS_TYPE_ID: str = os.getenv("APPLE_WALLET_PASS_TYPE_ID", "pass.com.nerava.wallet")
+    APPLE_WALLET_TEAM_ID: str = os.getenv("APPLE_WALLET_TEAM_ID", "")
+    APPLE_WALLET_CERT_P12_PATH: str = os.getenv("APPLE_WALLET_CERT_P12_PATH", "")
+    APPLE_WALLET_CERT_P12_PASSWORD: str = os.getenv("APPLE_WALLET_CERT_P12_PASSWORD", "")
+    APPLE_WALLET_APNS_KEY_ID: str = os.getenv("APPLE_WALLET_APNS_KEY_ID", "")
+    APPLE_WALLET_APNS_TEAM_ID: str = os.getenv("APPLE_WALLET_APNS_TEAM_ID", "")
+    APPLE_WALLET_APNS_AUTH_KEY_PATH: str = os.getenv("APPLE_WALLET_APNS_AUTH_KEY_PATH", "")
+    
+    # HubSpot Configuration
+    HUBSPOT_ENABLED: bool = os.getenv("HUBSPOT_ENABLED", "false").lower() == "true"
+    HUBSPOT_SEND_LIVE: bool = os.getenv("HUBSPOT_SEND_LIVE", "false").lower() == "true"
+    HUBSPOT_PRIVATE_APP_TOKEN: str = os.getenv("HUBSPOT_PRIVATE_APP_TOKEN", "")
+    HUBSPOT_PORTAL_ID: str = os.getenv("HUBSPOT_PORTAL_ID", "")
+    
     # Feature Flags (default OFF for safety)
     feature_merchant_intel: bool = False
     feature_behavior_cloud: bool = False
@@ -116,3 +132,48 @@ def clear_flag_cache():
 def is_demo() -> bool:
     """Check if demo mode is enabled."""
     return settings.DEMO_MODE
+
+def validate_config():
+    """Validate configuration at startup. Raises ValueError if invalid."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Validate Apple Wallet configuration if signing is enabled
+    if settings.APPLE_WALLET_SIGNING_ENABLED:
+        missing = []
+        if not settings.APPLE_WALLET_PASS_TYPE_ID:
+            missing.append("APPLE_WALLET_PASS_TYPE_ID")
+        if not settings.APPLE_WALLET_TEAM_ID:
+            missing.append("APPLE_WALLET_TEAM_ID")
+        
+        # Check for P12 or PEM cert/key
+        has_p12 = bool(settings.APPLE_WALLET_CERT_P12_PATH and os.path.exists(settings.APPLE_WALLET_CERT_P12_PATH))
+        cert_path = os.getenv("APPLE_WALLET_CERT_PATH", "")
+        key_path = os.getenv("APPLE_WALLET_KEY_PATH", "")
+        has_pem = bool(cert_path and os.path.exists(cert_path) and key_path and os.path.exists(key_path))
+        
+        if not (has_p12 or has_pem):
+            missing.append("APPLE_WALLET_CERT_P12_PATH (or APPLE_WALLET_CERT_PATH + APPLE_WALLET_KEY_PATH)")
+        
+        if missing:
+            error_msg = f"Apple Wallet signing enabled but missing required configuration: {', '.join(missing)}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        logger.info("Apple Wallet configuration validated")
+    
+    # Validate HubSpot configuration if send_live is enabled
+    if settings.HUBSPOT_SEND_LIVE:
+        if not settings.HUBSPOT_ENABLED:
+            error_msg = "HUBSPOT_SEND_LIVE is true but HUBSPOT_ENABLED is false"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        missing = []
+        if not settings.HUBSPOT_PRIVATE_APP_TOKEN:
+            missing.append("HUBSPOT_PRIVATE_APP_TOKEN")
+        if not settings.HUBSPOT_PORTAL_ID:
+            missing.append("HUBSPOT_PORTAL_ID")
+        if missing:
+            error_msg = f"HubSpot send_live enabled but missing required configuration: {', '.join(missing)}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        logger.info("HubSpot configuration validated")

@@ -94,3 +94,4 @@ def downgrade() -> None:
     if "primary_category" in columns:
         op.drop_column(table, "primary_category")
 
+

@@ -169,6 +169,22 @@ class NovaService:
         db.commit()
         
         logger.info(f"Granted {amount} Nova to driver {driver_id} (type: {type}, session: {session_id})")
+        
+        # Emit nova_earned event (non-blocking)
+        try:
+            from app.events.domain import NovaEarnedEvent
+            from app.events.outbox import store_outbox_event
+            event = NovaEarnedEvent(
+                user_id=str(driver_id),
+                amount_cents=amount,
+                session_id=session_id or "",
+                new_balance_cents=wallet.nova_balance,
+                earned_at=datetime.utcnow()
+            )
+            store_outbox_event(db, event)
+        except Exception as e:
+            logger.warning(f"Failed to emit nova_earned event: {e}")
+        
         return transaction
     
     @staticmethod
@@ -292,6 +308,14 @@ class NovaService:
         if not merchant:
             raise ValueError(f"Merchant {merchant_id} not found or not active")
         
+        # P0-3: Negative balance prevention (application layer)
+        # Add explicit check before acquiring lock for better error messages and early validation
+        wallet = db.query(DriverWallet).filter(DriverWallet.user_id == driver_id).first()
+        if not wallet:
+            raise ValueError(f"Driver wallet not found for user {driver_id}")
+        if wallet.nova_balance < amount:
+            raise ValueError(f"Insufficient Nova balance. Has {wallet.nova_balance}, needs {amount}")
+        
         # Atomic balance update with row lock (P0 race condition fix)
         # Use SELECT ... FOR UPDATE to lock the row, then atomic UPDATE
         wallet = db.query(DriverWallet).filter(DriverWallet.user_id == driver_id).with_for_update().first()
@@ -414,6 +438,43 @@ class NovaService:
         db.commit()
         
         logger.info(f"Redeemed {amount} Nova from driver {driver_id} to merchant {merchant_id} (idempotency_key: {idempotency_key})")
+        
+        # Emit nova_redeemed and first_redemption_completed events (non-blocking)
+        try:
+            from app.events.domain import NovaRedeemedEvent, FirstRedemptionCompletedEvent
+            from app.events.outbox import store_outbox_event
+            from app.models.domain import MerchantRedemption
+            
+            # Check if this is the first redemption for this driver
+            previous_redemptions = db.query(MerchantRedemption).filter(
+                MerchantRedemption.driver_user_id == driver_id
+            ).count()
+            
+            is_first_redemption = previous_redemptions == 0
+            
+            # Emit nova_redeemed event
+            redeem_event = NovaRedeemedEvent(
+                user_id=str(driver_id),
+                amount_cents=amount,
+                merchant_id=merchant_id,
+                redemption_id=driver_txn_id,
+                new_balance_cents=wallet.nova_balance,
+                redeemed_at=datetime.utcnow()
+            )
+            store_outbox_event(db, redeem_event)
+            
+            # Emit first_redemption_completed if this is the first
+            if is_first_redemption:
+                first_event = FirstRedemptionCompletedEvent(
+                    user_id=str(driver_id),
+                    redemption_id=driver_txn_id,
+                    merchant_id=merchant_id,
+                    amount_cents=amount,
+                    completed_at=datetime.utcnow()
+                )
+                store_outbox_event(db, first_event)
+        except Exception as e:
+            logger.warning(f"Failed to emit nova_redeemed event: {e}")
         
         return {
             "transaction_id": driver_txn.id,

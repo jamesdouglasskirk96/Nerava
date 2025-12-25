@@ -5,6 +5,7 @@ Models package - organized by domain
 from .user import User, UserPreferences
 from .refresh_token import RefreshToken
 from .otp_challenge import OTPChallenge
+from .notification_prefs import UserNotificationPrefs
 from .domain import (
     Zone,
     EnergyEvent,
@@ -70,6 +71,7 @@ __all__ = [
     "UserPreferences",
     "RefreshToken",
     "OTPChallenge",
+    "UserNotificationPrefs",
     # Domain models
     "Zone",
     "EnergyEvent",

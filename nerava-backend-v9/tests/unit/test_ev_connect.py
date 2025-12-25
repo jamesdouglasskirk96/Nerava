@@ -63,3 +63,4 @@ def test_ev_connect_503_when_disabled(client, mock_get_current_user):
         data = response.json()
         assert "not configured" in data["detail"].lower()
 
+

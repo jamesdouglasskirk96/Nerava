@@ -628,6 +628,20 @@ async def stripe_webhook(
     if not event_id:
         raise HTTPException(status_code=400, detail="Missing event ID")
     
+    # P1-5: Stripe webhook replay protection - reject events older than 5 minutes
+    event_created = event.get("created")
+    if event_created:
+        from datetime import timezone
+        event_time = datetime.fromtimestamp(event_created, tz=timezone.utc)
+        now = datetime.now(timezone.utc)
+        age_minutes = (now - event_time).total_seconds() / 60
+        if age_minutes > 5:
+            logger.warning(f"Rejecting old Stripe event {event_id}: {age_minutes:.1f} minutes old (replay protection)")
+            raise HTTPException(
+                status_code=400,
+                detail="Event too old (replay protection). Events older than 5 minutes are rejected."
+            )
+    
     # Check for duplicate event (idempotency)
     existing_event = db.execute(text("""
         SELECT event_id, status, processed_at FROM stripe_webhook_events

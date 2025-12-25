@@ -40,3 +40,4 @@ def test_demo_qr_redirect_missing_token(client, monkeypatch):
 
 
 
+

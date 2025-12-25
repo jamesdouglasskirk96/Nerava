@@ -10,6 +10,9 @@ from datetime import datetime, timedelta
 import json
 import os
 import uuid
+import hmac
+import hashlib
+import base64
 
 from app.db import get_db
 from app.config import settings
@@ -22,6 +25,38 @@ router = APIRouter(prefix="/v1", tags=["purchases"])
 logger = get_logger(__name__)
 
 
+def verify_square_signature(body: bytes, signature: str, secret: str) -> bool:
+    """
+    Verify Square webhook signature using HMAC-SHA256.
+    
+    Square uses HMAC-SHA256 with the webhook signature key, then base64 encodes the result.
+    
+    Args:
+        body: Raw request body as bytes
+        signature: X-Square-Signature header value (base64 encoded HMAC)
+        secret: SQUARE_WEBHOOK_SIGNATURE_KEY
+        
+    Returns:
+        True if signature is valid, False otherwise
+    """
+    try:
+        # Compute HMAC-SHA256
+        computed_hmac = hmac.new(
+            secret.encode('utf-8'),
+            body,
+            hashlib.sha256
+        ).digest()
+        
+        # Base64 encode
+        computed_signature = base64.b64encode(computed_hmac).decode('utf-8')
+        
+        # Constant-time comparison to prevent timing attacks
+        return hmac.compare_digest(computed_signature, signature)
+    except Exception as e:
+        logger.error(f"Square signature verification error: {e}")
+        return False
+
+
 class ClaimRequest(BaseModel):
     user_id: int
     payment_id: int
@@ -31,23 +66,57 @@ class ClaimRequest(BaseModel):
 async def ingest_purchase_webhook(
     request: Request,
     x_webhook_secret: Optional[str] = Header(None, alias="X-Webhook-Secret"),
+    x_square_signature: Optional[str] = Header(None, alias="X-Square-Signature"),
     db: Session = Depends(get_db)
 ):
     """
     Ingest purchase webhook from Square, CLO, or other providers.
     
     Rate limit: 60/min per IP (handled by middleware if configured)
-    Security: Requires X-Webhook-Secret header if WEBHOOK_SHARED_SECRET is set
+    Security: 
+    - P0-4: If SQUARE_WEBHOOK_SIGNATURE_KEY is configured, verifies X-Square-Signature header
+    - Otherwise, falls back to X-Webhook-Secret header if WEBHOOK_SHARED_SECRET is set
     """
-    # Verify webhook secret if configured
-    if settings.webhook_shared_secret:
-        if not x_webhook_secret or x_webhook_secret != settings.webhook_shared_secret:
-            raise HTTPException(status_code=401, detail="Invalid webhook secret")
+    # Get raw body for signature verification (must be bytes)
+    raw_body = await request.body()
     
-    # Parse body
+    # P0-4: Square webhook signature verification
+    env = os.getenv("ENV", "dev").lower()
+    is_local = env in {"local", "dev"}
+    
+    # Check if this is a Square webhook (provider will be determined after parsing, but we can check headers)
+    is_square_webhook = x_square_signature is not None
+    
+    if settings.square_webhook_signature_key:
+        # Signature key configured - require signature verification
+        if not x_square_signature:
+            logger.warning("Square webhook signature key configured but X-Square-Signature header missing")
+            raise HTTPException(status_code=401, detail="Missing X-Square-Signature header")
+        
+        if not verify_square_signature(raw_body, x_square_signature, settings.square_webhook_signature_key):
+            logger.warning("Square webhook signature verification failed")
+            raise HTTPException(status_code=401, detail="Invalid Square webhook signature")
+        
+        logger.debug("Square webhook signature verified successfully")
+    elif not is_local and is_square_webhook:
+        # In production, if Square signature header is present but key not configured, reject
+        # This ensures we fail closed in production
+        logger.error("Square webhook received but SQUARE_WEBHOOK_SIGNATURE_KEY not configured in production")
+        raise HTTPException(
+            status_code=500,
+            detail="Square webhook signature verification not configured. SQUARE_WEBHOOK_SIGNATURE_KEY is required in production."
+        )
+    else:
+        # Fallback to secret check if signature key not configured (backward compat for local/dev)
+        if settings.webhook_shared_secret:
+            if not x_webhook_secret or x_webhook_secret != settings.webhook_shared_secret:
+                raise HTTPException(status_code=401, detail="Invalid webhook secret")
+    
+    # Parse body (already read as raw_body, now decode as JSON)
     try:
-        body = await request.json()
-    except:
+        body = json.loads(raw_body.decode('utf-8'))
+    except Exception as e:
+        logger.error(f"Failed to parse JSON body: {e}")
         raise HTTPException(status_code=400, detail="Invalid JSON body")
     
     now = datetime.utcnow()
@@ -62,6 +131,33 @@ async def ingest_purchase_webhook(
     except Exception as e:
         logger.error(f"Normalization failed: {e}")
         raise HTTPException(status_code=400, detail=f"Failed to normalize event: {str(e)}")
+    
+    # P0-1: Purchase webhook replay protection - reject events older than 5 minutes
+    event_ts = normalized.get("ts")
+    if event_ts:
+        # event_ts is a datetime object from normalize_event
+        if isinstance(event_ts, datetime):
+            # Use UTC for comparison
+            from datetime import timezone
+            if event_ts.tzinfo is None:
+                # Assume UTC if no timezone info
+                event_time = event_ts.replace(tzinfo=timezone.utc)
+            else:
+                event_time = event_ts.astimezone(timezone.utc)
+            
+            now_utc = datetime.now(timezone.utc)
+            age_minutes = (now_utc - event_time).total_seconds() / 60
+            
+            if age_minutes > 5:
+                logger.warning(
+                    f"Rejecting old purchase webhook event: {age_minutes:.1f} minutes old "
+                    f"(replay protection). Provider: {normalized.get('provider')}, "
+                    f"provider_ref: {normalized.get('provider_ref')}"
+                )
+                raise HTTPException(
+                    status_code=400,
+                    detail="Webhook event too old (replay protection). Events older than 5 minutes are rejected."
+                )
     
     # Validate required fields
     if not normalized.get("provider") or not normalized.get("provider_ref"):

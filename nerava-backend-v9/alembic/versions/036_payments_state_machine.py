@@ -110,3 +110,4 @@ def downgrade():
         if 'payload_hash' in columns:
             op.drop_column('nova_transactions', 'payload_hash')
 
+

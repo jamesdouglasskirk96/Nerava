@@ -1,70 +1,62 @@
-import { apiMe, apiLogout, getCurrentUser, apiGetSmartcarConnectUrl, apiGetVehicleTelemetry, apiSendTelemetryEvent } from '../core/api.js';
-import { loadDemoRedemption } from '../core/demo-state.js';
+import { 
+  apiMe, 
+  apiLogout, 
+  getCurrentUser, 
+  apiGetSmartcarConnectUrl, 
+  apiEvStatus,
+  apiEvDisconnect,
+  apiWalletSummary,
+  apiWalletPassStatus,
+  apiWalletPassReinstall,
+  apiNotifPrefsGet,
+  apiNotifPrefsPut,
+  apiAccountExport,
+  apiAccountDelete,
+} from '../core/api.js';
+import { getRefreshToken, clearTokens } from '../core/auth.js';
 
-// Safe MetaMask/Ethereum provider detection and connection
-function isMetaMaskAvailable() {
-  return typeof window !== 'undefined' &&
-    window.ethereum &&
-    (window.ethereum.isMetaMask || window.ethereum.isBraveWallet || true);
+/**
+ * Format relative time (e.g., "2 hours ago", "Just now")
+ */
+function formatRelativeTime(dateString) {
+  if (!dateString) return 'Never';
+  
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+  if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+  return date.toLocaleDateString();
 }
 
-async function safeConnectMetaMask() {
-  if (!isMetaMaskAvailable()) {
-    console.warn('[Wallet][EV] No Ethereum provider / MetaMask extension detected. Skipping wallet connect.');
-    return null;
-  }
-
-  try {
-    const accounts = await window.ethereum.request({
-      method: 'eth_requestAccounts',
-    });
-    console.log('[Wallet][EV] Connected MetaMask accounts:', accounts);
-    return accounts;
-  } catch (err) {
-    // Silently handle MetaMask connection failures - don't block the page
-    console.warn('[Wallet][EV] Failed to connect to MetaMask (non-fatal):', err.message || err);
-    return null;
-  }
-}
-
-// Tier thresholds for reputation display
-const TIERS = [
-  { name: 'Bronze', min: 0, color: '#9CA3AF' },
-  { name: 'Silver', min: 100, color: '#64748B' },
-  { name: 'Gold', min: 300, color: '#EAB308' },
-  { name: 'Platinum', min: 700, color: '#06B6D4' },
-];
-
-function getTierInfo(score) {
-  const sorted = [...TIERS].sort((a, b) => a.min - b.min);
-  let current = sorted[0];
-  let next = null;
-  for (let i = 0; i < sorted.length; i++) {
-    if (score >= sorted[i].min) current = sorted[i];
-    if (score < sorted[i].min) {
-      next = sorted[i];
-      break;
-    }
-  }
-  return { current, next };
+/**
+ * Format auth provider name for display
+ */
+function formatAuthProvider(provider) {
+  const providers = {
+    'google': 'Google',
+    'apple': 'Apple',
+    'phone': 'Phone',
+    'local': 'Email',
+  };
+  return providers[provider] || provider;
 }
 
 export async function initMePage(rootEl) {
   console.log('[Profile] Initializing profile page...');
 
-  // Safely attempt MetaMask connection (non-blocking, non-fatal)
-  // This prevents unhandled promise rejections if MetaMask is not available
-  safeConnectMetaMask().catch(() => {
-    // Silently ignore - MetaMask connection is optional
-  });
-
-  // Get user info from /me endpoint
+  // Get user info
   let user = null;
   try {
     user = await apiMe();
   } catch (e) {
     console.warn('[Profile] Could not load user:', e.message);
-    // If not authenticated, redirect to login
     if (e.message && (e.message.includes('401') || e.message.includes('Unauthorized'))) {
       window.location.hash = '#/login';
       return;
@@ -76,304 +68,612 @@ export async function initMePage(rootEl) {
     return;
   }
 
-  const userName = user?.display_name || user?.email || user?.phone || 'User';
+  const userName = user?.display_name || user?.name || user?.email || user?.phone || 'User';
   const userEmail = user?.email || null;
-  const userPhone = user?.phone || null;
   const authProvider = user?.auth_provider || 'unknown';
+  const publicId = user?.public_id || null;
 
-  // Get reputation score (from demo or API)
-  const demo = loadDemoRedemption();
-  const repScore = demo?.reputation_score || user?.reputation_score || 0;
-  const tierInfo = getTierInfo(repScore);
-
+  // Render page structure
   rootEl.innerHTML = `
-    <div style="padding: 20px; background: white; min-height: calc(100vh - 140px);">
-      <!-- Profile Header -->
-      <div style="background: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 20px; text-align: center; position: relative;">
-        <button id="settings-btn" class="settings-btn" aria-label="Settings" style="position: absolute; top: 16px; right: 16px;">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-          </svg>
-        </button>
-        <div style="width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; font-size: 28px; font-weight: bold; color: white;">
-          ${userName.charAt(0).toUpperCase()}
-        </div>
-        <div style="font-size: 20px; font-weight: 700; color: #111827; margin-bottom: 4px;" id="me-name">${userName}</div>
-        ${userPhone ? `<div style="font-size: 14px; color: #64748b; margin-bottom: 12px;" id="me-phone">${userPhone}</div>` : ''}
-        <div style="font-size: 12px; color: #9ca3af; margin-bottom: 12px;">Signed in as "${userName}"</div>
-        
-        <!-- Badge Tier -->
-        <div style="display: inline-block; background: ${tierInfo.current.color}20; color: ${tierInfo.current.color}; padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; margin-bottom: 8px;" id="me-tier-badge">
-          ${tierInfo.current.name}
-        </div>
-      </div>
-
-      <!-- EV Vehicle Connection -->
-      <div style="background: white; border-radius: 12px; margin-bottom: 20px; border: 1px solid #e2e8f0;">
-        <div style="padding: 16px;">
-          <h3 style="font-size: 16px; font-weight: 600; color: #111827; margin: 0 0 12px 0;">EV Vehicle Connection</h3>
-          <div id="me-vehicle-status" style="margin-bottom: 12px; padding: 12px; background: #f8fafc; border-radius: 8px; font-size: 14px; color: #6b7280;">
-            Checking connection status...
+    <div class="profile-page">
+      <!-- Account Section -->
+      <div class="profile-section">
+        <h2 class="profile-section-title">Account</h2>
+        <div class="profile-card">
+          <div class="profile-field">
+            <span class="profile-label">Name</span>
+            <span class="profile-value" id="profile-name">${userName || '—'}</span>
           </div>
-          <button id="me-connect-ev-btn" style="width: 100%; background: #1e40af; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; margin-bottom: 8px;">
-            Connect Vehicle
-          </button>
-          <button id="me-test-telemetry-btn" style="width: 100%; background: #10b981; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; display: none;">
-            Test Telemetry
-          </button>
-          <div id="me-telemetry-display" style="margin-top: 12px; padding: 12px; background: #f0fdf4; border-radius: 8px; display: none;">
-            <div style="font-size: 12px; color: #059669; font-weight: 600; margin-bottom: 8px;">Latest Telemetry</div>
-            <div id="me-telemetry-data" style="font-size: 13px; color: #047857;"></div>
+          <div class="profile-field">
+            <span class="profile-label">Email</span>
+            <span class="profile-value" id="profile-email">${userEmail || '—'}</span>
+          </div>
+          <div class="profile-field">
+            <span class="profile-label">Signed in with</span>
+            <span class="profile-value">${formatAuthProvider(authProvider)}</span>
           </div>
         </div>
       </div>
 
-      <!-- Account Options -->
-      <div style="background: white; border-radius: 12px; margin-bottom: 20px; border: 1px solid #e2e8f0;">
-        <div style="padding: 16px;">
-          <h3 style="font-size: 16px; font-weight: 600; color: #111827; margin: 0 0 12px 0;">Account</h3>
-          <button id="me-settings-btn" style="width: 100%; background: #f1f5f9; border: none; text-align: center; padding: 12px; border-radius: 8px; color: #374151; font-size: 14px; font-weight: 600; cursor: pointer;">
-            Settings
+      <!-- Vehicle Section -->
+      <div class="profile-section">
+        <h2 class="profile-section-title">Vehicle</h2>
+        <div class="profile-card" id="vehicle-card">
+          <div id="vehicle-loading" class="profile-loading">Loading vehicle status...</div>
+          <div id="vehicle-error" class="profile-error" style="display: none;">
+            <div class="profile-error-message"></div>
+            <button class="profile-retry-btn" onclick="window._retryVehicleStatus()">Retry</button>
+          </div>
+          <div id="vehicle-content" style="display: none;">
+            <div class="profile-field">
+              <span class="profile-label">Status</span>
+              <span class="profile-status-pill" id="vehicle-status-pill"></span>
+            </div>
+            <div class="profile-field" id="vehicle-name-field" style="display: none;">
+              <span class="profile-label">Vehicle</span>
+              <span class="profile-value" id="vehicle-name"></span>
+            </div>
+            <div class="profile-field" id="vehicle-sync-field" style="display: none;">
+              <span class="profile-label">Last sync</span>
+              <span class="profile-value" id="vehicle-sync"></span>
+            </div>
+            <div class="profile-actions" id="vehicle-actions"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Wallet Section -->
+      <div class="profile-section">
+        <h2 class="profile-section-title">Wallet</h2>
+        <div class="profile-card" id="wallet-card">
+          <div id="wallet-loading" class="profile-loading">Loading wallet status...</div>
+          <div id="wallet-error" class="profile-error" style="display: none;">
+            <div class="profile-error-message"></div>
+            <button class="profile-retry-btn" onclick="window._retryWalletStatus()">Retry</button>
+          </div>
+          <div id="wallet-content" style="display: none;">
+            <div class="profile-field" id="wallet-balance-field" style="display: none;">
+              <span class="profile-label">Nova Balance</span>
+              <span class="profile-value" id="wallet-balance"></span>
+            </div>
+            <div class="profile-field">
+              <span class="profile-label">Wallet Pass</span>
+              <span class="profile-value" id="wallet-pass-status">Checking...</span>
+            </div>
+            <div class="profile-actions">
+              <button class="profile-btn" id="wallet-pass-btn" style="display: none;">Add/Reinstall Wallet Pass</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notifications Section -->
+      <div class="profile-section">
+        <h2 class="profile-section-title">Notifications</h2>
+        <div class="profile-card" id="notifications-card">
+          <div id="notifications-loading" class="profile-loading">Loading preferences...</div>
+          <div id="notifications-error" class="profile-error" style="display: none;">
+            <div class="profile-error-message"></div>
+            <button class="profile-retry-btn" onclick="window._retryNotifications()">Retry</button>
+          </div>
+          <div id="notifications-content" style="display: none;">
+            <div class="profile-toggle-field">
+              <label class="profile-toggle">
+                <input type="checkbox" id="notif-earned-nova">
+                <span class="profile-toggle-label">Earned Nova</span>
+              </label>
+            </div>
+            <div class="profile-toggle-field">
+              <label class="profile-toggle">
+                <input type="checkbox" id="notif-nearby-nova">
+                <span class="profile-toggle-label">Nearby Nova merchants</span>
+              </label>
+            </div>
+            <div class="profile-toggle-field">
+              <label class="profile-toggle">
+                <input type="checkbox" id="notif-wallet-reminders">
+                <span class="profile-toggle-label">Wallet reminders</span>
+              </label>
+            </div>
+            <div id="notifications-permission-warning" class="profile-warning" style="display: none;">
+              Notifications are disabled. Enable in Settings.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Privacy & Legal Section -->
+      <div class="profile-section">
+        <h2 class="profile-section-title">Privacy & Legal</h2>
+        <div class="profile-card">
+          <a href="https://nerava.app/privacy" target="_blank" class="profile-link">Privacy Policy</a>
+          <a href="https://nerava.app/terms" target="_blank" class="profile-link">Terms of Use</a>
+          <a href="https://nerava.app/privacy-choices" target="_blank" class="profile-link">Privacy Choices / Do Not Sell or Share</a>
+          <a href="mailto:support@nerava.com?subject=Support%20Request" class="profile-link">Contact Support</a>
+        </div>
+      </div>
+
+      <!-- Advanced Section (collapsed by default) -->
+      <div class="profile-section">
+        <h2 class="profile-section-title">
+          <button class="profile-section-toggle" id="advanced-toggle">
+            Advanced
+            <span class="profile-toggle-icon">▼</span>
           </button>
+        </h2>
+        <div class="profile-card" id="advanced-card" style="display: none;">
+          <div class="profile-field">
+            <span class="profile-label">App Version</span>
+            <span class="profile-value">1.0.0</span>
+          </div>
+          <div class="profile-field" id="api-url-field" style="display: none;">
+            <span class="profile-label">API Base URL</span>
+            <span class="profile-value" id="api-url"></span>
+          </div>
+          <div class="profile-field" id="account-id-field">
+            <span class="profile-label">Account ID</span>
+            <span class="profile-value" id="account-id">${publicId || '—'}</span>
+          </div>
+          <div class="profile-actions">
+            <button class="profile-btn profile-btn-secondary" id="export-data-btn">Request Data Export</button>
+            <button class="profile-btn profile-btn-danger" id="delete-account-btn">Delete Account</button>
+          </div>
         </div>
       </div>
 
       <!-- Sign Out -->
-      <div style="margin-top: 20px;">
-        <button id="me-signout-btn" style="width: 100%; background: #ef4444; color: white; border: none; padding: 14px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer;">
-          Sign out
-        </button>
-      </div>
-    </div>
-    
-    <!-- Settings Bottom Sheet -->
-    <div id="settings-sheet" class="settings-sheet">
-      <div class="settings-sheet-backdrop"></div>
-      <div class="settings-sheet-content">
-        <div class="settings-sheet-header">
-          <h3 class="settings-sheet-title">Settings</h3>
-          <button id="settings-close-btn" class="settings-sheet-close" aria-label="Close">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 6L6 18M6 6l12 12"/>
-            </svg>
-          </button>
-        </div>
-        <div class="settings-sheet-body">
-          <div class="settings-row">
-            <div class="settings-label">
-              <span class="settings-title">Push Notifications</span>
-              <span class="settings-desc">Get alerts for rewards and charging</span>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" id="settings-notifications-toggle">
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-        </div>
+      <div class="profile-section">
+        <button class="profile-btn profile-btn-danger profile-btn-full" id="sign-out-btn">Sign Out</button>
       </div>
     </div>
   `;
 
-  // Wire sign out button
-  rootEl.querySelector('#me-signout-btn')?.addEventListener('click', async () => {
-    console.log('[Profile] Sign out clicked');
-    try {
-      // Get refresh token for logout
-      const { getRefreshToken } = await import('../core/auth.js');
-      const refreshToken = getRefreshToken();
-      
-      await apiLogout(refreshToken);
-      
-      // Redirect to login
-      window.location.hash = '#/login';
-      window.location.reload();
-    } catch (e) {
-      console.error('[Profile] Sign out failed:', e);
-      // Clear tokens and redirect anyway
-      const { clearTokens } = await import('../core/auth.js');
-      clearTokens();
-      window.location.hash = '#/login';
-      window.location.reload();
-    }
-  });
+  // Store retry functions globally for onclick handlers
+  window._retryVehicleStatus = () => loadVehicleStatus(rootEl);
+  window._retryWalletStatus = () => loadWalletStatus(rootEl);
+  window._retryNotifications = () => loadNotifications(rootEl);
 
-  // Settings sheet functions
-  function openSettingsSheet() {
-    const sheet = document.getElementById('settings-sheet');
-    if (sheet) {
-      sheet.classList.add('open');
-      // Load saved preference (default: enabled)
-      const notifEnabled = localStorage.getItem('nerava_notifications') !== 'false';
-      const toggle = document.getElementById('settings-notifications-toggle');
-      if (toggle) {
-        toggle.checked = notifEnabled;
-      }
-    }
-  }
-  
-  function closeSettingsSheet() {
-    const sheet = document.getElementById('settings-sheet');
-    if (sheet) {
-      sheet.classList.remove('open');
-    }
-  }
-  
-  // Wire settings button (gear icon in header)
-  rootEl.querySelector('#settings-btn')?.addEventListener('click', openSettingsSheet);
-  
-  // Wire settings button (in Account section - keep for backward compatibility)
-  rootEl.querySelector('#me-settings-btn')?.addEventListener('click', openSettingsSheet);
-  
-  // Wire close button
-  const closeBtn = rootEl.querySelector('#settings-close-btn');
-  if (closeBtn) {
-    closeBtn.addEventListener('click', closeSettingsSheet);
-  }
-  
-  // Wire backdrop click to close
-  const backdrop = rootEl.querySelector('.settings-sheet-backdrop');
-  if (backdrop) {
-    backdrop.addEventListener('click', closeSettingsSheet);
-  }
-  
-  // Save notification preference on toggle
-  rootEl.querySelector('#settings-notifications-toggle')?.addEventListener('change', (e) => {
-    localStorage.setItem('nerava_notifications', e.target.checked ? 'true' : 'false');
-    console.log('[Settings] Notifications:', e.target.checked ? 'enabled' : 'disabled');
-  });
+  // Wire up event handlers
+  setupEventHandlers(rootEl, user);
 
-  // Check vehicle connection status
-  async function checkVehicleStatus() {
-    const statusEl = rootEl.querySelector('#me-vehicle-status');
-    const connectBtn = rootEl.querySelector('#me-connect-ev-btn');
-    const testBtn = rootEl.querySelector('#me-test-telemetry-btn');
-    
-    try {
-      const telemetry = await apiGetVehicleTelemetry();
-      if (telemetry) {
-        statusEl.textContent = '✓ Vehicle connected';
-        statusEl.style.background = '#f0fdf4';
-        statusEl.style.color = '#059669';
-        connectBtn.textContent = 'Reconnect Vehicle';
-        testBtn.style.display = 'block';
-        return true;
-      }
-    } catch (err) {
-      if (err.message && err.message.includes('404')) {
-        statusEl.textContent = 'Your vehicle is not connected yet';
-        statusEl.style.background = '#fef3c7';
-        statusEl.style.color = '#92400e';
-        connectBtn.textContent = 'Connect Vehicle';
-        testBtn.style.display = 'none';
-        return false;
-      }
-      // Send telemetry event for failure
-      apiSendTelemetryEvent({
-        event: 'TELEMETRY_FETCH_FAILED',
-        ts: Date.now(),
-        page: '#/me',
-        meta: {
-          error: err.message ? err.message.substring(0, 200) : 'Unknown error' // No secrets
-        }
-      }).catch(() => {});
-      console.warn('[Profile][EV] Status check failed:', err);
+  // Load all sections
+  loadVehicleStatus(rootEl);
+  loadWalletStatus(rootEl);
+  loadNotifications(rootEl);
+
+  // Show API URL in dev mode
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    const apiUrlField = rootEl.querySelector('#api-url-field');
+    const apiUrlValue = rootEl.querySelector('#api-url');
+    if (apiUrlField && apiUrlValue) {
+      apiUrlField.style.display = 'flex';
+      const BASE = window.location.origin;
+      apiUrlValue.textContent = BASE || 'Same origin';
     }
-    return false;
+  }
+}
+
+function setupEventHandlers(rootEl, user) {
+  // Advanced section toggle
+  const advancedToggle = rootEl.querySelector('#advanced-toggle');
+  const advancedCard = rootEl.querySelector('#advanced-card');
+  if (advancedToggle && advancedCard) {
+    advancedToggle.addEventListener('click', () => {
+      const isVisible = advancedCard.style.display !== 'none';
+      advancedCard.style.display = isVisible ? 'none' : 'block';
+      const icon = advancedToggle.querySelector('.profile-toggle-icon');
+      if (icon) {
+        icon.textContent = isVisible ? '▼' : '▲';
+      }
+    });
   }
 
-  // Wire Smartcar EV Connect button
-  async function handleConnectEvClick() {
-    const btn = rootEl.querySelector('#me-connect-ev-btn');
-    const originalText = btn.textContent;
-    
-    // Send telemetry event
-    apiSendTelemetryEvent({
-      event: 'EV_CONNECT_CLICKED',
-      ts: Date.now(),
-      page: '#/me',
-      meta: {}
-    }).catch(() => {});
-    
-    try {
-      btn.disabled = true;
-      btn.textContent = 'Redirecting to Secure Vehicle Login...';
-      console.log('[Profile][EV] Fetching Smartcar connect URL...');
-      const res = await apiGetSmartcarConnectUrl();
-      if (res?.url) {
-        window.location.href = res.url;
+  // Vehicle actions
+  const vehicleActions = rootEl.querySelector('#vehicle-actions');
+  if (vehicleActions) {
+    vehicleActions.addEventListener('click', async (e) => {
+      if (e.target.id === 'connect-vehicle-btn') {
+        await handleConnectVehicle(rootEl);
+      } else if (e.target.id === 'disconnect-vehicle-btn') {
+        await handleDisconnectVehicle(rootEl);
+      } else if (e.target.id === 'reconnect-vehicle-btn') {
+        await handleReconnectVehicle(rootEl);
+      }
+    });
+  }
+
+  // Wallet pass button
+  const walletPassBtn = rootEl.querySelector('#wallet-pass-btn');
+  if (walletPassBtn) {
+    walletPassBtn.addEventListener('click', async () => {
+      await handleWalletPassReinstall(rootEl);
+    });
+  }
+
+  // Notification toggles
+  const earnedNovaToggle = rootEl.querySelector('#notif-earned-nova');
+  const nearbyNovaToggle = rootEl.querySelector('#notif-nearby-nova');
+  const walletRemindersToggle = rootEl.querySelector('#notif-wallet-reminders');
+  
+  if (earnedNovaToggle) {
+    earnedNovaToggle.addEventListener('change', async () => {
+      await updateNotificationPrefs(rootEl, {
+        earned_nova: earnedNovaToggle.checked
+      });
+    });
+  }
+  if (nearbyNovaToggle) {
+    nearbyNovaToggle.addEventListener('change', async () => {
+      await updateNotificationPrefs(rootEl, {
+        nearby_nova: nearbyNovaToggle.checked
+      });
+    });
+  }
+  if (walletRemindersToggle) {
+    walletRemindersToggle.addEventListener('change', async () => {
+      await updateNotificationPrefs(rootEl, {
+        wallet_reminders: walletRemindersToggle.checked
+      });
+    });
+  }
+
+  // Export data button
+  const exportBtn = rootEl.querySelector('#export-data-btn');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', async () => {
+      await handleExportData(rootEl);
+    });
+  }
+
+  // Delete account button
+  const deleteBtn = rootEl.querySelector('#delete-account-btn');
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', async () => {
+      await handleDeleteAccount(rootEl);
+    });
+  }
+
+  // Sign out button
+  const signOutBtn = rootEl.querySelector('#sign-out-btn');
+  if (signOutBtn) {
+    signOutBtn.addEventListener('click', async () => {
+      await handleSignOut();
+    });
+  }
+}
+
+async function loadVehicleStatus(rootEl) {
+  const loadingEl = rootEl.querySelector('#vehicle-loading');
+  const errorEl = rootEl.querySelector('#vehicle-error');
+  const contentEl = rootEl.querySelector('#vehicle-content');
+  const errorMsgEl = rootEl.querySelector('#vehicle-error .profile-error-message');
+  const statusPill = rootEl.querySelector('#vehicle-status-pill');
+  const vehicleName = rootEl.querySelector('#vehicle-name');
+  const vehicleNameField = rootEl.querySelector('#vehicle-name-field');
+  const vehicleSync = rootEl.querySelector('#vehicle-sync');
+  const vehicleSyncField = rootEl.querySelector('#vehicle-sync-field');
+  const vehicleActions = rootEl.querySelector('#vehicle-actions');
+
+  try {
+    loadingEl.style.display = 'block';
+    errorEl.style.display = 'none';
+    contentEl.style.display = 'none';
+
+    const status = await apiEvStatus();
+
+    loadingEl.style.display = 'none';
+    contentEl.style.display = 'block';
+
+    // Set status pill
+    if (statusPill) {
+      const statusText = status.status === 'connected' ? 'Connected' :
+                        status.status === 'needs_attention' ? 'Needs attention' :
+                        'Not connected';
+      const statusClass = status.status === 'connected' ? 'status-connected' :
+                         status.status === 'needs_attention' ? 'status-warning' :
+                         'status-disconnected';
+      statusPill.textContent = statusText;
+      statusPill.className = `profile-status-pill ${statusClass}`;
+    }
+
+    // Set vehicle name
+    if (status.vehicle_label) {
+      if (vehicleName) vehicleName.textContent = status.vehicle_label;
+      if (vehicleNameField) vehicleNameField.style.display = 'flex';
+    } else {
+      if (vehicleNameField) vehicleNameField.style.display = 'none';
+    }
+
+    // Set last sync
+    if (status.last_sync_at) {
+      if (vehicleSync) vehicleSync.textContent = formatRelativeTime(status.last_sync_at);
+      if (vehicleSyncField) vehicleSyncField.style.display = 'flex';
+    } else {
+      if (vehicleSync) vehicleSync.textContent = 'Never';
+      if (vehicleSyncField) vehicleSyncField.style.display = 'flex';
+    }
+
+    // Set actions
+    if (vehicleActions) {
+      if (status.connected) {
+        vehicleActions.innerHTML = `
+          <button class="profile-btn profile-btn-secondary" id="disconnect-vehicle-btn">Disconnect</button>
+          <button class="profile-btn" id="reconnect-vehicle-btn">Reconnect</button>
+        `;
       } else {
-        alert('Unable to start EV connection. Please try again.');
+        vehicleActions.innerHTML = `
+          <button class="profile-btn" id="connect-vehicle-btn">Connect Vehicle</button>
+        `;
+      }
+    }
+  } catch (e) {
+    loadingEl.style.display = 'none';
+    errorEl.style.display = 'block';
+    if (errorMsgEl) {
+      errorMsgEl.textContent = `Failed to load vehicle status: ${e.message}`;
+    }
+  }
+}
+
+async function loadWalletStatus(rootEl) {
+  const loadingEl = rootEl.querySelector('#wallet-loading');
+  const errorEl = rootEl.querySelector('#wallet-error');
+  const contentEl = rootEl.querySelector('#wallet-content');
+  const errorMsgEl = rootEl.querySelector('#wallet-error .profile-error-message');
+  const balanceEl = rootEl.querySelector('#wallet-balance');
+  const balanceField = rootEl.querySelector('#wallet-balance-field');
+  const passStatusEl = rootEl.querySelector('#wallet-pass-status');
+  const passBtn = rootEl.querySelector('#wallet-pass-btn');
+
+  try {
+    loadingEl.style.display = 'block';
+    errorEl.style.display = 'none';
+    contentEl.style.display = 'none';
+
+    // Load wallet summary for balance
+    try {
+      const summary = await apiWalletSummary();
+      if (summary && summary.nova_balance !== undefined) {
+        if (balanceEl) balanceEl.textContent = `${summary.nova_balance} Nova`;
+        if (balanceField) balanceField.style.display = 'flex';
+      }
+    } catch (e) {
+      console.warn('[Profile] Could not load wallet balance:', e.message);
+      // Continue without balance
+    }
+
+    // Load pass status
+    const passStatus = await apiWalletPassStatus();
+    
+    loadingEl.style.display = 'none';
+    contentEl.style.display = 'block';
+
+    if (passStatusEl) {
+      if (passStatus.wallet_pass_last_generated_at) {
+        passStatusEl.textContent = 'Installed';
+      } else {
+        passStatusEl.textContent = 'Not installed';
+      }
+    }
+
+    if (passBtn) {
+      passBtn.style.display = 'block';
+    }
+  } catch (e) {
+    loadingEl.style.display = 'none';
+    errorEl.style.display = 'block';
+    if (errorMsgEl) {
+      errorMsgEl.textContent = `Failed to load wallet status: ${e.message}`;
+    }
+  }
+}
+
+async function loadNotifications(rootEl) {
+  const loadingEl = rootEl.querySelector('#notifications-loading');
+  const errorEl = rootEl.querySelector('#notifications-error');
+  const contentEl = rootEl.querySelector('#notifications-content');
+  const errorMsgEl = rootEl.querySelector('#notifications-error .profile-error-message');
+  const earnedToggle = rootEl.querySelector('#notif-earned-nova');
+  const nearbyToggle = rootEl.querySelector('#notif-nearby-nova');
+  const remindersToggle = rootEl.querySelector('#notif-wallet-reminders');
+  const permissionWarning = rootEl.querySelector('#notifications-permission-warning');
+
+  try {
+    loadingEl.style.display = 'block';
+    errorEl.style.display = 'none';
+    contentEl.style.display = 'none';
+
+    // Check notification permission
+    if ('Notification' in window) {
+      const permission = Notification.permission;
+      if (permission === 'denied' && permissionWarning) {
+        permissionWarning.style.display = 'block';
+      }
+    }
+
+    const prefs = await apiNotifPrefsGet();
+
+    loadingEl.style.display = 'none';
+    contentEl.style.display = 'block';
+
+    if (earnedToggle) earnedToggle.checked = prefs.earned_nova;
+    if (nearbyToggle) nearbyToggle.checked = prefs.nearby_nova;
+    if (remindersToggle) remindersToggle.checked = prefs.wallet_reminders;
+  } catch (e) {
+    loadingEl.style.display = 'none';
+    errorEl.style.display = 'block';
+    if (errorMsgEl) {
+      errorMsgEl.textContent = `Failed to load notification preferences: ${e.message}`;
+    }
+  }
+}
+
+async function updateNotificationPrefs(rootEl, partialPrefs) {
+  try {
+    // Get current prefs first
+    const currentPrefs = await apiNotifPrefsGet();
+    const updatedPrefs = { ...currentPrefs, ...partialPrefs };
+    
+    await apiNotifPrefsPut(updatedPrefs);
+    console.log('[Profile] Notification preferences updated');
+  } catch (e) {
+    console.error('[Profile] Failed to update notification preferences:', e);
+    alert(`Failed to update preferences: ${e.message}`);
+    // Reload to restore previous state
+    loadNotifications(rootEl);
+  }
+}
+
+async function handleConnectVehicle(rootEl) {
+  try {
+    const res = await apiGetSmartcarConnectUrl();
+    if (res?.url) {
+      window.location.href = res.url;
+    } else {
+      alert('Unable to start vehicle connection. Please try again.');
+    }
+  } catch (e) {
+    console.error('[Profile] Connect vehicle failed:', e);
+    alert(`Failed to connect vehicle: ${e.message}`);
+  }
+}
+
+async function handleDisconnectVehicle(rootEl) {
+  if (!confirm('Are you sure you want to disconnect your vehicle?')) {
+    return;
+  }
+
+  try {
+    await apiEvDisconnect();
+    alert('Vehicle disconnected successfully.');
+    loadVehicleStatus(rootEl);
+  } catch (e) {
+    console.error('[Profile] Disconnect vehicle failed:', e);
+    alert(`Failed to disconnect vehicle: ${e.message}`);
+  }
+}
+
+async function handleReconnectVehicle(rootEl) {
+  await handleConnectVehicle(rootEl);
+}
+
+async function handleWalletPassReinstall(rootEl) {
+  // Detect platform
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isAndroid = /Android/.test(navigator.userAgent);
+  const platform = isIOS ? 'apple' : isAndroid ? 'google' : 'apple'; // Default to Apple
+
+  const btn = rootEl.querySelector('#wallet-pass-btn');
+  const originalText = btn ? btn.textContent : 'Add/Reinstall Wallet Pass';
+  
+  try {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Processing...';
+    }
+
+    if (platform === 'apple') {
+      // For Apple, redirect to create endpoint which returns .pkpass file
+      // Use fetch to get the file and trigger download
+      try {
+        const response = await fetch('/v1/wallet/pass/apple/create', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Authorization': `Bearer ${(await import('../core/auth.js')).getAccessToken()}`,
+          },
+        });
+        
+        if (response.ok) {
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'nerava-wallet.pkpass';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+        } else {
+          throw new Error(`Failed to create pass: ${response.status}`);
+        }
+      } catch (e) {
+        // Fallback: redirect to endpoint
+        window.location.href = '/v1/wallet/pass/apple/create';
+      }
+    } else {
+      // For Google, call reinstall API
+      const res = await apiWalletPassReinstall(platform);
+      
+      if (res && res.add_to_google_wallet_url) {
+        window.open(res.add_to_google_wallet_url, '_blank');
+      } else {
+        alert('Wallet pass reinstall initiated. Check your Google Wallet app.');
+      }
+      
+      if (btn) {
         btn.disabled = false;
         btn.textContent = originalText;
       }
-    } catch (err) {
-      console.error('[Profile][EV] Connect failed', err);
-      alert('Unable to start EV connection. Please try again.');
+    }
+  } catch (e) {
+    console.error('[Profile] Wallet pass reinstall failed:', e);
+    alert(`Failed to reinstall wallet pass: ${e.message}`);
+    if (btn) {
       btn.disabled = false;
       btn.textContent = originalText;
     }
   }
+}
 
-  // Wire test telemetry button
-  async function handleTestTelemetryClick() {
-    const btn = rootEl.querySelector('#me-test-telemetry-btn');
-    const displayEl = rootEl.querySelector('#me-telemetry-display');
-    const dataEl = rootEl.querySelector('#me-telemetry-data');
-    
-    try {
-      btn.disabled = true;
-      btn.textContent = 'Loading...';
-      const telemetry = await apiGetVehicleTelemetry();
-      
-      if (telemetry) {
-        const soc = telemetry.soc_pct !== null ? `${telemetry.soc_pct.toFixed(1)}%` : 'N/A';
-        const state = telemetry.charging_state || 'Unknown';
-        const lat = telemetry.latitude !== null ? telemetry.latitude.toFixed(4) : 'N/A';
-        const lng = telemetry.longitude !== null ? telemetry.longitude.toFixed(4) : 'N/A';
-        const recorded = telemetry.recorded_at ? new Date(telemetry.recorded_at).toLocaleString() : 'N/A';
-        
-        dataEl.innerHTML = `
-          <div><strong>Battery:</strong> ${soc}</div>
-          <div><strong>Charging State:</strong> ${state}</div>
-          <div><strong>Location:</strong> ${lat}, ${lng}</div>
-          <div><strong>Recorded:</strong> ${recorded}</div>
-        `;
-        displayEl.style.display = 'block';
-      }
-    } catch (err) {
-      console.error('[Profile][EV] Telemetry test failed', err);
-      alert('Failed to fetch telemetry. Please try again.');
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Test Telemetry';
-    }
+async function handleExportData(rootEl) {
+  if (!confirm('Request a copy of your account data? You will receive an email when it\'s ready.')) {
+    return;
   }
 
-  rootEl.querySelector('#me-connect-ev-btn')?.addEventListener('click', handleConnectEvClick);
-  rootEl.querySelector('#me-test-telemetry-btn')?.addEventListener('click', handleTestTelemetryClick);
-  
-  // Check status on page load
-  checkVehicleStatus();
-  
-  // Check for callback success/error in URL
-  const urlParams = new URLSearchParams(window.location.search);
-  const vehicleConnected = urlParams.get('vehicle');
-  const error = urlParams.get('error');
-  
-  if (vehicleConnected === 'connected') {
-    setTimeout(() => {
-      checkVehicleStatus();
-      // Clean URL
-      window.history.replaceState({}, '', window.location.pathname);
-    }, 500);
-  } else if (error) {
-    const statusEl = rootEl.querySelector('#me-vehicle-status');
-    statusEl.textContent = `Connection failed: ${error}`;
-    statusEl.style.background = '#fee2e2';
-    statusEl.style.color = '#dc2626';
-    // Clean URL
-    window.history.replaceState({}, '', window.location.pathname);
+  try {
+    const res = await apiAccountExport();
+    alert(res.message || 'Export request submitted. You will receive an email when your data is ready.');
+  } catch (e) {
+    console.error('[Profile] Export data failed:', e);
+    alert(`Failed to request data export: ${e.message}`);
   }
 }
 
+async function handleDeleteAccount(rootEl) {
+  const confirmation = prompt('Type "DELETE" to confirm account deletion:');
+  if (confirmation !== 'DELETE') {
+    return;
+  }
+
+  if (!confirm('Are you absolutely sure? This action cannot be undone.')) {
+    return;
+  }
+
+  try {
+    await apiAccountDelete();
+    alert('Account deletion requested. You will be signed out.');
+    await handleSignOut();
+  } catch (e) {
+    console.error('[Profile] Delete account failed:', e);
+    if (e.message && e.message.includes('CONFIRMATION_REQUIRED')) {
+      alert('Please type "DELETE" exactly to confirm.');
+    } else {
+      alert(`Failed to delete account: ${e.message}`);
+    }
+  }
+}
+
+async function handleSignOut() {
+  try {
+    const refreshToken = getRefreshToken();
+    await apiLogout(refreshToken);
+  } catch (e) {
+    console.warn('[Profile] Logout API call failed:', e.message);
+    // Continue to clear tokens anyway
+  } finally {
+    clearTokens();
+    window.location.hash = '#/login';
+    window.location.reload();
+  }
+}

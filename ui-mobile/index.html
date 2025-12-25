@@ -18,6 +18,7 @@
   <link rel="apple-touch-icon" href="assets/icon-512.png">
   <meta name="theme-color" content="#1E40FF">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="nerava-api-base" content="https://c2khcn8vnk.us-east-1.awsapprunner.com">
 
   <link rel="stylesheet" href="css/tokens.css?v=20250131" />
   <link rel="stylesheet" href="css/style.css?v=20251222d" />
@@ -160,6 +161,35 @@
                       </div>
                       
                       <!-- AirDrop-style merchant popover -->
+                    </section>
+
+                    <!-- Discover page - List of Nova-accepting merchants (no map) -->
+                    <section id="page-discover" class="page page-padded" aria-label="Discover" style="display: none;">
+                      <!-- Header -->
+                      <div class="discover-header">
+                        <h1 class="discover-title">Spend Nova</h1>
+                        <p class="discover-subtitle">Nearby places where Nova works right now</p>
+                      </div>
+                      
+                      <!-- Loading skeleton -->
+                      <div id="discover-loading" class="discover-loading" style="display: none;">
+                        <div class="merchant-card-skeleton"></div>
+                        <div class="merchant-card-skeleton"></div>
+                        <div class="merchant-card-skeleton"></div>
+                      </div>
+                      
+                      <!-- Merchant cards list -->
+                      <div id="discover-merchants-list" class="discover-merchants-list">
+                        <!-- JS will inject merchant cards here -->
+                      </div>
+                      
+                      <!-- Empty state -->
+                      <div id="discover-empty-state" class="discover-empty-state" style="display: none;">
+                        <div class="discover-empty-icon">📍</div>
+                        <h2 class="discover-empty-title">No Nova spots nearby yet</h2>
+                        <p class="discover-empty-body">We're onboarding local favorites. Check back soon.</p>
+                        <a href="mailto:support@nerava.com?subject=Suggest%20a%20merchant" class="discover-empty-link">Suggest a merchant</a>
+                      </div>
                     </section>
 
       <!-- Charge / Wallet / Profile now padded pages (not overlay sheets) -->

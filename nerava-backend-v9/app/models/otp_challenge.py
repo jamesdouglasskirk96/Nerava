@@ -22,3 +22,4 @@ class OTPChallenge(Base):
     consumed = Column(Boolean, nullable=False, default=False, index=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
 
+

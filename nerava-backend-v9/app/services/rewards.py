@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Dict, Any
 import json
 
-from app.db import engine
+from app.db import get_engine
 from app.config import settings
 from app.utils.log import get_logger, log_reward_event
 from app.utils.dbjson import as_db_json, get_table_columns
@@ -37,7 +37,10 @@ def award_verify_bonus(
         }
     """
     log_reward_event(logger, "start", session_id, user_id, True, {"amount": amount})
-    
+
+    # Get database engine (lazy initialization)
+    engine = get_engine()
+
     # Start transaction (SQLAlchemy sessions are transactional by default)
     try:
         # 1. Idempotency check

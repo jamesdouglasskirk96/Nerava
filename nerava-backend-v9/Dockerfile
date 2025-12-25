@@ -23,37 +23,28 @@ FROM python:3.9-slim
 # Set working directory
 WORKDIR /app
 
-# Create non-root user first (before copying files)
-RUN useradd --create-home --shell /bin/bash app
-
-# Copy Python packages from builder to system location (accessible by all users)
+# Copy Python packages from builder to system location
 COPY --from=builder /install /usr/local
 
 # Copy application code
 COPY . .
 
-# Make startup script executable
-RUN chmod +x /app/scripts/start.sh
-
-# Set ownership of app directory
-RUN chown -R app:app /app
-
-# Switch to non-root user
-USER app
+# Make startup script executable (if exists)
+RUN chmod +x /app/scripts/start.sh 2>/dev/null || true
 
 # Set environment variables
 ENV PYTHONPATH=/app
 ENV PORT=8000
+ENV PYTHONUNBUFFERED=1
 
 # Expose port
 EXPOSE 8000
 
-# Health check (using Python since curl may not be available)
-# Uses PORT env var with fallback to 8000 (App Runner default)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python3 -c "import os, urllib.request; port = os.getenv('PORT', '8000'); urllib.request.urlopen(f'http://localhost:{port}/healthz')" || exit 1
+# Note: HEALTHCHECK disabled for App Runner - it has its own health checks
+# HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+#     CMD python3 -c "import os, urllib.request; port = os.getenv('PORT', '8000'); urllib.request.urlopen(f'http://localhost:{port}/healthz')" || exit 1
 
-# Run the application using startup script (runs migrations then starts uvicorn)
-# Using main_simple as the entry point (as per Procfile)
-CMD ["/app/scripts/start.sh"]
+# Run uvicorn directly with exec form (no shell)
+# Port 8000 is hardcoded since App Runner sets PORT=8000 in env
+CMD ["python", "-m", "uvicorn", "app.main_simple:app", "--host", "0.0.0.0", "--port", "8000"]
 

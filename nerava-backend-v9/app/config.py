@@ -32,9 +32,9 @@ class Settings(BaseSettings):
     # Frontend URL for redirects (OAuth callbacks, etc.)
     frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:8001/app")
     
-    # Region
-    region: str = "local"
-    primary_region: str = "local"
+    # Region (read from REGION env var, default to "local" for dev)
+    region: str = os.getenv("REGION", "local")
+    primary_region: str = os.getenv("PRIMARY_REGION", "local")
     
     # Events
     events_driver: str = "inproc"
@@ -93,6 +93,7 @@ class Settings(BaseSettings):
     purchase_match_radius_m: int = int(os.getenv("PURCHASE_MATCH_RADIUS_M", "120"))
     purchase_session_ttl_min: int = int(os.getenv("PURCHASE_SESSION_TTL_MIN", "30"))
     webhook_shared_secret: str = os.getenv("WEBHOOK_SHARED_SECRET", "")
+    square_webhook_signature_key: str = os.getenv("SQUARE_WEBHOOK_SIGNATURE_KEY", "")
     
     # Anti-Fraud
     max_verify_per_hour: int = int(os.getenv("MAX_VERIFY_PER_HOUR", "6"))

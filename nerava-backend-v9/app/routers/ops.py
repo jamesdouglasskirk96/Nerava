@@ -7,10 +7,9 @@ import asyncio
 
 router = APIRouter()
 
-@router.get("/healthz")
-async def health_check():
-    """Basic health check - always returns 200"""
-    return {"ok": True}
+# NOTE: /healthz and /readyz are now defined at root level in main_simple.py
+# These endpoints are kept for backward compatibility but may be removed in future versions.
+# Use root-level /healthz (liveness) and /readyz (readiness) instead.
 
 @router.get("/readyz")
 async def readiness_check(db = Depends(get_db)):

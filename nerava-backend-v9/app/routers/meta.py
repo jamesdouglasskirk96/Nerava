@@ -14,29 +14,9 @@ def health():
     """Basic health check endpoint"""
     return {"ok": True}
 
-@router.get("/healthz")
-async def healthz():
-    """Health check endpoint for App Runner and load balancers"""
-    from app.db import engine
-    from sqlalchemy import text
-    from datetime import datetime
-    try:
-        # Test database connection
-        with engine.connect() as conn:
-            result = conn.execute(text("SELECT 1"))
-            result.fetchone()
-        return {
-            "ok": True,
-            "database": "connected",
-            "time": datetime.utcnow().isoformat()
-        }
-    except Exception as e:
-        return {
-            "ok": False,
-            "database": "disconnected",
-            "error": str(e),
-            "time": datetime.utcnow().isoformat()
-        }, 503
+# DEPRECATED: /healthz removed from meta router
+# Use root-level /healthz (liveness) and /readyz (readiness) instead.
+# Root-level /healthz is defined in main_simple.py and does not perform DB checks.
 
 @router.get("/version")
 def version():

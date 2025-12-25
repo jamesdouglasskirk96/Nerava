@@ -70,3 +70,4 @@ def compute_nearest_charger(
     
     return (None, None)
 
+

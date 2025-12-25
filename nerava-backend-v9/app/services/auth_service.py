@@ -62,6 +62,23 @@ class AuthService:
         db.refresh(user)
         
         logger.info(f"Registered user: {user.id} ({email}) with roles: {role_flags}")
+        
+        # Emit driver_signed_up event if user is a driver (non-blocking)
+        if "driver" in roles:
+            try:
+                from app.events.domain import DriverSignedUpEvent
+                from app.events.outbox import store_outbox_event
+                from datetime import datetime
+                event = DriverSignedUpEvent(
+                    user_id=str(user.id),
+                    email=email,
+                    auth_provider=auth_provider,
+                    created_at=datetime.utcnow()
+                )
+                store_outbox_event(db, event)
+            except Exception as e:
+                logger.warning(f"Failed to emit driver_signed_up event: {e}")
+        
         return user
     
     @staticmethod

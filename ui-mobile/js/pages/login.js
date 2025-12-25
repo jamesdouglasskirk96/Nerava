@@ -122,7 +122,7 @@ function renderLoginPage(rootEl) {
                 </div>
                 
                 <!-- Phone Input Step -->
-                <div id="login-phone-step" class="login-step" style="display: ${currentStep === 'phone-input' ? 'block' : 'none'};">
+                <div id="login-phone-step" class="login-step" style="display: ${currentStep === 'phone' ? 'block' : 'none'};">
                     <div style="margin-bottom: 20px;">
                         <label style="display: block; font-size: 14px; font-weight: 600; color: #111827; margin-bottom: 8px;">
                             Phone Number
@@ -168,7 +168,7 @@ function renderLoginPage(rootEl) {
                 </div>
                 
                 <!-- OTP Input Step -->
-                <div id="login-otp-step" class="login-step" style="display: ${currentStep === 'otp-input' ? 'block' : 'none'};">
+                <div id="login-otp-step" class="login-step" style="display: ${currentStep === 'otp' ? 'block' : 'none'};">
                     <div style="margin-bottom: 20px;">
                         <label style="display: block; font-size: 14px; font-weight: 600; color: #111827; margin-bottom: 8px;">
                             Verification Code
@@ -256,7 +256,7 @@ function wireLoginHandlers(rootEl) {
     let googleInitialized = false;
     
     // Initialize Google Sign-In when page loads
-    function initGoogleSignIn() {
+    async function initGoogleSignIn() {
         // Wait for Google Identity Services to load
         if (typeof google === 'undefined' || !google.accounts) {
             // Retry after a short delay
@@ -264,15 +264,43 @@ function wireLoginHandlers(rootEl) {
             return;
         }
         
-        // Get Google Client ID from localStorage or environment
-        // In production, this should come from backend config or environment variable
-        googleClientId = localStorage.getItem('GOOGLE_CLIENT_ID') || '';
+        // Get Google Client ID from backend config API
+        try {
+            // Get API base - use getApiBase from api.js if available, otherwise fallback
+            let apiBase;
+            try {
+                const { getApiBase } = await import('../core/api.js');
+                apiBase = getApiBase();
+            } catch {
+                // Fallback if api.js not available - check meta tag first
+                const apiBaseMeta = document.querySelector('meta[name="nerava-api-base"]');
+                apiBase = window.NERAVA_API_BASE || (apiBaseMeta && apiBaseMeta.content) || window.API_BASE_URL || '';
+            }
+            const configResponse = await fetch(`${apiBase}/v1/public/config`);
+            if (configResponse.ok) {
+                const config = await configResponse.json();
+                googleClientId = config.google_client_id || '';
+            } else {
+                console.warn('[Login] Failed to fetch config from backend, falling back to localStorage');
+                googleClientId = localStorage.getItem('GOOGLE_CLIENT_ID') || '';
+            }
+        } catch (error) {
+            console.warn('[Login] Error fetching config from backend, falling back to localStorage:', error);
+            googleClientId = localStorage.getItem('GOOGLE_CLIENT_ID') || '';
+        }
         
         if (!googleClientId) {
             console.warn('[Login] Google Client ID not configured. Google Sign-In will show an error when clicked.');
-            console.warn('[Login] To enable: localStorage.setItem("GOOGLE_CLIENT_ID", "your-client-id")');
-            console.warn('[Login] The Google Client ID should match the one configured in your Google Cloud Console OAuth credentials.');
+            console.warn('[Login] The Google Client ID should be configured via GOOGLE_CLIENT_ID environment variable on the backend.');
             googleInitialized = false;
+            
+            // Show UI message if Google sign-in is not configured
+            const googleBtn = rootEl.querySelector('#btn-google-login');
+            if (googleBtn) {
+                googleBtn.disabled = true;
+                googleBtn.style.opacity = '0.5';
+                googleBtn.style.cursor = 'not-allowed';
+            }
             return;
         }
         
@@ -344,11 +372,30 @@ function wireLoginHandlers(rootEl) {
             
             // Check if initialized
             if (!googleInitialized) {
-                // Try to get client ID
-                googleClientId = localStorage.getItem('GOOGLE_CLIENT_ID') || '';
+                // Try to fetch client ID from backend if not already loaded
                 if (!googleClientId) {
-                    showError('Google Sign-In is not configured. Please set GOOGLE_CLIENT_ID in localStorage or use Phone OTP.');
-                    console.warn('[Login] To enable: localStorage.setItem("GOOGLE_CLIENT_ID", "your-client-id")');
+                    try {
+                        let apiBase;
+                        try {
+                            const { getApiBase } = await import('../core/api.js');
+                            apiBase = getApiBase();
+                        } catch {
+                            // Fallback if api.js not available - check meta tag first
+                            const apiBaseMeta = document.querySelector('meta[name="nerava-api-base"]');
+                            apiBase = window.NERAVA_API_BASE || (apiBaseMeta && apiBaseMeta.content) || window.API_BASE_URL || '';
+                        }
+                        const configResponse = await fetch(`${apiBase}/v1/public/config`);
+                        if (configResponse.ok) {
+                            const config = await configResponse.json();
+                            googleClientId = config.google_client_id || '';
+                        }
+                    } catch (error) {
+                        console.warn('[Login] Error fetching config:', error);
+                    }
+                }
+                
+                if (!googleClientId) {
+                    showError('Google Sign-In is not configured. Please use Phone OTP or contact support.');
                     return;
                 }
                 // Initialize now
@@ -386,12 +433,53 @@ function wireLoginHandlers(rootEl) {
     // Initialize Google Sign-In after a short delay to ensure script is loaded
     setTimeout(initGoogleSignIn, 500);
     
-    // Apple login
+    // Apple login - check if configured and hide button if not
+    async function initAppleSignIn() {
+        // Get Apple Client ID from backend config API
+        try {
+            let apiBase;
+            try {
+                const { getApiBase } = await import('../core/api.js');
+                apiBase = getApiBase();
+            } catch {
+                const apiBaseMeta = document.querySelector('meta[name="nerava-api-base"]');
+                apiBase = window.NERAVA_API_BASE || (apiBaseMeta && apiBaseMeta.content) || window.API_BASE_URL || '';
+            }
+            const configResponse = await fetch(`${apiBase}/v1/public/config`);
+            if (configResponse.ok) {
+                const config = await configResponse.json();
+                const appleClientId = config.apple_client_id || '';
+                
+                const appleBtn = rootEl.querySelector('#btn-apple-login');
+                if (!appleClientId && appleBtn) {
+                    // Hide button if Apple not configured
+                    appleBtn.style.display = 'none';
+                    console.log('[Login] Apple Sign-In not configured - button hidden');
+                } else if (appleClientId) {
+                    console.log('[Login] Apple Sign-In configured');
+                }
+            }
+        } catch (error) {
+            console.warn('[Login] Error fetching config for Apple Sign-In:', error);
+            // Hide button on error to be safe
+            const appleBtn = rootEl.querySelector('#btn-apple-login');
+            if (appleBtn) {
+                appleBtn.style.display = 'none';
+            }
+        }
+    }
+    
+    // Initialize Apple Sign-In check
+    setTimeout(initAppleSignIn, 500);
+    
     rootEl.querySelector('#btn-apple-login')?.addEventListener('click', async () => {
         try {
             hideError();
-            showError('Apple Sign-In requires configuration. Please use Phone OTP for now.');
+            // Apple Sign-In is intentionally disabled for launch
+            // Backend endpoint exists but requires Apple Developer account configuration
+            showError('Apple Sign-In is coming soon. Please use Phone OTP or Google Sign-In for now.');
         } catch (error) {
+            console.error('[Login] Apple login error:', error);
             showError(error.message || 'Apple login failed');
         }
     });
@@ -407,14 +495,20 @@ function wireLoginHandlers(rootEl) {
             
             console.log('[Login] Phone login button clicked');
             
-            // Check if we're in dev mode (DEMO_MODE or localhost)
-            const isDevMode = window.NERAVA_DEMO_MODE === true || 
-                              window.location.hostname === 'localhost' || 
-                              window.location.hostname === '127.0.0.1';
+            // Check if we're in dev mode (DEMO_MODE, localhost, or S3 staging site)
+            const hostname = window.location.hostname;
+            const isS3StagingSite = hostname.includes('s3-website') ||
+                                    hostname.includes('.s3.') ||
+                                    hostname.includes('nerava-ui-prod');
+            const isDevMode = window.NERAVA_DEMO_MODE === true ||
+                              hostname === 'localhost' ||
+                              hostname === '127.0.0.1' ||
+                              isS3StagingSite;
             
             console.log('[Login] Dev mode check:', {
                 NERAVA_DEMO_MODE: window.NERAVA_DEMO_MODE,
-                hostname: window.location.hostname,
+                hostname: hostname,
+                isS3StagingSite: isS3StagingSite,
                 isDevMode: isDevMode
             });
             
@@ -453,7 +547,7 @@ function wireLoginHandlers(rootEl) {
                 }
                 // Only show phone input step if button still exists and we're not already on it
                 try {
-                    showStep('phone-input');
+                    showStep('phone');
                 } catch (e) {
                     console.warn('[Login] Could not show phone input step:', e);
                 }
@@ -461,7 +555,7 @@ function wireLoginHandlers(rootEl) {
             } else {
                 // Normal mode: show phone input
                 console.log('[Login] Not in dev mode, showing phone input');
-                showStep('phone-input');
+                showStep('phone');
             }
         });
     } else {
@@ -474,7 +568,7 @@ function wireLoginHandlers(rootEl) {
     });
     
     rootEl.querySelector('#btn-back-phone')?.addEventListener('click', () => {
-        showStep('phone-input');
+        showStep('phone');
     });
     
     // Request OTP
@@ -495,7 +589,7 @@ function wireLoginHandlers(rootEl) {
             
             await apiOtpStart(phone);
             
-            showStep('otp-input');
+            showStep('otp');
         } catch (error) {
             showError(error.message || 'Failed to send verification code');
         } finally {

@@ -5,6 +5,7 @@ Handles driver checkout flow at merchants.
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from typing import Optional, List
 import uuid
 from datetime import datetime
@@ -25,7 +26,9 @@ from ..services.square_orders import (
     SquareError
 )
 from ..services.merchant_fee import record_merchant_fee
+from ..services.audit import log_wallet_mutation
 from ..dependencies_driver import get_current_driver, get_current_driver_optional
+from ..utils.env import is_local_env
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +46,7 @@ class RedeemRequest(BaseModel):
     qr_token: str
     order_total_cents: int
     square_order_id: Optional[str] = None  # Optional Square order ID
+    idempotency_key: Optional[str] = None  # P1-F: UUID for idempotency (required for non-Square redemptions)
 
 
 class RedeemResponse(BaseModel):
@@ -230,21 +234,30 @@ async def redeem_nova(
        - Fetches order total from Square
        - Prevents duplicate redemption
        - Records merchant fee
-    3. Calculates discount amount
-    4. Validates driver has sufficient Nova
-    5. Debits Nova from driver wallet
-    6. Creates MerchantRedemption record
+    3. P1-F: Validates idempotency_key for non-Square redemptions
+    4. Calculates discount amount
+    5. Validates driver has sufficient Nova
+    6. Debits Nova from driver wallet
+    7. Creates MerchantRedemption record
     
     Args:
-        request: RedeemRequest with qr_token, order_total_cents, and optional square_order_id
+        request: RedeemRequest with qr_token, order_total_cents, optional square_order_id, and optional idempotency_key
         user: Authenticated driver (optional in demo mode - uses user ID 1)
         
     Returns:
         RedeemResponse with redemption details including merchant_fee_cents
+    
+    P1-F Security: For non-Square redemptions, idempotency_key is required to prevent replay attacks.
+    If same idempotency_key is reused, returns cached response from previous redemption.
     """
     # In demo mode, allow unauthenticated requests using demo user (ID 1)
+    # P0-2: DEMO_MODE only works in local environment (security hardening)
     import os
-    demo_mode = os.getenv("DEMO_MODE", "false").lower() == "true"
+    demo_mode_enabled = os.getenv("DEMO_MODE", "false").lower() == "true"
+    demo_mode = demo_mode_enabled and is_local_env()
+    
+    if demo_mode_enabled and not is_local_env():
+        logger.warning("DEMO_MODE is enabled but environment is not local - DEMO_MODE disabled for security")
     
     if not user:
         if demo_mode:
@@ -271,6 +284,74 @@ async def redeem_nova(
             }
         )
     
+    # P1-F: Validate idempotency_key for non-Square redemptions
+    # Square redemptions use square_order_id for idempotency, non-Square need idempotency_key
+    if not request.square_order_id:
+        if not request.idempotency_key:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "IDEMPOTENCY_KEY_REQUIRED",
+                    "message": "idempotency_key is required for non-Square redemptions to prevent replay attacks"
+                }
+            )
+        
+        # Validate UUID format
+        try:
+            uuid.UUID(request.idempotency_key)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "INVALID_IDEMPOTENCY_KEY",
+                    "message": "idempotency_key must be a valid UUID"
+                }
+            )
+        
+        # Check for existing redemption with same idempotency_key
+        existing_redemption = db.query(MerchantRedemption).filter(
+            MerchantRedemption.merchant_id == merchant.id,
+            MerchantRedemption.idempotency_key == request.idempotency_key
+        ).first()
+        
+        if existing_redemption:
+            # Return cached response from previous redemption (early return to avoid processing)
+            logger.info(
+                f"[P1-F] Idempotent redemption: returning cached result for idempotency_key={request.idempotency_key}",
+                extra={
+                    "redemption_id": existing_redemption.id,
+                    "merchant_id": merchant.id,
+                    "idempotency_key": request.idempotency_key
+                }
+            )
+            
+            # Get current wallet balance for response
+            wallet = db.query(DriverWallet).filter(DriverWallet.user_id == user.id).first()
+            remaining_nova_cents = wallet.nova_balance if wallet else 0
+            
+            # Get merchant fee if it was a Square redemption
+            merchant_fee_cents = None
+            if existing_redemption.square_order_id:
+                from app.services.merchant_fee import get_merchant_fee
+                try:
+                    fee = get_merchant_fee(db, existing_redemption.id)
+                    merchant_fee_cents = fee.amount_cents if fee else None
+                except Exception:
+                    pass
+            
+            return RedeemResponse(
+                success=True,
+                merchant_id=existing_redemption.merchant_id,
+                discount_cents=existing_redemption.discount_cents,
+                order_total_cents=existing_redemption.order_total_cents,
+                nova_spent_cents=existing_redemption.nova_spent_cents,
+                remaining_nova_cents=remaining_nova_cents,
+                message="Idempotent redemption: returning cached result",
+                redemption_id=existing_redemption.id,
+                square_order_id=existing_redemption.square_order_id,
+                merchant_fee_cents=merchant_fee_cents
+            )
+    
     # Handle Square order lookup if square_order_id is provided
     order_total_cents = request.order_total_cents
     if request.square_order_id:
@@ -278,20 +359,9 @@ async def redeem_nova(
             # Fetch order total from Square
             order_total_cents = get_order_total_cents(db, merchant, request.square_order_id)
             
-            # Check for duplicate redemption
-            existing = db.query(MerchantRedemption).filter(
-                MerchantRedemption.merchant_id == merchant.id,
-                MerchantRedemption.square_order_id == request.square_order_id
-            ).first()
-            
-            if existing:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail={
-                        "error": "ORDER_ALREADY_REDEEMED",
-                        "message": "This Square order has already been redeemed"
-                    }
-                )
+            # P0-6: Race condition fix - rely on DB unique constraint instead of pre-check
+            # The unique index on (merchant_id, square_order_id) will prevent duplicates
+            # We'll catch IntegrityError and return 409 if duplicate
         except SquareNotConnectedError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -364,6 +434,10 @@ async def redeem_nova(
                 }
             )
     
+    # Get wallet balance before redemption
+    wallet_before = db.query(DriverWallet).filter(DriverWallet.user_id == user.id).first()
+    before_balance = wallet_before.nova_balance if wallet_before else 0
+    
     # Redeem Nova via NovaService
     try:
         result = NovaService.redeem_from_driver(
@@ -378,6 +452,25 @@ async def redeem_nova(
                 "checkout_type": "qr"
             }
         )
+        
+        # P1-1: Admin audit log
+        log_wallet_mutation(
+            db=db,
+            actor_id=user.id,
+            action="wallet_redeem",
+            user_id=str(user.id),
+            before_balance=before_balance,
+            after_balance=result["driver_balance"],
+            amount=-discount_cents,
+            metadata={
+                "qr_token": request.qr_token,
+                "merchant_id": merchant.id,
+                "order_total_cents": order_total_cents,
+                "square_order_id": request.square_order_id,
+                "checkout_type": "qr",
+                "redemption_id": redemption_id
+            }
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -387,7 +480,8 @@ async def redeem_nova(
             }
         )
     
-    # Create MerchantRedemption record
+    # Create MerchantRedemption record (P0-6: race condition fix with IntegrityError handling)
+    # P1-F: Include idempotency_key for non-Square redemptions
     redemption_id = str(uuid.uuid4())
     redemption = MerchantRedemption(
         id=redemption_id,
@@ -395,13 +489,57 @@ async def redeem_nova(
         driver_user_id=user.id,
         qr_token=request.qr_token,
         square_order_id=request.square_order_id,
+        idempotency_key=request.idempotency_key,  # P1-F: Store idempotency_key
         order_total_cents=order_total_cents,
         discount_cents=discount_cents,
         nova_spent_cents=discount_cents
     )
-    db.add(redemption)
-    db.commit()
-    db.refresh(redemption)
+    try:
+        db.add(redemption)
+        db.commit()
+        db.refresh(redemption)
+    except IntegrityError as e:
+        db.rollback()
+        # P1-F: Check for duplicate idempotency_key or square_order_id
+        if request.idempotency_key:
+            existing = db.query(MerchantRedemption).filter(
+                MerchantRedemption.merchant_id == merchant.id,
+                MerchantRedemption.idempotency_key == request.idempotency_key
+            ).first()
+            if existing:
+                # Return cached response (race condition: another request completed first)
+                # Get current wallet balance for response
+                wallet = db.query(DriverWallet).filter(DriverWallet.user_id == user.id).first()
+                remaining_nova_cents = wallet.nova_balance if wallet else 0
+                
+                return RedeemResponse(
+                    success=True,
+                    merchant_id=existing.merchant_id,
+                    discount_cents=existing.discount_cents,
+                    order_total_cents=existing.order_total_cents,
+                    nova_spent_cents=existing.nova_spent_cents,
+                    remaining_nova_cents=remaining_nova_cents,
+                    message="Idempotent redemption: returning cached result",
+                    redemption_id=existing.id,
+                    square_order_id=existing.square_order_id,
+                    merchant_fee_cents=None
+                )
+        elif request.square_order_id:
+            # Check if it's a duplicate square_order_id (race condition)
+            existing = db.query(MerchantRedemption).filter(
+                MerchantRedemption.merchant_id == merchant.id,
+                MerchantRedemption.square_order_id == request.square_order_id
+            ).first()
+            if existing:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "error": "ORDER_ALREADY_REDEEMED",
+                        "message": "This Square order has already been redeemed"
+                    }
+                )
+        # Re-raise if different IntegrityError
+        raise
     
     # Record merchant fee
     merchant_fee_cents = None
@@ -419,12 +557,66 @@ async def redeem_nova(
     
     # Mark wallet activity for pass refresh
     mark_wallet_activity(db, user.id)
+    
+    # P3: HubSpot tracking (dry run)
+    try:
+        from app.services.hubspot import track_event
+        from app.events.hubspot_adapter import adapt_redemption_event
+        hubspot_payload = adapt_redemption_event({
+            "user_id": str(user.id),
+            "merchant_id": merchant.id,
+            "amount_cents": discount_cents,
+            "redemption_id": redemption_id,
+            "redeemed_at": datetime.utcnow().isoformat()
+        })
+        track_event(db, "redemption", hubspot_payload)
+    except Exception as e:
+        # Don't fail redemption if HubSpot tracking fails
+        logger.warning(f"HubSpot tracking failed: {e}")
+    
     db.commit()
     
     logger.info(
         f"Redemption: driver {user.id} redeemed {discount_cents} Nova at merchant {merchant.id}, "
         f"order total: ${order_total_cents / 100:.2f}, square_order_id: {request.square_order_id}"
     )
+    
+    # Emit nova_redeemed and first_redemption_completed events (non-blocking)
+    try:
+        from app.events.domain import NovaRedeemedEvent, FirstRedemptionCompletedEvent
+        from app.events.outbox import store_outbox_event
+        
+        # Check if this is the first redemption for this driver
+        previous_redemptions = db.query(MerchantRedemption).filter(
+            MerchantRedemption.driver_user_id == user.id,
+            MerchantRedemption.id != redemption_id  # Exclude current redemption
+        ).count()
+        
+        is_first_redemption = previous_redemptions == 0
+        
+        # Emit nova_redeemed event
+        redeem_event = NovaRedeemedEvent(
+            user_id=str(user.id),
+            amount_cents=discount_cents,
+            merchant_id=merchant.id,
+            redemption_id=redemption_id,
+            new_balance_cents=result["driver_balance"],
+            redeemed_at=datetime.utcnow()
+        )
+        store_outbox_event(db, redeem_event)
+        
+        # Emit first_redemption_completed if this is the first
+        if is_first_redemption:
+            first_event = FirstRedemptionCompletedEvent(
+                user_id=str(user.id),
+                redemption_id=redemption_id,
+                merchant_id=merchant.id,
+                amount_cents=discount_cents,
+                completed_at=datetime.utcnow()
+            )
+            store_outbox_event(db, first_event)
+    except Exception as e:
+        logger.warning(f"Failed to emit nova_redeemed event: {e}")
     
     return RedeemResponse(
         success=True,

@@ -53,3 +53,4 @@ def downgrade():
                               existing_nullable=False,
                               existing_type=sa.Integer())
 
+

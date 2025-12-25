@@ -23,8 +23,26 @@ from app.dependencies_domain import (
 from app.core.config import settings
 from app.core.security import hash_password, create_access_token
 from app.core.email_sender import get_email_sender
+from app.utils.env import is_local_env
+import os
 
 logger = logging.getLogger(__name__)
+
+
+def _should_use_secure_cookie() -> bool:
+    """
+    Determine if cookies should use Secure flag (P0-5: security hardening).
+    
+    Returns True if:
+    - Not in local environment, OR
+    - In local environment but using HTTPS (FRONTEND_URL starts with https:// or HTTPS=true)
+    """
+    if not is_local_env():
+        return True  # Always secure in non-local
+    
+    # In local, check if HTTPS is being used
+    frontend_url = getattr(settings, 'FRONTEND_URL', None) or os.getenv("FRONTEND_URL", "") or ""
+    return frontend_url.startswith("https://") or os.getenv("HTTPS", "").lower() == "true"
 
 router = APIRouter(prefix="/v1/auth", tags=["auth-v1"])
 
@@ -93,6 +111,23 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
         
         token = AuthService.create_session_token(user)
         
+        # P3: HubSpot tracking (dry run)
+        try:
+            from app.services.hubspot import track_event
+            from app.events.hubspot_adapter import adapt_user_signup_event
+            hubspot_payload = adapt_user_signup_event({
+                "user_id": str(user.id),
+                "email": user.email,
+                "role_flags": user.role_flags,
+                "created_at": user.created_at.isoformat() if user.created_at else None
+            })
+            track_event(db, "user_signup", hubspot_payload)
+            db.commit()
+        except Exception as e:
+            # Don't fail registration if HubSpot tracking fails
+            import logging
+            logging.getLogger(__name__).warning(f"HubSpot tracking failed: {e}")
+        
         response = TokenResponse(access_token=token)
         return response
     except ValueError as e:
@@ -129,13 +164,13 @@ def login(
         
         token = AuthService.create_session_token(user)
         
-        # Set HTTP-only cookie for better security
+        # Set HTTP-only cookie for better security (P0-5: environment-aware secure flag)
         if response:
             response.set_cookie(
                 key="access_token",
                 value=token,
                 httponly=True,
-                secure=False,  # Set to False for localhost/HTTP, True in production with HTTPS
+                secure=_should_use_secure_cookie(),
                 samesite="lax",
                 max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
             )
@@ -347,13 +382,13 @@ async def verify_magic_link(
         # Create access token using AuthService (consistent with login/register)
         access_token = AuthService.create_session_token(user)
         
-        # Set HTTP-only cookie for better security (consistent with login)
+        # Set HTTP-only cookie for better security (consistent with login, P0-5: environment-aware secure flag)
         if response:
             response.set_cookie(
                 key="access_token",
                 value=access_token,
                 httponly=True,
-                secure=False,  # Set to False for localhost/HTTP, True in production with HTTPS
+                secure=_should_use_secure_cookie(),
                 samesite="lax",
                 max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
             )

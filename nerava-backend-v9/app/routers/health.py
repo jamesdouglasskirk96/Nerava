@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from datetime import datetime
-from app.db import engine
+from app.db import get_engine
 from sqlalchemy import text
 
 router = APIRouter()
@@ -9,7 +9,7 @@ router = APIRouter()
 def health():
     """
     Basic health check endpoint.
-    
+
     Returns:
         {
             "status": "ok",
@@ -18,6 +18,7 @@ def health():
     """
     try:
         # Test database connection with a trivial query
+        engine = get_engine()
         with engine.connect() as conn:
             result = conn.execute(text("SELECT 1"))
             result.fetchone()
@@ -31,21 +32,20 @@ def health():
 
 @router.get("/healthz")
 async def healthz():
-    """Detailed health check with database connectivity (legacy endpoint)"""
-    try:
-        # Test database connection
-        with engine.connect() as conn:
-            result = conn.execute(text("SELECT 1"))
-            result.fetchone()
-        return {
-            "ok": True,
-            "database": "connected",
-            "time": datetime.utcnow().isoformat()
-        }
-    except Exception as e:
-        return {
-            "ok": False,
-            "database": "disconnected",
-            "error": str(e),
-            "time": datetime.utcnow().isoformat()
-        }, 503
+    """
+    DEPRECATED: This endpoint performs database checks which can block health checks.
+    
+    Use root-level /healthz (liveness) for App Runner health checks instead.
+    This endpoint is kept for backward compatibility but may be removed.
+    
+    For dependency checks, use root-level /readyz (readiness probe).
+    """
+    # Return simple response without DB check to avoid blocking
+    # This matches the root-level /healthz behavior
+    return {
+        "ok": True,
+        "database": "not_checked",  # DB check removed to prevent blocking
+        "time": datetime.utcnow().isoformat(),
+        "deprecated": True,
+        "message": "Use root-level /healthz for liveness, /readyz for readiness"
+    }

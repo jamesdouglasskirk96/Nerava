@@ -19,10 +19,14 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 # Dev-only flag: allow anonymous user access in local dev
 # DO NOT enable in production - gated by environment check
 def _is_local_env() -> bool:
-    """Check if running in local environment"""
+    """Check if running in local environment
+    
+    P0-C Security: Only checks ENV, not REGION, to prevent spoofing in production.
+    REGION can be set to 'local' in production deployments, which would bypass security.
+    """
     env = os.getenv("ENV", "dev").lower()
-    region = os.getenv("REGION", "local").lower()
-    return env == "local" or region == "local"
+    # DO NOT check REGION - it can be spoofed in production
+    return env in {"local", "dev"}
 
 DEV_ALLOW_ANON_USER_ENABLED = (
     os.getenv("NERAVA_DEV_ALLOW_ANON_USER", "false").lower() == "true"

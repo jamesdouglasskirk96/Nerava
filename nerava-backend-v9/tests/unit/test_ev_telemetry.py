@@ -115,3 +115,4 @@ def test_telemetry_returns_200_when_mocked_smartcar_ok(client, mock_get_current_
             assert data["soc_pct"] == 75.5
             assert data["charging_state"] == "CHARGING"
 
+

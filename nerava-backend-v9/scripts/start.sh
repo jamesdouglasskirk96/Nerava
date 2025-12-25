@@ -13,19 +13,27 @@ echo ""
 # Change to app directory (where alembic.ini is located)
 cd /app
 
-# Run database migrations
-echo "=== Running database migrations ==="
-if ! python -m alembic upgrade head; then
-    echo "ERROR: Database migrations failed" >&2
-    echo "This usually means:" >&2
-    echo "  1. DATABASE_URL is not set or incorrect" >&2
-    echo "  2. Database is not accessible (network/security group issue)" >&2
-    echo "  3. Database user lacks permissions" >&2
-    echo "  4. Migration files are corrupted or missing" >&2
-    exit 1
+# Check if migrations should run on boot
+RUN_MIGRATIONS=${RUN_MIGRATIONS_ON_BOOT:-false}
+
+if [ "$RUN_MIGRATIONS" = "true" ]; then
+    echo "=== Running database migrations ==="
+    if python -m alembic upgrade head; then
+        echo "Migrations completed successfully"
+    else
+        echo "WARNING: Database migrations failed, but continuing startup" >&2
+        echo "This usually means:" >&2
+        echo "  1. DATABASE_URL is not set or incorrect" >&2
+        echo "  2. Database is not accessible (network/security group issue)" >&2
+        echo "  3. Database user lacks permissions" >&2
+        echo "  4. Migration files are corrupted or missing" >&2
+        # Don't exit - continue to start the app
+    fi
+    echo ""
+else
+    echo "Skipping migrations (RUN_MIGRATIONS_ON_BOOT not set to 'true')"
+    echo ""
 fi
-echo "Migrations completed successfully"
-echo ""
 
 # Start the application
 echo "=== Starting FastAPI application ==="
