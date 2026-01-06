@@ -1,0 +1,214 @@
+name: Deploy to AWS Production
+
+on:
+  push:
+    branches:
+      - main
+      - deploy/aws-prod
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  TERRAFORM_DIR: infra/terraform
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+        # Alternative if using access keys instead of OIDC:
+        # aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        # aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push backend image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: nerava/backend
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG ./backend
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Build and push driver image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: nerava/driver
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            --build-arg VITE_API_BASE_URL=https://api.nerava.network \
+            --build-arg VITE_ENV=prod \
+            --build-arg VITE_MOCK_MODE=false \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            ./apps/driver
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Build and push merchant image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: nerava/merchant
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            --build-arg VITE_API_BASE_URL=https://api.nerava.network \
+            --build-arg VITE_ENV=prod \
+            --build-arg VITE_MOCK_MODE=false \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            ./apps/merchant
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Build and push admin image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: nerava/admin
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            --build-arg VITE_API_BASE_URL=https://api.nerava.network \
+            --build-arg VITE_ENV=prod \
+            --build-arg VITE_MOCK_MODE=false \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            ./apps/admin
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Build and push landing image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: nerava/landing
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_DRIVER_APP_URL=https://app.nerava.network \
+            --build-arg NEXT_PUBLIC_MERCHANT_APP_URL=https://merchant.nerava.network \
+            --build-arg NEXT_PUBLIC_CHARGER_PORTAL_URL=https://charger.nerava.network \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            ./apps/landing
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Terraform Init
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: terraform plan -out=tfplan
+        continue-on-error: true
+
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: terraform apply -auto-approve tfplan || terraform apply -auto-approve
+
+      - name: Get ECS Cluster Name
+        id: get-cluster
+        run: |
+          CLUSTER_NAME=$(terraform -chdir=${{ env.TERRAFORM_DIR }} output -raw ecs_cluster_name)
+          echo "cluster_name=$CLUSTER_NAME" >> $GITHUB_OUTPUT
+
+      - name: Run Database Migrations
+        run: |
+          CLUSTER_NAME=${{ steps.get-cluster.outputs.cluster_name }}
+          TASK_DEFINITION=$(aws ecs describe-task-definition \
+            --task-definition nerava-backend \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text \
+            --region ${{ env.AWS_REGION }})
+          
+          SUBNET_IDS=$(terraform -chdir=${{ env.TERRAFORM_DIR }} output -json private_subnet_ids | jq -r '.[]' | tr '\n' ',' | sed 's/,$//')
+          SECURITY_GROUP=$(terraform -chdir=${{ env.TERRAFORM_DIR }} output -raw ecs_cluster_name | sed 's/-cluster$/-ecs-tasks-sg/' | xargs -I {} aws ec2 describe-security-groups \
+            --filters "Name=tag:Name,Values={}" \
+            --query 'SecurityGroups[0].GroupId' \
+            --output text \
+            --region ${{ env.AWS_REGION }})
+          
+          TASK_ARN=$(aws ecs run-task \
+            --cluster $CLUSTER_NAME \
+            --task-definition $TASK_DEFINITION \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_IDS],securityGroups=[$SECURITY_GROUP],assignPublicIp=DISABLED}" \
+            --overrides '{"containerOverrides":[{"name":"backend","command":["python","-m","alembic","upgrade","head"]}]}' \
+            --query 'tasks[0].taskArn' \
+            --output text \
+            --region ${{ env.AWS_REGION }})
+          
+          echo "Waiting for migration task to complete..."
+          aws ecs wait tasks-stopped \
+            --cluster $CLUSTER_NAME \
+            --tasks $TASK_ARN \
+            --region ${{ env.AWS_REGION }}
+          
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster $CLUSTER_NAME \
+            --tasks $TASK_ARN \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text \
+            --region ${{ env.AWS_REGION }})
+          
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "Migration failed with exit code $EXIT_CODE"
+            exit 1
+          fi
+          
+          echo "Migrations completed successfully"
+
+      - name: Update ECS Services
+        run: |
+          CLUSTER_NAME=${{ steps.get-cluster.outputs.cluster_name }}
+          for service in backend driver merchant admin landing; do
+            echo "Updating $service service..."
+            aws ecs update-service \
+              --cluster $CLUSTER_NAME \
+              --service nerava-$service \
+              --force-new-deployment \
+              --region ${{ env.AWS_REGION }} > /dev/null
+          done
+
+      - name: Wait for Services to Stabilize
+        run: |
+          CLUSTER_NAME=${{ steps.get-cluster.outputs.cluster_name }}
+          for service in backend driver merchant admin landing; do
+            echo "Waiting for $service service to stabilize..."
+            aws ecs wait services-stable \
+              --cluster $CLUSTER_NAME \
+              --services nerava-$service \
+              --region ${{ env.AWS_REGION }} || true
+          done
+
+      - name: Run Smoke Tests
+        run: |
+          chmod +x scripts/prod_smoke_test.sh
+          ./scripts/prod_smoke_test.sh
+

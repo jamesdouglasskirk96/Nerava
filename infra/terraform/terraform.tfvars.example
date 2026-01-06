@@ -1,0 +1,60 @@
+# AWS Configuration
+aws_region = "us-east-1"
+
+# Project Configuration
+project_name = "nerava"
+environment  = "prod"
+
+# VPC Configuration
+vpc_cidr = "10.0.0.0/16"
+availability_zones = ["us-east-1a", "us-east-1b"]
+
+# Domain Configuration
+domain_name = "nerava.network"
+
+# ACM Certificate ARN (REQUIRED - must be created manually first)
+# Request certificate in ACM console for *.nerava.network and nerava.network
+# Then paste the ARN here
+acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/12345678-1234-1234-1234-123456789012"
+
+# Route53 Configuration
+# If domain is already in Route53, provide the zone ID
+# Otherwise, leave empty and Terraform will create a new hosted zone
+route53_zone_id = ""
+
+# RDS Configuration
+rds_instance_class         = "db.t3.micro"
+rds_allocated_storage      = 20
+rds_backup_retention_period = 7
+
+# ECS Task Configuration
+ecs_task_cpu = {
+  backend  = 512
+  driver   = 256
+  merchant = 256
+  admin    = 256
+  landing  = 512
+}
+
+ecs_task_memory = {
+  backend  = 1024
+  driver   = 512
+  merchant = 512
+  admin    = 512
+  landing  = 1024
+}
+
+ecs_desired_count = {
+  backend  = 1
+  driver   = 1
+  merchant = 1
+  admin    = 1
+  landing  = 1
+}
+
+# GitHub OIDC Configuration (optional)
+# If using GitHub OIDC for CI/CD, provide these values
+# Otherwise, leave empty and use AWS access keys in GitHub Secrets
+github_repository        = "your-org/nerava"
+github_oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
+

@@ -1,208 +1,229 @@
-# Nerava Deployment Readiness
+# Production Deployment Checklist
 
-## Summary of Changes
+This document provides a production environment checklist to ensure safe deployment to AWS.
 
-The Nerava app has been made deployment-ready for Render, Fly.io, Vercel, and similar platforms.
+## Production Safety Gates
 
-### 1. Static File Path Resolution ✅
+The application includes fail-fast validation that prevents startup if production blockers are detected:
 
-**File**: `nerava-backend-v9/app/main_simple.py`
-- **Change**: Updated UI mount path to use `Path(__file__)` for proper relative resolution
-- **Before**: `os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "ui-mobile"))`
-- **After**: `Path(__file__).parent.parent.parent / "ui-mobile"`
+- ❌ OTP_PROVIDER=stub
+- ❌ MERCHANT_AUTH_MOCK=true
+- ❌ DEMO_MODE=true
+- ❌ ALLOWED_ORIGINS=*
+- ❌ DATABASE_URL starting with sqlite://
+- ❌ PUBLIC_BASE_URL containing localhost
+- ❌ FRONTEND_URL containing localhost
+- ❌ JWT_SECRET using default value
+- ❌ TOKEN_ENCRYPTION_KEY missing or invalid
 
-This ensures the ui-mobile directory is correctly resolved regardless of where the server is run from.
+## Required Environment Variables
 
-### 2. CORS Configuration ✅
+### Backend (`backend/`)
 
-**Files**: 
-- `nerava-backend-v9/app/config.py`
-- `ENV.example`
-
-**Changes**:
-- Added `public_base_url` setting from `PUBLIC_BASE_URL` environment variable
-- CORS origins now read from `ALLOWED_ORIGINS` environment variable
-- Defaults to `*` for development
-- Production can set specific origins like `https://nerava.com,https://app.nerava.com`
-
-### 3. Environment Variables ✅
-
-**Files**: `ENV.example`, `nerava-backend-v9/ENV.example`
-
-Both files now include:
-- Square API keys (`SQUARE_ACCESS_TOKEN`, etc.)
-- Database URL (`DATABASE_URL`)
-- Public base URL (`PUBLIC_BASE_URL`)
-- CORS origins (`ALLOWED_ORIGINS`)
-- Redis configuration
-- Logging and request settings
-- Feature flags
-
-### 4. Service Worker Enhancements ✅
-
-**File**: `ui-mobile/sw.js`
-
-**Improvements**:
-- Cache versioning with `v1.0.0` constant
-- Proper `skipWaiting()` call in install event
-- `clientsClaim()` in activate event with proper promise handling
-- Offline fallback page included in cache
-- Better error handling for offline scenarios
-- Fallback response for navigation requests
-
-### 5. Deployment Configuration ✅
-
-**Files**: `Procfile`, `nerava-backend-v9/requirements.txt`, `nerava-backend-v9/runtime.txt`
-
-**Changes**:
-- Updated Procfile to remove migrations from boot (run manually via shell instead)
-- Added `pydantic-settings` and `alembic` to requirements.txt
-- Created `runtime.txt` with Python 3.9.18
-- Procfile now properly handles PORT and WEB_CONCURRENCY environment variables
-
-### 6. Health Check Endpoints ✅
-
-**File**: `nerava-backend-v9/app/routers/health.py`
-
-**New Endpoints**:
-- `GET /v1/health` - Basic health check
-- `GET /v1/healthz` - Detailed health check with database connectivity test
-
-The `/healthz` endpoint returns 503 if database is disconnected, making it perfect for orchestration platforms.
-
-### 7. Service Worker Registration ✅
-
-**File**: `ui-mobile/js/app.js`
-
-**Changes**:
-- Added service worker registration on app load
-- Proper error handling
-- Console logging for debugging
-
-## Deployment Instructions
-
-### For Render.com
-
-1. Set environment variables in Render dashboard:
-   ```bash
-   DATABASE_URL=postgresql://user:pass@host/dbname
-   ALLOWED_ORIGINS=https://yourdomain.com
-   PUBLIC_BASE_URL=https://yourbackend.render.com
-   SQUARE_ACCESS_TOKEN=your_token
-   # ... other variables
-   ```
-
-2. Deploy from GitHub. Render will use the Procfile automatically.
-
-3. The app will:
-   - Run migrations on first deploy
-   - Start uvicorn with 4 workers
-   - Serve the UI at `/app`
-   - Expose API at `/v1/`
-
-### For Fly.io
-
-1. Create `fly.toml`:
-   ```toml
-   app = "nerava"
-   
-   [build]
-     dockerfile = "nerava-backend-v9/Dockerfile"
-   
-   [env]
-     PORT = "8080"
-     DATABASE_URL = "postgresql://..."
-   
-   [[services]]
-     internal_port = 8080
-     protocol = "tcp"
-   
-     [[services.ports]]
-       handlers = ["http"]
-       port = 80
-   
-     [[services.ports]]
-       handlers = ["tls", "http"]
-       port = 443
-   
-     [services.concurrency]
-       type = "connections"
-       hard_limit = 1000
-       soft_limit = 500
-   
-   [[services.tcp_checks]]
-     interval = "15s"
-     timeout = "2s"
-     grace_period = "1s"
-   ```
-
-2. Deploy: `flyctl deploy`
-
-### For Vercel
-
-1. Create `vercel.json`:
-   ```json
-   {
-     "buildCommand": "cd nerava-backend-v9 && pip install -r requirements.txt",
-     "outputDirectory": "nerava-backend-v9",
-     "rewrites": [
-       { "source": "/app/(.*)", "destination": "/app/$1" },
-       { "source": "/v1/(.*)", "destination": "/api/$1" }
-     ]
-   }
-   ```
-
-2. Note: Vercel is optimized for static sites. For production, consider Render or Fly.io for the full FastAPI app.
-
-## Testing Deployment
-
-### Local Testing
-
+#### Database (REQUIRED)
 ```bash
-# Copy environment variables
-cp ENV.example .env
+DATABASE_URL=postgresql://user:password@host:5432/nerava
+```
+**Note:** SQLite is rejected in production. Must use PostgreSQL.
 
-# Edit .env with your values
-nano .env
+#### Security (REQUIRED)
+```bash
+# Generate with: python -c 'import secrets; print(secrets.token_urlsafe(32))'
+JWT_SECRET=<secure_random_value>
 
-# Run migrations
-cd nerava-backend-v9
-python -m alembic upgrade head
-
-# Start server
-uvicorn app.main_simple:app --reload --port 8001
+# Generate with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+TOKEN_ENCRYPTION_KEY=<44_char_fernet_key>
 ```
 
-Visit:
-- UI: http://localhost:8001/app/
-- API: http://localhost:8001/v1/health
+#### URLs (REQUIRED: No localhost)
+```bash
+PUBLIC_BASE_URL=https://api.nerava.network
+FRONTEND_URL=https://app.nerava.network
+```
 
-### Production Testing
+#### CORS (REQUIRED: Explicit origins only)
+```bash
+ALLOWED_ORIGINS=https://app.nerava.network,https://www.nerava.network,https://merchant.nerava.network,https://admin.nerava.network
+```
+**Note:** Wildcard `*` is rejected in production.
 
-1. Check health: `curl https://yourdomain.com/v1/health`
-2. Check database connectivity: `curl https://yourdomain.com/v1/healthz`
-3. Test UI: Visit `https://yourdomain.com/app/`
-4. Test offline mode: Open browser DevTools > Application > Service Workers
+#### Host Security (REQUIRED)
+```bash
+ALLOWED_HOSTS=api.nerava.network,*.nerava.network
+```
 
-## PWA Features Enabled
+#### OTP Provider (REQUIRED: Must NOT be stub)
+```bash
+OTP_PROVIDER=twilio_verify
+# OR: OTP_PROVIDER=twilio_sms
 
-- ✅ Service Worker with caching
-- ✅ Offline page fallback
-- ✅ Manifest for mobile install
-- ✅ Skip waiting for immediate updates
-- ✅ Clients claim for instant control
+TWILIO_ACCOUNT_SID=<your_twilio_account_sid>
+TWILIO_AUTH_TOKEN=<your_twilio_auth_token>
+TWILIO_VERIFY_SERVICE_SID=<your_twilio_verify_service_sid>
+# OTP_FROM_NUMBER required only if using twilio_sms
+```
 
-## Next Steps
+#### Feature Flags (REQUIRED: Must be disabled)
+```bash
+MERCHANT_AUTH_MOCK=false
+DEMO_MODE=false
+```
 
-1. Set up CI/CD pipeline (GitHub Actions)
-2. Configure custom domain
-3. Enable SSL/TLS
-4. Set up monitoring (Sentry, etc.)
-5. Configure backups for production database
+#### Redis (REQUIRED)
+```bash
+REDIS_URL=redis://host:6379/0
+```
 
-## Notes
+#### Google OAuth (if using merchant SSO)
+```bash
+GOOGLE_CLIENT_ID=<your_google_client_id>
+GOOGLE_OAUTH_CLIENT_ID=<your_google_oauth_client_id>
+GOOGLE_OAUTH_CLIENT_SECRET=<your_google_oauth_client_secret>
+GOOGLE_OAUTH_REDIRECT_URI=https://api.nerava.network/v1/merchants/google/callback
+```
 
-- SQLite is fine for development but use PostgreSQL in production
-- Redis is optional but recommended for caching
-- Square webhooks require a publicly accessible URL
-- CORS should be tightened in production (remove wildcard)
+#### Google Places API
+```bash
+GOOGLE_PLACES_API_KEY=<your_google_places_api_key>
+```
+
+#### Square API (Production)
+```bash
+SQUARE_ENV=production
+SQUARE_APPLICATION_ID_PRODUCTION=<your_square_app_id>
+SQUARE_APPLICATION_SECRET_PRODUCTION=<your_square_app_secret>
+SQUARE_REDIRECT_URL_PRODUCTION=https://api.nerava.network/v1/merchants/square/callback
+SQUARE_WEBHOOK_SIGNATURE_KEY=<your_square_webhook_signature_key>
+```
+
+#### Stripe (Production)
+```bash
+STRIPE_SECRET_KEY=sk_live_<your_live_secret_key>
+STRIPE_WEBHOOK_SECRET=whsec_<your_webhook_secret>
+STRIPE_CONNECT_CLIENT_ID=ca_<your_connect_client_id>
+```
+
+#### Smartcar (Production)
+```bash
+SMARTCAR_CLIENT_ID=<your_smartcar_client_id>
+SMARTCAR_CLIENT_SECRET=<your_smartcar_client_secret>
+SMARTCAR_REDIRECT_URI=https://api.nerava.network/oauth/smartcar/callback
+SMARTCAR_MODE=live
+SMARTCAR_STATE_SECRET=<secure_random_secret>
+```
+
+#### HTTPS Redirect (Optional)
+```bash
+# Set to true if behind ALB/load balancer that terminates TLS
+SKIP_HTTPS_REDIRECT=false
+```
+
+### Frontend Apps (`apps/driver/`, `apps/merchant/`, `apps/admin/`)
+
+#### Build Arguments (REQUIRED)
+```bash
+VITE_API_BASE_URL=https://api.nerava.network
+VITE_ENV=prod
+VITE_MOCK_MODE=false
+VITE_POSTHOG_KEY=<your_posthog_key>
+```
+
+**Note:** Builds will fail if `VITE_API_BASE_URL` is `/api` or `http://localhost:*` in production.
+
+### Landing Page (`apps/landing/`)
+
+#### Build Arguments (REQUIRED)
+```bash
+NEXT_PUBLIC_DRIVER_APP_URL=https://app.nerava.network
+NEXT_PUBLIC_MERCHANT_APP_URL=https://merchant.nerava.network
+NEXT_PUBLIC_CHARGER_PORTAL_URL=https://charger.nerava.network
+NEXT_PUBLIC_POSTHOG_KEY=<your_posthog_key>
+```
+
+**Note:** Builds will fail if ESLint errors exist (eslint.ignoreDuringBuilds=false).
+
+## Validation Commands
+
+### Backend Validation
+
+Test that production safety gates work:
+
+```bash
+# Should fail: OTP_PROVIDER=stub
+ENV=prod OTP_PROVIDER=stub python -m app.main_simple
+
+# Should fail: MERCHANT_AUTH_MOCK=true
+ENV=prod MERCHANT_AUTH_MOCK=true python -m app.main_simple
+
+# Should fail: DEMO_MODE=true
+ENV=prod DEMO_MODE=true python -m app.main_simple
+
+# Should fail: ALLOWED_ORIGINS=*
+ENV=prod ALLOWED_ORIGINS=* python -m app.main_simple
+
+# Should fail: DATABASE_URL=sqlite://
+ENV=prod DATABASE_URL=sqlite:///test.db python -m app.main_simple
+
+# Should fail: PUBLIC_BASE_URL=localhost
+ENV=prod PUBLIC_BASE_URL=http://localhost:8001 python -m app.main_simple
+
+# Should fail: FRONTEND_URL=localhost
+ENV=prod FRONTEND_URL=http://localhost:8001/app python -m app.main_simple
+```
+
+### Frontend Build Validation
+
+Test that frontend builds fail with invalid config:
+
+```bash
+# Should fail: VITE_API_BASE_URL=/api
+cd apps/driver && VITE_ENV=prod VITE_API_BASE_URL=/api npm run build
+
+# Should fail: VITE_API_BASE_URL=localhost
+cd apps/driver && VITE_ENV=prod VITE_API_BASE_URL=http://localhost:8001 npm run build
+```
+
+### Landing Page Build Validation
+
+Test that landing page build fails with ESLint errors:
+
+```bash
+# Should fail if ESLint errors exist
+cd apps/landing && npm run build
+```
+
+## Production Deployment Steps
+
+1. **Set all required environment variables** (see above)
+2. **Generate secrets:**
+   ```bash
+   # JWT Secret
+   python -c 'import secrets; print(secrets.token_urlsafe(32))'
+   
+   # Token Encryption Key
+   python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+   ```
+3. **Verify database is PostgreSQL** (not SQLite)
+4. **Build frontend apps** with production env vars
+5. **Build landing page** with production env vars
+6. **Start backend** - it will validate all safety gates on startup
+7. **Monitor logs** for any validation failures
+
+## Security Features Enabled in Production
+
+- **TrustedHostMiddleware**: Validates Host header against ALLOWED_HOSTS
+- **HTTPSRedirectMiddleware**: Redirects HTTP to HTTPS (unless SKIP_HTTPS_REDIRECT=true)
+- **CORS**: Explicit origins only, no wildcard
+- **Postgres Pooling**: Configured with pool_size=20, max_overflow=10, pool_pre_ping=True, pool_recycle=3600
+- **Security Headers**: HSTS, X-Frame-Options, X-Content-Type-Options, X-XSS-Protection, Referrer-Policy
+
+## Troubleshooting
+
+If the application fails to start, check logs for validation errors. Common issues:
+
+- Missing required environment variables
+- Using forbidden values (stub, mock, demo, localhost, wildcard)
+- Invalid secret formats (JWT_SECRET, TOKEN_ENCRYPTION_KEY)
+- SQLite database URL in production
+
+All validation errors include clear error messages indicating what needs to be fixed.
