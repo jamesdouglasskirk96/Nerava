@@ -8,11 +8,36 @@ resource "aws_secretsmanager_secret" "backend_database" {
   }
 }
 
+# Note: DATABASE_URL will be updated after RDS is created via a null_resource or manually
+# The initial value is a placeholder that will be replaced
 resource "aws_secretsmanager_secret_version" "backend_database" {
   secret_id = aws_secretsmanager_secret.backend_database.id
-  secret_string = "postgresql://nerava_admin:${random_password.db_password.result}@${aws_db_instance.main.address}:5432/nerava"
+  secret_string = "postgresql://nerava_admin:${random_password.db_password.result}@PLACEHOLDER_RDS_ENDPOINT:5432/nerava"
   
-  depends_on = [aws_db_instance.main, random_password.db_password]
+  depends_on = [random_password.db_password]
+  
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
+}
+
+# Update DATABASE_URL after RDS is created
+resource "null_resource" "update_database_secret" {
+  triggers = {
+    rds_endpoint = aws_db_instance.main.address
+    password     = random_password.db_password.result
+  }
+  
+  provisioner "local-exec" {
+    command = <<-EOT
+      aws secretsmanager update-secret \
+        --secret-id ${aws_secretsmanager_secret.backend_database.arn} \
+        --secret-string "postgresql://nerava_admin:${random_password.db_password.result}@${aws_db_instance.main.address}:5432/nerava" \
+        --region ${var.aws_region}
+    EOT
+  }
+  
+  depends_on = [aws_db_instance.main, aws_secretsmanager_secret_version.backend_database]
 }
 
 # JWT Secret
