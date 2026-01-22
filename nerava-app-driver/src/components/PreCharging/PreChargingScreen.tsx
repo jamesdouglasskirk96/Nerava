@@ -3,6 +3,7 @@ import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChargerCard } from './ChargerCard'
 import { CarouselControls } from '../shared/CarouselControls'
+import { UserAvatar } from '../shared/UserAvatar'
 import { getAllMockChargers } from '../../mock/mockApi'
 import type { DiscoveryCharger } from '../../api/chargers'
 import type { ChargerWithExperiences } from '../../mock/types'
@@ -53,8 +54,8 @@ export function PreChargingScreen({ chargers: propChargers, loading: propLoading
   const currentCharger = chargers[currentIndex]
 
   const handleChargerClick = (chargerId: string) => {
-    // TODO: Wire to backend navigation
-    console.log('Navigate to charger:', chargerId)
+    // Navigate to WhileYouChargeScreen with charger_id
+    navigate(`/wyc?charger_id=${chargerId}`)
   }
 
   const handleToggleToCharging = () => {
@@ -100,13 +101,8 @@ export function PreChargingScreen({ chargers: propChargers, loading: propLoading
           </svg>
         </div>
         
-        {/* Right side: Find A Charger state pill (matches Figma) */}
-        <button
-          onClick={handleToggleToCharging}
-          className="px-3 py-1.5 bg-[#1877F2] rounded-full hover:bg-[#166FE5] active:scale-95 transition-all"
-        >
-          <span className="text-xs text-white font-medium">Find A Charger</span>
-        </button>
+        {/* Right side: User avatar */}
+        <UserAvatar />
       </header>
 
       {/* Main content - Matching Figma padding: 24px horizontal, 16px top */}
