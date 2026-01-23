@@ -4,17 +4,17 @@ on:
   push:
     branches: ['**']
     paths:
-      - 'nerava-app-driver/**'
+      - 'apps/driver/**'
       - '.github/workflows/ci-driver-app.yml'
   pull_request:
     branches: ['**']
     paths:
-      - 'nerava-app-driver/**'
+      - 'apps/driver/**'
       - '.github/workflows/ci-driver-app.yml'
 
 defaults:
   run:
-    working-directory: nerava-app-driver
+    working-directory: apps/driver
 
 jobs:
   lint:
@@ -29,7 +29,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: nerava-app-driver/package-lock.json
+          cache-dependency-path: apps/driver/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -49,7 +49,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: nerava-app-driver/package-lock.json
+          cache-dependency-path: apps/driver/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -61,7 +61,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: driver-app-dist
-          path: nerava-app-driver/dist/
+          path: apps/driver/dist/
           retention-days: 7
 
   unit-tests:
@@ -76,7 +76,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: nerava-app-driver/package-lock.json
+          cache-dependency-path: apps/driver/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -96,7 +96,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: nerava-app-driver/package-lock.json
+          cache-dependency-path: apps/driver/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -126,5 +126,5 @@ jobs:
         if: always()
         with:
           name: driver-app-playwright-report
-          path: nerava-app-driver/e2e/playwright-report/
+          path: apps/driver/e2e/playwright-report/
           retention-days: 7

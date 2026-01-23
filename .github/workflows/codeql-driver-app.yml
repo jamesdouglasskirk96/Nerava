@@ -5,12 +5,12 @@ on:
     branches:
       - main
     paths:
-      - 'nerava-app-driver/**'
+      - 'apps/driver/**'
   pull_request:
     branches:
       - main
     paths:
-      - 'nerava-app-driver/**'
+      - 'apps/driver/**'
   schedule:
     - cron: '0 3 * * 6'  # Saturday at 3am UTC
 
@@ -32,7 +32,7 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: javascript-typescript
-          source-root: nerava-app-driver
+          source-root: apps/driver
 
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3
