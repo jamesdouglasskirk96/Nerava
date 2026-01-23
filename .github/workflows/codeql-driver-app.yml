@@ -1,0 +1,43 @@
+name: CodeQL - Driver App
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'nerava-app-driver/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'nerava-app-driver/**'
+  schedule:
+    - cron: '0 3 * * 6'  # Saturday at 3am UTC
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          source-root: nerava-app-driver
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript-typescript"

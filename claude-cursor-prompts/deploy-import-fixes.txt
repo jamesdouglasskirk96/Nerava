@@ -1,0 +1,222 @@
+# Deploy Import Fixes - v25-import-fixes
+
+## Root Cause Analysis
+
+All App Runner deployments (v20 through v24) have been rolling back because the container fails health checks. The health checks fail because **the application crashes during import before uvicorn can start**.
+
+Three bugs were identified:
+
+---
+
+## Bug #1: Missing Settings Attribute
+
+**File:** `app/integrations/google_places_client.py` (line 22-26)
+
+**Problem:** The code imports `settings` from `app.config`, then tries to access `settings.GOOGLE_PLACES_API_KEY`. But `GOOGLE_PLACES_API_KEY` is only defined in `app/core/config.py`, NOT in `app/config.py`.
+
+**Error:**
+```
+AttributeError: 'Settings' object has no attribute 'GOOGLE_PLACES_API_KEY'
+```
+
+**Fix:** Use `getattr()` with a default value:
+
+```python
+# BEFORE (crashes):
+GOOGLE_PLACES_API_KEY = (
+    settings.GOOGLE_PLACES_API_KEY
+    or os.getenv("GOOGLE_PLACES_API_KEY")
+    or "AIzaSyAs0PVYXj3-ztRXCjdd0ztUGUSjQR73FFg"
+)
+
+# AFTER (works):
+GOOGLE_PLACES_API_KEY = (
+    getattr(settings, 'GOOGLE_PLACES_API_KEY', None)
+    or os.getenv("GOOGLE_PLACES_API_KEY")
+    or "AIzaSyAs0PVYXj3-ztRXCjdd0ztUGUSjQR73FFg"
+)
+```
+
+---
+
+## Bug #2: Wrong Import Path
+
+**File:** `app/routers/sms.py` (line 8)
+
+**Problem:** Imports `get_current_user` from `app.core.security`, but this function is not exported there. It's defined in `app.dependencies.domain`.
+
+**Error:**
+```
+ImportError: cannot import name 'get_current_user' from 'app.core.security'
+```
+
+**Fix:** Change the import path:
+
+```python
+# BEFORE (crashes):
+from ..core.security import get_current_user
+
+# AFTER (works):
+from ..dependencies.domain import get_current_user
+```
+
+---
+
+## Bug #3: Indentation Error
+
+**File:** `app/routers/exclusive.py` (lines 129-154)
+
+**Problem:** The code inside the `if existing_active:` block has incorrect indentation. The inner `if` statement and `else` block are not properly indented.
+
+**Error:**
+```
+IndentationError: expected an indented block
+```
+
+**Fix:** Properly indent the nested blocks:
+
+```python
+# BEFORE (crashes):
+        if existing_active:
+        # Check if expired
+        if existing_active.expires_at < datetime.utcnow():
+            # Mark as expired
+            ...
+        else:
+            # Return existing active session
+            ...
+
+# AFTER (works):
+        if existing_active:
+            # Check if expired
+            if existing_active.expires_at < datetime.utcnow():
+                # Mark as expired
+                ...
+            else:
+                # Return existing active session
+                ...
+```
+
+---
+
+## Verification Steps
+
+Before deploying, verify all fixes are in place:
+
+```bash
+cd "/Users/jameskirk/Desktop/Nerava/nerava-backend-v9 2"
+
+# Check Bug #1 fix
+grep "getattr" app/integrations/google_places_client.py
+# Should show: getattr(settings, 'GOOGLE_PLACES_API_KEY', None)
+
+# Check Bug #2 fix
+grep "get_current_user" app/routers/sms.py
+# Should show: from ..dependencies.domain import get_current_user
+
+# Check Bug #3 fix (syntax check)
+python3 -m py_compile app/routers/exclusive.py && echo "Syntax OK"
+
+# Full import test
+python3 -c "from app.main_simple import app; print('Import OK')"
+```
+
+---
+
+## Deployment Commands
+
+Once fixes are verified, deploy:
+
+```bash
+cd "/Users/jameskirk/Desktop/Nerava/nerava-backend-v9 2"
+
+# Login to ECR
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 566287346479.dkr.ecr.us-east-1.amazonaws.com
+
+# Build with no cache
+docker build --platform linux/arm64 --no-cache -t 566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:v25-import-fixes .
+
+# Push to ECR
+docker push 566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:v25-import-fixes
+
+# Update App Runner
+aws apprunner update-service \
+  --service-arn "arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3" \
+  --source-configuration '{
+    "ImageRepository": {
+      "ImageIdentifier": "566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:v25-import-fixes",
+      "ImageRepositoryType": "ECR",
+      "ImageConfiguration": {
+        "Port": "8000"
+      }
+    },
+    "AutoDeploymentsEnabled": false
+  }'
+
+echo "Deployment started. Monitoring..."
+```
+
+---
+
+## Monitor Deployment
+
+```bash
+# Monitor until complete
+while true; do
+  STATUS=$(aws apprunner describe-service \
+    --service-arn "arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3" \
+    --query 'Service.Status' --output text)
+
+  IMAGE=$(aws apprunner describe-service \
+    --service-arn "arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3" \
+    --query 'Service.SourceConfiguration.ImageRepository.ImageIdentifier' --output text)
+
+  echo "[$(date +%H:%M:%S)] Status: $STATUS | Image: $IMAGE"
+
+  if [ "$STATUS" = "RUNNING" ]; then
+    echo "Deployment complete!"
+    break
+  fi
+
+  sleep 30
+done
+```
+
+---
+
+## Test After Deployment
+
+```bash
+# Health check
+curl -s https://api.nerava.network/healthz
+
+# Magic link endpoint (the main feature we're deploying)
+curl -s -X POST https://api.nerava.network/v1/magic/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "phone": "+17133056318",
+    "exclusive_session_id": "demo_123",
+    "merchant_id": "ChIJKV41JMnORIYRu2cBs5CKtBc",
+    "charger_id": "tesla_market_heights"
+  }'
+```
+
+**Expected success response:**
+```json
+{
+  "token": "abc123...",
+  "link": "https://app.nerava.network/magic?token=abc123...",
+  "expires_in_minutes": 30
+}
+```
+
+---
+
+## Success Criteria
+
+Deployment is successful when:
+
+1. ✅ App Runner status is `RUNNING` (not `OPERATION_IN_PROGRESS`)
+2. ✅ Image shows `v25-import-fixes` (not `v19-photo-fix`)
+3. ✅ Health check returns `{"ok":true,...}`
+4. ✅ Magic link endpoint returns a token (not `{"detail":"Not Found"}`)

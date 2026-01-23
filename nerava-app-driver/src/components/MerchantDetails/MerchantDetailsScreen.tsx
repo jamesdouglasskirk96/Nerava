@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { Navigation, X, Heart, Share2 } from 'lucide-react'
 import { useMerchantDetails, useWalletActivate, useShareLink } from '../../services/api'
@@ -13,6 +13,8 @@ import { Button } from '../shared/Button'
 import { ActivateExclusiveModal } from '../ActivateExclusiveModal/ActivateExclusiveModal'
 import { useFavoriteMerchant } from '../../hooks/useFavoriteMerchant'
 import { useGeolocation, CHARGER_RADIUS_M } from '../../hooks/useGeolocation'
+import { track, AnalyticsEvents } from '../../lib/analytics'
+import { getChargerDiscovery, getChargerFromDiscovery } from '../../api/chargers'
 
 export function MerchantDetailsScreen() {
   const { merchantId } = useParams<{ merchantId: string }>()
@@ -20,6 +22,45 @@ export function MerchantDetailsScreen() {
   const navigate = useNavigate()
   const sessionId = searchParams.get('session_id') || undefined
   const chargerId = searchParams.get('charger_id') || undefined
+  const chargerLatParam = searchParams.get('charger_lat')
+  const chargerLngParam = searchParams.get('charger_lng')
+  
+  // Get user location for fetching charger details
+  const geoForCharger = useGeolocation()
+  
+  // Fetch charger details if charger_id is provided and we have user location
+  const [chargerData, setChargerData] = useState<{ lat: number; lng: number } | null>(null)
+  
+  useEffect(() => {
+    if (chargerId && geoForCharger.latitude && geoForCharger.longitude) {
+      // Try to get charger from discovery
+      getChargerDiscovery(geoForCharger.latitude, geoForCharger.longitude)
+        .then((discovery) => {
+          const charger = getChargerFromDiscovery(chargerId, discovery)
+          if (charger) {
+            setChargerData({ lat: charger.lat, lng: charger.lng })
+          }
+        })
+        .catch(() => {
+          // Ignore errors, will use fallback
+        })
+    }
+  }, [chargerId, geoForCharger.latitude, geoForCharger.longitude])
+  
+  // Use charger coordinates from params, fetched data, or fallback
+  const chargerCoordinates = useMemo(() => {
+    if (chargerLatParam && chargerLngParam) {
+      return {
+        lat: parseFloat(chargerLatParam),
+        lng: parseFloat(chargerLngParam),
+      }
+    }
+    if (chargerData) {
+      return chargerData
+    }
+    // Fallback to hardcoded coordinates (Domain Austin)
+    return { lat: 30.4027, lng: -97.6719 }
+  }, [chargerLatParam, chargerLngParam, chargerData])
 
   const { data: merchantData, isLoading, error } = useMerchantDetails(merchantId || null, sessionId)
   const walletActivate = useWalletActivate()
@@ -35,7 +76,14 @@ export function MerchantDetailsScreen() {
   const { data: shareData } = useShareLink(merchantId || null)
 
   // Geolocation for proximity-based activation
-  const geo = useGeolocation(5000) // Poll every 5 seconds
+  const geoLocation = useGeolocation(5000) // Poll every 5 seconds
+
+  // Track merchant details opened
+  useEffect(() => {
+    if (merchantId) {
+      track(AnalyticsEvents.MERCHANT_DETAILS_OPENED, { merchant_id: merchantId })
+    }
+  }, [merchantId])
 
   // Check if preferences modal should be shown (only once per session)
   useEffect(() => {
@@ -152,14 +200,38 @@ export function MerchantDetailsScreen() {
   const openNow = merchantAny.open_now !== undefined ? merchantAny.open_now : undefined
   const hoursText = merchantAny.hours_text || undefined
 
+  // Helper function to get today's hours from opening_hours JSON
+  function getHoursToday(openingHours: any): string | undefined {
+    if (!openingHours?.weekday_text) return undefined
+
+    // Get today's day (0=Sunday, 1=Monday, etc. in JS)
+    const today = new Date().getDay()
+    // Convert to weekday_text index (which starts with Monday=0)
+    const weekdayIndex = today === 0 ? 6 : today - 1
+
+    const weekdayText = openingHours.weekday_text
+    if (weekdayIndex < weekdayText.length) {
+      const fullText = weekdayText[weekdayIndex]
+      // Parse "Monday: 11:00 AM – 10:00 PM" -> "11 AM–10 PM"
+      if (fullText.includes(':')) {
+        const hoursPart = fullText.split(':').slice(1).join(':').trim()
+        // Simplify format
+        return hoursPart
+          .replace(/:00/g, '')
+          .replace(/\s+/g, ' ')
+          .replace(' – ', '–')
+          .replace(' - ', '–')
+      }
+    }
+    return undefined
+  }
+
   const handleCTA = () => {
-    if (geo.isNearCharger) {
+    if (geoLocation.isNearCharger) {
       handleAddToWallet()
     } else {
       // Open Google Maps directions to charger location
-      const chargerLat = 30.4027
-      const chargerLng = -97.6719
-      window.open(`https://www.google.com/maps/dir/?api=1&destination=${chargerLat},${chargerLng}`, '_blank')
+      window.open(`https://www.google.com/maps/dir/?api=1&destination=${chargerCoordinates.lat},${chargerCoordinates.lng}`, '_blank')
     }
   }
 
@@ -196,8 +268,8 @@ export function MerchantDetailsScreen() {
           isFavorite={isFavorite}
         />
 
-        {/* Content */}
-        <div className="px-5 py-4 space-y-4">
+        {/* Content - Tighter spacing */}
+        <div className="px-5 py-3 space-y-3">
           {/* Merchant name + category */}
           <div>
             <h1 className="text-2xl font-bold text-[#050505]">{merchantData.merchant.name}</h1>
@@ -211,40 +283,42 @@ export function MerchantDetailsScreen() {
             <ExclusiveOfferCard
               title={merchantData.perk.title}
               description={merchantData.perk.description}
+              options={(merchantData.perk as any).options}
             />
           )}
 
-          {/* Distance Card */}
+          {/* Distance Card - only show if we have valid distance */}
           {(merchantData.moment.distance_miles ?? 0) > 0 && (
             <DistanceCard
               distanceMiles={merchantData.moment.distance_miles}
             />
           )}
 
-          {/* Hours card - only show if hours data exists */}
-          {(hoursText || hoursToday) && (
+          {/* Hours Today - show if available */}
+          {(hoursToday || merchantAny.opening_hours) && (
             <HoursCard
-              hoursText={hoursText}
-              hoursToday={hoursToday}
+              hoursToday={hoursToday || getHoursToday(merchantAny.opening_hours)}
               openNow={openNow}
             />
           )}
 
-          {/* Merchant description */}
+          {/* Description */}
           {merchantAny.description && (
             <p className="text-sm text-[#65676B] leading-relaxed">
               {merchantAny.description}
             </p>
           )}
 
-          {/* Location Status - CALM design, not red error */}
-          <LocationStatusCard geo={geo} />
+          {/* Location Status - Only show if there's an error or warning */}
+          {(geoLocation.error || geoLocation.distanceToCharger === null) && (
+            <LocationStatusCard geo={geoLocation} />
+          )}
         </div>
       </div>
 
       {/* Sticky Bottom CTA */}
       <div className="sticky bottom-0 px-5 py-4 bg-white border-t border-gray-100 safe-area-inset-bottom">
-        {geo.isNearCharger ? (
+        {geoLocation.isNearCharger ? (
           merchantData.wallet.can_add ? (
             <Button
               variant="primary"
@@ -268,9 +342,7 @@ export function MerchantDetailsScreen() {
             <Button
               variant="secondary"
               onClick={() => {
-                const chargerLat = 30.4027
-                const chargerLng = -97.6719
-                window.open(`https://www.google.com/maps/dir/?api=1&destination=${chargerLat},${chargerLng}`, '_blank')
+                window.open(`https://www.google.com/maps/dir/?api=1&destination=${chargerCoordinates.lat},${chargerCoordinates.lng}`, '_blank')
               }}
               className="w-full flex items-center justify-center gap-2"
             >

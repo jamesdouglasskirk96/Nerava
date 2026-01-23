@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 255, 255, 255;
+  --background-end-rgb: 255, 255, 255;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+      to bottom,
+      transparent,
+      rgb(var(--background-end-rgb))
+    )
+    rgb(var(--background-start-rgb));
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Ensure h1 and h2 headings always stay on one line */
+/* Use nowrap to prevent wrapping - font sizes will scale responsively via Tailwind classes */
+h1, h2 {
+  white-space: nowrap;
+  line-height: 1.1;
+  overflow: visible;
+  display: block;
+}
+
+/* On very small screens, ensure headings scale down enough to fit on one line */
+/* This works in conjunction with Tailwind's responsive text classes */
+@media (max-width: 640px) {
+  h1 {
+    font-size: min(2rem, 7vw) !important;
+  }
+  h2 {
+    font-size: min(1.75rem, 6vw) !important;
+  }
+}
+

@@ -50,3 +50,4 @@ def test_magic_link_rate_limit_resets(client):
     assert response.status_code != 429
 
 
+

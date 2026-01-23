@@ -96,3 +96,4 @@ echo "2. Update backend ALLOWED_ORIGINS with CloudFront domain"
 echo "3. Update ui-mobile/index.html with App Runner URL meta tag"
 
 
+

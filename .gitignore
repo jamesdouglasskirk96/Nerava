@@ -20,6 +20,15 @@ dist/
 .next/
 .turbo/
 
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+# Large files / archives
+*.zip
+
 # Databases / data
 *.db
 *.db-shm

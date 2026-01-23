@@ -1,0 +1,885 @@
+# Corporate Chain Denylist - COMPREHENSIVE
+# One pattern per line. Supports regex patterns (prefix with "regex:")
+# Lines starting with # are comments
+
+# ============================================================================
+# FAST FOOD (Tier 1 - Obvious)
+# ============================================================================
+McDonald's
+Burger King
+Wendy's
+Taco Bell
+KFC
+Kentucky Fried Chicken
+Chick-fil-A
+Popeyes
+Arby's
+Sonic Drive-In
+Jack in the Box
+Whataburger
+Carl's Jr
+Hardee's
+Five Guys
+In-N-Out
+Culver's
+Raising Cane's
+Wingstop
+Buffalo Wild Wings
+Zaxby's
+Checkers
+Rally's
+White Castle
+Krystal
+Del Taco
+Taco Bueno
+Taco Cabana
+Long John Silver's
+Captain D's
+Church's Chicken
+Bojangles
+Jollibee
+Shake Shack
+Smashburger
+Steak 'n Shake
+Fatburger
+Wayback Burgers
+Mooyah
+BurgerFi
+Habit Burger
+Freddy's
+Portillo's
+Nando's
+Champs Chicken
+
+# ============================================================================
+# FAST CASUAL (Tier 1)
+# ============================================================================
+Chipotle
+Panera Bread
+Panera
+Qdoba
+Moe's Southwest Grill
+Moe's Southwest
+Panda Express
+Noodles & Company
+Noodles and Company
+Firehouse Subs
+Jersey Mike's
+Jimmy John's
+Subway
+Potbelly
+McAlister's Deli
+McAlister's
+Jason's Deli
+Tropical Smoothie
+Smoothie King
+Blaze Pizza
+MOD Pizza
+Pieology
+&pizza
+Pie Five
+Your Pie
+Newk's
+Zoe's Kitchen
+CAVA
+Sweetgreen
+Salata
+Chopt
+Just Salad
+Dig Inn
+Cosi
+Corner Bakery
+Au Bon Pain
+La Madeleine
+Atlanta Bread
+Einstein Bros
+Einstein Bagels
+Bruegger's Bagels
+Noah's Bagels
+Schlotzsky's
+Quiznos
+Which Wich
+Penn Station
+Charleys
+Charleys Philly
+Erbert & Gerbert's
+Capriotti's
+Mendocino Farms
+Tender Greens
+True Food Kitchen
+Flower Child
+The Kebab Shop
+Ike's Love & Sandwiches
+Ike's
+Wingstop
+Pluckers
+Wing Zone
+
+# ============================================================================
+# PIZZA CHAINS
+# ============================================================================
+Pizza Hut
+Domino's
+Papa John's
+Little Caesars
+Papa Murphy's
+Marco's Pizza
+Jet's Pizza
+Cicis Pizza
+CiCi's
+Hungry Howie's
+Round Table Pizza
+Mountain Mike's
+Godfather's Pizza
+Donatos
+Sbarro
+California Pizza Kitchen
+CPK
+
+# ============================================================================
+# COFFEE CHAINS
+# ============================================================================
+Starbucks
+Dunkin'
+Dunkin Donuts
+Peet's Coffee
+Dutch Bros
+Tim Hortons
+Caribou Coffee
+The Coffee Bean
+Coffee Bean & Tea Leaf
+Philz Coffee
+Blue Bottle
+La Colombe
+Intelligentsia
+Stumptown
+Black Rock Coffee
+Scooter's Coffee
+Biggby Coffee
+PJ's Coffee
+CC's Coffee
+Saxbys
+Dunn Brothers
+It's A Grind
+Gloria Jean's
+
+# ============================================================================
+# CASUAL DINING CHAINS
+# ============================================================================
+Applebee's
+Chili's
+TGI Friday's
+TGI Fridays
+Olive Garden
+Red Lobster
+Outback Steakhouse
+Outback
+Texas Roadhouse
+LongHorn Steakhouse
+Longhorn
+Cracker Barrel
+Denny's
+IHOP
+Waffle House
+Bob Evans
+Golden Corral
+Perkins
+Village Inn
+Cheesecake Factory
+The Cheesecake Factory
+P.F. Chang's
+PF Chang's
+BJ's Restaurant
+BJ's Brewhouse
+Red Robin
+Ruby Tuesday
+O'Charley's
+Cheddar's
+Cheddar's Scratch Kitchen
+Logan's Roadhouse
+99 Restaurant
+Ground Round
+Friendly's
+Shoney's
+Huddle House
+Bennigan's
+Bonefish Grill
+Carrabba's
+Seasons 52
+Yard House
+Bar Louie
+Granite City
+Twin Peaks
+Hooters
+Tilted Kilt
+Walk-On's
+Miller's Ale House
+World of Beer
+Buffalo Wings & Rings
+Native Grill
+Arooga's
+
+# ============================================================================
+# JAPANESE / ASIAN CHAINS
+# ============================================================================
+Benihana
+P.F. Chang's
+PF Chang's
+Kona Grill
+RA Sushi
+Kabuki
+Blue Sushi Sake Grill
+Genghis Grill
+HuHot
+Flat Top Grill
+bd's Mongolian Grill
+Teriyaki Madness
+Yoshinoya
+Tokyo Joe's
+Sarku Japan
+Edo Japan
+Pei Wei
+Pick Up Stix
+Leeann Chin
+Stir Crazy
+
+# ============================================================================
+# MEXICAN CHAINS
+# ============================================================================
+Chipotle
+Qdoba
+Moe's Southwest
+Taco Bell
+Taco Cabana
+Taco Bueno
+Del Taco
+Baja Fresh
+Rubio's
+Green Burrito
+Chronic Taco
+Tijuana Flats
+Fuzzy's Taco Shop
+Torchy's Tacos
+Velvet Taco
+Taco Mac
+On The Border
+Chuy's
+El Torito
+El Pollo Loco
+California Tortilla
+
+# ============================================================================
+# ICE CREAM / DESSERT CHAINS
+# ============================================================================
+Baskin-Robbins
+Baskin Robbins
+Cold Stone
+Cold Stone Creamery
+Dairy Queen
+DQ
+Carvel
+Rita's Italian Ice
+Rita's
+Marble Slab
+Häagen-Dazs
+Haagen-Dazs
+Ben & Jerry's
+Friendly's
+Culver's
+Andy's Frozen Custard
+Freddy's
+Insomnia Cookies
+Crumbl
+Crumbl Cookies
+Great American Cookies
+Mrs. Fields
+Auntie Anne's
+Cinnabon
+Wetzel's Pretzels
+Jamba
+Jamba Juice
+Orange Julius
+Tropical Smoothie
+Smoothie King
+Juice It Up
+Robeks
+Nekter Juice Bar
+
+# ============================================================================
+# STEAKHOUSE CHAINS
+# ============================================================================
+Ruth's Chris
+Morton's
+The Capital Grille
+Capital Grille
+Fleming's
+Del Frisco's
+STK
+Smith & Wollensky
+Mastro's
+Eddie V's
+Ocean Prime
+Fogo de Chão
+Fogo de Chao
+Texas de Brazil
+Rodizio Grill
+Gauchos
+Saltgrass
+Black Angus
+Sizzler
+Ponderosa
+Western Sizzlin
+Ryan's
+Golden Corral
+
+# ============================================================================
+# SEAFOOD CHAINS
+# ============================================================================
+Red Lobster
+Joe's Crab Shack
+Long John Silver's
+Captain D's
+Bonefish Grill
+Legal Sea Foods
+McCormick & Schmick's
+Landry's Seafood
+Pappadeaux
+Pappas Seafood
+Luke's Lobster
+Catch
+
+# ============================================================================
+# BREAKFAST / BRUNCH CHAINS
+# ============================================================================
+IHOP
+Denny's
+Waffle House
+Cracker Barrel
+Bob Evans
+Perkins
+Village Inn
+First Watch
+Another Broken Egg
+Snooze
+Keke's
+The Egg & I
+Original Pancake House
+Le Peep
+Mimi's Cafe
+Mimi's
+
+# ============================================================================
+# SPORTS BARS / ENTERTAINMENT
+# ============================================================================
+Buffalo Wild Wings
+BWW
+Dave & Buster's
+Dave and Buster's
+Main Event
+Topgolf
+Chuck E. Cheese
+Round1
+Bowlero
+Lucky Strike
+AMF Bowling
+Pinstripes
+Punch Bowl Social
+Alamo Drafthouse
+Movie Tavern
+Studio Movie Grill
+Flix Brewhouse
+iPic
+Cinépolis
+Look Dine-In Cinemas
+
+# ============================================================================
+# SALON / BEAUTY CHAINS
+# ============================================================================
+Ulta
+Ulta Beauty
+Sephora
+Great Clips
+Supercuts
+Sport Clips
+Sports Clips
+Fantastic Sams
+Cost Cutters
+SmartStyle
+Hair Cuttery
+Regis Salon
+MasterCuts
+First Choice Haircutters
+Visible Changes
+Floyd's 99
+Roosters
+Knockouts
+European Wax Center
+Waxing the City
+Hand & Stone
+Massage Envy
+Elements Massage
+Massage Heights
+Spavia
+Woodhouse Spa
+Drybar
+Madison Reed
+Sola Salon
+Salon Lofts
+Phenix Salon Suites
+MY SALON Suite
+
+# ============================================================================
+# FITNESS / GYM CHAINS
+# ============================================================================
+Planet Fitness
+LA Fitness
+24 Hour Fitness
+Gold's Gym
+Anytime Fitness
+Orangetheory
+OrangeTheory
+CrossFit
+Equinox
+Life Time
+Life Time Fitness
+Crunch Fitness
+Crunch
+YMCA
+YWCA
+F45
+Barry's
+Barry's Bootcamp
+SoulCycle
+CycleBar
+Club Pilates
+Pure Barre
+Burn Boot Camp
+Title Boxing
+9Round
+UFC Gym
+Snap Fitness
+Fitness 19
+EOS Fitness
+Chuze Fitness
+Retro Fitness
+Workout Anytime
+Youfit
+Blink Fitness
+Fit4Less
+Esporta
+
+# ============================================================================
+# RETAIL CHAINS (that have cafes/food)
+# ============================================================================
+Walmart
+Target
+Costco
+Sam's Club
+Best Buy
+Home Depot
+Lowe's
+Kroger
+H-E-B
+HEB
+Whole Foods
+Trader Joe's
+Aldi
+Publix
+Safeway
+Albertsons
+Wegmans
+Giant
+Stop & Shop
+ShopRite
+Food Lion
+Harris Teeter
+Meijer
+Hy-Vee
+WinCo
+Sprouts
+Natural Grocers
+Fresh Market
+Fresh Thyme
+Earth Fare
+
+# ============================================================================
+# GAS STATIONS / CONVENIENCE
+# ============================================================================
+7-Eleven
+7 Eleven
+Circle K
+QuikTrip
+QT
+Wawa
+Sheetz
+RaceTrac
+Buc-ee's
+Bucees
+Love's
+Pilot Flying J
+Pilot
+Flying J
+TA Travel Centers
+TravelCenters of America
+Petro
+Kum & Go
+Casey's
+Maverik
+Thorntons
+Kwik Trip
+Kwik Star
+GetGo
+Speedway
+Shell
+Chevron
+Exxon
+Mobil
+BP
+Valero
+Sunoco
+76
+Conoco
+Phillips 66
+Murphy USA
+Murphy Express
+
+# ============================================================================
+# HOTELS (bars/restaurants inside)
+# ============================================================================
+Marriott
+Hilton
+Hyatt
+Holiday Inn
+Hampton Inn
+Courtyard by Marriott
+Courtyard
+Residence Inn
+Fairfield Inn
+Fairfield
+La Quinta
+Best Western
+Motel 6
+Super 8
+Days Inn
+Comfort Inn
+Comfort Suites
+Quality Inn
+Sleep Inn
+Clarion
+Cambria
+Radisson
+Wyndham
+Ramada
+Howard Johnson
+DoubleTree
+Embassy Suites
+Homewood Suites
+Home2 Suites
+SpringHill Suites
+TownePlace Suites
+AC Hotels
+Aloft
+Element
+Four Points
+Westin
+Sheraton
+W Hotels
+St. Regis
+Ritz-Carlton
+JW Marriott
+Renaissance
+Autograph Collection
+Tribute Portfolio
+Canopy
+Curio
+Tapestry
+Conrad
+Waldorf Astoria
+LXR
+Tempo
+Avid
+Even Hotels
+Atwell Suites
+Voco
+Kimpton
+InterContinental
+Crowne Plaza
+Hotel Indigo
+Staybridge
+Candlewood
+
+# ============================================================================
+# BANKS / FINANCIAL (sometimes have cafes)
+# ============================================================================
+Chase
+Bank of America
+Wells Fargo
+Citibank
+Capital One
+TD Bank
+PNC Bank
+US Bank
+Truist
+Fifth Third
+Regions Bank
+Citizens Bank
+KeyBank
+Huntington
+M&T Bank
+BMO Harris
+Comerica
+
+# ============================================================================
+# PHARMACIES / HEALTHCARE
+# ============================================================================
+CVS
+Walgreens
+Rite Aid
+Express Scripts
+Minute Clinic
+CareNow
+MedExpress
+CityMD
+GoHealth
+Carbon Health
+One Medical
+
+# ============================================================================
+# CAR SERVICES
+# ============================================================================
+Jiffy Lube
+Valvoline
+Firestone
+Midas
+Pep Boys
+AutoZone
+O'Reilly Auto Parts
+Advance Auto Parts
+Discount Tire
+America's Tire
+Goodyear
+Tire Kingdom
+Big O Tires
+NTB
+Brake Check
+Meineke
+AAMCO
+Maaco
+Caliber Collision
+Service King
+
+# ============================================================================
+# PHONE / TECH RETAIL
+# ============================================================================
+AT&T
+Verizon
+T-Mobile
+Sprint
+Apple Store
+Microsoft Store
+Best Buy
+GameStop
+UBreakiFix
+Batteries Plus
+CPR Cell Phone Repair
+
+# ============================================================================
+# FRANCHISE INDICATORS (regex)
+# ============================================================================
+regex:.*\s+#\d+$
+regex:.*\s+Store\s+#?\d+
+regex:.*\s+Location\s+#?\d+
+regex:.*\s+Unit\s+#?\d+
+regex:.*\s+-\s+[A-Z][a-z]+\s+(Mall|Center|Plaza|Square)
+regex:^The\s+UPS\s+Store
+regex:^FedEx\s+Office
+regex:^Staples
+regex:^Office\s+Depot
+regex:^OfficeMax
+
+# ============================================================================
+# COMMON FRANCHISE SUFFIXES
+# ============================================================================
+regex:.*\s+at\s+[A-Z][a-z]+\s+(Mall|Center|Plaza|Village|Square|Commons|Crossing|Landing|Point|Towne|Town)
+regex:.*\s+-\s+[A-Z][a-z]+\s+(Mall|Center|Plaza|Village|Square|Commons|Crossing)
+
+# ============================================================================
+# ADDITIONAL CHAINS (Round 2 - Found in Austin area)
+# ============================================================================
+
+# Movie Theaters
+Cinemark
+AMC
+Regal
+Alamo Drafthouse
+iPic
+Flix Brewhouse
+Movie Tavern
+Studio Movie Grill
+
+# Theme Parks / Entertainment
+Six Flags
+SeaWorld
+Schlitterbahn
+Main Event
+Dave & Buster's
+Top Golf
+Topgolf
+
+# Bakery / Dessert Chains
+Nothing Bundt Cakes
+Duck Donuts
+Crumbl
+Crumbl Cookies
+Insomnia Cookies
+Great American Cookies
+Mrs. Fields
+Auntie Anne's
+Cinnabon
+Wetzel's Pretzels
+Krispy Kreme
+Shipley
+Shipley's Donuts
+Hurts Donut
+Voodoo Doughnut
+Daylight Donuts
+Donut Palace
+Kolache Factory
+Kolache Shoppe
+Paris Baguette
+85C Bakery
+85°C Bakery
+
+# Texas Regional Chains
+Rudy's
+Rudy's BBQ
+Rudy's Country Store
+Hopdoddy
+Hopdoddy Burger Bar
+Home Slice
+Home Slice Pizza
+Torchy's
+Torchy's Tacos
+Velvet Taco
+Fuzzy's
+Fuzzy's Taco Shop
+Freebirds
+Freebirds World Burrito
+Kerbey Lane
+Kerbey Lane Cafe
+Magnolia Cafe
+Matt's El Rancho
+The Salt Lick
+Salt Lick BBQ
+Franklin Barbecue
+La Barbecue
+Terry Black's
+Terry Black's BBQ
+Black's Barbecue
+Lockhart Smokehouse
+Cooper's BBQ
+Cooper's Old Time Pit Bar-B-Que
+The County Line
+Pappasito's
+Pappas
+Pappas Bros
+Pappadeaux
+Pappas Seafood
+Pappas Bar-B-Q
+Pappas Burger
+
+# Fast Casual (More)
+Nékter
+Nekter Juice Bar
+Tropical Smoothie Cafe
+Smoothie King
+Jamba
+Jamba Juice
+Juice It Up
+Juiceland
+Clean Juice
+Pressed Juicery
+
+# Coffee (More)
+Summer Moon
+Summer Moon Coffee
+Jo's Coffee
+Mozart's
+Alfred Coffee
+Verve Coffee
+Blue Bottle Coffee
+Philz
+
+# Gyms (More)
+The Little Gym
+My Gym
+Gymboree
+Kiddie Academy
+The Learning Experience
+Primrose Schools
+Goddard School
+Bright Horizons
+
+# Salons (More chains)
+Supercuts
+Great Clips
+Sport Clips
+Fantastic Sams
+Cost Cutters
+SmartStyle
+Hair Cuttery
+Floyd's 99 Barbershop
+Birds Barbershop
+18|8 Fine Men's Salons
+V's Barbershop
+
+# Wine/Liquor chains
+Total Wine
+Spec's
+Twin Liquors
+BevMo
+
+# Pet chains
+PetSmart
+Petco
+Pet Supplies Plus
+
+# Optical chains
+LensCrafters
+Pearle Vision
+Visionworks
+America's Best
+Eyeglass World
+
+# Quick service
+Wingstop
+Wing Stop
+Pluckers
+Pluckers Wing Bar
+Buffalo Wild Wings
+Hooters
+Twin Peaks
+
+# Hotel restaurant indicators
+Lobby Bar
+Hotel Bar
+Proper Hotel
+Hyatt
+Marriott
+Hilton
+W Hotel
+Four Seasons
+Omni
+InterContinental
+Westin
+Sheraton
+
+# Mall indicators in name
+at Nordstrom
+at Macy's
+at Dillard's
+Food Court
+Mall
+Galleria
+
+# Franchise website patterns (add these domains)

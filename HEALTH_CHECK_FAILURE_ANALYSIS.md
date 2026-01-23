@@ -126,3 +126,4 @@ Create a simple test script to verify RDS connectivity from App Runner network.
 
 The critical missing piece is **visibility** - we need to see what's happening during startup to diagnose the root cause.
 
+

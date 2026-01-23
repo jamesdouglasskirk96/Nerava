@@ -74,3 +74,4 @@ echo "2. Update App Runner DATABASE_URL env var with the URL above"
 echo "3. Verify migrations run successfully"
 
 
+

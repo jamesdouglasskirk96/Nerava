@@ -1,0 +1,221 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: nerava-backend
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=sqlite:///./nerava.db
+      - ALLOWED_ORIGINS=http://localhost,http://localhost:80,http://localhost:8001
+      - OTP_PROVIDER=stub
+      - ENV=dev
+      - POSTHOG_KEY=${POSTHOG_KEY:-}
+      - POSTHOG_HOST=${POSTHOG_HOST:-https://app.posthog.com}
+      - HUBSPOT_ACCESS_TOKEN=${HUBSPOT_ACCESS_TOKEN:-}
+      - ANALYTICS_ENABLED=${ANALYTICS_ENABLED:-true}
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - nerava-network
+
+  landing:
+    build:
+      context: ./apps/landing
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_BASE_PATH=
+        - NEXT_PUBLIC_POSTHOG_KEY=${POSTHOG_KEY:-}
+        - NEXT_PUBLIC_POSTHOG_HOST=${POSTHOG_HOST:-http://localhost:8080}
+        - NEXT_PUBLIC_POSTHOG_ENABLED=${POSTHOG_ENABLED:-true}
+        - NEXT_PUBLIC_ANALYTICS_ENABLED=${ANALYTICS_ENABLED:-true}
+    container_name: nerava-landing
+    environment:
+      - NEXT_PUBLIC_BASE_PATH=
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - nerava-network
+
+  driver:
+    build:
+      context: ./apps/driver
+      dockerfile: Dockerfile
+      args:
+        - VITE_PUBLIC_BASE=/app/
+        - VITE_API_BASE_URL=/api
+        - VITE_POSTHOG_KEY=${POSTHOG_KEY:-}
+        - VITE_POSTHOG_HOST=${POSTHOG_HOST:-http://localhost:8080}
+        - VITE_POSTHOG_ENABLED=${POSTHOG_ENABLED:-true}
+        - VITE_ANALYTICS_ENABLED=${ANALYTICS_ENABLED:-true}
+    container_name: nerava-driver
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - nerava-network
+
+  merchant:
+    build:
+      context: ./apps/merchant
+      dockerfile: Dockerfile
+      args:
+        - VITE_PUBLIC_BASE=/merchant/
+        - VITE_API_BASE_URL=/api
+        - VITE_POSTHOG_KEY=${POSTHOG_KEY:-}
+        - VITE_POSTHOG_HOST=${POSTHOG_HOST:-http://localhost:8080}
+        - VITE_POSTHOG_ENABLED=${POSTHOG_ENABLED:-true}
+        - VITE_ANALYTICS_ENABLED=${ANALYTICS_ENABLED:-true}
+    container_name: nerava-merchant
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - nerava-network
+
+  admin:
+    build:
+      context: ./apps/admin
+      dockerfile: Dockerfile
+      args:
+        - VITE_PUBLIC_BASE=/admin/
+        - VITE_API_BASE_URL=/api
+        - VITE_POSTHOG_KEY=${POSTHOG_KEY:-}
+        - VITE_POSTHOG_HOST=${POSTHOG_HOST:-http://localhost:8080}
+        - VITE_POSTHOG_ENABLED=${POSTHOG_ENABLED:-true}
+        - VITE_ANALYTICS_ENABLED=${ANALYTICS_ENABLED:-true}
+    container_name: nerava-admin
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - nerava-network
+
+  posthog-db:
+    image: postgres:15-alpine
+    container_name: nerava-posthog-db
+    environment:
+      - POSTGRES_DB=posthog
+      - POSTGRES_USER=posthog
+      - POSTGRES_PASSWORD=${POSTHOG_DB_PASSWORD:-posthog_password_change_in_production}
+    volumes:
+      - posthog-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U posthog"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nerava-network
+
+  posthog-redis:
+    image: redis:7-alpine
+    container_name: nerava-posthog-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nerava-network
+
+  posthog:
+    image: posthog/posthog:ce2d044d386456e1f23dd590b569b6d052f8791e
+    container_name: nerava-posthog
+    ports:
+      - "8081:8000"
+    environment:
+      - POSTHOG_SECRET_KEY=${POSTHOG_SECRET_KEY:-63982d0670d4bbc2fd74097865501f228eaf7f8a86fe3143f726696d655dc0d5}
+      - POSTHOG_DB_NAME=posthog
+      - POSTHOG_DB_USER=posthog
+      - POSTHOG_DB_PASSWORD=${POSTHOG_DB_PASSWORD:-posthog_password_change_in_production}
+      - POSTHOG_POSTGRES_HOST=posthog-db
+      - POSTHOG_POSTGRES_PORT=5432
+      - POSTHOG_REDIS_HOST=posthog-redis
+      - POSTHOG_REDIS_PORT=6379
+      - SITE_URL=http://localhost:8081
+      - DISABLE_SECURE_SSL_REDIRECT=true
+      - SECURE_COOKIES=false
+      - IS_BEHIND_PROXY=false
+      - SKIP_ENV_VALIDATION=true
+      - DEBUG=1
+    depends_on:
+      posthog-db:
+        condition: service_healthy
+      posthog-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/_health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - nerava-network
+
+  proxy:
+    build:
+      context: ./infra/nginx
+      dockerfile: Dockerfile
+    container_name: nerava-proxy
+    ports:
+      - "80:80"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      backend:
+        condition: service_healthy
+      landing:
+        condition: service_healthy
+      driver:
+        condition: service_healthy
+      merchant:
+        condition: service_healthy
+      admin:
+        condition: service_healthy
+      posthog:
+        condition: service_healthy
+    networks:
+      - nerava-network
+
+networks:
+  nerava-network:
+    driver: bridge
+
+volumes:
+  posthog-db-data:

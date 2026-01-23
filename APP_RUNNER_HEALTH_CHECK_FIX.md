@@ -104,3 +104,4 @@ curl https://35udmmcgut.us-east-1.awsapprunner.com/readyz
 - In `light` mode, optional background workers are skipped - this is intentional for App Runner deployments
 - All startup failures are logged but don't crash the application (except for critical validation errors)
 
+

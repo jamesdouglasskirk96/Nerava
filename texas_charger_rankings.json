@@ -1,0 +1,5064 @@
+{
+  "top_25": [
+    {
+      "charger": {
+        "name": "EVgo Charging Station",
+        "place_id": "ChIJhxFCVsmeToYRvhLMLdzHO-w",
+        "lat": 32.809635799999995,
+        "lng": -96.808726,
+        "address": "3802 Cedar Springs Rd, Dallas, TX 75219, USA",
+        "network": "EVgo",
+        "estimated_stall_count": 8,
+        "city": "Dallas",
+        "state": "TX",
+        "location_name": "Dallas-Fort Worth"
+      },
+      "merchants": {
+        "total_count": 20,
+        "within_200m": 9,
+        "within_400m": 20,
+        "top_5": [
+          {
+            "name": "Snooze, an A.M. Eatery",
+            "place_id": "ChIJuT0WBdqfToYR42VoTSN7mxQ",
+            "lat": 32.8101869,
+            "lng": -96.8084197,
+            "distance_m": 68,
+            "rating": 4.4,
+            "user_rating_count": 1974,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.snoozeeatery.com/restaurant/texas/oak-lawn-avenue/?utm_source=Google&utm_medium=BusinessListing",
+            "phone": "(469) 480-7250",
+            "types": [
+              "breakfast_restaurant",
+              "brunch_restaurant",
+              "diner",
+              "coffee_shop",
+              "cafe",
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food_store",
+              "store",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "3211 Oak Lawn Ave Suite A, Dallas, TX 75219, USA"
+          },
+          {
+            "name": "Village Baking Co. - Oak Lawn",
+            "place_id": "ChIJyeR71iqfToYReX-i6Qgiw08",
+            "lat": 32.8099114,
+            "lng": -96.8077843,
+            "distance_m": 93,
+            "rating": 4.4,
+            "user_rating_count": 223,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://villagebakingco.com/",
+            "phone": "(214) 833-3020",
+            "types": [
+              "bakery",
+              "coffee_shop",
+              "cafe",
+              "point_of_interest",
+              "food_store",
+              "store",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "3218 Oak Lawn Ave, Dallas, TX 75219, USA"
+          },
+          {
+            "name": "Union",
+            "place_id": "ChIJA7_tfgmfToYRrwi1YiP-2nU",
+            "lat": 32.8085041,
+            "lng": -96.8082558,
+            "distance_m": 133,
+            "rating": 4.6,
+            "user_rating_count": 662,
+            "price_level": "PRICE_LEVEL_INEXPENSIVE",
+            "website": "http://uniondallas.org/",
+            "phone": "(469) 501-5440",
+            "types": [
+              "coffee_shop",
+              "cafe",
+              "food_store",
+              "food",
+              "point_of_interest",
+              "store",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "3705 Cedar Springs Rd, Dallas, TX 75219, USA"
+          },
+          {
+            "name": "Enoteca Italia",
+            "place_id": "ChIJZTDlLFifToYRYIPlzfX8x24",
+            "lat": 32.8087154,
+            "lng": -96.80779849999999,
+            "distance_m": 134,
+            "rating": 4.7,
+            "user_rating_count": 783,
+            "price_level": null,
+            "website": "https://www.enotecaitaliadallas.com/menu",
+            "phone": "(972) 685-2112",
+            "types": [
+              "italian_restaurant",
+              "restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "3102 Oak Lawn Ave #116, Dallas, TX 75219, USA"
+          },
+          {
+            "name": "Taqueria La Ventana",
+            "place_id": "ChIJAQD8ZMmeToYRwVpU4nQrTuo",
+            "lat": 32.8099444,
+            "lng": -96.8102195,
+            "distance_m": 144,
+            "rating": 4.4,
+            "user_rating_count": 1571,
+            "price_level": "PRICE_LEVEL_INEXPENSIVE",
+            "website": "https://www.taquerialaventana.com/home",
+            "phone": "(972) 432-5945",
+            "types": [
+              "mexican_restaurant",
+              "restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "3847 Cedar Springs Rd, Dallas, TX 75219, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.67,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.4
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 1
+    },
+    {
+      "charger": {
+        "name": "Tesla Destination Charger",
+        "place_id": "ChIJUz4btwi1RIYR1WbyvSMK7bc",
+        "lat": 30.265612700000002,
+        "lng": -97.7466417,
+        "address": "200 Lavaca St, Austin, TX 78701, USA",
+        "network": "Tesla",
+        "estimated_stall_count": 12,
+        "city": "Austin",
+        "state": "TX",
+        "location_name": "Austin Metro"
+      },
+      "merchants": {
+        "total_count": 20,
+        "within_200m": 5,
+        "within_400m": 20,
+        "top_5": [
+          {
+            "name": "La Condesa",
+            "place_id": "ChIJj9nrSA-1RIYRybO2K0NxQUo",
+            "lat": 30.265639099999998,
+            "lng": -97.7477811,
+            "distance_m": 109,
+            "rating": 4.3,
+            "user_rating_count": 2021,
+            "price_level": "PRICE_LEVEL_EXPENSIVE",
+            "website": "https://lacondesa.com/",
+            "phone": "(512) 377-6305",
+            "types": [
+              "mexican_restaurant",
+              "brunch_restaurant",
+              "night_club",
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "400A W 2nd St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Lamberts",
+            "place_id": "ChIJAW3LRQ-1RIYR5hvk_KAUmbo",
+            "lat": 30.2652263,
+            "lng": -97.74790619999999,
+            "distance_m": 129,
+            "rating": 4.4,
+            "user_rating_count": 2048,
+            "price_level": "PRICE_LEVEL_EXPENSIVE",
+            "website": "http://www.lambertsaustin.com/",
+            "phone": "(512) 494-1500",
+            "types": [
+              "barbecue_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "401 W 2nd St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "The Well",
+            "place_id": "ChIJ14ud0cO1RIYRY88BIQ_C-OY",
+            "lat": 30.2656068,
+            "lng": -97.7483158,
+            "distance_m": 161,
+            "rating": 4.4,
+            "user_rating_count": 868,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.eatwellatx.com/",
+            "phone": "(737) 742-1129",
+            "types": [
+              "cafe",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "440 W 2nd St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Red Ash",
+            "place_id": "ChIJWfpBiwi1RIYRvg4iIbIE2go",
+            "lat": 30.2657022,
+            "lng": -97.74494089999999,
+            "distance_m": 164,
+            "rating": 4.7,
+            "user_rating_count": 2310,
+            "price_level": "PRICE_LEVEL_EXPENSIVE",
+            "website": "http://redashgrill.com/",
+            "phone": "(512) 379-2906",
+            "types": [
+              "italian_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "Colorado Tower, 303 Colorado St #200, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Local Foods -- 2nd Street District",
+            "place_id": "ChIJ95AF5WrLRIYR7oUGX4-hdtM",
+            "lat": 30.2656938,
+            "lng": -97.7485706,
+            "distance_m": 185,
+            "rating": 4.5,
+            "user_rating_count": 482,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.localfoodstexas.com/",
+            "phone": "(512) 614-1212",
+            "types": [
+              "american_restaurant",
+              "vegan_restaurant",
+              "vegetarian_restaurant",
+              "meal_takeaway",
+              "food_store",
+              "sandwich_shop",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "store",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "454 W 2nd St, Austin, TX 78701, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.67,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.4
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 2
+    },
+    {
+      "charger": {
+        "name": "Tesla Destination Charger",
+        "place_id": "ChIJZdoEAwi1RIYR_OvYWeeivCI",
+        "lat": 30.265050000000002,
+        "lng": -97.74186999999999,
+        "address": "301 Brazos St, Austin, TX 78701, USA",
+        "network": "Tesla",
+        "estimated_stall_count": 12,
+        "city": "Austin",
+        "state": "TX",
+        "location_name": "Austin Metro"
+      },
+      "merchants": {
+        "total_count": 20,
+        "within_200m": 7,
+        "within_400m": 20,
+        "top_5": [
+          {
+            "name": "Taqueria De Diez (D/10)",
+            "place_id": "ChIJDSfb3Dq1RIYR6BUfB7JSNRU",
+            "lat": 30.2639708,
+            "lng": -97.74081260000001,
+            "distance_m": 157,
+            "rating": 4.8,
+            "user_rating_count": 1580,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://taqueriadediez.com/",
+            "phone": "(512) 633-4829",
+            "types": [
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "206 Trinity St unit 110, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Elephant Room",
+            "place_id": "ChIJa59yaAi1RIYRyTOii08uLtQ",
+            "lat": 30.265672700000003,
+            "lng": -97.7434921,
+            "distance_m": 170,
+            "rating": 4.6,
+            "user_rating_count": 2491,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.elephantroom.com/",
+            "phone": "(512) 575-2925",
+            "types": [
+              "event_venue",
+              "night_club",
+              "bar",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "Swift Building, 315 Congress Ave., Austin, TX 78701, USA"
+          },
+          {
+            "name": "Houndstooth Coffee",
+            "place_id": "ChIJn3uWRwi1RIYRFf5C6_ymWJw",
+            "lat": 30.266216,
+            "lng": -97.743066,
+            "distance_m": 173,
+            "rating": 4.5,
+            "user_rating_count": 1159,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.houndstoothcoffee.com/?utm_source=google&utm_medium=organic&utm_campaign=googlebusiness",
+            "phone": "(512) 394-6051",
+            "types": [
+              "coffee_shop",
+              "liquor_store",
+              "cafe",
+              "food_store",
+              "point_of_interest",
+              "food",
+              "store",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "401 Congress Ave. #100c, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Gus\u2019s World Famous Fried Chicken",
+            "place_id": "ChIJz50W9ge1RIYR_zs2KnEZIbs",
+            "lat": 30.263479900000004,
+            "lng": -97.741745,
+            "distance_m": 175,
+            "rating": 4.5,
+            "user_rating_count": 5769,
+            "price_level": "PRICE_LEVEL_INEXPENSIVE",
+            "website": "http://gusfriedchicken.com/austin-texas-location/",
+            "phone": "(512) 474-4877",
+            "types": [
+              "restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "117 San Jacinto Blvd, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Cooper's Old Time Pit Bar-B-Que",
+            "place_id": "ChIJoZsHcQi1RIYRfyBnp0UxNMI",
+            "lat": 30.2649418,
+            "lng": -97.7437436,
+            "distance_m": 180,
+            "rating": 4.4,
+            "user_rating_count": 6433,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://coopersbbqaustin.com/",
+            "phone": "(512) 474-4227",
+            "types": [
+              "barbecue_restaurant",
+              "barbecue_area",
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "217 Congress Ave., Austin, TX 78701, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.67,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.4
+      },
+      "recommended_first_anchor_merchant_type": "Bar",
+      "rank": 3
+    },
+    {
+      "charger": {
+        "name": "Tesla Destination Charger",
+        "place_id": "ChIJXbN3ige1RIYRjMpyUWOIzzE",
+        "lat": 30.2628141,
+        "lng": -97.741677,
+        "address": "304 E Cesar Chavez St, Austin, TX 78701, USA",
+        "network": "Tesla",
+        "estimated_stall_count": 12,
+        "city": "Austin",
+        "state": "TX",
+        "location_name": "Austin Metro"
+      },
+      "merchants": {
+        "total_count": 20,
+        "within_200m": 8,
+        "within_400m": 20,
+        "top_5": [
+          {
+            "name": "Zanzibar",
+            "place_id": "ChIJFaJVsLS1RIYRcUZU0nlHQJ8",
+            "lat": 30.262830899999994,
+            "lng": -97.7415705,
+            "distance_m": 10,
+            "rating": 4.8,
+            "user_rating_count": 8014,
+            "price_level": null,
+            "website": "https://www.zanzibaratx.com/?utm_source=google&utm_medium=organic&utm_campaign=business_listing",
+            "phone": "(737) 787-6969",
+            "types": [
+              "restaurant",
+              "night_club",
+              "bar",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "304 E Cesar Chavez St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Corinne Austin",
+            "place_id": "ChIJB5Ku76K1RIYRwGbv_w3DySk",
+            "lat": 30.262701099999997,
+            "lng": -97.74157629999999,
+            "distance_m": 16,
+            "rating": 4.8,
+            "user_rating_count": 5411,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.corinneatx.com/?utm_source=google&utm_medium=organic&utm_campaign=business_listing",
+            "phone": "(737) 787-7018",
+            "types": [
+              "restaurant",
+              "american_restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "304 E Cesar Chavez St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Gus\u2019s World Famous Fried Chicken",
+            "place_id": "ChIJz50W9ge1RIYR_zs2KnEZIbs",
+            "lat": 30.263479900000004,
+            "lng": -97.741745,
+            "distance_m": 74,
+            "rating": 4.5,
+            "user_rating_count": 5769,
+            "price_level": "PRICE_LEVEL_INEXPENSIVE",
+            "website": "http://gusfriedchicken.com/austin-texas-location/",
+            "phone": "(512) 474-4877",
+            "types": [
+              "restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "117 San Jacinto Blvd, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Taqueria De Diez (D/10)",
+            "place_id": "ChIJDSfb3Dq1RIYR6BUfB7JSNRU",
+            "lat": 30.2639708,
+            "lng": -97.74081260000001,
+            "distance_m": 153,
+            "rating": 4.8,
+            "user_rating_count": 1580,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://taqueriadediez.com/",
+            "phone": "(512) 633-4829",
+            "types": [
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "206 Trinity St unit 110, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Cedar Door Patio Bar & Grill",
+            "place_id": "ChIJwd-t5ge1RIYRfg8ZQBcWbYE",
+            "lat": 30.264092700000003,
+            "lng": -97.7425827,
+            "distance_m": 167,
+            "rating": 4.3,
+            "user_rating_count": 1636,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.cedardooraustin.com/",
+            "phone": "(512) 473-3712",
+            "types": [
+              "bar_and_grill",
+              "bar",
+              "american_restaurant",
+              "event_venue",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "201 Brazos St bldg A, Austin, TX 78701, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.67,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.4
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 4
+    },
+    {
+      "charger": {
+        "name": "ChargePoint Charging Station",
+        "place_id": "ChIJnVYLzw-1RIYRdAtjk_eTZNQ",
+        "lat": 30.266131500000004,
+        "lng": -97.751666,
+        "address": "710 W Cesar Chavez St, Austin, TX 78701, USA",
+        "network": "ChargePoint",
+        "estimated_stall_count": 8,
+        "city": "Austin",
+        "state": "TX",
+        "location_name": "Austin Metro"
+      },
+      "merchants": {
+        "total_count": 20,
+        "within_200m": 8,
+        "within_400m": 20,
+        "top_5": [
+          {
+            "name": "True Food Kitchen",
+            "place_id": "ChIJB_bjLg61RIYRrBuIICDuw90",
+            "lat": 30.2670001,
+            "lng": -97.7522838,
+            "distance_m": 113,
+            "rating": 4.5,
+            "user_rating_count": 2794,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.truefoodkitchen.com/locations/austin/",
+            "phone": "(512) 777-2430",
+            "types": [
+              "asian_restaurant",
+              "vegan_restaurant",
+              "vegetarian_restaurant",
+              "mediterranean_restaurant",
+              "meal_takeaway",
+              "american_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "222 West Ave Ste HR100, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Ember Kitchen",
+            "place_id": "ChIJ0ZHePHK1RIYR2vIKkhQevxQ",
+            "lat": 30.266876,
+            "lng": -97.7528456,
+            "distance_m": 140,
+            "rating": 4.8,
+            "user_rating_count": 2204,
+            "price_level": null,
+            "website": "https://www.emberatx.com/",
+            "phone": "(512) 291-6846",
+            "types": [
+              "restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "800 W Cesar Chavez St Ste PP110, Austin, TX 78701, USA"
+          },
+          {
+            "name": "The Peacock",
+            "place_id": "ChIJ-8eTtIK1RIYRhj3kHXUqNzE",
+            "lat": 30.2660503,
+            "lng": -97.7501571,
+            "distance_m": 145,
+            "rating": 4.4,
+            "user_rating_count": 1140,
+            "price_level": "PRICE_LEVEL_EXPENSIVE",
+            "website": "https://www.properhotel.com/austin/restaurants-bars/the-peacock/",
+            "phone": "(512) 628-1410",
+            "types": [
+              "mediterranean_restaurant",
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "Proper Hotel, 600 W 2nd St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Uchib\u0101 Austin",
+            "place_id": "ChIJzx_PiR21RIYRTOytfAVNFcs",
+            "lat": 30.2657572,
+            "lng": -97.7502114,
+            "distance_m": 146,
+            "rating": 4.4,
+            "user_rating_count": 495,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://uchiba.uchirestaurants.com/location/austin/",
+            "phone": "(512) 916-4808",
+            "types": [
+              "sushi_restaurant",
+              "fine_dining_restaurant",
+              "meal_takeaway",
+              "japanese_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "601 W 2nd St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "The Baked Bear",
+            "place_id": "ChIJc-X_1hG1RIYRcbXYdl1OD9A",
+            "lat": 30.267243599999997,
+            "lng": -97.75277260000001,
+            "distance_m": 163,
+            "rating": 4.6,
+            "user_rating_count": 734,
+            "price_level": "PRICE_LEVEL_INEXPENSIVE",
+            "website": "https://www.thebakedbear.com/austin/",
+            "phone": "(512) 300-0167",
+            "types": [
+              "dessert_restaurant",
+              "ice_cream_shop",
+              "bakery",
+              "dessert_shop",
+              "confectionery",
+              "food_store",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "store",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "211 Walter Seaholm Dr Suite LR150, Austin, TX 78701, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.67,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.4
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 5
+    },
+    {
+      "charger": {
+        "name": "ChargePoint Charging Station",
+        "place_id": "ChIJi167PA-1RIYRlaNgJbBgG_E",
+        "lat": 30.2661816,
+        "lng": -97.7481682,
+        "address": "W 3rd St, Austin, TX 78701, USA",
+        "network": "ChargePoint",
+        "estimated_stall_count": 8,
+        "city": "Austin",
+        "state": "TX",
+        "location_name": "Austin Metro"
+      },
+      "merchants": {
+        "total_count": 20,
+        "within_200m": 12,
+        "within_400m": 20,
+        "top_5": [
+          {
+            "name": "Violet Crown Austin",
+            "place_id": "ChIJ_____1u1RIYRpbuTY6jerdc",
+            "lat": 30.2657646,
+            "lng": -97.7481387,
+            "distance_m": 46,
+            "rating": 4.5,
+            "user_rating_count": 844,
+            "price_level": null,
+            "website": "https://austin.violetcrown.com/cinema",
+            "phone": "(737) 688-0022",
+            "types": [
+              "movie_theater",
+              "event_venue",
+              "bar",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "434 W 2nd St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "The Well",
+            "place_id": "ChIJ14ud0cO1RIYRY88BIQ_C-OY",
+            "lat": 30.2656068,
+            "lng": -97.7483158,
+            "distance_m": 65,
+            "rating": 4.4,
+            "user_rating_count": 868,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.eatwellatx.com/",
+            "phone": "(737) 742-1129",
+            "types": [
+              "cafe",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "440 W 2nd St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Local Foods -- 2nd Street District",
+            "place_id": "ChIJ95AF5WrLRIYR7oUGX4-hdtM",
+            "lat": 30.2656938,
+            "lng": -97.7485706,
+            "distance_m": 67,
+            "rating": 4.5,
+            "user_rating_count": 482,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.localfoodstexas.com/",
+            "phone": "(512) 614-1212",
+            "types": [
+              "american_restaurant",
+              "vegan_restaurant",
+              "vegetarian_restaurant",
+              "meal_takeaway",
+              "food_store",
+              "sandwich_shop",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "store",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "454 W 2nd St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "La Condesa",
+            "place_id": "ChIJj9nrSA-1RIYRybO2K0NxQUo",
+            "lat": 30.265639099999998,
+            "lng": -97.7477811,
+            "distance_m": 71,
+            "rating": 4.3,
+            "user_rating_count": 2021,
+            "price_level": "PRICE_LEVEL_EXPENSIVE",
+            "website": "https://lacondesa.com/",
+            "phone": "(512) 377-6305",
+            "types": [
+              "mexican_restaurant",
+              "brunch_restaurant",
+              "night_club",
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "400A W 2nd St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Barry's Austin",
+            "place_id": "ChIJaQRnIFm1RIYRmnphA-DwzGk",
+            "lat": 30.265570900000004,
+            "lng": -97.7479626,
+            "distance_m": 71,
+            "rating": 4.8,
+            "user_rating_count": 191,
+            "price_level": null,
+            "website": "https://www.barrys.com/studio/austin",
+            "phone": "(512) 368-8806",
+            "types": [
+              "fitness_center",
+              "gym",
+              "sports_activity_location",
+              "point_of_interest",
+              "health",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "408 W 2nd St, Austin, TX 78701, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.67,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.4
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 6
+    },
+    {
+      "charger": {
+        "name": "Tesla Destination Charger",
+        "place_id": "ChIJ4fouhPb1XIYRQfc_l1ODYZ8",
+        "lat": 29.4426749,
+        "lng": -98.4811155,
+        "address": "136 E Grayson St, San Antonio, TX 78215, USA",
+        "network": "Tesla",
+        "estimated_stall_count": 12,
+        "city": "San Antonio",
+        "state": "TX",
+        "location_name": "San Antonio Metro"
+      },
+      "merchants": {
+        "total_count": 20,
+        "within_200m": 13,
+        "within_400m": 20,
+        "top_5": [
+          {
+            "name": "Southerleigh Fine Food & Brewery",
+            "place_id": "ChIJszniNvT1XIYRztK4HoRRv4I",
+            "lat": 29.442520299999998,
+            "lng": -98.48066279999999,
+            "distance_m": 47,
+            "rating": 4.5,
+            "user_rating_count": 4210,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.southerleighatpearl.com/?y_source=1_MTA1NjI1NDkxMC03MTUtbG9jYXRpb24ud2Vic2l0ZQ%3D%3D",
+            "phone": "(210) 455-5701",
+            "types": [
+              "restaurant",
+              "american_restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "136 E Grayson St Suite 120, San Antonio, TX 78215, USA"
+          },
+          {
+            "name": "Brasserie Mon Chou Chou",
+            "place_id": "ChIJ55hW-GP1XIYR17PAiOkEJmQ",
+            "lat": 29.442977199999998,
+            "lng": -98.48061919999999,
+            "distance_m": 59,
+            "rating": 4.6,
+            "user_rating_count": 1423,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.brasseriemonchouchou.com/?y_source=1_MzE2MzcyNDctNzE1LWxvY2F0aW9uLndlYnNpdGU%3D",
+            "phone": "(210) 469-3743",
+            "types": [
+              "restaurant",
+              "french_restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "312 Pearl Pkwy, San Antonio, TX 78215, USA"
+          },
+          {
+            "name": "Boiler House at Pearl",
+            "place_id": "ChIJS2G8jfb1XIYRLQvUCbRyKxQ",
+            "lat": 29.442817500000004,
+            "lng": -98.4804954,
+            "distance_m": 62,
+            "rating": 4.3,
+            "user_rating_count": 2475,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://boilerhousesa.com/",
+            "phone": "(210) 354-4644",
+            "types": [
+              "wine_bar",
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "next to Hotel Emma, 312 Pearl Pkwy Building 3, San Antonio, TX 78215, USA"
+          },
+          {
+            "name": "Food Hall At Bottling",
+            "place_id": "ChIJg6PHn_b1XIYRUz5Vzbcv6Yc",
+            "lat": 29.4419211,
+            "lng": -98.4806024,
+            "distance_m": 97,
+            "rating": 4.5,
+            "user_rating_count": 831,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.bottlingdepartment.com/",
+            "phone": "(210) 564-9140",
+            "types": [
+              "food_court",
+              "restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "312 Pearl Pkwy Building 6, San Antonio, TX 78215, USA"
+          },
+          {
+            "name": "Jazz, TX",
+            "place_id": "ChIJc6CElPb1XIYRJy5Kj0BF73Q",
+            "lat": 29.441936,
+            "lng": -98.4804523,
+            "distance_m": 104,
+            "rating": 4.8,
+            "user_rating_count": 1371,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://jazztx.com/",
+            "phone": "(210) 332-9386",
+            "types": [
+              "event_venue",
+              "night_club",
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "312 Pearl Pkwy Building 6, Suite 6001, San Antonio, TX 78215, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.67,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.4
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 7
+    },
+    {
+      "charger": {
+        "name": "ChargePoint Charging Station",
+        "place_id": "ChIJF1PPIPT1XIYRqCWUspWAreE",
+        "lat": 29.4433498,
+        "lng": -98.4804327,
+        "address": "2102 Emma Koehler, San Antonio, TX 78215, USA",
+        "network": "ChargePoint",
+        "estimated_stall_count": 8,
+        "city": "San Antonio",
+        "state": "TX",
+        "location_name": "San Antonio Metro"
+      },
+      "merchants": {
+        "total_count": 20,
+        "within_200m": 10,
+        "within_400m": 20,
+        "top_5": [
+          {
+            "name": "Brasserie Mon Chou Chou",
+            "place_id": "ChIJ55hW-GP1XIYR17PAiOkEJmQ",
+            "lat": 29.442977199999998,
+            "lng": -98.48061919999999,
+            "distance_m": 45,
+            "rating": 4.6,
+            "user_rating_count": 1423,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.brasseriemonchouchou.com/?y_source=1_MzE2MzcyNDctNzE1LWxvY2F0aW9uLndlYnNpdGU%3D",
+            "phone": "(210) 469-3743",
+            "types": [
+              "restaurant",
+              "french_restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "312 Pearl Pkwy, San Antonio, TX 78215, USA"
+          },
+          {
+            "name": "Lick Honest Ice Cream",
+            "place_id": "ChIJAQZXp_b1XIYR7J2E3nCpV1E",
+            "lat": 29.443275,
+            "lng": -98.47988889999999,
+            "distance_m": 53,
+            "rating": 4.5,
+            "user_rating_count": 2119,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://ilikelick.com/",
+            "phone": "(210) 314-8166",
+            "types": [
+              "ice_cream_shop",
+              "dessert_shop",
+              "confectionery",
+              "food_store",
+              "food",
+              "point_of_interest",
+              "store",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "312 Pearl Pkwy #2101, San Antonio, TX 78215, USA"
+          },
+          {
+            "name": "Boiler House at Pearl",
+            "place_id": "ChIJS2G8jfb1XIYRLQvUCbRyKxQ",
+            "lat": 29.442817500000004,
+            "lng": -98.4804954,
+            "distance_m": 59,
+            "rating": 4.3,
+            "user_rating_count": 2475,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://boilerhousesa.com/",
+            "phone": "(210) 354-4644",
+            "types": [
+              "wine_bar",
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "next to Hotel Emma, 312 Pearl Pkwy Building 3, San Antonio, TX 78215, USA"
+          },
+          {
+            "name": "Southerleigh Fine Food & Brewery",
+            "place_id": "ChIJszniNvT1XIYRztK4HoRRv4I",
+            "lat": 29.442520299999998,
+            "lng": -98.48066279999999,
+            "distance_m": 95,
+            "rating": 4.5,
+            "user_rating_count": 4210,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.southerleighatpearl.com/?y_source=1_MTA1NjI1NDkxMC03MTUtbG9jYXRpb24ud2Vic2l0ZQ%3D%3D",
+            "phone": "(210) 455-5701",
+            "types": [
+              "restaurant",
+              "american_restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "136 E Grayson St Suite 120, San Antonio, TX 78215, USA"
+          },
+          {
+            "name": "Ladino",
+            "place_id": "ChIJTykT3TL1XIYRa2RCyeJwdwU",
+            "lat": 29.443934899999995,
+            "lng": -98.47945440000001,
+            "distance_m": 115,
+            "rating": 4.5,
+            "user_rating_count": 800,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://ladinosatx.com/",
+            "phone": "(210) 325-6007",
+            "types": [
+              "restaurant",
+              "mediterranean_restaurant",
+              "brunch_restaurant",
+              "middle_eastern_restaurant",
+              "bar",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "200 E Grayson St #100, San Antonio, TX 78215, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.67,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.4
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 8
+    },
+    {
+      "charger": {
+        "name": "Tesla Supercharger",
+        "place_id": "ChIJZ9n3577FQIYRr5WYlhbPM50",
+        "lat": 29.778897999999998,
+        "lng": -95.559446,
+        "address": "Queensbury Ln #12711, Houston, TX 77024, USA",
+        "network": "Tesla",
+        "estimated_stall_count": 12,
+        "city": "Houston",
+        "state": "TX",
+        "location_name": "Houston Metro"
+      },
+      "merchants": {
+        "total_count": 20,
+        "within_200m": 5,
+        "within_400m": 20,
+        "top_5": [
+          {
+            "name": "Eddie V's Prime Seafood",
+            "place_id": "ChIJXUta17LEQIYRXrc_TtW3ID8",
+            "lat": 29.7788529,
+            "lng": -95.5607943,
+            "distance_m": 130,
+            "rating": 4.7,
+            "user_rating_count": 1736,
+            "price_level": "PRICE_LEVEL_VERY_EXPENSIVE",
+            "website": "https://www.eddiev.com/locations/tx/houston/houston-citycentre/8507?cmpid=br:ev_ag:ie_ch:loc_ca:EVGMB_sn:gmb_gt:houston-tx-8507_pl:locurl_rd:1006",
+            "phone": "(832) 200-2380",
+            "types": [
+              "seafood_restaurant",
+              "fine_dining_restaurant",
+              "steak_house",
+              "event_venue",
+              "night_club",
+              "bar",
+              "american_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "12848 Queensbury Ln #200, Houston, TX 77024, USA"
+          },
+          {
+            "name": "Cyclone Anaya's Tex-Mex Kitchen",
+            "place_id": "ChIJjWAVFrPEQIYRfsD4n6WmsBE",
+            "lat": 29.779945599999998,
+            "lng": -95.5603685,
+            "distance_m": 147,
+            "rating": 4.7,
+            "user_rating_count": 7876,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.cycloneanaya.com/",
+            "phone": "(713) 461-1300",
+            "types": [
+              "mexican_restaurant",
+              "bar",
+              "american_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "800 Town and Country Blvd, Houston, TX 77024, USA"
+          },
+          {
+            "name": "RA Sushi - Houston (City Centre)",
+            "place_id": "ChIJf-E0w7LEQIYR_gIFC34mE4M",
+            "lat": 29.7795879,
+            "lng": -95.5608743,
+            "distance_m": 158,
+            "rating": 4.2,
+            "user_rating_count": 3565,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://rasushi.com/",
+            "phone": "(713) 331-2792",
+            "types": [
+              "sushi_restaurant",
+              "japanese_restaurant",
+              "restaurant",
+              "food",
+              "bar",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "799 Town and Country Blvd, Houston, TX 77024, USA"
+          },
+          {
+            "name": "Postino Town & Country",
+            "place_id": "ChIJZR7xulTFQIYRPkogWPRhQ6Q",
+            "lat": 29.777902400000002,
+            "lng": -95.5610111,
+            "distance_m": 187,
+            "rating": 4.7,
+            "user_rating_count": 878,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.postinowinecafe.com/locations/postino-town-and-country",
+            "phone": "(713) 574-8337",
+            "types": [
+              "restaurant",
+              "wine_bar",
+              "catering_service",
+              "food_delivery",
+              "bar",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "791 Town and Country Blvd Ste 146, Houston, TX 77024, USA"
+          },
+          {
+            "name": "Fellini",
+            "place_id": "ChIJ0Rbv1bLEQIYRSqhf48uSdmw",
+            "lat": 29.779248000000003,
+            "lng": -95.561448,
+            "distance_m": 197,
+            "rating": 4.4,
+            "user_rating_count": 984,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.fellinihouston.com/",
+            "phone": "(281) 888-6261",
+            "types": [
+              "cafe",
+              "ice_cream_shop",
+              "wine_bar",
+              "coffee_shop",
+              "sandwich_shop",
+              "dessert_shop",
+              "confectionery",
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "bakery",
+              "food_store",
+              "store",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "794 Sorella Ct, Houston, TX 77024, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.67,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.4
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 9
+    },
+    {
+      "charger": {
+        "name": "Tesla Supercharger",
+        "place_id": "ChIJ86QTuUs3R4YRMnqiIy_0D7c",
+        "lat": 30.194962999999998,
+        "lng": -95.45247499999999,
+        "address": "Metropark Dr #8888, Shenandoah, TX 77385, USA",
+        "network": "Tesla",
+        "estimated_stall_count": 12,
+        "city": "Madisonville",
+        "state": "TX",
+        "location_name": "I-45 - Madisonville"
+      },
+      "merchants": {
+        "total_count": 20,
+        "within_200m": 12,
+        "within_400m": 20,
+        "top_5": [
+          {
+            "name": "Kyuramen x TBaar - Shenandoah",
+            "place_id": "ChIJ35TX7hw3R4YRUkMO9PMP37k",
+            "lat": 30.195293399999997,
+            "lng": -95.4524323,
+            "distance_m": 37,
+            "rating": 4.4,
+            "user_rating_count": 239,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.kyuramen.com/",
+            "phone": "(281) 305-9788",
+            "types": [
+              "ramen_restaurant",
+              "japanese_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "8821 Metropark Dr, Shenandoah, TX 77385, USA"
+          },
+          {
+            "name": "D1 Training East Woodlands",
+            "place_id": "ChIJcciNwzA3R4YRkRxTZ8oItdE",
+            "lat": 30.1952947,
+            "lng": -95.45240749999999,
+            "distance_m": 37,
+            "rating": 4.8,
+            "user_rating_count": 25,
+            "price_level": null,
+            "website": "https://www.d1training.com/east-woodlands/",
+            "phone": "(832) 772-2393",
+            "types": [
+              "gym",
+              "fitness_center",
+              "childrens_camp",
+              "sports_activity_location",
+              "point_of_interest",
+              "health",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "8821 Metropark Dr Suite 300, Shenandoah, TX 77385, USA"
+          },
+          {
+            "name": "Somisomi",
+            "place_id": "ChIJJapU_pQ3R4YR7nfxWa-vPyA",
+            "lat": 30.195203399999997,
+            "lng": -95.45212219999999,
+            "distance_m": 43,
+            "rating": 4.9,
+            "user_rating_count": 142,
+            "price_level": "PRICE_LEVEL_INEXPENSIVE",
+            "website": "https://somisomi.com/",
+            "phone": "(936) 266-0069",
+            "types": [
+              "dessert_shop",
+              "confectionery",
+              "food_store",
+              "food",
+              "point_of_interest",
+              "store",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "8821 Metropark Dr, Shenandoah, TX 77385, USA"
+          },
+          {
+            "name": "JAX Burgers, Fries & Shakes",
+            "place_id": "ChIJkRozZAc3R4YR9KLmeLWBzR8",
+            "lat": 30.195195899999998,
+            "lng": -95.45195600000001,
+            "distance_m": 56,
+            "rating": 4.3,
+            "user_rating_count": 321,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://jaxburgers.com/",
+            "phone": "(936) 231-8648",
+            "types": [
+              "hamburger_restaurant",
+              "american_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "8821 Metropark Dr Suite 1600, Shenandoah, TX 77385, USA"
+          },
+          {
+            "name": "Black Bear Diner The Woodlands",
+            "place_id": "ChIJrxV9sfg3R4YRkJOCHIeGnaA",
+            "lat": 30.195203699999997,
+            "lng": -95.4531901,
+            "distance_m": 74,
+            "rating": 4.7,
+            "user_rating_count": 6403,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://blackbeardiner.com/location/the-woodlands/",
+            "phone": "(936) 283-5312",
+            "types": [
+              "american_restaurant",
+              "hamburger_restaurant",
+              "breakfast_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "8821 Metropark Dr, Shenandoah, TX 77385, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.67,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.4
+      },
+      "recommended_first_anchor_merchant_type": "Bar",
+      "rank": 10
+    },
+    {
+      "charger": {
+        "name": "Tesla Supercharger",
+        "place_id": "ChIJo52XKZGfToYRuCVUADnYRYc",
+        "lat": 32.881141,
+        "lng": -96.76952,
+        "address": "9740 N Central Expy, Dallas, TX 75231, USA",
+        "network": "Tesla",
+        "estimated_stall_count": 12,
+        "city": "Dallas",
+        "state": "TX",
+        "location_name": "Dallas-Fort Worth"
+      },
+      "merchants": {
+        "total_count": 20,
+        "within_200m": 9,
+        "within_400m": 20,
+        "top_5": [
+          {
+            "name": "Houndstooth Coffee",
+            "place_id": "ChIJMchGuemfToYRe12aRfYwx3c",
+            "lat": 32.8808891,
+            "lng": -96.7692488,
+            "distance_m": 38,
+            "rating": 4.4,
+            "user_rating_count": 695,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://houndstoothcoffee.com/cafes/walnut-hill/?utm_source=google&utm_medium=organic&utm_campaign=googlebusiness",
+            "phone": "(469) 399-7653",
+            "types": [
+              "coffee_shop",
+              "cafe",
+              "food_store",
+              "food",
+              "point_of_interest",
+              "store",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "9730 N Central Expy, Dallas, TX 75231, USA"
+          },
+          {
+            "name": "Doce Mesas",
+            "place_id": "ChIJvenKsDyfToYRqHpGF48sCbs",
+            "lat": 32.881353,
+            "lng": -96.76918289999999,
+            "distance_m": 39,
+            "rating": 4.4,
+            "user_rating_count": 263,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.docemesasdallas.com/",
+            "phone": "(972) 685-0680",
+            "types": [
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "9810 N Central Expy #600, Dallas, TX 75231, USA"
+          },
+          {
+            "name": "Movement The Hill",
+            "place_id": "ChIJg6FrjcefToYRC86FZzUz44Y",
+            "lat": 32.8812545,
+            "lng": -96.7685542,
+            "distance_m": 91,
+            "rating": 4.6,
+            "user_rating_count": 133,
+            "price_level": null,
+            "website": "https://movementgyms.com/the-hill/?utm_source=google-my-business&utm_medium=organic&utm_campaign=the-hill",
+            "phone": "(214) 447-3159",
+            "types": [
+              "yoga_studio",
+              "sports_coaching",
+              "sports_complex",
+              "fitness_center",
+              "gym",
+              "school",
+              "sports_activity_location",
+              "point_of_interest",
+              "health",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "8021 Walnut Hill Ln, Dallas, TX 75231, USA"
+          },
+          {
+            "name": "bellagreen",
+            "place_id": "ChIJo6oL9kafToYRiJy_i5A9B4c",
+            "lat": 32.8814555,
+            "lng": -96.7680529,
+            "distance_m": 141,
+            "rating": 4.6,
+            "user_rating_count": 1869,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://bellagreen.com/",
+            "phone": "(972) 639-5164",
+            "types": [
+              "american_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "8041 Walnut Hill Ln #810, Dallas, TX 75231, USA"
+          },
+          {
+            "name": "Kom\u00e9 Sushi and Handroll Bar",
+            "place_id": "ChIJ_4ff0SCfToYRlen7iRUXYiw",
+            "lat": 32.8816357,
+            "lng": -96.76811459999999,
+            "distance_m": 142,
+            "rating": 4.8,
+            "user_rating_count": 396,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": null,
+            "phone": "(214) 238-6314",
+            "types": [
+              "japanese_restaurant",
+              "sushi_restaurant",
+              "asian_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "8041 Walnut Hill Ln Suite 820, Dallas, TX 75231, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.67,
+        "merchant_quality": 6.9,
+        "monetization_likelihood": 10.0,
+        "final": 8.37
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 11
+    },
+    {
+      "charger": {
+        "name": "Tesla Supercharger",
+        "place_id": "ChIJ2_MNyg-1RIYRkTEKVh9-5x0",
+        "lat": 30.2471801,
+        "lng": -97.7500043,
+        "address": "1603 S Congress Ave, Austin, TX 78704, USA",
+        "network": "Tesla",
+        "estimated_stall_count": 12,
+        "city": "Austin",
+        "state": "TX",
+        "location_name": "Austin Metro"
+      },
+      "merchants": {
+        "total_count": 20,
+        "within_200m": 8,
+        "within_400m": 20,
+        "top_5": [
+          {
+            "name": "Ma\u00f1ana",
+            "place_id": "ChIJh91qhvy0RIYRqlF6u8rGJ3M",
+            "lat": 30.2473651,
+            "lng": -97.7501159,
+            "distance_m": 23,
+            "rating": 4.4,
+            "user_rating_count": 725,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://mananaaustin.com/",
+            "phone": "(512) 872-3144",
+            "types": [
+              "coffee_shop",
+              "cafe",
+              "breakfast_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "bakery",
+              "food_store",
+              "store",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "1603 S Congress Ave, Austin, TX 78704, USA"
+          },
+          {
+            "name": "South Congress Hotel",
+            "place_id": "ChIJh91qhvy0RIYRtJ71kCXMjsc",
+            "lat": 30.2472958,
+            "lng": -97.7503382,
+            "distance_m": 35,
+            "rating": 4.4,
+            "user_rating_count": 1133,
+            "price_level": null,
+            "website": "http://southcongresshotel.com/?utm_source=google-gbp&utm_medium=organic&utm_campaign=gbp",
+            "phone": "(512) 920-6405",
+            "types": [
+              "hotel",
+              "bar",
+              "lodging",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "1603 S Congress Ave, Austin, TX 78704, USA"
+          },
+          {
+            "name": "Caf\u00e9 No S\u00e9",
+            "place_id": "ChIJh91qhvy0RIYRBzoQTNhuG-4",
+            "lat": 30.247111000000004,
+            "lng": -97.750424,
+            "distance_m": 41,
+            "rating": 4.5,
+            "user_rating_count": 1474,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://cafenoseaustin.com/",
+            "phone": "(512) 942-2061",
+            "types": [
+              "cafe",
+              "brunch_restaurant",
+              "breakfast_restaurant",
+              "meal_takeaway",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "1603 S Congress Ave, Austin, TX 78704, USA"
+          },
+          {
+            "name": "Vespaio Restaurant",
+            "place_id": "ChIJQxDp5f-1RIYREhw0DPYuRuI",
+            "lat": 30.2474255,
+            "lng": -97.7507097,
+            "distance_m": 73,
+            "rating": 4.5,
+            "user_rating_count": 2048,
+            "price_level": "PRICE_LEVEL_EXPENSIVE",
+            "website": "http://vespaioristorante.com/",
+            "phone": "(512) 441-6100",
+            "types": [
+              "italian_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "1610 S Congress Ave S, Austin, TX 78704, USA"
+          },
+          {
+            "name": "Chapul\u00edn Cantina",
+            "place_id": "ChIJlWI5IXy1RIYR7JQ2HSqBzDo",
+            "lat": 30.247260500000003,
+            "lng": -97.7508515,
+            "distance_m": 82,
+            "rating": 4.5,
+            "user_rating_count": 432,
+            "price_level": "PRICE_LEVEL_EXPENSIVE",
+            "website": "http://chapulincantina.com/",
+            "phone": "(512) 441-7672",
+            "types": [
+              "restaurant",
+              "mexican_restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "1610 S Congress Ave, Austin, TX 78704, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.67,
+        "merchant_quality": 6.9,
+        "monetization_likelihood": 10.0,
+        "final": 8.37
+      },
+      "recommended_first_anchor_merchant_type": "Dessert shop",
+      "rank": 12
+    },
+    {
+      "charger": {
+        "name": "Tesla Destination Charger",
+        "place_id": "ChIJUSzkPKlYXIYRzMcnhg5mHSg",
+        "lat": 29.417594699999995,
+        "lng": -98.4886082,
+        "address": "607 S Alamo St, San Antonio, TX 78205, USA",
+        "network": "Tesla",
+        "estimated_stall_count": 12,
+        "city": "San Antonio",
+        "state": "TX",
+        "location_name": "San Antonio Metro"
+      },
+      "merchants": {
+        "total_count": 20,
+        "within_200m": 12,
+        "within_400m": 20,
+        "top_5": [
+          {
+            "name": "Hola!",
+            "place_id": "ChIJU47bBOdZXIYRhbi2JrNRvtk",
+            "lat": 29.4178988,
+            "lng": -98.4884549,
+            "distance_m": 37,
+            "rating": 4.5,
+            "user_rating_count": 427,
+            "price_level": null,
+            "website": "http://www.holatapas.net/",
+            "phone": "(210) 236-5688",
+            "types": [
+              "steak_house",
+              "bar",
+              "restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "603 S Alamo St, San Antonio, TX 78210, USA"
+          },
+          {
+            "name": "Battalion",
+            "place_id": "ChIJgVXdFqlYXIYRvcLXJWoP8Fs",
+            "lat": 29.4177677,
+            "lng": -98.4881123,
+            "distance_m": 52,
+            "rating": 4.5,
+            "user_rating_count": 1791,
+            "price_level": "PRICE_LEVEL_EXPENSIVE",
+            "website": "http://www.battalionsa.com/",
+            "phone": "(210) 816-0088",
+            "types": [
+              "italian_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "604 S Alamo St, San Antonio, TX 78205, USA"
+          },
+          {
+            "name": "Azuca Nuevo Latino",
+            "place_id": "ChIJaSTOJqlYXIYR_k1E4m_aIl4",
+            "lat": 29.417121700000003,
+            "lng": -98.4885876,
+            "distance_m": 53,
+            "rating": 4.5,
+            "user_rating_count": 1194,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.azuca.net/",
+            "phone": "(210) 225-5550",
+            "types": [
+              "mexican_restaurant",
+              "seafood_restaurant",
+              "american_restaurant",
+              "restaurant",
+              "food",
+              "bar",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "709 S Alamo St, San Antonio, TX 78205, USA"
+          },
+          {
+            "name": "Blush Restaurant & Bakery",
+            "place_id": "ChIJQ0xq6i9ZXIYRdB6JmwMyEYs",
+            "lat": 29.416946799999995,
+            "lng": -98.48868399999999,
+            "distance_m": 72,
+            "rating": 4.4,
+            "user_rating_count": 677,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://blushrestaurant.com/",
+            "phone": "(210) 202-0804",
+            "types": [
+              "brunch_restaurant",
+              "coffee_shop",
+              "bakery",
+              "breakfast_restaurant",
+              "event_venue",
+              "cafe",
+              "food_store",
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "store",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "713 S Alamo St, San Antonio, TX 78205, USA"
+          },
+          {
+            "name": "Rosario's ComidaMex & Bar",
+            "place_id": "ChIJEdIctahYXIYRXiT7Ak7uKYQ",
+            "lat": 29.417214700000002,
+            "lng": -98.4897776,
+            "distance_m": 121,
+            "rating": 4.3,
+            "user_rating_count": 7671,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://rosariossa.com/",
+            "phone": "(210) 223-1806",
+            "types": [
+              "mexican_restaurant",
+              "american_restaurant",
+              "restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "722 S St Mary's St, San Antonio, TX 78205, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.67,
+        "merchant_quality": 6.9,
+        "monetization_likelihood": 10.0,
+        "final": 8.37
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 13
+    },
+    {
+      "charger": {
+        "name": "ChargePoint Charging Station",
+        "place_id": "ChIJPag60zqZToYRupq3XInUemw",
+        "lat": 32.790656999999996,
+        "lng": -96.80299099999999,
+        "address": "2000 McKinney Ave, Dallas, TX 75201, USA",
+        "network": "ChargePoint",
+        "estimated_stall_count": 8,
+        "city": "Dallas",
+        "state": "TX",
+        "location_name": "Dallas-Fort Worth"
+      },
+      "merchants": {
+        "total_count": 19,
+        "within_200m": 10,
+        "within_400m": 19,
+        "top_5": [
+          {
+            "name": "STK Steakhouse",
+            "place_id": "ChIJJZGu-ZqZToYRfSZAvIFsp_o",
+            "lat": 32.7910872,
+            "lng": -96.80319279999999,
+            "distance_m": 51,
+            "rating": 4.5,
+            "user_rating_count": 5043,
+            "price_level": "PRICE_LEVEL_VERY_EXPENSIVE",
+            "website": "https://stksteakhouse.com/venues/dallas/",
+            "phone": "(972) 842-9450",
+            "types": [
+              "steak_house",
+              "seafood_restaurant",
+              "fine_dining_restaurant",
+              "night_club",
+              "american_restaurant",
+              "bar",
+              "event_venue",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "2000 McKinney Ave, Dallas, TX 75201, USA"
+          },
+          {
+            "name": "Haywire",
+            "place_id": "ChIJs_xpraSZToYR53zDDkGvNs8",
+            "lat": 32.7901512,
+            "lng": -96.80348049999999,
+            "distance_m": 73,
+            "rating": 4.5,
+            "user_rating_count": 1858,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://haywirerestaurant.com/",
+            "phone": "(469) 501-5522",
+            "types": [
+              "american_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "1920 McKinney Ave Ste 100, Dallas, TX 75201, USA"
+          },
+          {
+            "name": "Doc B's Restaurant",
+            "place_id": "ChIJ8Qdf6KSZToYRhCOkl8RN_lE",
+            "lat": 32.790974999999996,
+            "lng": -96.8037224,
+            "distance_m": 77,
+            "rating": 4.6,
+            "user_rating_count": 909,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://docbsrestaurant.com/locations/dallas",
+            "phone": "(469) 998-2330",
+            "types": [
+              "american_restaurant",
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "2021 McKinney Ave #190, Dallas, TX 75201, USA"
+          },
+          {
+            "name": "Miriam Cocina Latina",
+            "place_id": "ChIJd9J6I3OZToYRSACH3m8IWSU",
+            "lat": 32.789859199999995,
+            "lng": -96.8024767,
+            "distance_m": 101,
+            "rating": 4.6,
+            "user_rating_count": 1211,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.miriamcocina.com/",
+            "phone": "(214) 855-5275",
+            "types": [
+              "mexican_restaurant",
+              "restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "2015 Woodall Rodgers Fwy, Dallas, TX 75201, USA"
+          },
+          {
+            "name": "Del Frisco's Double Eagle Steakhouse",
+            "place_id": "ChIJuW9izCAhTIYRC9kB2gghzHs",
+            "lat": 32.7914296,
+            "lng": -96.8037039,
+            "distance_m": 109,
+            "rating": 4.4,
+            "user_rating_count": 2294,
+            "price_level": "PRICE_LEVEL_VERY_EXPENSIVE",
+            "website": "https://www.delfriscos.com/location/del-friscos-double-eagle-steakhouse-dallas-tx/",
+            "phone": "(972) 490-9000",
+            "types": [
+              "steak_house",
+              "fine_dining_restaurant",
+              "seafood_restaurant",
+              "bar",
+              "american_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "2323 Olive St, Dallas, TX 75201, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.33,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.3
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 14
+    },
+    {
+      "charger": {
+        "name": "ChargePoint Charging Station",
+        "place_id": "ChIJZb9v6zqZToYR0S82DpIVR7E",
+        "lat": 32.7913687,
+        "lng": -96.8045751,
+        "address": "2021 McKinney Ave, Dallas, TX 75201, USA",
+        "network": "ChargePoint",
+        "estimated_stall_count": 8,
+        "city": "Dallas",
+        "state": "TX",
+        "location_name": "Dallas-Fort Worth"
+      },
+      "merchants": {
+        "total_count": 19,
+        "within_200m": 5,
+        "within_400m": 19,
+        "top_5": [
+          {
+            "name": "Mexican Sugar",
+            "place_id": "ChIJDVkCWriZToYRq5qxgjDnvgc",
+            "lat": 32.791218199999996,
+            "lng": -96.8044116,
+            "distance_m": 23,
+            "rating": 4.6,
+            "user_rating_count": 2356,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.mexicansugarcocina.com/",
+            "phone": "(214) 613-1796",
+            "types": [
+              "mexican_restaurant",
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "2355 Olive St #155, Dallas, TX 75201, USA"
+          },
+          {
+            "name": "STK Steakhouse",
+            "place_id": "ChIJJZGu-ZqZToYRfSZAvIFsp_o",
+            "lat": 32.7910872,
+            "lng": -96.80319279999999,
+            "distance_m": 133,
+            "rating": 4.5,
+            "user_rating_count": 5043,
+            "price_level": "PRICE_LEVEL_VERY_EXPENSIVE",
+            "website": "https://stksteakhouse.com/venues/dallas/",
+            "phone": "(972) 842-9450",
+            "types": [
+              "steak_house",
+              "seafood_restaurant",
+              "fine_dining_restaurant",
+              "night_club",
+              "american_restaurant",
+              "bar",
+              "event_venue",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "2000 McKinney Ave, Dallas, TX 75201, USA"
+          },
+          {
+            "name": "Haywire",
+            "place_id": "ChIJs_xpraSZToYR53zDDkGvNs8",
+            "lat": 32.7901512,
+            "lng": -96.80348049999999,
+            "distance_m": 170,
+            "rating": 4.5,
+            "user_rating_count": 1858,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://haywirerestaurant.com/",
+            "phone": "(469) 501-5522",
+            "types": [
+              "american_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "1920 McKinney Ave Ste 100, Dallas, TX 75201, USA"
+          },
+          {
+            "name": "CAVA",
+            "place_id": "ChIJi3UbfR2ZToYRZJFAgILZjsY",
+            "lat": 32.7898527,
+            "lng": -96.8040175,
+            "distance_m": 176,
+            "rating": 4.5,
+            "user_rating_count": 1484,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://cava.com/",
+            "phone": "(214) 281-8668",
+            "types": [
+              "mediterranean_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "1919 McKinney Ave, Dallas, TX 75201, USA"
+          },
+          {
+            "name": "Happiest Hour",
+            "place_id": "ChIJbfNuQzqZToYRKwLr-sZwIQA",
+            "lat": 32.791142,
+            "lng": -96.806687,
+            "distance_m": 199,
+            "rating": 4.3,
+            "user_rating_count": 5051,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.happiesthourdallas.com/",
+            "phone": "(972) 528-0067",
+            "types": [
+              "bar",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "2616 Olive St, Dallas, TX 75201, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.33,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.3
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 15
+    },
+    {
+      "charger": {
+        "name": "Tesla Destination Charger",
+        "place_id": "ChIJM4rFpf20RIYROrL-CjM9JYU",
+        "lat": 30.250902099999998,
+        "lng": -97.7497731,
+        "address": "1316 S Congress Ave, Austin, TX 78704, USA",
+        "network": "Tesla",
+        "estimated_stall_count": 12,
+        "city": "Austin",
+        "state": "TX",
+        "location_name": "Austin Metro"
+      },
+      "merchants": {
+        "total_count": 19,
+        "within_200m": 11,
+        "within_400m": 19,
+        "top_5": [
+          {
+            "name": "Jo's Coffee \u2013 South Congress",
+            "place_id": "ChIJ1S_Bov20RIYRe7MiR8tYawY",
+            "lat": 30.2510458,
+            "lng": -97.74937170000001,
+            "distance_m": 42,
+            "rating": 4.4,
+            "user_rating_count": 1918,
+            "price_level": "PRICE_LEVEL_INEXPENSIVE",
+            "website": "https://www.joscoffee.com/south-congress-jos",
+            "phone": "(512) 852-2300",
+            "types": [
+              "coffee_shop",
+              "sandwich_shop",
+              "cafe",
+              "meal_takeaway",
+              "restaurant",
+              "point_of_interest",
+              "food_store",
+              "store",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "1300 S Congress Ave, Austin, TX 78704, USA"
+          },
+          {
+            "name": "Lucky Robot Restaurant",
+            "place_id": "ChIJT-5pvP20RIYRomVuik28HBI",
+            "lat": 30.2508333,
+            "lng": -97.74901109999999,
+            "distance_m": 74,
+            "rating": 4.5,
+            "user_rating_count": 2655,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://luckyrobotatx.com/?utm_source=google",
+            "phone": "(512) 444-8081",
+            "types": [
+              "japanese_restaurant",
+              "seafood_restaurant",
+              "sushi_restaurant",
+              "vegan_restaurant",
+              "vegetarian_restaurant",
+              "asian_restaurant",
+              "american_restaurant",
+              "dessert_shop",
+              "confectionery",
+              "ramen_restaurant",
+              "meal_takeaway",
+              "restaurant",
+              "point_of_interest",
+              "food_store",
+              "store",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "1303 S Congress Ave, Austin, TX 78704, USA"
+          },
+          {
+            "name": "The Continental Club",
+            "place_id": "ChIJJUbJuv20RIYRpFyFb-IiSZo",
+            "lat": 30.250505999999998,
+            "lng": -97.7490768,
+            "distance_m": 80,
+            "rating": 4.7,
+            "user_rating_count": 2226,
+            "price_level": "PRICE_LEVEL_INEXPENSIVE",
+            "website": "https://continentalclub.com/",
+            "phone": "(512) 441-2444",
+            "types": [
+              "night_club",
+              "bar",
+              "event_venue",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "1315 S Congress Ave, Austin, TX 78704, USA"
+          },
+          {
+            "name": "Amy's Ice Creams",
+            "place_id": "ChIJ7XN8ov20RIYRLmnVuy3Y2B4",
+            "lat": 30.2509623,
+            "lng": -97.74893809999999,
+            "distance_m": 80,
+            "rating": 4.5,
+            "user_rating_count": 1623,
+            "price_level": "PRICE_LEVEL_INEXPENSIVE",
+            "website": "http://amysicecreams.com/",
+            "phone": "(512) 440-7488",
+            "types": [
+              "ice_cream_shop",
+              "dessert_shop",
+              "confectionery",
+              "point_of_interest",
+              "food_store",
+              "store",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "1301 S Congress Ave, Austin, TX 78704, USA"
+          },
+          {
+            "name": "Joann's Fine Foods",
+            "place_id": "ChIJu_Tsmf20RIYR1falDEp-d_I",
+            "lat": 30.2515845,
+            "lng": -97.74915469999999,
+            "distance_m": 96,
+            "rating": 4.4,
+            "user_rating_count": 903,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.joannsaustin.com/",
+            "phone": "(512) 358-6054",
+            "types": [
+              "american_restaurant",
+              "restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "1224 S Congress Ave, Austin, TX 78704, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.33,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.3
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 16
+    },
+    {
+      "charger": {
+        "name": "Tesla Destination Charger",
+        "place_id": "ChIJYQbasg61RIYR1EIDTjKUJzQ",
+        "lat": 30.269019999999998,
+        "lng": -97.747146,
+        "address": "510 Guadalupe St, Austin, TX 78701, USA",
+        "network": "Tesla",
+        "estimated_stall_count": 12,
+        "city": "Austin",
+        "state": "TX",
+        "location_name": "Austin Metro"
+      },
+      "merchants": {
+        "total_count": 19,
+        "within_200m": 5,
+        "within_400m": 19,
+        "top_5": [
+          {
+            "name": "WU Chow - Downtown",
+            "place_id": "ChIJL3w-vA61RIYR8bQpaPieF1U",
+            "lat": 30.268578200000004,
+            "lng": -97.7478856,
+            "distance_m": 86,
+            "rating": 4.3,
+            "user_rating_count": 1801,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://wuchowaustin.com/",
+            "phone": "(512) 476-2469",
+            "types": [
+              "chinese_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "500 W 5th St #168, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Little Woodrow's West 6th",
+            "place_id": "ChIJHa8koQ61RIYRDD-niQj3Y3w",
+            "lat": 30.269758399999994,
+            "lng": -97.7481007,
+            "distance_m": 123,
+            "rating": 4.3,
+            "user_rating_count": 1022,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://littlewoodrows.com/locations/west-6th/",
+            "phone": "(512) 477-2337",
+            "types": [
+              "bar_and_grill",
+              "bar",
+              "restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "520 W 6th St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Fixe Southern House",
+            "place_id": "ChIJzcQxtg61RIYRlTVfnv-nAd0",
+            "lat": 30.268877500000002,
+            "lng": -97.7485651,
+            "distance_m": 137,
+            "rating": 4.6,
+            "user_rating_count": 2014,
+            "price_level": "PRICE_LEVEL_EXPENSIVE",
+            "website": "http://fixesouthernhouse.com/",
+            "phone": "(512) 888-9133",
+            "types": [
+              "american_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "500 W 5th St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "The Roosevelt Room",
+            "place_id": "ChIJIeohJQm1RIYRG-NyRBlsnuw",
+            "lat": 30.2677886,
+            "lng": -97.74627729999999,
+            "distance_m": 160,
+            "rating": 4.6,
+            "user_rating_count": 2229,
+            "price_level": "PRICE_LEVEL_EXPENSIVE",
+            "website": "http://www.therooseveltroomatx.com/",
+            "phone": "(512) 494-4094",
+            "types": [
+              "bar",
+              "event_venue",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "307 W 5th St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Powder Room",
+            "place_id": "ChIJz4YxIwm1RIYRlKgOqoQHlR4",
+            "lat": 30.2675879,
+            "lng": -97.7459566,
+            "distance_m": 196,
+            "rating": 4.2,
+            "user_rating_count": 347,
+            "price_level": null,
+            "website": "https://www.loboshospitality.com/powder-room",
+            "phone": "(512) 996-3113",
+            "types": [
+              "bar",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "301 W 5th St, Austin, TX 78701, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.33,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.3
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 17
+    },
+    {
+      "charger": {
+        "name": "ChargePoint Charging Station",
+        "place_id": "ChIJ0Rzv-Qi1RIYRJLQNJ18HQkM",
+        "lat": 30.2665756,
+        "lng": -97.7444232,
+        "address": "391 Colorado St, Austin, TX 78701, USA",
+        "network": "ChargePoint",
+        "estimated_stall_count": 8,
+        "city": "Austin",
+        "state": "TX",
+        "location_name": "Austin Metro"
+      },
+      "merchants": {
+        "total_count": 19,
+        "within_200m": 7,
+        "within_400m": 19,
+        "top_5": [
+          {
+            "name": "Red Ash",
+            "place_id": "ChIJWfpBiwi1RIYRvg4iIbIE2go",
+            "lat": 30.2657022,
+            "lng": -97.74494089999999,
+            "distance_m": 109,
+            "rating": 4.7,
+            "user_rating_count": 2310,
+            "price_level": "PRICE_LEVEL_EXPENSIVE",
+            "website": "http://redashgrill.com/",
+            "phone": "(512) 379-2906",
+            "types": [
+              "italian_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "Colorado Tower, 303 Colorado St #200, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Elephant Room",
+            "place_id": "ChIJa59yaAi1RIYRyTOii08uLtQ",
+            "lat": 30.265672700000003,
+            "lng": -97.7434921,
+            "distance_m": 134,
+            "rating": 4.6,
+            "user_rating_count": 2491,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.elephantroom.com/",
+            "phone": "(512) 575-2925",
+            "types": [
+              "event_venue",
+              "night_club",
+              "bar",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "Swift Building, 315 Congress Ave., Austin, TX 78701, USA"
+          },
+          {
+            "name": "Houndstooth Coffee",
+            "place_id": "ChIJn3uWRwi1RIYRFf5C6_ymWJw",
+            "lat": 30.266216,
+            "lng": -97.743066,
+            "distance_m": 136,
+            "rating": 4.5,
+            "user_rating_count": 1159,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.houndstoothcoffee.com/?utm_source=google&utm_medium=organic&utm_campaign=googlebusiness",
+            "phone": "(512) 394-6051",
+            "types": [
+              "coffee_shop",
+              "liquor_store",
+              "cafe",
+              "food_store",
+              "point_of_interest",
+              "food",
+              "store",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "401 Congress Ave. #100c, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Powder Room",
+            "place_id": "ChIJz4YxIwm1RIYRlKgOqoQHlR4",
+            "lat": 30.2675879,
+            "lng": -97.7459566,
+            "distance_m": 185,
+            "rating": 4.2,
+            "user_rating_count": 347,
+            "price_level": null,
+            "website": "https://www.loboshospitality.com/powder-room",
+            "phone": "(512) 996-3113",
+            "types": [
+              "bar",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "301 W 5th St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Cooper's Old Time Pit Bar-B-Que",
+            "place_id": "ChIJoZsHcQi1RIYRfyBnp0UxNMI",
+            "lat": 30.2649418,
+            "lng": -97.7437436,
+            "distance_m": 193,
+            "rating": 4.4,
+            "user_rating_count": 6433,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://coopersbbqaustin.com/",
+            "phone": "(512) 474-4227",
+            "types": [
+              "barbecue_restaurant",
+              "barbecue_area",
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "217 Congress Ave., Austin, TX 78701, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.33,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.3
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 18
+    },
+    {
+      "charger": {
+        "name": "ChargePoint Charging Station",
+        "place_id": "ChIJj9f0nwm1RIYRcyZO4OU5iJ4",
+        "lat": 30.268638000000003,
+        "lng": -97.744304,
+        "address": "200 W 6th St, Austin, TX 78701, USA",
+        "network": "ChargePoint",
+        "estimated_stall_count": 8,
+        "city": "Austin",
+        "state": "TX",
+        "location_name": "Austin Metro"
+      },
+      "merchants": {
+        "total_count": 19,
+        "within_200m": 5,
+        "within_400m": 19,
+        "top_5": [
+          {
+            "name": "Perry's Steakhouse & Grille - Downtown Austin",
+            "place_id": "ChIJz7o2jgm1RIYRi_5Y7JfjH0A",
+            "lat": 30.2694225,
+            "lng": -97.74352689999999,
+            "distance_m": 115,
+            "rating": 4.6,
+            "user_rating_count": 4397,
+            "price_level": "PRICE_LEVEL_EXPENSIVE",
+            "website": "http://www.perryssteakhouse.com/menu-locations/austin/downtown/",
+            "phone": "(512) 474-6300",
+            "types": [
+              "steak_house",
+              "fine_dining_restaurant",
+              "wine_bar",
+              "bar",
+              "american_restaurant",
+              "seafood_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "114 W 7th St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Comedor",
+            "place_id": "ChIJgywubmi1RIYRQlw1yAejkGA",
+            "lat": 30.267599299999997,
+            "lng": -97.744164,
+            "distance_m": 116,
+            "rating": 4.4,
+            "user_rating_count": 957,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://comedortx.com/",
+            "phone": "(512) 499-0977",
+            "types": [
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "501 Colorado St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Velvet Taco",
+            "place_id": "ChIJIQ4kr4e1RIYRbQ_afrDF1p0",
+            "lat": 30.2679585,
+            "lng": -97.74317239999999,
+            "distance_m": 132,
+            "rating": 4.6,
+            "user_rating_count": 2745,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.velvettaco.com/location/6th-congress/",
+            "phone": "(512) 298-5223",
+            "types": [
+              "mexican_restaurant",
+              "restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "522 Congress Ave. Suite 100, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Caroline",
+            "place_id": "ChIJQyfp5wm1RIYRd7IXfFuFzTg",
+            "lat": 30.2688157,
+            "lng": -97.7422982,
+            "distance_m": 194,
+            "rating": 4.8,
+            "user_rating_count": 13655,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.carolinerestaurant.com/?utm_source=google&utm_medium=organic&utm_campaign=business_listing",
+            "phone": "(512) 982-6766",
+            "types": [
+              "american_restaurant",
+              "coffee_shop",
+              "cafe",
+              "food_store",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "store",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "621 Congress Ave. Suite 101, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Powder Room",
+            "place_id": "ChIJz4YxIwm1RIYRlKgOqoQHlR4",
+            "lat": 30.2675879,
+            "lng": -97.7459566,
+            "distance_m": 197,
+            "rating": 4.2,
+            "user_rating_count": 347,
+            "price_level": null,
+            "website": "https://www.loboshospitality.com/powder-room",
+            "phone": "(512) 996-3113",
+            "types": [
+              "bar",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "301 W 5th St, Austin, TX 78701, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.33,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.3
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 19
+    },
+    {
+      "charger": {
+        "name": "ChargePoint Charging Station",
+        "place_id": "ChIJyd-xzgm1RIYRqLATWPtXayQ",
+        "lat": 30.267694,
+        "lng": -97.742662,
+        "address": "515 Congress Ave., Austin, TX 78701, USA",
+        "network": "ChargePoint",
+        "estimated_stall_count": 8,
+        "city": "Austin",
+        "state": "TX",
+        "location_name": "Austin Metro"
+      },
+      "merchants": {
+        "total_count": 19,
+        "within_200m": 9,
+        "within_400m": 19,
+        "top_5": [
+          {
+            "name": "Velvet Taco",
+            "place_id": "ChIJIQ4kr4e1RIYRbQ_afrDF1p0",
+            "lat": 30.2679585,
+            "lng": -97.74317239999999,
+            "distance_m": 57,
+            "rating": 4.6,
+            "user_rating_count": 2745,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.velvettaco.com/location/6th-congress/",
+            "phone": "(512) 298-5223",
+            "types": [
+              "mexican_restaurant",
+              "restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "522 Congress Ave. Suite 100, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Upstairs at Caroline",
+            "place_id": "ChIJQyfp5wm1RIYRuYHlan7PCQs",
+            "lat": 30.268663500000002,
+            "lng": -97.7420691,
+            "distance_m": 122,
+            "rating": 4.9,
+            "user_rating_count": 6331,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.carolinerestaurant.com/upstairs-at-caroline?utm_source=google&utm_medium=organic&utm_campaign=business_listing",
+            "phone": "(512) 982-6766",
+            "types": [
+              "american_restaurant",
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "109 E 7th St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Speakeasy",
+            "place_id": "ChIJ2VVCTgi1RIYRdZUyhqoZk_s",
+            "lat": 30.266815599999994,
+            "lng": -97.74351899999999,
+            "distance_m": 128,
+            "rating": 4.4,
+            "user_rating_count": 1902,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.speakeasyaustin.com/",
+            "phone": "(512) 477-2789",
+            "types": [
+              "bowling_alley",
+              "night_club",
+              "bar",
+              "sports_complex",
+              "event_venue",
+              "sports_activity_location",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "412 Congress Ave. D, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Caroline",
+            "place_id": "ChIJQyfp5wm1RIYRd7IXfFuFzTg",
+            "lat": 30.2688157,
+            "lng": -97.7422982,
+            "distance_m": 130,
+            "rating": 4.8,
+            "user_rating_count": 13655,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.carolinerestaurant.com/?utm_source=google&utm_medium=organic&utm_campaign=business_listing",
+            "phone": "(512) 982-6766",
+            "types": [
+              "american_restaurant",
+              "coffee_shop",
+              "cafe",
+              "food_store",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "store",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "621 Congress Ave. Suite 101, Austin, TX 78701, USA"
+          },
+          {
+            "name": "The Dead Rabbit, Austin",
+            "place_id": "ChIJW3sENn-1RIYRGjtbjA74zn0",
+            "lat": 30.267720699999995,
+            "lng": -97.7411286,
+            "distance_m": 147,
+            "rating": 4.4,
+            "user_rating_count": 523,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://thedeadrabbit.com/?utm_source=google_business_profile&utm_medium=gbp_view_website&utm_campaign=google_business_profile",
+            "phone": "(737) 530-8830",
+            "types": [
+              "bar",
+              "brunch_restaurant",
+              "pub",
+              "event_venue",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "204 E 6th St, Austin, TX 78701, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.33,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.3
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 20
+    },
+    {
+      "charger": {
+        "name": "ChargePoint Charging Station",
+        "place_id": "ChIJ39XZBgm1RIYRhA3h90LkjTI",
+        "lat": 30.267581000000003,
+        "lng": -97.744568,
+        "address": "405 Colorado St, Austin, TX 78701, USA",
+        "network": "ChargePoint",
+        "estimated_stall_count": 8,
+        "city": "Austin",
+        "state": "TX",
+        "location_name": "Austin Metro"
+      },
+      "merchants": {
+        "total_count": 19,
+        "within_200m": 5,
+        "within_400m": 19,
+        "top_5": [
+          {
+            "name": "Speakeasy",
+            "place_id": "ChIJ2VVCTgi1RIYRdZUyhqoZk_s",
+            "lat": 30.266815599999994,
+            "lng": -97.74351899999999,
+            "distance_m": 132,
+            "rating": 4.4,
+            "user_rating_count": 1902,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.speakeasyaustin.com/",
+            "phone": "(512) 477-2789",
+            "types": [
+              "bowling_alley",
+              "night_club",
+              "bar",
+              "sports_complex",
+              "event_venue",
+              "sports_activity_location",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "412 Congress Ave. D, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Powder Room",
+            "place_id": "ChIJz4YxIwm1RIYRlKgOqoQHlR4",
+            "lat": 30.2675879,
+            "lng": -97.7459566,
+            "distance_m": 133,
+            "rating": 4.2,
+            "user_rating_count": 347,
+            "price_level": null,
+            "website": "https://www.loboshospitality.com/powder-room",
+            "phone": "(512) 996-3113",
+            "types": [
+              "bar",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "301 W 5th St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Velvet Taco",
+            "place_id": "ChIJIQ4kr4e1RIYRbQ_afrDF1p0",
+            "lat": 30.2679585,
+            "lng": -97.74317239999999,
+            "distance_m": 140,
+            "rating": 4.6,
+            "user_rating_count": 2745,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.velvettaco.com/location/6th-congress/",
+            "phone": "(512) 298-5223",
+            "types": [
+              "mexican_restaurant",
+              "restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "522 Congress Ave. Suite 100, Austin, TX 78701, USA"
+          },
+          {
+            "name": "CAVA",
+            "place_id": "ChIJfd05H2e1RIYRQHGIfo6yVDc",
+            "lat": 30.26721,
+            "lng": -97.74296,
+            "distance_m": 160,
+            "rating": 4.6,
+            "user_rating_count": 2143,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://cava.com/",
+            "phone": "(512) 256-8002",
+            "types": [
+              "mediterranean_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "515 Congress Ave., Austin, TX 78701, USA"
+          },
+          {
+            "name": "The Roosevelt Room",
+            "place_id": "ChIJIeohJQm1RIYRG-NyRBlsnuw",
+            "lat": 30.2677886,
+            "lng": -97.74627729999999,
+            "distance_m": 166,
+            "rating": 4.6,
+            "user_rating_count": 2229,
+            "price_level": "PRICE_LEVEL_EXPENSIVE",
+            "website": "http://www.therooseveltroomatx.com/",
+            "phone": "(512) 494-4094",
+            "types": [
+              "bar",
+              "event_venue",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "307 W 5th St, Austin, TX 78701, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.33,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.3
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 21
+    },
+    {
+      "charger": {
+        "name": "ChargePoint Charging Station",
+        "place_id": "ChIJCbhAgKe1RIYRRjCgbMlaBd8",
+        "lat": 30.26726,
+        "lng": -97.74156699999999,
+        "address": "508 Brazos St, Austin, TX 78701, USA",
+        "network": "ChargePoint",
+        "estimated_stall_count": 8,
+        "city": "Austin",
+        "state": "TX",
+        "location_name": "Austin Metro"
+      },
+      "merchants": {
+        "total_count": 19,
+        "within_200m": 9,
+        "within_400m": 19,
+        "top_5": [
+          {
+            "name": "The Dead Rabbit, Austin",
+            "place_id": "ChIJW3sENn-1RIYRGjtbjA74zn0",
+            "lat": 30.267720699999995,
+            "lng": -97.7411286,
+            "distance_m": 66,
+            "rating": 4.4,
+            "user_rating_count": 523,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://thedeadrabbit.com/?utm_source=google_business_profile&utm_medium=gbp_view_website&utm_campaign=google_business_profile",
+            "phone": "(737) 530-8830",
+            "types": [
+              "bar",
+              "brunch_restaurant",
+              "pub",
+              "event_venue",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "204 E 6th St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Arriba Abajo",
+            "place_id": "ChIJUdnMmqe1RIYRzv0M06MjaOw",
+            "lat": 30.2667947,
+            "lng": -97.74098740000001,
+            "distance_m": 76,
+            "rating": 4.5,
+            "user_rating_count": 981,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.arribaabajoatx.com/menus/",
+            "phone": "(737) 257-3026",
+            "types": [
+              "restaurant",
+              "mexican_restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "506 San Jacinto Blvd, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Voodoo Doughnut",
+            "place_id": "ChIJ81ogcae1RIYRPNSTL-oW9IY",
+            "lat": 30.267783599999998,
+            "lng": -97.7408519,
+            "distance_m": 90,
+            "rating": 4.4,
+            "user_rating_count": 7003,
+            "price_level": "PRICE_LEVEL_INEXPENSIVE",
+            "website": "https://www.voodoodoughnut.com/",
+            "phone": "(512) 215-8586",
+            "types": [
+              "donut_shop",
+              "bakery",
+              "food_store",
+              "point_of_interest",
+              "food",
+              "store",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "212 E 6th St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Upstairs at Caroline",
+            "place_id": "ChIJQyfp5wm1RIYRuYHlan7PCQs",
+            "lat": 30.268663500000002,
+            "lng": -97.7420691,
+            "distance_m": 163,
+            "rating": 4.9,
+            "user_rating_count": 6331,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.carolinerestaurant.com/upstairs-at-caroline?utm_source=google&utm_medium=organic&utm_campaign=business_listing",
+            "phone": "(512) 982-6766",
+            "types": [
+              "american_restaurant",
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "109 E 7th St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Velvet Taco",
+            "place_id": "ChIJIQ4kr4e1RIYRbQ_afrDF1p0",
+            "lat": 30.2679585,
+            "lng": -97.74317239999999,
+            "distance_m": 173,
+            "rating": 4.6,
+            "user_rating_count": 2745,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.velvettaco.com/location/6th-congress/",
+            "phone": "(512) 298-5223",
+            "types": [
+              "mexican_restaurant",
+              "restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "522 Congress Ave. Suite 100, Austin, TX 78701, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.33,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.3
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 22
+    },
+    {
+      "charger": {
+        "name": "ChargePoint Charging Station",
+        "place_id": "ChIJe1tWEgi1RIYRUvZSkQN_EJY",
+        "lat": 30.265279000000003,
+        "lng": -97.74284999999999,
+        "address": "301 Congress Ave., Austin, TX 78701, USA",
+        "network": "ChargePoint",
+        "estimated_stall_count": 8,
+        "city": "Austin",
+        "state": "TX",
+        "location_name": "Austin Metro"
+      },
+      "merchants": {
+        "total_count": 19,
+        "within_200m": 6,
+        "within_400m": 19,
+        "top_5": [
+          {
+            "name": "Elephant Room",
+            "place_id": "ChIJa59yaAi1RIYRyTOii08uLtQ",
+            "lat": 30.265672700000003,
+            "lng": -97.7434921,
+            "distance_m": 76,
+            "rating": 4.6,
+            "user_rating_count": 2491,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.elephantroom.com/",
+            "phone": "(512) 575-2925",
+            "types": [
+              "event_venue",
+              "night_club",
+              "bar",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "Swift Building, 315 Congress Ave., Austin, TX 78701, USA"
+          },
+          {
+            "name": "Cooper's Old Time Pit Bar-B-Que",
+            "place_id": "ChIJoZsHcQi1RIYRfyBnp0UxNMI",
+            "lat": 30.2649418,
+            "lng": -97.7437436,
+            "distance_m": 94,
+            "rating": 4.4,
+            "user_rating_count": 6433,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://coopersbbqaustin.com/",
+            "phone": "(512) 474-4227",
+            "types": [
+              "barbecue_restaurant",
+              "barbecue_area",
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "217 Congress Ave., Austin, TX 78701, USA"
+          },
+          {
+            "name": "Houndstooth Coffee",
+            "place_id": "ChIJn3uWRwi1RIYRFf5C6_ymWJw",
+            "lat": 30.266216,
+            "lng": -97.743066,
+            "distance_m": 106,
+            "rating": 4.5,
+            "user_rating_count": 1159,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.houndstoothcoffee.com/?utm_source=google&utm_medium=organic&utm_campaign=googlebusiness",
+            "phone": "(512) 394-6051",
+            "types": [
+              "coffee_shop",
+              "liquor_store",
+              "cafe",
+              "food_store",
+              "point_of_interest",
+              "food",
+              "store",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "401 Congress Ave. #100c, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Corner Restaurant",
+            "place_id": "ChIJxcCceAi1RIYR9AqXT8eWDyc",
+            "lat": 30.2645703,
+            "lng": -97.7438317,
+            "distance_m": 123,
+            "rating": 4.8,
+            "user_rating_count": 17160,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.cornerrestaurantaustin.com/?utm_source=google&utm_medium=organic&utm_campaign=business_listing",
+            "phone": "(512) 608-4488",
+            "types": [
+              "restaurant",
+              "american_restaurant",
+              "bar",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "110 E 2nd St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Fogo De Chao - Austin",
+            "place_id": "ChIJ7_1MCai1RIYRsFrrp7OT0zI",
+            "lat": 30.264823999999997,
+            "lng": -97.744512,
+            "distance_m": 167,
+            "rating": 4.7,
+            "user_rating_count": 8619,
+            "price_level": "PRICE_LEVEL_EXPENSIVE",
+            "website": "https://fogodechao.com/location/austin/",
+            "phone": "(512) 472-0220",
+            "types": [
+              "brazilian_restaurant",
+              "steak_house",
+              "restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "200 Congress Ave., Austin, TX 78701, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.33,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.3
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 23
+    },
+    {
+      "charger": {
+        "name": "ChargePoint Charging Station",
+        "place_id": "ChIJ_-DFxPb1XIYRy19A_q5nD-4",
+        "lat": 29.441174999999998,
+        "lng": -98.47968,
+        "address": "503 Avenue A, San Antonio, TX 78215, USA",
+        "network": "ChargePoint",
+        "estimated_stall_count": 8,
+        "city": "San Antonio",
+        "state": "TX",
+        "location_name": "San Antonio Metro"
+      },
+      "merchants": {
+        "total_count": 19,
+        "within_200m": 11,
+        "within_400m": 19,
+        "top_5": [
+          {
+            "name": "Best Quality Daughter",
+            "place_id": "ChIJqfLkRej1XIYRr8lAVkRq7tU",
+            "lat": 29.4414957,
+            "lng": -98.4792238,
+            "distance_m": 57,
+            "rating": 4.5,
+            "user_rating_count": 1705,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.bestqualitydaughter.com/",
+            "phone": "(210) 819-4236",
+            "types": [
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "602 Avenue A, San Antonio, TX 78215, USA"
+          },
+          {
+            "name": "Cured",
+            "place_id": "ChIJe--Ztvb1XIYRNy2aPPiPK-o",
+            "lat": 29.441949400000002,
+            "lng": -98.4798783,
+            "distance_m": 88,
+            "rating": 4.5,
+            "user_rating_count": 2049,
+            "price_level": "PRICE_LEVEL_EXPENSIVE",
+            "website": "http://www.curedatpearl.com/",
+            "phone": "(210) 314-3929",
+            "types": [
+              "restaurant",
+              "food_store",
+              "food",
+              "point_of_interest",
+              "store",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "306 Pearl Pkwy UNIT 101, San Antonio, TX 78215, USA"
+          },
+          {
+            "name": "Pullman Market",
+            "place_id": "ChIJp4maawD1XIYRBn5U6QHi938",
+            "lat": 29.4413279,
+            "lng": -98.48073099999999,
+            "distance_m": 103,
+            "rating": 4.5,
+            "user_rating_count": 480,
+            "price_level": null,
+            "website": "https://www.pullmanmarket.com/",
+            "phone": "(210) 759-0086",
+            "types": [
+              "grocery_store",
+              "butcher_shop",
+              "ice_cream_shop",
+              "dessert_shop",
+              "coffee_shop",
+              "cafe",
+              "confectionery",
+              "bakery",
+              "food_store",
+              "food",
+              "point_of_interest",
+              "store",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "221 Newell Ave, San Antonio, TX 78215, USA"
+          },
+          {
+            "name": "Local Coffee",
+            "place_id": "ChIJpXGVtvb1XIYRK9O5ZlMCi4I",
+            "lat": 29.4421439,
+            "lng": -98.47946379999999,
+            "distance_m": 110,
+            "rating": 4.5,
+            "user_rating_count": 1145,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.localcoffee.com/",
+            "phone": "(210) 530-1004",
+            "types": [
+              "cafe",
+              "coffee_shop",
+              "point_of_interest",
+              "food_store",
+              "store",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "302 Pearl Pkwy, San Antonio, TX 78215, USA"
+          },
+          {
+            "name": "Jazz, TX",
+            "place_id": "ChIJc6CElPb1XIYRJy5Kj0BF73Q",
+            "lat": 29.441936,
+            "lng": -98.4804523,
+            "distance_m": 113,
+            "rating": 4.8,
+            "user_rating_count": 1371,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://jazztx.com/",
+            "phone": "(210) 332-9386",
+            "types": [
+              "event_venue",
+              "night_club",
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "312 Pearl Pkwy Building 6, Suite 6001, San Antonio, TX 78215, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.33,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.3
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 24
+    },
+    {
+      "charger": {
+        "name": "ChargePoint Charging Station",
+        "place_id": "ChIJ8Tsx8zq_QIYRYc-pO_2NxKc",
+        "lat": 29.759970000000003,
+        "lng": -95.364735,
+        "address": "804 Capitol St, Houston, TX 77002, USA",
+        "network": "ChargePoint",
+        "estimated_stall_count": 8,
+        "city": "Houston",
+        "state": "TX",
+        "location_name": "Houston Metro"
+      },
+      "merchants": {
+        "total_count": 19,
+        "within_200m": 5,
+        "within_400m": 19,
+        "top_5": [
+          {
+            "name": "La Taquiza Street Tacos",
+            "place_id": "ChIJwSzif6-_QIYRb8YfvgRkGrY",
+            "lat": 29.75952,
+            "lng": -95.3650286,
+            "distance_m": 58,
+            "rating": 4.6,
+            "user_rating_count": 826,
+            "price_level": "PRICE_LEVEL_INEXPENSIVE",
+            "website": "https://taquizahtx.com/",
+            "phone": "(281) 846-6154",
+            "types": [
+              "mexican_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "800 Capitol St, Houston, TX 77002, USA"
+          },
+          {
+            "name": "Shake Shack Downtown Houston",
+            "place_id": "ChIJu3N_Geq_QIYRS38b1ONGe2I",
+            "lat": 29.759194200000003,
+            "lng": -95.36344179999999,
+            "distance_m": 152,
+            "rating": 4.3,
+            "user_rating_count": 1396,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.shakeshack.com/location/downtown-houston-tx?utm_source=google&utm_medium=listing",
+            "phone": "(281) 800-1450",
+            "types": [
+              "hamburger_restaurant",
+              "sandwich_shop",
+              "catering_service",
+              "dessert_restaurant",
+              "food_delivery",
+              "fast_food_restaurant",
+              "meal_takeaway",
+              "american_restaurant",
+              "restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "702 Main St, Houston, TX 77002, USA"
+          },
+          {
+            "name": "The Finn",
+            "place_id": "ChIJl6HE3zq_QIYR_D5oLSXEgN8",
+            "lat": 29.7587077,
+            "lng": -95.3638142,
+            "distance_m": 166,
+            "rating": 4.4,
+            "user_rating_count": 1057,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.thefinnhou.com/",
+            "phone": "(713) 357-5115",
+            "types": [
+              "restaurant",
+              "food_court",
+              "bar",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "712 Main St, Houston, TX 77002, USA"
+          },
+          {
+            "name": "Mamajuana Cafe",
+            "place_id": "ChIJrzjBcRm_QIYRvnZnu2FDmLo",
+            "lat": 29.760529199999993,
+            "lng": -95.36279689999999,
+            "distance_m": 197,
+            "rating": 4.5,
+            "user_rating_count": 754,
+            "price_level": null,
+            "website": "https://mamajuanacafehouston.com/",
+            "phone": "(346) 603-5615",
+            "types": [
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "909 Texas St Suite E, Houston, TX 77002, USA"
+          },
+          {
+            "name": "Flying Saucer Draught Emporium",
+            "place_id": "ChIJnZ2b0Dq_QIYRD_Cn_lhWq8c",
+            "lat": 29.758893399999998,
+            "lng": -95.3631059,
+            "distance_m": 198,
+            "rating": 4.5,
+            "user_rating_count": 4326,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.beerknurd.com/locations/houston-flying-saucer",
+            "phone": "(713) 228-9472",
+            "types": [
+              "restaurant",
+              "pub",
+              "american_restaurant",
+              "food",
+              "bar",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "705 Main St, Houston, TX 77002, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.33,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.3
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 25
+    }
+  ],
+  "next_tier_26_35": [
+    {
+      "charger": {
+        "name": "Tesla Supercharger",
+        "place_id": "ChIJAXjqO5nNRIYRi6myV5lMAJ0",
+        "lat": 30.402497,
+        "lng": -97.72472599999999,
+        "address": "11410 Century Oaks Terrace, Austin, TX 78758, USA",
+        "network": "Tesla",
+        "estimated_stall_count": 12,
+        "city": "Temple",
+        "state": "TX",
+        "location_name": "I-35 - Temple"
+      },
+      "merchants": {
+        "total_count": 19,
+        "within_200m": 6,
+        "within_400m": 19,
+        "top_5": [
+          {
+            "name": "Capitol City Comedy Club",
+            "place_id": "ChIJN6CCRsnLRIYR1SY9av5vKts",
+            "lat": 30.402617300000003,
+            "lng": -97.7256615,
+            "distance_m": 91,
+            "rating": 4.4,
+            "user_rating_count": 2392,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.capcitycomedy.com/",
+            "phone": "(512) 467-2333",
+            "types": [
+              "comedy_club",
+              "restaurant",
+              "food",
+              "bar",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "Bldg B, 11506 Century Oaks Terrace Unit 100, Austin, TX 78758, USA"
+          },
+          {
+            "name": "Fleming\u2019s Prime Steakhouse & Wine Bar",
+            "place_id": "ChIJZUukAXLMRIYRzT9h1Xmnh9U",
+            "lat": 30.403172899999998,
+            "lng": -97.7255814,
+            "distance_m": 111,
+            "rating": 4.5,
+            "user_rating_count": 1582,
+            "price_level": "PRICE_LEVEL_VERY_EXPENSIVE",
+            "website": "https://www.flemingssteakhouse.com/Locations/TX/Austin-The-Domain?y_source=1_MTU1MDMxNDQtNzE1LWxvY2F0aW9uLndlYnNpdGU%3D",
+            "phone": "(512) 835-9463",
+            "types": [
+              "fine_dining_restaurant",
+              "bar_and_grill",
+              "wine_bar",
+              "steak_house",
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "11600 Century Oaks Terrace Suite 140, Austin, TX 78758, USA"
+          },
+          {
+            "name": "Loro Asian Smokehouse & Bar",
+            "place_id": "ChIJlTsE19HNRIYRww5fQlMtQ9o",
+            "lat": 30.403039,
+            "lng": -97.72368639999999,
+            "distance_m": 117,
+            "rating": 4.2,
+            "user_rating_count": 394,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.loroeats.com/",
+            "phone": "(512) 379-0027",
+            "types": [
+              "restaurant",
+              "asian_restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "11601 Domain Dr #200, Austin, TX 78758, USA"
+          },
+          {
+            "name": "North Italia",
+            "place_id": "ChIJv1GZ8HHMRIYRwYLWJiQySY0",
+            "lat": 30.4023266,
+            "lng": -97.7259912,
+            "distance_m": 123,
+            "rating": 4.3,
+            "user_rating_count": 2909,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.northitalia.com/locations/austin-tx-the-domain/",
+            "phone": "(512) 339-4400",
+            "types": [
+              "italian_restaurant",
+              "brunch_restaurant",
+              "pizza_restaurant",
+              "wine_bar",
+              "meal_takeaway",
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "11506 Century Oaks Terrace Suite 124, Austin, TX 78758, USA"
+          },
+          {
+            "name": "Sweet Paris Cr\u00eaperie & Cafe",
+            "place_id": "ChIJ2_AQXmzNRIYRjbxFdvT-FTo",
+            "lat": 30.401851499999996,
+            "lng": -97.7264579,
+            "distance_m": 181,
+            "rating": 4.4,
+            "user_rating_count": 1333,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.sweetparis.com/",
+            "phone": "(512) 551-3979",
+            "types": [
+              "cafe",
+              "dessert_shop",
+              "confectionery",
+              "restaurant",
+              "point_of_interest",
+              "food_store",
+              "store",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "11410 Century Oaks Terrace #112, Austin, TX 78758, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.33,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.3
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 26
+    },
+    {
+      "charger": {
+        "name": "ChargePoint Charging Station",
+        "place_id": "ChIJuWNixg21RIYRMXt3G3bm_rc",
+        "lat": 30.2707406,
+        "lng": -97.750821,
+        "address": "800 W 6th St, Austin, TX 78701, USA",
+        "network": "ChargePoint",
+        "estimated_stall_count": 8,
+        "city": "Austin",
+        "state": "TX",
+        "location_name": "Austin Metro"
+      },
+      "merchants": {
+        "total_count": 19,
+        "within_200m": 7,
+        "within_400m": 19,
+        "top_5": [
+          {
+            "name": "Sammie's",
+            "place_id": "ChIJ_WWpQBe1RIYRGvDZJ7tgkqM",
+            "lat": 30.270215099999994,
+            "lng": -97.75115699999999,
+            "distance_m": 67,
+            "rating": 4.4,
+            "user_rating_count": 642,
+            "price_level": "PRICE_LEVEL_VERY_EXPENSIVE",
+            "website": "http://sammiesitalian.com/",
+            "phone": "(512) 474-2054",
+            "types": [
+              "italian_restaurant",
+              "restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "807 W 6th St, Austin, TX 78703, USA"
+          },
+          {
+            "name": "Taquero Mucho",
+            "place_id": "ChIJ423Gyzy1RIYRiUhxFSck7MA",
+            "lat": 30.2700601,
+            "lng": -97.75109929999999,
+            "distance_m": 80,
+            "rating": 4,
+            "user_rating_count": 2102,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.taqueromuchoaustin.com/",
+            "phone": "(512) 291-6867",
+            "types": [
+              "mexican_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "508 West Ave, Austin, TX 78701, USA"
+          },
+          {
+            "name": "Buford's",
+            "place_id": "ChIJo2_mLAy1RIYRupo-7JGdHjc",
+            "lat": 30.27027,
+            "lng": -97.74969399999999,
+            "distance_m": 120,
+            "rating": 3.6,
+            "user_rating_count": 513,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.bufordsaustin.com/",
+            "phone": "(512) 545-5505",
+            "types": [
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "700 W 6th St, Austin, TX 78701, USA"
+          },
+          {
+            "name": "QI Austin: Modern Asian Kitchen",
+            "place_id": "ChIJAelbJy-1RIYRU43XDTviDOk",
+            "lat": 30.2706213,
+            "lng": -97.7524179,
+            "distance_m": 154,
+            "rating": 4.4,
+            "user_rating_count": 906,
+            "price_level": "PRICE_LEVEL_EXPENSIVE",
+            "website": "https://qiaustin.com/",
+            "phone": "(512) 474-2777",
+            "types": [
+              "chinese_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "835 W 6th St #114, Austin, TX 78703, USA"
+          },
+          {
+            "name": "CorePower Yoga - Monarch",
+            "place_id": "ChIJ57G_BQ61RIYR2W1XO34l6ok",
+            "lat": 30.269324299999997,
+            "lng": -97.751798,
+            "distance_m": 183,
+            "rating": 4.5,
+            "user_rating_count": 154,
+            "price_level": null,
+            "website": "https://www.corepoweryoga.com/yoga-studios/tx/austin/monarch",
+            "phone": "(833) 448-2561",
+            "types": [
+              "yoga_studio",
+              "fitness_center",
+              "sports_complex",
+              "gym",
+              "sports_activity_location",
+              "point_of_interest",
+              "health",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "801 W 5th St Retail Unit I, Austin, TX 78703, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.33,
+        "merchant_quality": 6.95,
+        "monetization_likelihood": 10.0,
+        "final": 8.28
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 27
+    },
+    {
+      "charger": {
+        "name": "EVgo Charging Station",
+        "place_id": "ChIJ1YXMSSO_QIYRyhJbcmQtRFk",
+        "lat": 29.7544,
+        "lng": -95.36207,
+        "address": "1331 Lamar St, Houston, TX 77010, USA",
+        "network": "EVgo",
+        "estimated_stall_count": 8,
+        "city": "Houston",
+        "state": "TX",
+        "location_name": "Houston Metro"
+      },
+      "merchants": {
+        "total_count": 19,
+        "within_200m": 7,
+        "within_400m": 19,
+        "top_5": [
+          {
+            "name": "Phoenicia Specialty Foods",
+            "place_id": "ChIJMySlQyO_QIYRfT2Tz0HkWDw",
+            "lat": 29.7544406,
+            "lng": -95.3616797,
+            "distance_m": 38,
+            "rating": 4.6,
+            "user_rating_count": 2385,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.phoeniciafoods.com/locations/downtown-market/",
+            "phone": "(832) 360-2222",
+            "types": [
+              "bakery",
+              "liquor_store",
+              "supermarket",
+              "grocery_store",
+              "cafeteria",
+              "butcher_shop",
+              "deli",
+              "food_store",
+              "catering_service",
+              "food_delivery",
+              "point_of_interest",
+              "food",
+              "store",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "1001 Austin St, Houston, TX 77010, USA"
+          },
+          {
+            "name": "Toro Toro",
+            "place_id": "ChIJx5IjV9W_QIYR8vy3_t2ySsY",
+            "lat": 29.7541206,
+            "lng": -95.3627334,
+            "distance_m": 71,
+            "rating": 4.3,
+            "user_rating_count": 452,
+            "price_level": null,
+            "website": "https://www.fourseasons.com/houston/dining/restaurants/toro-toro/?utm_source=google&utm_medium=organicsearch&utm_campaign=tor-hfs-fab-mid-seo-na&utm_content=na-na&utm_term=na",
+            "phone": "(713) 650-1300",
+            "types": [
+              "steak_house",
+              "breakfast_restaurant",
+              "coffee_shop",
+              "cafe",
+              "wine_bar",
+              "dessert_shop",
+              "asian_restaurant",
+              "confectionery",
+              "night_club",
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food_store",
+              "store",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "1300 Lamar St, Houston, TX 77010, USA"
+          },
+          {
+            "name": "Brasserie Du Parc",
+            "place_id": "ChIJS5qabCO_QIYRBxiySMKtPkc",
+            "lat": 29.7538725,
+            "lng": -95.3613343,
+            "distance_m": 92,
+            "rating": 4.3,
+            "user_rating_count": 737,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.brasserieduparc.net/",
+            "phone": "(832) 879-2802",
+            "types": [
+              "french_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "1440 Lamar St, Houston, TX 77010, USA"
+          },
+          {
+            "name": "Pappas Bros. Steakhouse",
+            "place_id": "ChIJ6aLOqzy_QIYRUwovZb_mO00",
+            "lat": 29.755544799999996,
+            "lng": -95.36312579999999,
+            "distance_m": 163,
+            "rating": 4.6,
+            "user_rating_count": 1426,
+            "price_level": "PRICE_LEVEL_VERY_EXPENSIVE",
+            "website": "http://pappasbros.com/",
+            "phone": "(713) 658-1995",
+            "types": [
+              "steak_house",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "1200 McKinney St, Houston, TX 77010, USA"
+          },
+          {
+            "name": "Hearsay On The Green",
+            "place_id": "ChIJn05yICO_QIYRwvODrs7hhfo",
+            "lat": 29.752797700000002,
+            "lng": -95.36151819999999,
+            "distance_m": 186,
+            "rating": 4.3,
+            "user_rating_count": 1346,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://hearsaygastrolounge.com/",
+            "phone": "(832) 377-3362",
+            "types": [
+              "american_restaurant",
+              "restaurant",
+              "food",
+              "bar",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "1515 Dallas St, Houston, TX 77010, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.33,
+        "merchant_quality": 6.95,
+        "monetization_likelihood": 10.0,
+        "final": 8.28
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 28
+    },
+    {
+      "charger": {
+        "name": "ChargePoint Charging Station",
+        "place_id": "ChIJX0cm-OGYToYR9L6EhrNaonc",
+        "lat": 32.77688,
+        "lng": -96.79158,
+        "address": "912 Park Ave, Dallas, TX 75201, USA",
+        "network": "ChargePoint",
+        "estimated_stall_count": 8,
+        "city": "Dallas",
+        "state": "TX",
+        "location_name": "Dallas-Fort Worth"
+      },
+      "merchants": {
+        "total_count": 19,
+        "within_200m": 15,
+        "within_400m": 19,
+        "top_5": [
+          {
+            "name": "La 57",
+            "place_id": "ChIJPaQY7QGZToYRyOG7bJTDMT0",
+            "lat": 32.7773124,
+            "lng": -96.79037819999999,
+            "distance_m": 122,
+            "rating": 4,
+            "user_rating_count": 80,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.la-57.com/",
+            "phone": "(945) 275-1256",
+            "types": [
+              "bakery",
+              "point_of_interest",
+              "food_store",
+              "store",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "920 S Harwood St #198, Dallas, TX 75201, USA"
+          },
+          {
+            "name": "Nammi at the Farmers Market",
+            "place_id": "ChIJ5WWLd-GYToYRFpSR-x7CLoA",
+            "lat": 32.7773536,
+            "lng": -96.7903868,
+            "distance_m": 123,
+            "rating": 4.3,
+            "user_rating_count": 192,
+            "price_level": "PRICE_LEVEL_INEXPENSIVE",
+            "website": null,
+            "phone": "(469) 248-2031",
+            "types": [
+              "vietnamese_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "920 S Harwood St #106, Dallas, TX 75201, USA"
+          },
+          {
+            "name": "Cone Creamery Dallas Farmers Market",
+            "place_id": "ChIJ8Z-QKOGZToYRc_iTt8SH5tk",
+            "lat": 32.777332,
+            "lng": -96.7903779,
+            "distance_m": 123,
+            "rating": 3.6,
+            "user_rating_count": 41,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://ccdfm.square.site/?location=11ed1cedcf4c3591b384ac1f6bbba82c",
+            "phone": "(972) 987-7450",
+            "types": [
+              "ice_cream_shop",
+              "dessert_restaurant",
+              "dessert_shop",
+              "confectionery",
+              "korean_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food_store",
+              "store",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "920 S Harwood St #121, Dallas, TX 75201, USA"
+          },
+          {
+            "name": "Palmieri Cafe",
+            "place_id": "ChIJDUg6eeGYToYRlvPAkdmcndM",
+            "lat": 32.777436699999996,
+            "lng": -96.79036409999999,
+            "distance_m": 129,
+            "rating": 4.5,
+            "user_rating_count": 387,
+            "price_level": "PRICE_LEVEL_INEXPENSIVE",
+            "website": "http://www.palmiericafe.com/",
+            "phone": "(214) 684-9932",
+            "types": [
+              "coffee_shop",
+              "cafe",
+              "food_store",
+              "food",
+              "point_of_interest",
+              "store",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "920 S Harwood St UNIT 100, Dallas, TX 75201, USA"
+          },
+          {
+            "name": "Hurtado Barbecue Dallas",
+            "place_id": "ChIJMU3xrrmZToYRxWdob9uBtfk",
+            "lat": 32.777908499999995,
+            "lng": -96.7905198,
+            "distance_m": 151,
+            "rating": 4.8,
+            "user_rating_count": 705,
+            "price_level": null,
+            "website": "https://hurtadobbq.com/",
+            "phone": "(214) 556-8136",
+            "types": [
+              "barbecue_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "900 S Harwood St, Dallas, TX 75201, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.33,
+        "merchant_quality": 6.89,
+        "monetization_likelihood": 10.0,
+        "final": 8.27
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 29
+    },
+    {
+      "charger": {
+        "name": "ChargePoint Charging Station",
+        "place_id": "ChIJMViJgN2YToYRfoq0wu9QgKU",
+        "lat": 32.782826,
+        "lng": -96.784387,
+        "address": "2700 Commerce St, Dallas, TX 75226, USA",
+        "network": "ChargePoint",
+        "estimated_stall_count": 8,
+        "city": "Dallas",
+        "state": "TX",
+        "location_name": "Dallas-Fort Worth"
+      },
+      "merchants": {
+        "total_count": 19,
+        "within_200m": 13,
+        "within_400m": 19,
+        "top_5": [
+          {
+            "name": "Ruins",
+            "place_id": "ChIJtZC8_0OZToYRQr_bitBI9KM",
+            "lat": 32.7832174,
+            "lng": -96.7841129,
+            "distance_m": 51,
+            "rating": 4.4,
+            "user_rating_count": 1469,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.ruinsdeepellum.com/",
+            "phone": "(972) 707-0607",
+            "types": [
+              "bar",
+              "mexican_restaurant",
+              "event_venue",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "2653 Commerce St, Dallas, TX 75226, USA"
+          },
+          {
+            "name": "The Free Man Cajun Cafe & Lounge",
+            "place_id": "ChIJrZ7Xid2YToYRqT2ZtSxPSPU",
+            "lat": 32.7825987,
+            "lng": -96.78498429999999,
+            "distance_m": 61,
+            "rating": 4.3,
+            "user_rating_count": 3587,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.freemandallas.com/",
+            "phone": null,
+            "types": [
+              "meal_takeaway",
+              "bar",
+              "american_restaurant",
+              "event_venue",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "2626-2630 Commerce St, Dallas, TX 75226, USA"
+          },
+          {
+            "name": "Angry Dog",
+            "place_id": "ChIJP9rrfN2YToYRM-YLi3Ov7T4",
+            "lat": 32.782886399999995,
+            "lng": -96.7835593,
+            "distance_m": 78,
+            "rating": 4.6,
+            "user_rating_count": 2790,
+            "price_level": "PRICE_LEVEL_INEXPENSIVE",
+            "website": "https://www.angrydog.com/",
+            "phone": "(214) 741-4406",
+            "types": [
+              "bar_and_grill",
+              "hamburger_restaurant",
+              "bar",
+              "american_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "2726 Commerce St, Dallas, TX 75226, USA"
+          },
+          {
+            "name": "Vidorra",
+            "place_id": "ChIJKSE5u42ZToYRWxFYRL3T78E",
+            "lat": 32.7835179,
+            "lng": -96.7847214,
+            "distance_m": 83,
+            "rating": 4.1,
+            "user_rating_count": 5125,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.vidorracocina.com/",
+            "phone": "(972) 215-0640",
+            "types": [
+              "mexican_restaurant",
+              "restaurant",
+              "food",
+              "bar",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "2642 Main St, Dallas, TX 75226, USA"
+          },
+          {
+            "name": "Pecan Lodge",
+            "place_id": "ChIJGXYxd92YToYR7yV_BSMQ2Xk",
+            "lat": 32.7836494,
+            "lng": -96.7838379,
+            "distance_m": 105,
+            "rating": 4.5,
+            "user_rating_count": 8405,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.pecanlodge.com/",
+            "phone": "(214) 748-8900",
+            "types": [
+              "barbecue_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "2702 Main St, Dallas, TX 75226, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.33,
+        "merchant_quality": 6.89,
+        "monetization_likelihood": 10.0,
+        "final": 8.27
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 30
+    },
+    {
+      "charger": {
+        "name": "ChargePoint Charging Station",
+        "place_id": "ChIJ9RA-Hvf1XIYRkg_d5F1nhwY",
+        "lat": 29.440289,
+        "lng": -98.480385,
+        "address": "226 Newell Ave, San Antonio, TX 78215, USA",
+        "network": "ChargePoint",
+        "estimated_stall_count": 8,
+        "city": "San Antonio",
+        "state": "TX",
+        "location_name": "San Antonio Metro"
+      },
+      "merchants": {
+        "total_count": 19,
+        "within_200m": 8,
+        "within_400m": 19,
+        "top_5": [
+          {
+            "name": "Isidore",
+            "place_id": "ChIJ-9eV5Gb1XIYRg-VP6Jm2Rt4",
+            "lat": 29.440715899999997,
+            "lng": -98.4808161,
+            "distance_m": 63,
+            "rating": 4.4,
+            "user_rating_count": 188,
+            "price_level": null,
+            "website": "https://isidoresatx.com/",
+            "phone": "(210) 756-7359",
+            "types": [
+              "restaurant",
+              "wine_bar",
+              "steak_house",
+              "fine_dining_restaurant",
+              "american_restaurant",
+              "bar",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "221 Newell Ave, San Antonio, TX 78215, USA"
+          },
+          {
+            "name": "Mezquite",
+            "place_id": "ChIJS82ICJf1XIYRXL5GROiTCcI",
+            "lat": 29.4408981,
+            "lng": -98.4810851,
+            "distance_m": 96,
+            "rating": 4.5,
+            "user_rating_count": 588,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://mezquitesatx.com/",
+            "phone": "(210) 756-7378",
+            "types": [
+              "restaurant",
+              "brunch_restaurant",
+              "mexican_restaurant",
+              "bar",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "221 Newell Ave, San Antonio, TX 78215, USA"
+          },
+          {
+            "name": "Pullman Market",
+            "place_id": "ChIJp4maawD1XIYRBn5U6QHi938",
+            "lat": 29.4413279,
+            "lng": -98.48073099999999,
+            "distance_m": 120,
+            "rating": 4.5,
+            "user_rating_count": 480,
+            "price_level": null,
+            "website": "https://www.pullmanmarket.com/",
+            "phone": "(210) 759-0086",
+            "types": [
+              "grocery_store",
+              "butcher_shop",
+              "ice_cream_shop",
+              "dessert_shop",
+              "coffee_shop",
+              "cafe",
+              "confectionery",
+              "bakery",
+              "food_store",
+              "food",
+              "point_of_interest",
+              "store",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "221 Newell Ave, San Antonio, TX 78215, USA"
+          },
+          {
+            "name": "Fife and Farro",
+            "place_id": "ChIJ2eVR6wT1XIYRhQsg7Y7bUOM",
+            "lat": 29.441374699999997,
+            "lng": -98.4808436,
+            "distance_m": 129,
+            "rating": 4.5,
+            "user_rating_count": 1016,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://fifeandfarro.com/",
+            "phone": "(210) 759-0087",
+            "types": [
+              "restaurant",
+              "pizza_restaurant",
+              "italian_restaurant",
+              "meal_takeaway",
+              "food",
+              "bar",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "221 Newell Ave, San Antonio, TX 78215, USA"
+          },
+          {
+            "name": "Best Quality Daughter",
+            "place_id": "ChIJqfLkRej1XIYRr8lAVkRq7tU",
+            "lat": 29.4414957,
+            "lng": -98.4792238,
+            "distance_m": 175,
+            "rating": 4.5,
+            "user_rating_count": 1705,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.bestqualitydaughter.com/",
+            "phone": "(210) 819-4236",
+            "types": [
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "602 Avenue A, San Antonio, TX 78215, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.33,
+        "merchant_quality": 6.89,
+        "monetization_likelihood": 10.0,
+        "final": 8.27
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 31
+    },
+    {
+      "charger": {
+        "name": "Tesla Destination Charger",
+        "place_id": "ChIJE8XUHTu_QIYRv8N59PvMYe0",
+        "lat": 29.758401,
+        "lng": -95.3642,
+        "address": "806 Main St, Houston, TX 77002, USA",
+        "network": "Tesla",
+        "estimated_stall_count": 12,
+        "city": "Houston",
+        "state": "TX",
+        "location_name": "Houston Metro"
+      },
+      "merchants": {
+        "total_count": 19,
+        "within_200m": 5,
+        "within_400m": 19,
+        "top_5": [
+          {
+            "name": "The Finn",
+            "place_id": "ChIJl6HE3zq_QIYR_D5oLSXEgN8",
+            "lat": 29.7587077,
+            "lng": -95.3638142,
+            "distance_m": 50,
+            "rating": 4.4,
+            "user_rating_count": 1057,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.thefinnhou.com/",
+            "phone": "(713) 357-5115",
+            "types": [
+              "restaurant",
+              "food_court",
+              "bar",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "712 Main St, Houston, TX 77002, USA"
+          },
+          {
+            "name": "Shake Shack Downtown Houston",
+            "place_id": "ChIJu3N_Geq_QIYRS38b1ONGe2I",
+            "lat": 29.759194200000003,
+            "lng": -95.36344179999999,
+            "distance_m": 115,
+            "rating": 4.3,
+            "user_rating_count": 1396,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.shakeshack.com/location/downtown-houston-tx?utm_source=google&utm_medium=listing",
+            "phone": "(281) 800-1450",
+            "types": [
+              "hamburger_restaurant",
+              "sandwich_shop",
+              "catering_service",
+              "dessert_restaurant",
+              "food_delivery",
+              "fast_food_restaurant",
+              "meal_takeaway",
+              "american_restaurant",
+              "restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "702 Main St, Houston, TX 77002, USA"
+          },
+          {
+            "name": "Flying Saucer Draught Emporium",
+            "place_id": "ChIJnZ2b0Dq_QIYRD_Cn_lhWq8c",
+            "lat": 29.758893399999998,
+            "lng": -95.3631059,
+            "distance_m": 119,
+            "rating": 4.5,
+            "user_rating_count": 4326,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.beerknurd.com/locations/houston-flying-saucer",
+            "phone": "(713) 228-9472",
+            "types": [
+              "restaurant",
+              "pub",
+              "american_restaurant",
+              "food",
+              "bar",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "705 Main St, Houston, TX 77002, USA"
+          },
+          {
+            "name": "La Taquiza Street Tacos",
+            "place_id": "ChIJwSzif6-_QIYRb8YfvgRkGrY",
+            "lat": 29.75952,
+            "lng": -95.3650286,
+            "distance_m": 148,
+            "rating": 4.6,
+            "user_rating_count": 826,
+            "price_level": "PRICE_LEVEL_INEXPENSIVE",
+            "website": "https://taquizahtx.com/",
+            "phone": "(281) 846-6154",
+            "types": [
+              "mexican_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "800 Capitol St, Houston, TX 77002, USA"
+          },
+          {
+            "name": "Morton's The Steakhouse",
+            "place_id": "ChIJQSHubTu_QIYRDJgT6ET6lJk",
+            "lat": 29.756916,
+            "lng": -95.364314,
+            "distance_m": 165,
+            "rating": 4.5,
+            "user_rating_count": 1272,
+            "price_level": "PRICE_LEVEL_VERY_EXPENSIVE",
+            "website": "https://www.mortons.com/location/mortons-the-steakhouse-houston-tx-downtown/",
+            "phone": "(713) 659-3700",
+            "types": [
+              "restaurant",
+              "steak_house",
+              "american_restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "1001 McKinney St Suite A4, Houston, TX 77002, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.33,
+        "merchant_quality": 6.89,
+        "monetization_likelihood": 10.0,
+        "final": 8.27
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 32
+    },
+    {
+      "charger": {
+        "name": "ChargePoint Charging Station",
+        "place_id": "ChIJMZD3OjC_QIYR1FLSzOhhW5o",
+        "lat": 29.763529,
+        "lng": -95.36336829999999,
+        "address": "300 Milam St A, Houston, TX 77002, USA",
+        "network": "ChargePoint",
+        "estimated_stall_count": 8,
+        "city": "Houston",
+        "state": "TX",
+        "location_name": "Houston Metro"
+      },
+      "merchants": {
+        "total_count": 19,
+        "within_200m": 5,
+        "within_400m": 19,
+        "top_5": [
+          {
+            "name": "La Fisheria",
+            "place_id": "ChIJjfnzbEzHQIYRa3zh8igbVQw",
+            "lat": 29.763516199999998,
+            "lng": -95.362068,
+            "distance_m": 126,
+            "rating": 4.8,
+            "user_rating_count": 4410,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.lafisheriahtx.com/",
+            "phone": "(713) 802-1712",
+            "types": [
+              "mexican_restaurant",
+              "seafood_restaurant",
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "213 Milam St, Houston, TX 77002, USA"
+          },
+          {
+            "name": "Press Waffle Co.",
+            "place_id": "ChIJv47TbHm_QIYRHDgTjjc4Gpg",
+            "lat": 29.762982100000002,
+            "lng": -95.3645956,
+            "distance_m": 133,
+            "rating": 4.7,
+            "user_rating_count": 742,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.presswaffleco.com/",
+            "phone": "(713) 405-1407",
+            "types": [
+              "breakfast_restaurant",
+              "brunch_restaurant",
+              "coffee_shop",
+              "cafe",
+              "dessert_shop",
+              "confectionery",
+              "restaurant",
+              "point_of_interest",
+              "food_store",
+              "store",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "Lyric Market Food Hall Inside Lyric Market, Food Hall, 411 Smith St Stall G-H, Houston, TX 77002, USA"
+          },
+          {
+            "name": "Hearsay Market Square",
+            "place_id": "ChIJ325pwi-_QIYRtB5lEbq1nCI",
+            "lat": 29.763077799999998,
+            "lng": -95.3616728,
+            "distance_m": 171,
+            "rating": 4.4,
+            "user_rating_count": 2203,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://hearsaygastrolounge.com/",
+            "phone": "(713) 225-8079",
+            "types": [
+              "american_restaurant",
+              "brunch_restaurant",
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "218 Travis St, Houston, TX 77002, USA"
+          },
+          {
+            "name": "Space City Birria",
+            "place_id": "ChIJAxCpYVy_QIYRdQZ9ciPWb3U",
+            "lat": 29.7619112,
+            "lng": -95.3634041,
+            "distance_m": 180,
+            "rating": 4.8,
+            "user_rating_count": 1458,
+            "price_level": "PRICE_LEVEL_INEXPENSIVE",
+            "website": "https://spacecitybirriatacos.com/?utm_source=google",
+            "phone": "(832) 802-7333",
+            "types": [
+              "ramen_restaurant",
+              "breakfast_restaurant",
+              "japanese_restaurant",
+              "mexican_restaurant",
+              "bar",
+              "catering_service",
+              "food_delivery",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "415 Milam St, Houston, TX 77002, USA"
+          },
+          {
+            "name": "Birraporetti's",
+            "place_id": "ChIJ34hlYjC_QIYRokhNiyTitHc",
+            "lat": 29.762385,
+            "lng": -95.364853,
+            "distance_m": 192,
+            "rating": 4.2,
+            "user_rating_count": 2189,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.birraporettis.com/",
+            "phone": "(713) 224-9494",
+            "types": [
+              "italian_restaurant",
+              "catering_service",
+              "banquet_hall",
+              "food_delivery",
+              "brunch_restaurant",
+              "event_venue",
+              "restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "500 Louisiana St, Houston, TX 77002, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.33,
+        "merchant_quality": 6.89,
+        "monetization_likelihood": 10.0,
+        "final": 8.27
+      },
+      "recommended_first_anchor_merchant_type": "Coffee shop",
+      "rank": 33
+    },
+    {
+      "charger": {
+        "name": "Tesla Supercharger",
+        "place_id": "ChIJq4-GNQC_QIYR6f3JGMGnUdE",
+        "lat": 29.766731399999998,
+        "lng": -95.36597590000001,
+        "address": "401 Franklin St, Houston, TX 77201, USA",
+        "network": "Tesla",
+        "estimated_stall_count": 12,
+        "city": "Houston",
+        "state": "TX",
+        "location_name": "Houston Metro"
+      },
+      "merchants": {
+        "total_count": 20,
+        "within_200m": 17,
+        "within_400m": 20,
+        "top_5": [
+          {
+            "name": "Flower & Cream",
+            "place_id": "ChIJq56Ow3y_QIYRmRMM_Qs3uXc",
+            "lat": 29.766403999999998,
+            "lng": -95.3649425,
+            "distance_m": 106,
+            "rating": 4.6,
+            "user_rating_count": 187,
+            "price_level": "PRICE_LEVEL_INEXPENSIVE",
+            "website": "http://www.flowerandcream.com/",
+            "phone": null,
+            "types": [
+              "ice_cream_shop",
+              "dessert_shop",
+              "confectionery",
+              "point_of_interest",
+              "food_store",
+              "store",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "401 Franklin St, Houston, TX 77201, USA"
+          },
+          {
+            "name": "Andes Cafe",
+            "place_id": "ChIJqxkj3Nu-QIYR_YVEUKk18LE",
+            "lat": 29.766461999999997,
+            "lng": -95.36481359999999,
+            "distance_m": 116,
+            "rating": 4.1,
+            "user_rating_count": 954,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "http://www.andescafe.com/",
+            "phone": "(832) 290-8823",
+            "types": [
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "401 Franklin St Ste 1275, Houston, TX 77002, USA"
+          },
+          {
+            "name": "POST Market (Food Hall)",
+            "place_id": "ChIJjWyGK86_QIYR_xBpyfcdvN0",
+            "lat": 29.766214899999998,
+            "lng": -95.3648839,
+            "distance_m": 120,
+            "rating": 4.6,
+            "user_rating_count": 1904,
+            "price_level": null,
+            "website": "https://posthtx.com/eat",
+            "phone": "(713) 999-2550",
+            "types": [
+              "food_court",
+              "restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "401 Franklin St Suite 1200, Houston, TX 77002, USA"
+          },
+          {
+            "name": "Ch\u00f2pnBl\u1ecdk",
+            "place_id": "ChIJ4ctH_OK_QIYRHlOBJpNaMe8",
+            "lat": 29.766214899999998,
+            "lng": -95.3648839,
+            "distance_m": 120,
+            "rating": 4.6,
+            "user_rating_count": 734,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://chopnblok.co/",
+            "phone": "(281) 631-5009",
+            "types": [
+              "african_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "401 Franklin St Suite A, Houston, TX 77201, USA"
+          },
+          {
+            "name": "Taco Fuego",
+            "place_id": "ChIJIXHDpMu_QIYRtXiTzXzMNfo",
+            "lat": 29.766214899999998,
+            "lng": -95.3648839,
+            "distance_m": 120,
+            "rating": 4.9,
+            "user_rating_count": 3402,
+            "price_level": "PRICE_LEVEL_INEXPENSIVE",
+            "website": "https://tacofuego.com/",
+            "phone": null,
+            "types": [
+              "mexican_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "401 Franklin St Suite 1260, Houston, TX 77201, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.67,
+        "merchant_quality": 6.45,
+        "monetization_likelihood": 10.0,
+        "final": 8.23
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 34
+    },
+    {
+      "charger": {
+        "name": "EVgo Charging Station",
+        "place_id": "ChIJMR-2-DshTIYRRz_0qw7CFUQ",
+        "lat": 32.9544626,
+        "lng": -96.81910839999999,
+        "address": "5201 Belt Line Rd, Dallas, TX 75254, USA",
+        "network": "EVgo",
+        "estimated_stall_count": 8,
+        "city": "Dallas",
+        "state": "TX",
+        "location_name": "Dallas-Fort Worth"
+      },
+      "merchants": {
+        "total_count": 18,
+        "within_200m": 5,
+        "within_400m": 18,
+        "top_5": [
+          {
+            "name": "Postino Addison",
+            "place_id": "ChIJy_n1YpghTIYRA3AI6pQZRQU",
+            "lat": 32.9535864,
+            "lng": -96.81889679999999,
+            "distance_m": 99,
+            "rating": 4.6,
+            "user_rating_count": 456,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.postinowinecafe.com/locations/postino-addison",
+            "phone": "(214) 731-7777",
+            "types": [
+              "restaurant",
+              "wine_bar",
+              "catering_service",
+              "food_delivery",
+              "bar",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "5280 Belt Line Rd Suite 100, Dallas, TX 75254, USA"
+          },
+          {
+            "name": "Twin Peaks",
+            "place_id": "ChIJmcGvjDshTIYRHnhuh-ek7BY",
+            "lat": 32.9535832,
+            "lng": -96.8193775,
+            "distance_m": 101,
+            "rating": 4.5,
+            "user_rating_count": 5196,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://twinpeaksrestaurant.com/locations/addison-tx",
+            "phone": "(972) 503-7325",
+            "types": [
+              "american_restaurant",
+              "bar",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "5260 Belt Line Rd, Dallas, TX 75254, USA"
+          },
+          {
+            "name": "CAVA",
+            "place_id": "ChIJfbjVsuAhTIYRn9GFKaq-0Nc",
+            "lat": 32.9537652,
+            "lng": -96.820809,
+            "distance_m": 177,
+            "rating": 4.4,
+            "user_rating_count": 1394,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://cava.com/",
+            "phone": "(469) 250-8010",
+            "types": [
+              "mediterranean_restaurant",
+              "restaurant",
+              "food",
+              "point_of_interest",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "5100 Belt Line Rd Ste 1056, Dallas, TX 75254, USA"
+          },
+          {
+            "name": "Loro Asian Smokehouse & Bar",
+            "place_id": "ChIJKXO8Eh0hTIYRlwExpEAE8Ks",
+            "lat": 32.9528752,
+            "lng": -96.81889629999999,
+            "distance_m": 178,
+            "rating": 4.3,
+            "user_rating_count": 618,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.loroeats.com/locations/dallas/addison/",
+            "phone": "(214) 894-5676",
+            "types": [
+              "asian_restaurant",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "14999 Montfort Dr, Dallas, TX 75254, USA"
+          },
+          {
+            "name": "Flower Child",
+            "place_id": "ChIJMR29ft0hTIYRckkdkApLoSM",
+            "lat": 32.953739999999996,
+            "lng": -96.81728509999999,
+            "distance_m": 188,
+            "rating": 4.6,
+            "user_rating_count": 1353,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "website": "https://www.iamaflowerchild.com/locations/dallas-addison/?utm_source=Google&utm_medium=Organic&utm_campaign=Maps",
+            "phone": "(469) 480-8556",
+            "types": [
+              "american_restaurant",
+              "vegan_restaurant",
+              "vegetarian_restaurant",
+              "catering_service",
+              "food_delivery",
+              "restaurant",
+              "point_of_interest",
+              "food",
+              "establishment"
+            ],
+            "business_status": "OPERATIONAL",
+            "address": "5290 Belt Line Rd #100, Dallas, TX 75254, USA"
+          }
+        ]
+      },
+      "scores": {
+        "charger": 6.0,
+        "merchant_density": 9.0,
+        "merchant_quality": 7.0,
+        "monetization_likelihood": 10.0,
+        "final": 8.2
+      },
+      "recommended_first_anchor_merchant_type": "Restaurant",
+      "rank": 35
+    }
+  ],
+  "metadata": {
+    "analysis_date": "2026-01-10T08:28:22.183895",
+    "total_chargers_analyzed": 481,
+    "total_merchants_enriched": 4539
+  }
+}

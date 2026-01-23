@@ -1,0 +1,199 @@
+## Task: Fix Docker Build Architecture Issue and Redeploy
+
+### Problem
+The Docker image has a multi-manifest with an `unknown/unknown` attestation that's causing App Runner deployments to fail and rollback. This is caused by Docker BuildKit's provenance/SBOM attestation feature.
+
+Current ECR manifest shows:
+```json
+{
+  "manifests": [
+    { "architecture": "amd64", "os": "linux" },      // Actual image
+    { "architecture": "unknown", "os": "unknown" }   // Problematic attestation
+  ]
+}
+```
+
+---
+
+## Step 1: Rebuild Docker Image Without Attestations
+
+```bash
+cd "/Users/jameskirk/Desktop/Nerava/nerava-backend-v9 2"
+
+# Clean any cached layers
+docker builder prune -f
+
+# Build WITHOUT provenance/SBOM attestations
+docker build \
+  --platform linux/amd64 \
+  --provenance=false \
+  --sbom=false \
+  -t nerava-backend:v15 \
+  .
+```
+
+**Alternative if above doesn't work:**
+```bash
+# Disable BuildKit entirely
+DOCKER_BUILDKIT=0 docker build --platform linux/amd64 -t nerava-backend:v15 .
+```
+
+---
+
+## Step 2: Verify Image Architecture
+
+```bash
+# Check the image is single-arch amd64
+docker inspect nerava-backend:v15 --format '{{.Os}}/{{.Architecture}}'
+# Expected: linux/amd64
+
+# Verify it's NOT a multi-manifest
+docker manifest inspect nerava-backend:v15 2>&1 || echo "Good - single image, not manifest list"
+```
+
+---
+
+## Step 3: Login to ECR and Push
+
+```bash
+# Login to ECR
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 566287346479.dkr.ecr.us-east-1.amazonaws.com
+
+# Tag for ECR
+docker tag nerava-backend:v15 566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:v15-fixed-arch
+
+# Push to ECR
+docker push 566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:v15-fixed-arch
+```
+
+---
+
+## Step 4: Verify ECR Image Has Single Manifest
+
+```bash
+# Check the pushed image manifest
+docker manifest inspect 566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:v15-fixed-arch
+
+# Should show single manifest with linux/amd64, NOT multiple manifests
+# Should NOT have "unknown/unknown" platform
+```
+
+---
+
+## Step 5: Update App Runner Service
+
+```bash
+aws apprunner update-service \
+  --service-arn "arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3" \
+  --source-configuration '{
+    "ImageRepository": {
+      "ImageIdentifier": "566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:v15-fixed-arch",
+      "ImageConfiguration": {
+        "Port": "8000",
+        "RuntimeEnvironmentVariables": {
+          "ENV": "prod",
+          "REGION": "us-east-1",
+          "DATABASE_URL": "postgresql+psycopg2://nerava_admin:YJEDUbHGFIZBo6D5JiDPTbb4ZbmbE4ae@nerava-db.c27i820wot9o.us-east-1.rds.amazonaws.com:5432/nerava",
+          "REDIS_URL": "redis://nerava-redis.yagp9v.ng.0001.use1.cache.amazonaws.com:6379/0",
+          "JWT_SECRET": "787044b63251814c8dd160437b395a77fa6e162bdc53e24320cd84d14fa5ed86",
+          "TOKEN_ENCRYPTION_KEY": "s1V8FQAFl7IzLcNJuBXBjDLpCb3j_IrbDbLWVzufBm4=",
+          "TWILIO_ACCOUNT_SID": "YOUR_TWILIO_ACCOUNT_SID_HERE",
+          "TWILIO_AUTH_TOKEN": "7566751c593a16c1f011a9c82dee6d91",
+          "TWILIO_VERIFY_SERVICE_SID": "VAd22350253af88b2c0868d0a77b8b0265",
+          "OTP_PROVIDER": "twilio_verify",
+          "ALLOWED_ORIGINS": "https://nerava.network,https://www.nerava.network,https://app.nerava.network",
+          "PUBLIC_WEB_BASE_URL": "https://api.nerava.network",
+          "SKIP_HTTPS_REDIRECT": "true",
+          "SKIP_STARTUP_VALIDATION": "true",
+          "APP_STARTUP_MODE": "light"
+        }
+      },
+      "ImageRepositoryType": "ECR"
+    },
+    "AuthenticationConfiguration": {
+      "AccessRoleArn": "arn:aws:iam::566287346479:role/AppRunnerECRAccess"
+    }
+  }' \
+  --region us-east-1
+```
+
+---
+
+## Step 6: Monitor Deployment
+
+```bash
+# Check deployment status (run multiple times)
+aws apprunner list-operations \
+  --service-arn "arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3" \
+  --region us-east-1 | jq '.OperationSummaryList[0]'
+
+# Wait for Status to be "SUCCEEDED" (not "ROLLBACK_SUCCEEDED")
+```
+
+---
+
+## Step 7: Verify Deployment Success
+
+```bash
+# Test health endpoint
+curl https://api.nerava.network/healthz
+
+# Test new merchants/open endpoint (should return empty array, not 404)
+curl "https://api.nerava.network/v1/drivers/merchants/open?charger_id=ch_domain_tesla_001"
+
+# Test discovery endpoint
+curl "https://api.nerava.network/v1/chargers/discovery?lat=30.38&lng=-97.69"
+```
+
+**Expected results:**
+- `/healthz` → `{"ok":true,...}`
+- `/v1/drivers/merchants/open` → `[]` (empty array, NOT 404)
+- `/v1/chargers/discovery` → JSON response with chargers (NOT 404)
+
+---
+
+## Troubleshooting
+
+If deployment still fails:
+
+1. **Check App Runner logs in AWS Console:**
+   - Go to: https://console.aws.amazon.com/apprunner
+   - Select "nerava-backend" service
+   - Click "Logs" tab
+   - Look for startup errors
+
+2. **Try increasing health check timeout:**
+   ```bash
+   aws apprunner update-service \
+     --service-arn "arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3" \
+     --health-check-configuration '{
+       "Protocol": "HTTP",
+       "Path": "/healthz",
+       "Interval": 10,
+       "Timeout": 10,
+       "HealthyThreshold": 1,
+       "UnhealthyThreshold": 10
+     }' \
+     --region us-east-1
+   ```
+
+3. **Test image locally with production-like settings:**
+   ```bash
+   docker run --rm -p 8099:8000 \
+     -e ENV=prod \
+     -e SKIP_STARTUP_VALIDATION=true \
+     -e APP_STARTUP_MODE=light \
+     -e DATABASE_URL=sqlite:///./test.db \
+     nerava-backend:v15
+   ```
+   Then test: `curl http://localhost:8099/healthz`
+
+---
+
+## Summary
+
+The root cause is Docker BuildKit adding attestation manifests to the image. The fix is to:
+1. Rebuild with `--provenance=false --sbom=false`
+2. Push clean single-arch image to ECR
+3. Update App Runner to use new image
+4. Verify deployment succeeds (no rollback)

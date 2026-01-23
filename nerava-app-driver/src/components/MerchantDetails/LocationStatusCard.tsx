@@ -25,14 +25,14 @@ export function LocationStatusCard({ geo }: LocationStatusCardProps) {
   // Error or permission denied - CALM treatment
   if (geo.error || geo.distanceToCharger === null) {
     return (
-      <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
-        <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
-          <MapPin className="w-5 h-5 text-gray-400" />
+      <div className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-xl">
+        <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
+          <MapPin className="w-4 h-4 text-gray-400" />
         </div>
         <div className="flex-1">
-          <p className="text-sm font-medium text-gray-700">Location off</p>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Turn on location to show walk times and verify you're at the charger.
+          <p className="text-xs font-medium text-gray-600">Location off</p>
+          <p className="text-[11px] text-gray-500">
+            Enable location to verify you're at the charger.
           </p>
         </div>
       </div>

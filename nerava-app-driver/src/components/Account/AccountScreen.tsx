@@ -1,8 +1,15 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, User, Heart, Settings, HelpCircle, LogOut } from 'lucide-react'
+import { FavoritesView } from './FavoritesView'
+import { SettingsView } from './SettingsView'
+import { HelpView } from './HelpView'
+
+type ViewType = 'menu' | 'favorites' | 'settings' | 'help'
 
 export function AccountScreen() {
   const navigate = useNavigate()
+  const [activeView, setActiveView] = useState<ViewType>('menu')
   const isAuthenticated = !!localStorage.getItem('access_token')
 
   const handleLogout = () => {
@@ -11,6 +18,18 @@ export function AccountScreen() {
     navigate('/')
   }
 
+  // Sub-views
+  if (activeView === 'favorites') {
+    return <FavoritesView onBack={() => setActiveView('menu')} />
+  }
+  if (activeView === 'settings') {
+    return <SettingsView onBack={() => setActiveView('menu')} />
+  }
+  if (activeView === 'help') {
+    return <HelpView onBack={() => setActiveView('menu')} />
+  }
+
+  // Main menu
   return (
     <div className="h-[100dvh] flex flex-col bg-white">
       {/* Header */}
@@ -40,15 +59,24 @@ export function AccountScreen() {
 
         {/* Menu items */}
         <div className="space-y-2">
-          <button className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 rounded-xl">
+          <button
+            onClick={() => setActiveView('favorites')}
+            className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 rounded-xl"
+          >
             <Heart className="w-5 h-5 text-[#65676B]" />
             <span>Favorites</span>
           </button>
-          <button className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 rounded-xl">
+          <button
+            onClick={() => setActiveView('settings')}
+            className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 rounded-xl"
+          >
             <Settings className="w-5 h-5 text-[#65676B]" />
             <span>Settings</span>
           </button>
-          <button className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 rounded-xl">
+          <button
+            onClick={() => setActiveView('help')}
+            className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 rounded-xl"
+          >
             <HelpCircle className="w-5 h-5 text-[#65676B]" />
             <span>Help & Support</span>
           </button>

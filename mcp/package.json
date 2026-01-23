@@ -1,0 +1,20 @@
+{
+  "name": "repo-knowledge-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for repo knowledge tools",
+  "main": "repo-knowledge-server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node repo-knowledge-server.js"
+  },
+  "keywords": [
+    "mcp",
+    "repo-knowledge"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.1",
+    "zod": "^3.25.76"
+  }
+}

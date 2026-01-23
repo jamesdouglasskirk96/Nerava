@@ -1,0 +1,51 @@
+# Production dependencies only
+# This file contains direct production dependencies.
+# To update: edit this file, then run: pip-compile requirements.in
+
+# Web framework
+fastapi==0.103.2
+uvicorn[standard]==0.23.2
+
+# Database
+sqlalchemy==2.0.23
+sqlalchemy-utils==0.41.1
+alembic==1.12.1
+psycopg2-binary>=2.9.0
+
+# Authentication & Security
+python-jose[cryptography]==3.3.0
+PyJWT>=2.8.0
+passlib[bcrypt]==1.7.4
+cryptography>=41.0.0
+
+# Data validation
+pydantic==2.5.0
+pydantic-settings==2.1.0
+email-validator>=2.0.0
+
+# HTTP client (pinned for Starlette TestClient compatibility)
+httpx>=0.24.0,<0.27.0
+
+# Utilities
+python-dotenv==1.0.0
+python-multipart>=0.0.6
+requests>=2.31.0
+
+# External services
+stripe>=6.0.0
+redis>=5.0.0
+google-auth>=2.23.0
+phonenumbers>=8.13.0
+twilio>=8.10.0
+
+# Monitoring & Observability
+prometheus-client>=0.19.0
+sentry-sdk[fastapi]>=1.35.0
+
+# PDF & QR generation
+reportlab>=4.0.0
+qrcode[pil]>=7.4.2
+
+# Server
+gunicorn==21.2.0
+

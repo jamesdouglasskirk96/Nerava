@@ -1,0 +1,99 @@
+## Task: Fix IAM Role Name and Redeploy v15-fixed-arch
+
+### Problem Found
+The deployment keeps failing because the **wrong IAM role name** was used:
+- **Wrong**: `AppRunnerECRAccess`
+- **Correct**: `AppRunnerECRAccessRole`
+
+Error from App Runner logs:
+```
+[AppRunner] Failed to pull your application image.
+Reason: Invalid Access Role in AuthenticationConfiguration.
+Confirm that your service is configured with a valid access role to your ECR repository.
+```
+
+---
+
+## Step 1: Redeploy with Correct IAM Role
+
+The Docker image `v15-fixed-arch` is already in ECR and has the correct manifest (no attestation issues). Just need to update the service with the correct IAM role name.
+
+```bash
+aws apprunner update-service \
+  --service-arn "arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3" \
+  --source-configuration '{
+    "ImageRepository": {
+      "ImageIdentifier": "566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:v15-fixed-arch",
+      "ImageConfiguration": {
+        "Port": "8000",
+        "RuntimeEnvironmentVariables": {
+          "ENV": "prod",
+          "REGION": "us-east-1",
+          "DATABASE_URL": "postgresql+psycopg2://nerava_admin:YJEDUbHGFIZBo6D5JiDPTbb4ZbmbE4ae@nerava-db.c27i820wot9o.us-east-1.rds.amazonaws.com:5432/nerava",
+          "REDIS_URL": "redis://nerava-redis.yagp9v.ng.0001.use1.cache.amazonaws.com:6379/0",
+          "JWT_SECRET": "787044b63251814c8dd160437b395a77fa6e162bdc53e24320cd84d14fa5ed86",
+          "TOKEN_ENCRYPTION_KEY": "s1V8FQAFl7IzLcNJuBXBjDLpCb3j_IrbDbLWVzufBm4=",
+          "TWILIO_ACCOUNT_SID": "YOUR_TWILIO_ACCOUNT_SID_HERE",
+          "TWILIO_AUTH_TOKEN": "7566751c593a16c1f011a9c82dee6d91",
+          "TWILIO_VERIFY_SERVICE_SID": "VAd22350253af88b2c0868d0a77b8b0265",
+          "OTP_PROVIDER": "twilio_verify",
+          "ALLOWED_ORIGINS": "https://nerava.network,https://www.nerava.network,https://app.nerava.network",
+          "PUBLIC_WEB_BASE_URL": "https://api.nerava.network",
+          "SKIP_HTTPS_REDIRECT": "true",
+          "SKIP_STARTUP_VALIDATION": "true",
+          "APP_STARTUP_MODE": "light"
+        }
+      },
+      "ImageRepositoryType": "ECR"
+    },
+    "AuthenticationConfiguration": {
+      "AccessRoleArn": "arn:aws:iam::566287346479:role/AppRunnerECRAccessRole"
+    }
+  }' \
+  --region us-east-1
+```
+
+**NOTE**: The role name is `AppRunnerECRAccessRole` (with "Role" suffix), NOT `AppRunnerECRAccess`.
+
+---
+
+## Step 2: Monitor Deployment
+
+```bash
+# Check deployment status (run multiple times)
+aws apprunner list-operations \
+  --service-arn "arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3" \
+  --region us-east-1 | jq '.OperationSummaryList[0]'
+
+# Wait for Status to be "SUCCEEDED" (not "ROLLBACK_SUCCEEDED")
+```
+
+---
+
+## Step 3: Verify Deployment Success
+
+```bash
+# Test health endpoint
+curl https://api.nerava.network/healthz
+
+# Test new merchants/open endpoint (should return empty array or data, NOT 404)
+curl "https://api.nerava.network/v1/drivers/merchants/open?charger_id=ch_domain_tesla_001"
+
+# Test discovery endpoint
+curl "https://api.nerava.network/v1/chargers/discovery?lat=30.38&lng=-97.69"
+```
+
+**Expected results:**
+- `/healthz` -> `{"ok":true,...}`
+- `/v1/drivers/merchants/open` -> `[]` (empty array, NOT 404) - endpoint exists but no data seeded yet
+- `/v1/chargers/discovery` -> JSON response (NOT 404)
+
+---
+
+## Summary
+
+**Root cause**: IAM role name typo (`AppRunnerECRAccess` vs `AppRunnerECRAccessRole`)
+
+**Fix**: Run the update-service command above with the correct role name.
+
+The Docker image (v15-fixed-arch) is already correct - it has a clean single-architecture manifest without attestations.

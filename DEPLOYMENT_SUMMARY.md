@@ -1,90 +1,119 @@
-# Deployment Summary
+# Backend Deployment Summary - v14-merchants-open
 
-## Changes Made
+## Deployment Status
 
-### 1. Fixed Config Router Import Issue ✅
-- **File:** `nerava-backend-v9/app/main_simple.py:626`
-- **Change:** Changed `app.include_router(config_router)` to `app.include_router(config_router.router)`
-- **Issue:** Module was being used as router object, causing AttributeError
+✅ **Docker Image Built**: `nerava-backend:latest`
+✅ **Image Tagged**: `566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:v14-merchants-open`
+✅ **Pushed to ECR**: Successfully uploaded
+✅ **App Runner Updated**: Deployment in progress (`OPERATION_IN_PROGRESS`)
 
-### 2. Enhanced Error Handling ✅
-- **File:** `nerava-backend-v9/app/main_simple.py`
-- **Changes:**
-  - Added comprehensive error handling to startup validation
-  - Added print statements with `flush=True` for better log visibility
-  - Enhanced startup event handler with error logging
-  - Added error handling to health check endpoint
+## Changes Deployed
 
-### 3. Infrastructure Verification ✅
-- Verified RDS security group allows traffic from VPC Connector (sg-00bc5ec63287eacdd)
-- Verified ElastiCache security group allows traffic from VPC Connector
-- Confirmed VPC Connector is properly configured
+### 1. Auth Middleware Fix
+- **File**: `app/middleware/auth.py`
+- **Change**: Added optional auth path prefixes
+- **Paths**: 
+  - `/v1/drivers/merchants/open` - Optional authentication
+  - `/v1/chargers/discovery` - Optional authentication
 
-### 4. Service Configuration ✅
-- Created new App Runner service: `nerava-backend-new`
-- Health check configuration:
-  - Path: `/healthz`
-  - Interval: 20 seconds
-  - Timeout: 10 seconds
-  - Healthy Threshold: 2
-  - Unhealthy Threshold: 5
-- VPC Connector attached for database access
-- All environment variables configured
+### 2. New Endpoint: `/v1/drivers/merchants/open`
+- **File**: `app/routers/drivers_domain.py`
+- **Purpose**: Get merchants linked to a specific charger
+- **Auth**: Optional (works without authentication)
+- **Features**:
+  - Returns merchants sorted by distance
+  - Sets `is_primary: true` for Asadas Grill
+  - Returns correct photo URLs (`/static/merchant_photos_asadas_grill/asadas_grill_01.jpg`)
+  - Returns `exclusive_title: "Free Beverage Exclusive"` for Asadas Grill
 
-## Current Status
+### 3. New Endpoint: `/v1/chargers/discovery`
+- **File**: `app/routers/chargers.py`
+- **Purpose**: Get charger discovery data with nearby merchants
+- **Auth**: Optional (works without authentication)
+- **Features**:
+  - Returns chargers sorted by distance
+  - Each charger includes 2 nearest merchants
+  - Sets `within_radius=True` if user is within 400m of nearest charger
+  - Asadas Grill photos prioritized
 
-- **Service ARN:** `arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend-new/b6499de161c84614b9a1cbe30b72e796`
-- **Service URL:** `f2i7kzpkib.us-east-1.awsapprunner.com`
-- **Status:** `OPERATION_IN_PROGRESS` (deploying)
-
-## Monitoring Commands
-
-### Check Service Status
-```bash
-aws apprunner describe-service \
-  --service-arn arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend-new/b6499de161c84614b9a1cbe30b72e796 \
-  --region us-east-1
-```
-
-### Test Health Endpoint
-```bash
-curl https://f2i7kzpkib.us-east-1.awsapprunner.com/healthz
-```
-
-### Check Application Logs
-```bash
-aws logs tail "/aws/apprunner/nerava-backend-new/b6499de161c84614b9a1cbe30b72e796/service" \
-  --since 10m \
-  --region us-east-1 \
-  --format short
-```
-
-### Filter for Errors/Startup Messages
-```bash
-aws logs tail "/aws/apprunner/nerava-backend-new/b6499de161c84614b9a1cbe30b72e796/service" \
-  --since 10m \
-  --region us-east-1 \
-  --format short | grep -E "STARTUP|ERROR|Exception|Traceback"
-```
+### 4. Merchant Details Service Update
+- **File**: `app/services/merchant_details.py`
+- **Changes**:
+  - Asadas Grill shows "Free Beverage Exclusive" instead of "Happy Hour"
+  - Category shows as "Restaurant" (not "Restaurant • Food")
+  - Badge shows as "Exclusive" (not "Happy Hour ⭐️")
 
 ## Next Steps
 
-1. **Wait for deployment to complete** - Typically takes 5-10 minutes
-2. **Monitor status** - Check service status every few minutes
-3. **Verify health endpoint** - Once status is RUNNING, test the `/healthz` endpoint
-4. **Check logs** - If deployment fails, review logs for startup errors
+### 1. Wait for Deployment to Complete
 
-## Troubleshooting
+Check deployment status:
+```bash
+aws apprunner describe-service \
+  --service-arn "arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3" \
+  --region us-east-1 | jq -r '.Service.Status'
+```
 
-If deployment fails:
-1. Check CloudWatch logs for `[STARTUP]` messages
-2. Look for ERROR, Exception, or Traceback in logs
-3. Verify environment variables are correct
-4. Confirm database connectivity from VPC Connector
-5. Check that all required secrets are set
+Wait for status to be `RUNNING` (currently `OPERATION_IN_PROGRESS`)
 
-## Image Details
+### 2. Seed Production Database
 
-- **ECR Repository:** `566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:latest`
-- **Latest Push:** Image has been pushed with all fixes applied
-- **Dockerfile:** Uses `python -m uvicorn app.main_simple:app --host 0.0.0.0 --port 8000`
+After deployment completes, seed Asadas Grill data in production:
+
+**Option A: Use seed script (if database access available)**
+```bash
+cd "nerava-backend-v9 2"
+# Set production DATABASE_URL
+export DATABASE_URL="postgresql+psycopg2://nerava_admin:YJEDUbHGFIZBo6D5JiDPTbb4ZbmbE4ae@nerava-db.c27i820wot9o.us-east-1.rds.amazonaws.com:5432/nerava"
+python scripts/seed_asadas_grill.py
+```
+
+**Option B: Manual SQL (see cursor-prompt-deploy-and-fix-auth.txt Part 4)**
+
+### 3. Verify Production Endpoints
+
+```bash
+# Test health endpoint
+curl "https://api.nerava.network/healthz"
+
+# Test merchants/open endpoint (no auth required)
+curl "https://api.nerava.network/v1/drivers/merchants/open?charger_id=ch_domain_tesla_001"
+
+# Expected: Returns merchants including Asadas Grill with:
+#   - is_primary: true
+#   - exclusive_title: "Free Beverage Exclusive"
+#   - photo_url: "/static/merchant_photos_asadas_grill/asadas_grill_01.jpg"
+
+# Test discovery endpoint (no auth required)
+curl "https://api.nerava.network/v1/chargers/discovery?lat=30.3839&lng=-97.6900"
+
+# Expected: Returns chargers with nearby merchants
+
+# Test merchant details
+curl "https://api.nerava.network/v1/merchants/m_asadas_grill"
+
+# Expected: Returns merchant with:
+#   - category: "Restaurant"
+#   - perk.title: "Free Beverage Exclusive"
+#   - perk.badge: "Exclusive"
+```
+
+## Files Modified
+
+1. ✅ `app/middleware/auth.py` - Added optional auth path prefixes
+2. ✅ `app/routers/drivers_domain.py` - Added `/merchants/open` endpoint
+3. ✅ `app/routers/chargers.py` - Added `/discovery` endpoint
+4. ✅ `app/services/merchant_details.py` - Updated perk/category logic
+5. ✅ `scripts/seed_asadas_grill.py` - Created seed script (run in production)
+
+## Docker Image
+
+- **Image**: `566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:v14-merchants-open`
+- **Digest**: `sha256:5f1234c7fa2aba6742825254777aa3c175c90ea388fff30c70131a875f2e3557`
+- **Size**: 856 bytes (manifest)
+
+## Service Info
+
+- **Service ARN**: `arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3`
+- **Service URL**: `tvuywdkems.us-east-1.awsapprunner.com`
+- **Status**: `OPERATION_IN_PROGRESS` (deploying)

@@ -1,0 +1,377 @@
+## Task: Fix Charger-to-Merchant Routing and Asadas Grill Data
+
+### Problem Summary
+
+1. **Missing API endpoint**: Frontend calls `/v1/drivers/merchants/open?charger_id=...` but this endpoint doesn't exist
+2. **Asadas Grill not in database**: The merchant doesn't exist in the database, only static photos are available
+3. **Merchant details don't match Figma**: Should show "Free Beverage Exclusive" not "Exclusive Discount"
+
+---
+
+## Part 1: Create Missing `/v1/drivers/merchants/open` Endpoint
+
+### File: `nerava-backend-v9 2/app/routers/drivers_domain.py`
+
+Add this endpoint after the existing `/merchants/nearby` endpoint (around line 391):
+
+```python
+@router.get("/merchants/open")
+async def get_merchants_for_charger(
+    charger_id: str = Query(..., description="Charger ID"),
+    state: str = Query("charging", description="Session state: 'pre-charge' or 'charging'"),
+    open_only: bool = Query(False, description="Filter to only open merchants"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get merchants linked to a specific charger.
+
+    Returns merchants that are walkable from the specified charger,
+    sorted by distance/walk time.
+    """
+    from app.models.while_you_charge import Charger, Merchant, ChargerMerchant, MerchantPerk
+    from app.utils.pwa_responses import shape_merchant
+    import logging
+    logger = logging.getLogger(__name__)
+
+    logger.info(f"[MerchantsOpen] Getting merchants for charger: {charger_id}, state: {state}")
+
+    # Find charger
+    charger = db.query(Charger).filter(Charger.id == charger_id).first()
+    if not charger:
+        logger.warning(f"[MerchantsOpen] Charger not found: {charger_id}")
+        return []
+
+    # Get linked merchants via ChargerMerchant
+    links = db.query(ChargerMerchant).filter(
+        ChargerMerchant.charger_id == charger_id
+    ).order_by(ChargerMerchant.distance_m.asc()).all()
+
+    if not links:
+        logger.info(f"[MerchantsOpen] No merchants linked to charger: {charger_id}")
+        return []
+
+    merchant_ids = [link.merchant_id for link in links]
+    merchants = db.query(Merchant).filter(Merchant.id.in_(merchant_ids)).all()
+    merchants_by_id = {m.id: m for m in merchants}
+
+    # Get active perks
+    perks = db.query(MerchantPerk).filter(
+        MerchantPerk.merchant_id.in_(merchant_ids),
+        MerchantPerk.is_active == True
+    ).all()
+    perks_by_merchant = {p.merchant_id: p for p in perks}
+
+    result = []
+    for link in links:
+        merchant = merchants_by_id.get(link.merchant_id)
+        if not merchant:
+            continue
+
+        perk = perks_by_merchant.get(merchant.id)
+
+        # Check for exclusive status - look for specific merchants or perks with high value
+        merchant_name_lower = merchant.name.lower() if merchant.name else ""
+        is_primary = "asadas" in merchant_name_lower and "grill" in merchant_name_lower
+
+        # Build photo URL - prioritize static photos for known merchants
+        photo_url = None
+        if is_primary:
+            photo_url = "/static/merchant_photos_asadas_grill/asadas_grill_01.jpg"
+        elif merchant.photo_url:
+            photo_url = merchant.photo_url
+        elif merchant.logo_url:
+            photo_url = merchant.logo_url
+
+        # Determine exclusive title/description
+        exclusive_title = None
+        exclusive_description = None
+        if is_primary:
+            exclusive_title = "Free Beverage Exclusive"
+            exclusive_description = "Get a free beverage with any meal during charging hours. Show your pass to redeem."
+        elif perk:
+            exclusive_title = perk.title
+            exclusive_description = perk.description
+
+        result.append({
+            "id": merchant.id,
+            "merchant_id": merchant.id,
+            "place_id": merchant.external_id or merchant.id,
+            "name": merchant.name,
+            "lat": merchant.lat,
+            "lng": merchant.lng,
+            "address": merchant.address,
+            "phone": merchant.phone,
+            "logo_url": photo_url,
+            "photo_url": photo_url,
+            "category": merchant.category,
+            "types": merchant.place_types or [],
+            "is_primary": is_primary,
+            "exclusive_title": exclusive_title,
+            "exclusive_description": exclusive_description,
+            "rating": merchant.rating,
+            "walk_time_s": link.walk_duration_s,
+            "walk_time_seconds": link.walk_duration_s,
+            "distance_m": int(link.distance_m)
+        })
+
+    logger.info(f"[MerchantsOpen] Returning {len(result)} merchants for charger {charger_id}")
+    return result
+```
+
+---
+
+## Part 2: Seed Asadas Grill Merchant and Link to Chargers
+
+### File: `nerava-backend-v9 2/scripts/seed_asadas_grill.py` (CREATE NEW)
+
+```python
+"""
+Seed Asadas Grill merchant and link to Domain chargers.
+"""
+import sys
+sys.path.insert(0, '.')
+
+from app.db import SessionLocal
+from app.models.while_you_charge import Merchant, Charger, ChargerMerchant, MerchantPerk
+import json
+import math
+
+def haversine_distance(lat1, lon1, lat2, lon2):
+    """Calculate distance in meters"""
+    R = 6371000
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+    a = (math.sin(delta_phi / 2) ** 2 +
+         math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2)
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return R * c
+
+def seed_asadas_grill():
+    db = SessionLocal()
+    try:
+        # Load place details from static file
+        with open('merchant_photos_asadas_grill/place_details.json', 'r') as f:
+            place_data = json.load(f)
+
+        # Check if Asadas Grill already exists
+        existing = db.query(Merchant).filter(
+            Merchant.name.ilike('%asadas%grill%')
+        ).first()
+
+        if existing:
+            print(f"Asadas Grill already exists: {existing.id}")
+            merchant = existing
+        else:
+            # Create merchant
+            merchant = Merchant(
+                id="m_asadas_grill",
+                external_id=place_data["place_id"],  # ChIJKV41JMnORIYRu2cBs5CKtBc
+                name="Asadas Grill",
+                category="Restaurant",
+                primary_category="food",
+                lat=place_data["location"]["lat"],  # 30.4027969
+                lng=place_data["location"]["lng"],  # -97.6719438
+                address=place_data["address"],
+                rating=place_data.get("rating"),
+                price_level=place_data.get("price_level"),
+                place_types=["restaurant", "mexican_restaurant", "food"],
+                photo_url="/static/merchant_photos_asadas_grill/asadas_grill_01.jpg"
+            )
+            db.add(merchant)
+            db.flush()
+            print(f"Created Asadas Grill: {merchant.id}")
+
+        # Create perk for Asadas Grill
+        existing_perk = db.query(MerchantPerk).filter(
+            MerchantPerk.merchant_id == merchant.id,
+            MerchantPerk.is_active == True
+        ).first()
+
+        if not existing_perk:
+            perk = MerchantPerk(
+                merchant_id=merchant.id,
+                title="Free Beverage Exclusive",
+                description="Get a free beverage with any meal during charging hours. Show your pass to redeem.",
+                nova_reward=50,
+                is_active=True
+            )
+            db.add(perk)
+            print("Created Free Beverage Exclusive perk")
+
+        # Link to all Domain chargers
+        domain_chargers = db.query(Charger).filter(
+            Charger.id.like('ch_domain%')
+        ).all()
+
+        # If no Domain chargers, link to test charger
+        if not domain_chargers:
+            domain_chargers = db.query(Charger).filter(
+                Charger.id.like('ch_test%')
+            ).all()
+
+        for charger in domain_chargers:
+            # Check if link exists
+            existing_link = db.query(ChargerMerchant).filter(
+                ChargerMerchant.charger_id == charger.id,
+                ChargerMerchant.merchant_id == merchant.id
+            ).first()
+
+            if existing_link:
+                print(f"Link already exists: {charger.id} -> {merchant.id}")
+                continue
+
+            # Calculate distance
+            distance_m = haversine_distance(
+                charger.lat, charger.lng,
+                merchant.lat, merchant.lng
+            )
+
+            # Estimate walk time (80m per minute)
+            walk_duration_s = int((distance_m / 80) * 60)
+
+            link = ChargerMerchant(
+                charger_id=charger.id,
+                merchant_id=merchant.id,
+                distance_m=distance_m,
+                walk_duration_s=walk_duration_s,
+                walk_distance_m=distance_m * 1.3  # Estimate walking distance is ~30% longer
+            )
+            db.add(link)
+            print(f"Linked {charger.name} -> Asadas Grill ({int(distance_m)}m, {walk_duration_s}s walk)")
+
+        db.commit()
+        print("Done! Asadas Grill is now seeded and linked to chargers.")
+
+    except Exception as e:
+        print(f"Error: {e}")
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+if __name__ == "__main__":
+    seed_asadas_grill()
+```
+
+Run with:
+```bash
+cd "nerava-backend-v9 2"
+python scripts/seed_asadas_grill.py
+```
+
+---
+
+## Part 3: Update Merchant Details to Match Figma
+
+### File: `nerava-backend-v9 2/app/services/merchant_details.py`
+
+Around line 111, update the default perk logic:
+
+**Find this:**
+```python
+    # Default perk if none exists
+    if not perk:
+        perk_title = "Happy Hour"
+        perk_badge = "Happy Hour ⭐️"
+        perk_description = "Show your pass to access Happy Hour."
+```
+
+**Replace with:**
+```python
+    # Default perk if none exists
+    # Check for Asadas Grill special case
+    merchant_name_lower = merchant.name.lower() if merchant.name else ""
+    if not perk:
+        if "asadas" in merchant_name_lower and "grill" in merchant_name_lower:
+            perk_title = "Free Beverage Exclusive"
+            perk_badge = "Exclusive"
+            perk_description = "Get a free beverage with any meal during charging hours. Show your pass to redeem."
+        else:
+            perk_title = "Happy Hour"
+            perk_badge = "Happy Hour ⭐️"
+            perk_description = "Show your pass to access Happy Hour."
+```
+
+Also update the category formatting (around line 140):
+
+**Find this:**
+```python
+    # Format category
+    category = merchant.category or "Restaurant"
+    if merchant.primary_category:
+        category_map = {
+            "coffee": "Coffee • Bakery",
+            "food": "Restaurant • Food",
+            "other": "Shop • Services"
+        }
+        category = category_map.get(merchant.primary_category, category)
+```
+
+**Replace with:**
+```python
+    # Format category - match Figma design (simple category, not combined)
+    category = merchant.category or "Restaurant"
+    # Don't transform category for Asadas Grill - it should just be "Restaurant"
+    if "asadas" in merchant_name_lower and "grill" in merchant_name_lower:
+        category = "Restaurant"
+```
+
+---
+
+## Part 4: Verify Charger Data in Database
+
+Ensure Domain chargers exist. If not, create them:
+
+### File: Check/update `nerava-backend-v9 2/app/domains/domain_hub.py`
+
+The DOMAIN_CHARGERS should include:
+- ch_domain_tesla_001
+- ch_domain_chargepoint_001
+- ch_domain_chargepoint_002
+
+---
+
+## Testing
+
+1. Run seed script:
+```bash
+python scripts/seed_asadas_grill.py
+```
+
+2. Test the new endpoint locally:
+```bash
+curl "http://localhost:8001/v1/drivers/merchants/open?charger_id=ch_domain_tesla_001"
+```
+
+3. Verify Asadas Grill appears in response with:
+   - `is_primary: true`
+   - `exclusive_title: "Free Beverage Exclusive"`
+   - `photo_url: "/static/merchant_photos_asadas_grill/asadas_grill_01.jpg"`
+
+4. Test merchant details:
+```bash
+curl "http://localhost:8001/v1/merchants/m_asadas_grill"
+```
+
+Should return:
+- `category: "Restaurant"` (not "Mexican • Restaurant")
+- `perk.title: "Free Beverage Exclusive"`
+- `perk.badge: "Exclusive"`
+
+---
+
+## Files Modified/Created
+
+1. `nerava-backend-v9 2/app/routers/drivers_domain.py` - Add `/merchants/open` endpoint
+2. `nerava-backend-v9 2/scripts/seed_asadas_grill.py` - CREATE NEW seed script
+3. `nerava-backend-v9 2/app/services/merchant_details.py` - Update perk and category logic
+
+---
+
+## After Implementation
+
+1. Rebuild Docker image and deploy to production
+2. Run seed script in production environment
+3. Test from driver app - clicking a charger should show Asadas Grill with correct data

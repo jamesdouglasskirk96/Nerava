@@ -1,0 +1,265 @@
+# Continuous Deployment Monitor & Fix
+
+## Goal
+Monitor the App Runner deployment until v23-magic-link-fix (or newer) is successfully running. If it rolls back, diagnose the issue and deploy a fixed version.
+
+## Service Details
+- **Service ARN:** `arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3`
+- **ECR Repo:** `566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend`
+- **Working Directory:** `/Users/jameskirk/Desktop/Nerava/nerava-backend-v9 2`
+- **Target Endpoint:** `POST https://api.nerava.network/v1/magic/generate`
+
+---
+
+## Step 1: Check Current Status
+
+```bash
+cd "/Users/jameskirk/Desktop/Nerava/nerava-backend-v9 2"
+
+# Check deployment status
+aws apprunner describe-service \
+  --service-arn "arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3" \
+  --query '{Status: Service.Status, Image: Service.SourceConfiguration.ImageRepository.ImageIdentifier}'
+
+# Check recent operations for rollbacks
+aws apprunner list-operations \
+  --service-arn "arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3" \
+  --query 'OperationSummaryList[0:5].[Type,Status,EndedAt]' --output table
+```
+
+---
+
+## Step 2: If RUNNING, Test the Endpoint
+
+```bash
+# Test magic link endpoint
+curl -s -X POST https://api.nerava.network/v1/magic/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "phone": "+17133056318",
+    "exclusive_session_id": "demo_123",
+    "merchant_id": "ChIJKV41JMnORIYRu2cBs5CKtBc",
+    "charger_id": "tesla_market_heights"
+  }'
+```
+
+**Success Response:**
+```json
+{"token": "...", "link": "https://app.nerava.network/magic?token=...", "expires_in_minutes": 30}
+```
+
+**Failure Response (router not loaded):**
+```json
+{"detail": "Not Found"}
+```
+
+If you get the success response, **STOP - deployment is working!**
+
+---
+
+## Step 3: If OPERATION_IN_PROGRESS, Wait and Monitor
+
+```bash
+# Monitor until status changes
+while true; do
+  STATUS=$(aws apprunner describe-service \
+    --service-arn "arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3" \
+    --query 'Service.Status' --output text)
+
+  IMAGE=$(aws apprunner describe-service \
+    --service-arn "arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3" \
+    --query 'Service.SourceConfiguration.ImageRepository.ImageIdentifier' --output text)
+
+  echo "[$(date +%H:%M:%S)] Status: $STATUS | Image: $IMAGE"
+
+  if [ "$STATUS" = "RUNNING" ]; then
+    echo "Deployment complete! Testing endpoint..."
+    break
+  fi
+
+  sleep 30
+done
+
+# Test endpoint after deployment completes
+curl -s -X POST https://api.nerava.network/v1/magic/generate \
+  -H "Content-Type: application/json" \
+  -d '{"phone": "+17133056318", "exclusive_session_id": "test", "merchant_id": "test", "charger_id": "test"}'
+```
+
+---
+
+## Step 4: If Rolled Back, Get Logs
+
+```bash
+# Get latest log stream
+STREAM=$(aws logs describe-log-streams \
+  --log-group-name "/aws/apprunner/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3/application" \
+  --order-by LastEventTime --descending --limit 1 \
+  --query 'logStreams[0].logStreamName' --output text)
+
+echo "Latest log stream: $STREAM"
+
+# Get startup logs (look for errors)
+aws logs get-log-events \
+  --log-group-name "/aws/apprunner/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3/application" \
+  --log-stream-name "$STREAM" \
+  --start-from-head \
+  --limit 100 \
+  --query 'events[*].message' --output text
+```
+
+**Look for:**
+- `[STARTUP] Attempting to import magic_link router...` - should appear
+- `[STARTUP ERROR]` - any import errors
+- `ImportError` or `ModuleNotFoundError`
+- Health check failures
+
+---
+
+## Step 5: If Magic Link Router Not Loading
+
+The magic_link router code is at line 937-949 in `app/main_simple.py`:
+
+```python
+# Magic link router for SMS authentication
+try:
+    print("[STARTUP] Attempting to import magic_link router...", flush=True)
+    from .routers import magic_link
+    print(f"[STARTUP] magic_link module imported successfully", flush=True)
+    app.include_router(magic_link.router)  # /v1/magic/*
+    print("[STARTUP] Magic link router loaded successfully", flush=True)
+    logger.info("Magic link router loaded successfully")
+except ImportError as e:
+    print(f"[STARTUP ERROR] ImportError loading magic_link router: {e}", flush=True)
+    logger.error(f"ImportError loading magic_link router: {e}", exc_info=True)
+except Exception as e:
+    print(f"[STARTUP ERROR] Failed to load magic_link router: {e}", flush=True)
+    logger.error(f"Failed to load magic_link router: {e}", exc_info=True)
+```
+
+**Verify the files exist:**
+```bash
+ls -la app/routers/magic_link.py
+ls -la app/services/magic_link_service.py
+```
+
+**Test import locally:**
+```bash
+python3 -c "from app.routers import magic_link; print('OK:', magic_link.router)"
+```
+
+---
+
+## Step 6: Build and Deploy New Version
+
+If there's an issue, fix it and deploy:
+
+```bash
+cd "/Users/jameskirk/Desktop/Nerava/nerava-backend-v9 2"
+
+# Determine next version number
+NEXT_VERSION="v24-magic-link-fix"
+
+# Login to ECR
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 566287346479.dkr.ecr.us-east-1.amazonaws.com
+
+# Build with no cache
+docker build --platform linux/arm64 --no-cache -t 566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:$NEXT_VERSION .
+
+# Push to ECR
+docker push 566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:$NEXT_VERSION
+
+# Update App Runner service
+aws apprunner update-service \
+  --service-arn "arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3" \
+  --source-configuration "{
+    \"ImageRepository\": {
+      \"ImageIdentifier\": \"566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:$NEXT_VERSION\",
+      \"ImageRepositoryType\": \"ECR\",
+      \"ImageConfiguration\": {
+        \"Port\": \"8000\",
+        \"RuntimeEnvironmentVariables\": {
+          \"ENV\": \"prod\",
+          \"PORT\": \"8000\"
+        }
+      }
+    },
+    \"AutoDeploymentsEnabled\": false
+  }"
+
+echo "Deployment started for $NEXT_VERSION"
+```
+
+Then go back to **Step 3** to monitor.
+
+---
+
+## Step 7: Debug Locally with Docker (if still failing)
+
+```bash
+cd "/Users/jameskirk/Desktop/Nerava/nerava-backend-v9 2"
+
+# Build for local testing
+docker build --platform linux/arm64 -t nerava-test .
+
+# Run with minimal env vars to test startup
+docker run --rm -p 8000:8000 \
+  -e DATABASE_URL="postgresql+psycopg2://test:test@host.docker.internal:5432/test" \
+  -e JWT_SECRET="test-secret-key-12345" \
+  -e ENV="dev" \
+  -e SKIP_STARTUP_VALIDATION="true" \
+  nerava-test
+
+# In another terminal, test the endpoint
+curl http://localhost:8000/v1/magic/generate -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"phone": "+1", "exclusive_session_id": "x", "merchant_id": "x", "charger_id": "x"}'
+```
+
+Watch the Docker logs for startup messages about magic_link router.
+
+---
+
+## Success Criteria
+
+The deployment is successful when ALL of these are true:
+
+1. `aws apprunner describe-service` shows `Status: RUNNING`
+2. Image shows a version >= v23 (not v19-photo-fix)
+3. Magic link endpoint returns a token:
+   ```bash
+   curl -s -X POST https://api.nerava.network/v1/magic/generate \
+     -H "Content-Type: application/json" \
+     -d '{"phone": "+17133056318", "exclusive_session_id": "demo", "merchant_id": "ChIJKV41JMnORIYRu2cBs5CKtBc", "charger_id": "tesla_market_heights"}'
+   ```
+   Returns: `{"token": "...", "link": "...", "expires_in_minutes": 30}`
+
+---
+
+## Common Issues & Fixes
+
+### Issue: Router silently not loading
+**Cause:** Import error swallowed by try-except
+**Fix:** Check logs for `[STARTUP ERROR]` messages
+
+### Issue: Health check timeout
+**Cause:** Startup takes too long
+**Fix:** Ensure startup is under 60 seconds
+
+### Issue: Module not found in container
+**Cause:** File not included in Docker build
+**Fix:** Check Dockerfile COPY commands and .dockerignore
+
+### Issue: Deployment rolls back immediately
+**Cause:** Container fails health check
+**Fix:** Test locally with Docker first
+
+---
+
+## Files Reference
+
+- **Main app:** `app/main_simple.py` (magic_link at lines 937-949)
+- **Router:** `app/routers/magic_link.py`
+- **Service:** `app/services/magic_link_service.py`
+- **Dockerfile:** `Dockerfile`
+- **Requirements:** `requirements.txt`

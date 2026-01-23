@@ -28,3 +28,4 @@ def test_gitignore_has_env_patterns():
     assert ".env.*" in gitignore_content or "*.env" in gitignore_content
 
 
+

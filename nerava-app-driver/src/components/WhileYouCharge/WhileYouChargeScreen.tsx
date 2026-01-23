@@ -1,6 +1,7 @@
 // WhileYouCharge Screen matching Figma exactly - uses real API data
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { ArrowLeft } from 'lucide-react'
 import { UserAvatar } from '../shared/UserAvatar'
 import { FeaturedMerchantCard } from './FeaturedMerchantCard'
 import { Carousel } from '../shared/Carousel'
@@ -77,30 +78,27 @@ export function WhileYouChargeScreen({ chargerId: propChargerId }: WhileYouCharg
   return (
     <div className="h-[100dvh] max-h-[100dvh] bg-white flex flex-col overflow-hidden">
       {/* Header - Matching Figma: 60px height, 20px horizontal padding */}
-      <header className="bg-white px-5 h-[60px] flex-shrink-0 flex items-center justify-between border-b border-[#E4E6EB] border-t-0 border-l-0 border-r-0">
-        {/* Logo: "NERAVA" + ⚡ icon - 16px font, 6px spacing */}
-        <div className="flex items-center gap-1.5">
-          <h1 
-            className="text-base font-normal text-[#050505]"
-            style={{ letterSpacing: '-0.7125px', lineHeight: '24px' }}
-          >
-            NERAVA
-          </h1>
-          <svg 
-            className="w-4 h-4 text-facebook-blue" 
-            fill="none" 
-            stroke="currentColor" 
-            viewBox="0 0 24 24"
-            strokeWidth={1.33}
-          >
-            <path 
-              strokeLinecap="round" 
-              strokeLinejoin="round" 
-              d="M13 10V3L4 14h7v7l9-11h-7z" 
+      <header className="bg-white px-5 h-[60px] flex-shrink-0 flex items-center justify-between border-b border-[#E4E6EB] relative">
+        {/* Left side: Back button */}
+        <button
+          onClick={handleToggleToPreCharging}
+          className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 active:scale-95 transition-all"
+          aria-label="Back to chargers"
+        >
+          <ArrowLeft className="w-4 h-4 text-[#050505]" />
+        </button>
+
+        {/* Center: Logo */}
+        <div className="absolute left-1/2 transform -translate-x-1/2">
+          <a href="/" className="flex items-center">
+            <img
+              src="/nerava-logo.png"
+              alt="Nerava"
+              className="h-6 w-auto"
             />
-          </svg>
+          </a>
         </div>
-        
+
         {/* Right side: User avatar */}
         <UserAvatar />
       </header>

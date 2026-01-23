@@ -1,0 +1,88 @@
+## Task: Fix Asadas Grill Photo Not Loading
+
+### Problem
+The Asadas Grill photo is not loading because:
+1. `pwa_responses.py` returns `/static/merchant_photos_asadas_grill/asadas_grill_01.jpg`
+2. But the backend doesn't mount the `/static/` directory in `main.py`
+3. The photos exist at `merchant_photos_asadas_grill/` in the backend root
+
+### Solution
+Add a static files mount for the merchant photos directory.
+
+---
+
+### File to modify: `nerava-backend-v9 2/app/main.py`
+
+After line 58 (after the existing static mounts), add:
+
+```python
+# Mount merchant photos directory for static photo serving
+MERCHANT_PHOTOS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "merchant_photos_asadas_grill"))
+if os.path.isdir(MERCHANT_PHOTOS_DIR):
+    app.mount("/static/merchant_photos_asadas_grill", StaticFiles(directory=MERCHANT_PHOTOS_DIR), name="merchant_photos")
+```
+
+**Find this section (around lines 50-58):**
+```python
+# Mount UI after app is defined
+UI_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "ui-mobile"))
+if os.path.isdir(UI_DIR):
+    app.mount("/app", StaticFiles(directory=UI_DIR, html=True), name="ui")
+
+# Mount assets directory
+ASSETS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "ui-mobile", "assets"))
+if os.path.isdir(ASSETS_DIR):
+    app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
+```
+
+**Replace with:**
+```python
+# Mount UI after app is defined
+UI_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "ui-mobile"))
+if os.path.isdir(UI_DIR):
+    app.mount("/app", StaticFiles(directory=UI_DIR, html=True), name="ui")
+
+# Mount assets directory
+ASSETS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "ui-mobile", "assets"))
+if os.path.isdir(ASSETS_DIR):
+    app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
+
+# Mount merchant photos directory for static photo serving (Asadas Grill, etc.)
+MERCHANT_PHOTOS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "merchant_photos_asadas_grill"))
+if os.path.isdir(MERCHANT_PHOTOS_DIR):
+    app.mount("/static/merchant_photos_asadas_grill", StaticFiles(directory=MERCHANT_PHOTOS_DIR), name="merchant_photos")
+```
+
+---
+
+### Verification
+
+After making this change:
+1. Restart the backend server
+2. Test the URL: `https://api.nerava.network/static/merchant_photos_asadas_grill/asadas_grill_01.jpg`
+3. The image should load successfully
+4. The driver app should now show Asadas Grill's photo
+
+---
+
+### Also ensure Dockerfile copies the photos
+
+In `nerava-backend-v9 2/Dockerfile`, make sure the merchant photos directory is copied:
+
+**Find this line (or add if missing):**
+```dockerfile
+COPY merchant_photos_asadas_grill/ ./merchant_photos_asadas_grill/
+```
+
+This should be added before the final CMD instruction, alongside other COPY commands like:
+```dockerfile
+COPY app/ ./app/
+COPY alembic/ ./alembic/
+COPY merchant_photos_asadas_grill/ ./merchant_photos_asadas_grill/
+```
+
+---
+
+### Files to modify:
+1. `nerava-backend-v9 2/app/main.py` - Add static mount for merchant photos
+2. `nerava-backend-v9 2/Dockerfile` - Ensure photos are copied to container (if not already)

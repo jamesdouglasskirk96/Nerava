@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { DriverSessionProvider } from './contexts/DriverSessionContext'
+import { FavoritesProvider } from './contexts/FavoritesContext'
 import { DriverHome } from './components/DriverHome/DriverHome'
 import { QRHandler } from './components/QRHandler/QRHandler'
 import { PartyClusterScreen } from './components/PartyCluster/PartyClusterScreen'
@@ -9,11 +10,13 @@ import { MerchantDetailsScreen } from './components/MerchantDetails/MerchantDeta
 import { PreChargingScreen } from './components/PreCharging/PreChargingScreen'
 import { ExclusiveActiveScreen } from './components/ExclusiveActive/ExclusiveActiveScreen'
 import { AccountScreen } from './components/Account/AccountScreen'
+import { MagicLinkPage } from './pages/MagicLink'
 
 function App() {
   return (
     <DriverSessionProvider>
-      <BrowserRouter>
+      <FavoritesProvider>
+        <BrowserRouter>
         <Routes>
           {/* QR code entry point */}
           <Route path="/app/qr/:token" element={<QRHandler />} />
@@ -29,10 +32,13 @@ function App() {
           <Route path="/app/merchant/:merchantId" element={<MerchantDetailsScreen />} />
           {/* Exclusive Active screen - shown after activating an exclusive */}
           <Route path="/app/exclusive/:merchantId" element={<ExclusiveActiveScreen />} />
+          {/* Magic link handler - handles SMS magic links */}
+          <Route path="/magic" element={<MagicLinkPage />} />
           {/* Account screen */}
           <Route path="/account" element={<AccountScreen />} />
         </Routes>
-      </BrowserRouter>
+        </BrowserRouter>
+      </FavoritesProvider>
     </DriverSessionProvider>
   )
 }

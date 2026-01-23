@@ -1,0 +1,151 @@
+# Deploy v26 with Full Environment Variables
+
+## Root Cause of v25 Rollback
+
+The v25 image has all the code fixes, but the `update-service` command overwrote the `ImageConfiguration` with only `PORT`, wiping out all other environment variables like `REDIS_URL`, `DATABASE_URL`, etc.
+
+When the container starts with `ENV=prod` but no `REDIS_URL`, it fails startup validation and crashes.
+
+## Solution
+
+Use `update-service` WITHOUT specifying `ImageConfiguration.RuntimeEnvironmentVariables` to preserve existing env vars.
+
+---
+
+## Step 1: Build v26 Image (Same Code as v25)
+
+```bash
+cd "/Users/jameskirk/Desktop/Nerava/nerava-backend-v9 2"
+
+# Login to ECR
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 566287346479.dkr.ecr.us-east-1.amazonaws.com
+
+# Build fresh
+docker build --platform linux/arm64 --no-cache -t 566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:v26-full-env .
+
+# Push
+docker push 566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:v26-full-env
+```
+
+---
+
+## Step 2: Update Service (Preserve Env Vars)
+
+**CRITICAL:** Do NOT include `RuntimeEnvironmentVariables` in the command. This preserves existing env vars.
+
+```bash
+aws apprunner update-service \
+  --service-arn "arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3" \
+  --source-configuration '{
+    "ImageRepository": {
+      "ImageIdentifier": "566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:v26-full-env",
+      "ImageRepositoryType": "ECR"
+    }
+  }'
+```
+
+This minimal source-configuration only changes the image, keeping the existing `ImageConfiguration` (with all 27 environment variables) intact.
+
+---
+
+## Step 3: Monitor Deployment
+
+```bash
+while true; do
+  STATUS=$(aws apprunner describe-service \
+    --service-arn "arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3" \
+    --query 'Service.Status' --output text)
+
+  IMAGE=$(aws apprunner describe-service \
+    --service-arn "arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3" \
+    --query 'Service.SourceConfiguration.ImageRepository.ImageIdentifier' --output text | sed 's/.*://')
+
+  echo "[$(date +%H:%M:%S)] Status: $STATUS | Image: $IMAGE"
+
+  if [ "$STATUS" = "RUNNING" ]; then
+    echo ""
+    echo "Deployment complete! Testing..."
+    break
+  fi
+
+  sleep 30
+done
+```
+
+---
+
+## Step 4: Test After Deployment
+
+```bash
+# Health check
+curl -s https://api.nerava.network/healthz | jq .
+
+# Magic link endpoint
+curl -s -X POST https://api.nerava.network/v1/magic/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "phone": "+17133056318",
+    "exclusive_session_id": "final_test",
+    "merchant_id": "ChIJKV41JMnORIYRu2cBs5CKtBc",
+    "charger_id": "tesla_market_heights"
+  }' | jq .
+```
+
+---
+
+## Success Criteria
+
+1. ✅ Status: `RUNNING`
+2. ✅ Image: `v26-full-env` (not `v19-photo-fix`)
+3. ✅ Health check returns `{"ok": true, ...}`
+4. ✅ Magic link returns `{"token": "...", "link": "...", "expires_in_minutes": 30}`
+
+---
+
+## If Still Failing
+
+If v26 still rolls back, check the application logs for the new instance:
+
+```bash
+# Get latest log stream
+aws logs describe-log-streams \
+  --log-group-name "/aws/apprunner/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3/application" \
+  --order-by LastEventTime --descending --limit 3
+
+# Get logs from newest stream
+STREAM="instance/NEW_INSTANCE_ID_HERE"
+aws logs get-log-events \
+  --log-group-name "/aws/apprunner/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3/application" \
+  --log-stream-name "$STREAM" \
+  --start-from-head \
+  --limit 100 \
+  --query 'events[*].message' --output text | tr '\t' '\n'
+```
+
+Look for:
+- `[STARTUP ERROR]` messages
+- `Traceback` or `Error`
+- Which validation is failing
+
+---
+
+## Environment Variables Reference
+
+The service should have these 27 environment variables (already configured):
+
+| Variable | Purpose |
+|----------|---------|
+| DATABASE_URL | PostgreSQL connection |
+| REDIS_URL | Redis for rate limiting |
+| JWT_SECRET | JWT signing |
+| ENV | prod |
+| TOKEN_ENCRYPTION_KEY | Fernet encryption |
+| ALLOWED_ORIGINS | CORS |
+| TWILIO_* | SMS/OTP |
+| SENDGRID_API_KEY | Email |
+| HUBSPOT_* | CRM |
+| SENTRY_* | Error tracking |
+| POSTHOG_* | Analytics |
+| ... | (and more) |
+
+All these are preserved when using the minimal update-service command above.

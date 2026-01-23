@@ -25,6 +25,7 @@ import Api, {
   ZONE_SLUG,
   apiRedeemNova,
   apiWalletSummary,
+  apiChargerDiscovery,
 } from '../core/api.js';
 import { ensureMap, clearStations, addStationDot, fitToStations, getMap } from '../core/map.js';
 import { setTab } from '../app.js';
@@ -292,8 +293,24 @@ async function loadPilotData() {
       console.warn('[Explore] Using default location:', { lat: DEFAULT_LAT, lng: DEFAULT_LNG });
     }
     
-    // Load chargers - use fallback for now (can be migrated to v1 endpoint later)
-    _chargers = fallbackChargers();
+    // Load chargers from API discovery endpoint (shows all seeded chargers)
+    console.log('[Explore] Loading chargers from discovery API:', { lat: userLat, lng: userLng });
+    try {
+      const discoveryData = await apiChargerDiscovery({ lat: userLat, lng: userLng });
+      console.log('[Explore] Discovery API response:', discoveryData);
+      
+      if (discoveryData && discoveryData.chargers && Array.isArray(discoveryData.chargers)) {
+        _chargers = discoveryData.chargers.map(toMapCharger).filter(Boolean);
+        console.log('[Explore] Loaded', _chargers.length, 'chargers from API');
+      } else {
+        console.warn('[Explore] Invalid discovery response, using fallback');
+        _chargers = fallbackChargers();
+      }
+    } catch (err) {
+      console.error('[Explore] Error fetching chargers from API:', err);
+      console.warn('[Explore] Falling back to hardcoded chargers');
+      _chargers = fallbackChargers();
+    }
     
     // Load nearby merchants using v1 API
     // Use a larger radius to include all merchants in the zone (Domain area spans ~15km)
@@ -404,7 +421,9 @@ async function loadPilotData() {
       updateRecommendedPerks(merchantCards);
     }
 
-    if (_chargers.length) {
+    // Render charger pins on map
+    if (_chargers.length > 0) {
+      renderChargerPins(_chargers);
       selectCharger(_chargers[0]);
     }
   } catch (err) {
@@ -431,7 +450,9 @@ async function loadPilotData() {
     updateRecommendedPerks(merchantCards);
     showEmptyState('Failed to load merchants – please try again.');
 
-    if (_chargers.length) {
+    // Render charger pins on map
+    if (_chargers.length > 0) {
+      renderChargerPins(_chargers);
       selectCharger(_chargers[0]);
     }
   }

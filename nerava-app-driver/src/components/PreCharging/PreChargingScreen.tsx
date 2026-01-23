@@ -1,55 +1,59 @@
-// Pre-charging state screen - matching Figma design, uses real data from API
-import { useState, useMemo } from 'react'
+// Pre-charging state screen - uses real data from API only
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChargerCard } from './ChargerCard'
 import { CarouselControls } from '../shared/CarouselControls'
 import { UserAvatar } from '../shared/UserAvatar'
-import { getAllMockChargers } from '../../mock/mockApi'
-import type { DiscoveryCharger } from '../../api/chargers'
-import type { ChargerWithExperiences } from '../../mock/types'
+import { useGeolocation } from '../../hooks/useGeolocation'
+import { getChargerDiscovery, type DiscoveryCharger } from '../../api/chargers'
 
 interface PreChargingScreenProps {
   chargers?: DiscoveryCharger[]
   loading?: boolean
 }
 
-// Convert ChargerWithExperiences to DiscoveryCharger format
-function convertMockCharger(mockCharger: ChargerWithExperiences): DiscoveryCharger {
-  return {
-    id: mockCharger.id,
-    name: mockCharger.name,
-    address: '', // Not in mock data
-    lat: 0, // Not in mock data
-    lng: 0, // Not in mock data
-    distance_m: mockCharger.distance_m,
-    drive_time_min: Math.round(mockCharger.distance_m / 1000), // Approximate: 1km per minute
-    network: mockCharger.network_name || 'Unknown',
-    stalls: mockCharger.stalls,
-    kw: 150, // Default kW for superchargers
-    photo_url: mockCharger.photo_url || '',
-    nearby_merchants: mockCharger.nearby_experiences.map((merchant) => ({
-      place_id: merchant.place_id,
-      name: merchant.name,
-      photo_url: merchant.photo_url || '',
-      distance_m: merchant.distance_m,
-      walk_time_min: Math.round(merchant.distance_m / 80), // 80m per minute
-      has_exclusive: merchant.badges?.includes('Exclusive') || false,
-    })),
-  }
-}
-
 export function PreChargingScreen({ chargers: propChargers, loading: propLoading }: PreChargingScreenProps = {}) {
   const navigate = useNavigate()
   const [currentIndex, setCurrentIndex] = useState(0)
-  
-  // Use props if provided, otherwise convert mock data (for route usage)
-  const chargers = useMemo(() => {
-    if (propChargers) return propChargers
-    const mockChargers = getAllMockChargers()
-    return mockChargers.map(convertMockCharger)
-  }, [propChargers])
-  
-  const loading = propLoading || false
+  const geo = useGeolocation()
+
+  // Fetch chargers from API if not provided via props
+  const [fetchedChargers, setFetchedChargers] = useState<DiscoveryCharger[]>([])
+  const [fetchLoading, setFetchLoading] = useState(false)
+  const [fetchError, setFetchError] = useState<string | null>(null)
+  const hasFetchedRef = useRef(false)
+
+  useEffect(() => {
+    // Only fetch once when location becomes available for the first time
+    if (
+      !hasFetchedRef.current &&
+      (!propChargers || propChargers.length === 0) &&
+      geo.lat &&
+      geo.lng &&
+      !geo.loading
+    ) {
+      hasFetchedRef.current = true
+      setFetchLoading(true)
+      setFetchError(null)
+      getChargerDiscovery(geo.lat, geo.lng)
+        .then((response) => {
+          setFetchedChargers(response.chargers)
+          setFetchLoading(false)
+        })
+        .catch((err) => {
+          console.error('[PreChargingScreen] Failed to fetch chargers:', err)
+          console.error('[PreChargingScreen] API URL:', `${import.meta.env.VITE_API_BASE_URL || 'https://api.nerava.network'}/v1/chargers/discovery`)
+          console.error('[PreChargingScreen] Location:', { lat: geo.lat, lng: geo.lng })
+          setFetchError(err.message)
+          setFetchLoading(false)
+          // Don't fall back to mock data - show error instead
+        })
+    }
+  }, [propChargers, geo.lat, geo.lng, geo.loading])
+
+  // Use props if provided, otherwise use fetched data
+  const chargers = (propChargers && propChargers.length > 0) ? propChargers : fetchedChargers
+  const loading = propLoading || fetchLoading || geo.loading
   
   const currentCharger = chargers[currentIndex]
 
@@ -77,28 +81,19 @@ export function PreChargingScreen({ chargers: propChargers, loading: propLoading
   return (
     <div className="h-[100dvh] max-h-[100dvh] bg-white flex flex-col overflow-hidden">
       {/* Header - Matching Figma: 60px height, 20px horizontal padding */}
-      <header className="bg-white px-5 h-[60px] flex-shrink-0 flex items-center justify-between border-b border-[#E4E6EB]">
-        {/* Logo: "NERAVA" + ⚡ icon - 16px font, 6px spacing */}
-        <div className="flex items-center gap-1.5">
-          <h1 
-            className="text-base font-normal text-[#050505]"
-            style={{ letterSpacing: '-0.7125px', lineHeight: '24px' }}
-          >
-            NERAVA
-          </h1>
-          <svg 
-            className="w-4 h-4 text-facebook-blue" 
-            fill="none" 
-            stroke="currentColor" 
-            viewBox="0 0 24 24"
-            strokeWidth={1.33}
-          >
-            <path 
-              strokeLinecap="round" 
-              strokeLinejoin="round" 
-              d="M13 10V3L4 14h7v7l9-11h-7z" 
+      <header className="bg-white px-5 h-[60px] flex-shrink-0 flex items-center justify-between border-b border-[#E4E6EB] relative">
+        {/* Left spacer for balance */}
+        <div className="w-8"></div>
+        
+        {/* Center: Logo */}
+        <div className="absolute left-1/2 transform -translate-x-1/2">
+          <a href="/" className="flex items-center">
+            <img
+              src="/nerava-logo.png"
+              alt="Nerava"
+              className="h-6 w-auto"
             />
-          </svg>
+          </a>
         </div>
         
         {/* Right side: User avatar */}
@@ -131,6 +126,8 @@ export function PreChargingScreen({ chargers: propChargers, loading: propLoading
           <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
             {loading ? (
               <div className="text-center text-[#656A6B] py-8">Loading chargers...</div>
+            ) : fetchError ? (
+              <div className="text-center text-red-500 py-8">Error: {fetchError}</div>
             ) : currentCharger ? (
               <div className="flex flex-col h-full">
                 <div className="flex-1 min-h-0">

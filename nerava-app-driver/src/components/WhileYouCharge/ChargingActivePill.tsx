@@ -8,9 +8,9 @@ export function ChargingActivePill({ onClick, isCharging = true }: ChargingActiv
   return (
     <button
       onClick={onClick}
-      className="px-3 py-1.5 bg-[#1877F2] rounded-full hover:bg-[#166FE5] active:scale-95 transition-all"
+      className="px-3 py-1.5 bg-[#1877F2] rounded-full hover:bg-[#166FE5] active:scale-95 transition-all flex items-center justify-center"
     >
-      <span className="text-xs text-white font-medium">
+      <span className="text-xs text-white font-medium leading-none">
         {isCharging ? "Charging Now" : "Find A Charger"}
       </span>
     </button>

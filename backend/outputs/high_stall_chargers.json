@@ -1,0 +1,178 @@
+[
+  {
+    "id": "ChIJG_kiSQDPRIYRBbyQ7K4cevM",
+    "name": "Tesla Supercharger",
+    "address": "500 W Canyon Ridge Dr, Austin, TX 78753, USA",
+    "lat": 30.403686500000003,
+    "lng": -97.6731044,
+    "dist_to_asadas": 148.90945543292491
+  },
+  {
+    "id": "ChIJKZ_6jsjORIYRVAt3LFFW5UI",
+    "name": "EVgo Charging Station",
+    "address": "500 W Canyon Ridge Dr, Austin, TX 78753, USA",
+    "lat": 30.405127999999994,
+    "lng": -97.67348,
+    "dist_to_asadas": 298.14950348735715
+  },
+  {
+    "id": "ChIJAXjqO5nNRIYRi6myV5lMAJ0",
+    "name": "Tesla Supercharger",
+    "address": "11410 Century Oaks Terrace, Austin, TX 78758, USA",
+    "lat": 30.402497,
+    "lng": -97.72472599999999,
+    "dist_to_asadas": 5062.162647772661
+  },
+  {
+    "id": "ChIJ51fvhIfLRIYRf3XcWjepmrA",
+    "name": "Tesla Supercharger",
+    "address": "10515 N Mopac Expy, Austin, TX 78759, USA",
+    "lat": 30.390456,
+    "lng": -97.73305599999999,
+    "dist_to_asadas": 6019.79093477145
+  },
+  {
+    "id": "ChIJzZ0kaIDLRIYRhwVpeX4ZSfQ",
+    "name": "Tesla Supercharger",
+    "address": "9607 Research Blvd, Austin, TX 78759, USA",
+    "lat": 30.389267,
+    "lng": -97.73974,
+    "dist_to_asadas": 6674.1775586786935
+  },
+  {
+    "id": "ChIJkxADC4HMRIYRcIuq34TOtbo",
+    "name": "EVgo Charging Station",
+    "address": "10107 Research Blvd, Austin, TX 78759, USA",
+    "lat": 30.3933705,
+    "lng": -97.7456109,
+    "dist_to_asadas": 7142.66620740338
+  },
+  {
+    "id": "ChIJ230oIYTJRIYR5-5_qpmz3-A",
+    "name": "EVgo Charging Station",
+    "address": "1030 Norwood Park Blvd, Austin, TX 78753, USA",
+    "lat": 30.3402804,
+    "lng": -97.6925749,
+    "dist_to_asadas": 7227.794441606103
+  },
+  {
+    "id": "ChIJj7rigCPKRIYRv72j6K8r-8Q",
+    "name": "Tesla Supercharger",
+    "address": "6406 N Interstate 35 Frontage Rd, Austin, TX 78752, USA",
+    "lat": 30.329275,
+    "lng": -97.70625899999999,
+    "dist_to_asadas": 8813.262842003209
+  },
+  {
+    "id": "ChIJ_XF_mCrRRIYR8Tj_yyNpJMw",
+    "name": "Tesla Supercharger",
+    "address": "110 N Interstate Hwy 35, Round Rock, TX 78681, USA",
+    "lat": 30.509680999999997,
+    "lng": -97.687755,
+    "dist_to_asadas": 11981.207904489007
+  },
+  {
+    "id": "ChIJaXuzZXXKRIYR7Z81k1KTKD8",
+    "name": "Electrify America Charging Station",
+    "address": "1000 E 41st St, Austin, TX 78751, USA",
+    "lat": 30.3006,
+    "lng": -97.72175,
+    "dist_to_asadas": 12327.834616242737
+  },
+  {
+    "id": "ChIJ_wPK_Qu5RIYRwun0irXLJuQ",
+    "name": "Tesla Supercharger",
+    "address": "12200 FM 969, Austin, TX 78724, USA",
+    "lat": 30.254829,
+    "lng": -97.605144,
+    "dist_to_asadas": 17658.26737033432
+  },
+  {
+    "id": "ChIJiVFl1yzTRIYR2bGSkpfvo8E",
+    "name": "Tesla Supercharger",
+    "address": "2800 E Whitestone Blvd, Cedar Park, TX 78613, USA",
+    "lat": 30.5337487,
+    "lng": -97.784508,
+    "dist_to_asadas": 18122.142205143562
+  },
+  {
+    "id": "ChIJ2_MNyg-1RIYRkTEKVh9-5x0",
+    "name": "Tesla Supercharger",
+    "address": "1603 S Congress Ave, Austin, TX 78704, USA",
+    "lat": 30.2471801,
+    "lng": -97.7500043,
+    "dist_to_asadas": 18856.192349589543
+  },
+  {
+    "id": "ChIJleJ5suIsW4YRiY7MM6waiIg",
+    "name": "Tesla Destination Charger",
+    "address": "1010 E Whitestone Blvd, Cedar Park, TX 78613, USA",
+    "lat": 30.524079800000003,
+    "lng": -97.8175768,
+    "dist_to_asadas": 19408.851429774317
+  },
+  {
+    "id": "ChIJnaxilcItW4YRJQDLl6n_hD0",
+    "name": "Tesla Supercharger",
+    "address": "1001 E Whitestone Blvd, Cedar Park, TX 78613, USA",
+    "lat": 30.5257647,
+    "lng": -97.8194683,
+    "dist_to_asadas": 19669.32278791105
+  },
+  {
+    "id": "ChIJdbvdZIe0RIYRF3wQlpJgjdY",
+    "name": "Tesla Supercharger",
+    "address": "2201 E Ben White Blvd, Austin, TX 78744, USA",
+    "lat": 30.214916000000002,
+    "lng": -97.74215099999999,
+    "dist_to_asadas": 21951.616851679926
+  },
+  {
+    "id": "ChIJcz30IE9LW4YRYVS3g5VSz9Y",
+    "name": "Tesla Supercharger",
+    "address": "2300 W Ben White Blvd, Austin, TX 78704, USA",
+    "lat": 30.233400099999997,
+    "lng": -97.7914251,
+    "dist_to_asadas": 22052.854920152087
+  },
+  {
+    "id": "ChIJ2Um53XdLW4YRFBnBkfJKFJA",
+    "name": "Tesla Supercharger",
+    "address": "5601 Brodie Ln, Austin, TX 78745, USA",
+    "lat": 30.2261013,
+    "lng": -97.82192380000001,
+    "dist_to_asadas": 24357.66879829832
+  },
+  {
+    "id": "ChIJ5wPFqlGzRIYR-aaISLZySUk",
+    "name": "EVgo Charging Station",
+    "address": "6501 S Congress Ave, Austin, TX 78745, USA",
+    "lat": 30.1963185,
+    "lng": -97.77704039999999,
+    "dist_to_asadas": 25078.615304272385
+  },
+  {
+    "id": "ChIJaTN1zvZMW4YRepQJDE1Yjr4",
+    "name": "EVgo Charging Station",
+    "address": "1807 W Slaughter Ln, Austin, TX 78748, USA",
+    "lat": 30.172118100000002,
+    "lng": -97.82392349999999,
+    "dist_to_asadas": 29510.76144877896
+  },
+  {
+    "id": "ChIJd749_h9VW4YRo2JVbrw88f8",
+    "name": "Tesla Supercharger",
+    "address": "151 Evans Dr Suite 113, Kyle, TX 78640, USA",
+    "lat": 30.013033999999998,
+    "lng": -97.8626748,
+    "dist_to_asadas": 47055.83185281809
+  },
+  {
+    "id": "ChIJL1YAZRGnXIYReRPLic74yN8",
+    "name": "Tesla Supercharger",
+    "address": "3939 I-35, San Marcos, TX 78666, USA",
+    "lat": 29.827683800000003,
+    "lng": -97.979654,
+    "dist_to_asadas": 70466.61181524479
+  }
+]

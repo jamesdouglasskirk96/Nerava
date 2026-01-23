@@ -1,0 +1,291 @@
+## Task: Deploy Backend and Fix Auth Middleware for Merchants Open Endpoint
+
+### Issue Found During Validation
+
+The `/v1/drivers/merchants/open` endpoint uses `get_current_driver_optional` for optional authentication, BUT the auth middleware will still block unauthenticated requests because the path is not in `excluded_paths`.
+
+**This means**: Unauthenticated users cannot call the endpoint even though it was designed to work without auth.
+
+---
+
+## Part 1: Fix Auth Middleware to Allow `/v1/drivers/merchants/open`
+
+### File: `nerava-backend-v9 2/app/middleware/auth.py`
+
+**Find this (around line 22-32):**
+```python
+        self.excluded_paths = {
+            "/healthz",
+            "/readyz",
+            "/metrics",
+            "/docs",
+            "/openapi.json",
+            "/v1/energyhub/windows",  # Public endpoint
+            "/v1/energyhub/events/charge-start",  # Public endpoint
+            "/v1/energyhub/events/charge-stop",  # Public endpoint
+            "/oauth/smartcar/callback",  # Smartcar OAuth callback (no auth required)
+        }
+```
+
+**Replace with:**
+```python
+        self.excluded_paths = {
+            "/healthz",
+            "/readyz",
+            "/metrics",
+            "/docs",
+            "/openapi.json",
+            "/v1/energyhub/windows",  # Public endpoint
+            "/v1/energyhub/events/charge-start",  # Public endpoint
+            "/v1/energyhub/events/charge-stop",  # Public endpoint
+            "/oauth/smartcar/callback",  # Smartcar OAuth callback (no auth required)
+        }
+        # Paths that support optional authentication (public access with optional user context)
+        self.optional_auth_path_prefixes = [
+            "/v1/drivers/merchants/open",  # Merchants for charger (optional auth)
+            "/v1/chargers/discovery",  # Charger discovery (optional auth)
+        ]
+```
+
+**Also update the dispatch method (around line 37-45):**
+
+**Find this:**
+```python
+    async def dispatch(self, request: Request, call_next):
+        # Skip authentication for excluded paths
+        if request.url.path in self.excluded_paths:
+            return await call_next(request)
+
+        # Skip authentication for paths starting with excluded prefixes (e.g., /app for UI)
+        for prefix in getattr(self, 'excluded_path_prefixes', []):
+            if request.url.path.startswith(prefix):
+                return await call_next(request)
+```
+
+**Replace with:**
+```python
+    async def dispatch(self, request: Request, call_next):
+        # Skip authentication for excluded paths
+        if request.url.path in self.excluded_paths:
+            return await call_next(request)
+
+        # Skip authentication for paths starting with excluded prefixes (e.g., /app for UI)
+        for prefix in getattr(self, 'excluded_path_prefixes', []):
+            if request.url.path.startswith(prefix):
+                return await call_next(request)
+
+        # Skip authentication for paths that support optional auth
+        for prefix in getattr(self, 'optional_auth_path_prefixes', []):
+            if request.url.path.startswith(prefix):
+                return await call_next(request)
+```
+
+---
+
+## Part 2: Verify Local Changes Work
+
+Run these tests locally before deploying:
+
+```bash
+cd "nerava-backend-v9 2"
+
+# Start the server
+uvicorn app.main_simple:app --reload --port 8001
+
+# Test merchants/open endpoint (no auth)
+curl "http://localhost:8001/v1/drivers/merchants/open?charger_id=ch_domain_tesla_001"
+
+# Expected: Returns Asadas Grill with is_primary: true
+
+# Test merchant details
+curl "http://localhost:8001/v1/merchants/m_asadas_grill"
+
+# Expected: Returns merchant with:
+#   - category: "Restaurant"
+#   - perk.title: "Free Beverage Exclusive"
+#   - perk.badge: "Exclusive"
+```
+
+---
+
+## Part 3: Deploy to Production
+
+### Step 1: Build Docker Image
+
+```bash
+cd "nerava-backend-v9 2"
+docker build --platform linux/amd64 -t nerava-backend:latest .
+```
+
+### Step 2: Tag and Push to ECR
+
+```bash
+# Login to ECR
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 566287346479.dkr.ecr.us-east-1.amazonaws.com
+
+# Tag the image
+docker tag nerava-backend:latest 566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:v14-merchants-open
+
+# Push to ECR
+docker push 566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:v14-merchants-open
+```
+
+### Step 3: Update App Runner Service
+
+```bash
+aws apprunner update-service \
+  --service-arn "arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3" \
+  --source-configuration '{
+    "ImageRepository": {
+      "ImageIdentifier": "566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:v14-merchants-open",
+      "ImageConfiguration": {
+        "Port": "8000",
+        "RuntimeEnvironmentVariables": {
+          "ENV": "prod",
+          "REGION": "us-east-1",
+          "DATABASE_URL": "postgresql+psycopg2://nerava_admin:YJEDUbHGFIZBo6D5JiDPTbb4ZbmbE4ae@nerava-db.c27i820wot9o.us-east-1.rds.amazonaws.com:5432/nerava",
+          "REDIS_URL": "redis://nerava-redis.yagp9v.ng.0001.use1.cache.amazonaws.com:6379/0",
+          "JWT_SECRET": "787044b63251814c8dd160437b395a77fa6e162bdc53e24320cd84d14fa5ed86",
+          "TOKEN_ENCRYPTION_KEY": "s1V8FQAFl7IzLcNJuBXBjDLpCb3j_IrbDbLWVzufBm4=",
+          "TWILIO_ACCOUNT_SID": "YOUR_TWILIO_ACCOUNT_SID_HERE",
+          "TWILIO_AUTH_TOKEN": "7566751c593a16c1f011a9c82dee6d91",
+          "TWILIO_VERIFY_SERVICE_SID": "VAd22350253af88b2c0868d0a77b8b0265",
+          "OTP_PROVIDER": "twilio_verify",
+          "ALLOWED_ORIGINS": "https://nerava.network,https://www.nerava.network,https://app.nerava.network",
+          "PUBLIC_WEB_BASE_URL": "https://api.nerava.network",
+          "SKIP_HTTPS_REDIRECT": "true",
+          "SKIP_STARTUP_VALIDATION": "true",
+          "APP_STARTUP_MODE": "light"
+        }
+      },
+      "ImageRepositoryType": "ECR"
+    },
+    "AuthenticationConfiguration": {
+      "AccessRoleArn": "arn:aws:iam::566287346479:role/AppRunnerECRAccess"
+    }
+  }' \
+  --region us-east-1
+```
+
+### Step 4: Wait for Deployment
+
+```bash
+# Check deployment status
+aws apprunner describe-service \
+  --service-arn "arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3" \
+  --region us-east-1 | jq '.Service.Status'
+
+# Wait for status to be "RUNNING"
+```
+
+---
+
+## Part 4: Seed Production Database
+
+After deployment succeeds, seed Asadas Grill in production:
+
+### Option A: Run seed script via SSH/container exec (if available)
+
+```bash
+python scripts/seed_asadas_grill.py
+```
+
+### Option B: Use a database migration or manual SQL
+
+Connect to the production PostgreSQL database and run:
+
+```sql
+-- Check if merchant exists
+SELECT * FROM merchants WHERE name ILIKE '%asadas%grill%';
+
+-- If not exists, create it
+INSERT INTO merchants (id, external_id, name, category, primary_category, lat, lng, address, rating, price_level, place_types, photo_url, created_at, updated_at)
+VALUES (
+  'm_asadas_grill',
+  'ChIJKV41JMnORIYRu2cBs5CKtBc',
+  'Asadas Grill',
+  'Restaurant',
+  'food',
+  30.4027969,
+  -97.6719438,
+  '501 W Canyon Ridge Dr, Austin, TX 78753, USA',
+  4.5,
+  2,
+  '["restaurant", "mexican_restaurant", "food"]',
+  '/static/merchant_photos_asadas_grill/asadas_grill_01.jpg',
+  NOW(),
+  NOW()
+);
+
+-- Create perk
+INSERT INTO merchant_perks (merchant_id, title, description, nova_reward, is_active, created_at, updated_at)
+VALUES (
+  'm_asadas_grill',
+  'Free Beverage Exclusive',
+  'Get a free beverage with any meal during charging hours. Show your pass to redeem.',
+  50,
+  true,
+  NOW(),
+  NOW()
+);
+
+-- Link to Domain chargers (get charger IDs first)
+SELECT id, name, lat, lng FROM chargers WHERE id LIKE 'ch_domain%';
+
+-- Create links (adjust charger_id as needed)
+INSERT INTO charger_merchants (charger_id, merchant_id, distance_m, walk_duration_s, walk_distance_m, created_at, updated_at)
+SELECT
+  c.id,
+  'm_asadas_grill',
+  -- Calculate approximate distance (will be recalculated by app if needed)
+  1000,
+  -- Walk time: 1000m / 80m per min * 60 = 750s
+  750,
+  1300,
+  NOW(),
+  NOW()
+FROM chargers c WHERE c.id LIKE 'ch_domain%';
+```
+
+---
+
+## Part 5: Verify Production Deployment
+
+```bash
+# Test health endpoint
+curl "https://api.nerava.network/healthz"
+
+# Test merchants/open endpoint (no auth)
+curl "https://api.nerava.network/v1/drivers/merchants/open?charger_id=ch_domain_tesla_001"
+
+# Test merchant details
+curl "https://api.nerava.network/v1/merchants/m_asadas_grill"
+
+# Test discovery endpoint (should also work now)
+curl "https://api.nerava.network/v1/chargers/discovery?lat=30.3839&lng=-97.6900"
+```
+
+---
+
+## Summary of Changes
+
+1. **Auth middleware fix**: Add `/v1/drivers/merchants/open` and `/v1/chargers/discovery` to optional auth paths
+2. **Deploy v14**: Push new image with:
+   - `/v1/drivers/merchants/open` endpoint
+   - `/v1/chargers/discovery` endpoint
+   - Fixed merchant details for Asadas Grill
+   - Updated auth middleware
+3. **Seed production data**: Add Asadas Grill merchant, perk, and charger links
+
+---
+
+## Files to Modify
+
+1. `nerava-backend-v9 2/app/middleware/auth.py` - Add optional auth path prefixes
+2. Deploy using commands above
+
+## Files Already Modified (by previous Cursor session)
+
+1. `nerava-backend-v9 2/app/routers/drivers_domain.py` - Added `/merchants/open` endpoint ✓
+2. `nerava-backend-v9 2/scripts/seed_asadas_grill.py` - Created seed script ✓
+3. `nerava-backend-v9 2/app/services/merchant_details.py` - Updated perk/category logic ✓

@@ -1,0 +1,103 @@
+rank,name,address,phone,website,rating,reviews,dist_to_asadas_km,nearest_charger,dist_to_charger_m
+1,Asadas Grill,"501 W Canyon Ridge Dr, Austin, TX 78753, USA",(512) 719-3390,https://www.asadas-grill.com/,4.5,2407,0.00,Tesla Supercharger,149
+2,PINSTACK,"500 W Canyon Ridge Dr, Austin, TX 78753, USA",(512) 580-0555,https://pinstackbowl.com/,4.2,1032,0.15,Tesla Supercharger,80
+3,Tech Ridge Center,"500 W Canyon Ridge Dr, Austin, TX 78753, USA",(713) 599-3500,https://www.regencycenters.com/property/detail/60572/Tech-Ridge-Center,4.3,4280,0.21,Tesla Supercharger,104
+4,True Texas BBQ,"500 W Canyon Ridge Dr, Austin, TX 78753, USA",(737) 708-8900,https://www.truetxbbq.com/?utm_source=google&utm_medium=organic&utm_campaign=gmb_restaurant&utm_content=476TT,4.6,467,0.27,Tesla Supercharger,225
+5,Tsukimi,"12400 N Interstate Hwy 35 A-111, Austin, TX 78753, USA",(512) 386-1037,https://www.tsukimiaustin.com/,4.3,825,0.42,Tesla Supercharger,284
+6,OneTaco @ Techridge,"500 W Canyon Ridge Dr L400, Austin, TX 78753, USA",(512) 296-2538,http://www.eatonetaco.com/,4.4,377,0.43,Tesla Supercharger,320
+7,AGS Spice Indian Cuisine,"500 W Canyon Ridge Dr suite#L275, Austin, TX 78753, USA",(210) 912-7740,https://www.mymozoorder.com/food/2758,0,0,0.45,Tesla Supercharger,344
+8,Culinary Dropout,"11721 Rock Rose Ave #100, Austin, TX 78758, USA",(512) 777-3394,https://www.culinarydropout.com/locations/austin-tx/?utm_source=Google&utm_medium=Organic&utm_campaign=Maps,4.4,5973,4.75,Tesla Supercharger,327
+9,Jeni's Splendid Ice Creams,"11601 Rock Rose Ave #110, Austin, TX 78758, USA",(737) 209-0336,https://jenis.com/scoop-shops/jenis-the-domain/,4.5,725,4.84,Tesla Supercharger,241
+10,Houndstooth Coffee,"11501 Rock Rose Ave #118, Austin, TX 78758, USA",(512) 243-7963,http://houndstoothcoffee.com/?utm_source=google&utm_medium=organic&utm_campaign=googlebusiness,4.2,576,4.88,Tesla Supercharger,279
+11,Haywire,"11501 Rock Rose Ave #100, Austin, TX 78758, USA",(512) 381-8880,https://www.haywirerestaurant.com/,4.5,498,4.89,Tesla Supercharger,293
+12,JINYA Ramen Bar - Austin,"3210 Esperanza Crossing Suite 130, Austin, TX 78758, USA",(512) 829-7779,https://www.jinyaramenbar.com/locations/austin/?utm_medium=soci&utm_source=gmb,4.3,2908,4.93,Tesla Supercharger,282
+13,Loro Asian Smokehouse & Bar,"11601 Domain Dr #200, Austin, TX 78758, USA",(512) 379-0027,http://www.loroeats.com/,4.2,395,4.96,Tesla Supercharger,117
+14,Fleming’s Prime Steakhouse & Wine Bar,"11600 Century Oaks Terrace Suite 140, Austin, TX 78758, USA",(512) 835-9463,https://www.flemingssteakhouse.com/Locations/TX/Austin-The-Domain?y_source=1_MTU1MDMxNDQtNzE1LWxvY2F0aW9uLndlYnNpdGU%3D,4.5,1589,5.14,Tesla Supercharger,111
+15,Capitol City Comedy Club,"Bldg B, 11506 Century Oaks Terrace Unit 100, Austin, TX 78758, USA",(512) 467-2333,http://www.capcitycomedy.com/,4.4,2400,5.16,Tesla Supercharger,98
+16,North Italia,"11506 Century Oaks Terrace Suite 124, Austin, TX 78758, USA",(512) 339-4400,https://www.northitalia.com/locations/austin-tx-the-domain/,4.3,2919,5.18,Tesla Supercharger,123
+17,Gloria's Latin Cuisine,"3309 Esperanza Crossing Suite #100 Suite 100, Austin, TX 78758, USA",(512) 833-6400,https://gloriascuisine.com/locations/austin-domain.html?utm_source=google&utm_medium=Yext&y_source=1_MjA1ODAzNTQtNzE1LWxvY2F0aW9uLndlYnNpdGU%3D,4.5,4238,5.19,Tesla Supercharger,293
+18,Sweet Paris Crêperie & Cafe,"11410 Century Oaks Terrace #112, Austin, TX 78758, USA",(512) 551-3979,http://www.sweetparis.com/,4.4,1340,5.23,Tesla Supercharger,181
+19,Plank Provisions,"11410 Century Oaks Terrace #136, Austin, TX 78758, USA",(737) 234-1122,https://plankprovisions.com/,4.4,1119,5.26,Tesla Supercharger,258
+20,Sixty Vines,"3401 Esperanza Crossing, Austin, TX 78758, USA",(512) 381-6514,https://sixtyvines.com/,4.6,787,5.30,Tesla Supercharger,331
+21,Zalat Pizza,"10515 N Mopac Expy STE 310, Austin, TX 78759, USA",(512) 729-0420,https://zalatpizza.com/,4.8,339,5.85,Tesla Supercharger,206
+22,Purple Rice Korean Grab & Go,"10515 N Mopac Expy A-135, Austin, TX 78759, USA",(512) 820-5860,https://www.purple-rice.com/,4.9,130,6.00,Tesla Supercharger,134
+23,EJ's Hot Pot & Sushi,"10515 N Mopac Expy A 150, Austin, TX 78759, USA",(512) 291-2560,,0,0,6.02,Tesla Supercharger,157
+24,Masala Wok Indian + Asian Fare,"10515 N Mopac Expy Suite A - 155, Austin, TX 78759, USA",(512) 296-2977,https://www.masalawok.com/,4.1,1151,6.04,Tesla Supercharger,175
+25,Mighty Fine Burgers Arbor Walk,"10515 N Mopac Expy Unit 205, Austin, TX 78759, USA",(512) 524-2400,https://www.mightyfineburgers.com/,4.5,2348,6.05,Tesla Supercharger,77
+26,Bella Vita Ice Cream,"10515 N Mopac Expy Suite B215, Austin, TX 78759, USA",(917) 943-1753,https://www.bellavitaicecream.com/,4.9,423,6.06,Tesla Supercharger,97
+27,Southside Market & BBQ - Austin at Arbor Walk,"10515 N Mopac Expy Suite B-225, Austin, TX 78759, USA",(512) 838-3600,https://www.southsidemarket.com/,4.1,599,6.08,Tesla Supercharger,113
+28,Lupe Tortilla Mexican Restaurant,"10515 N Mopac Expy Bldg R, Austin, TX 78759, USA",(512) 582-2201,https://tex-mex.com/austin-arborwalk/,4.3,3618,6.20,Tesla Supercharger,392
+29,Baby Acapulco Restaurant,"9505-B Stonelake Blvd, Austin, TX 78759, USA",(512) 795-9000,http://www.babyacapulco.com/,4,1799,6.55,Tesla Supercharger,338
+30,Kikka Sushi,"9607 Research Blvd #300, Austin, TX 78759, USA",(512) 345-5003,,4,1,6.85,Tesla Supercharger,183
+31,Market Sandwich,"9607 Research Blvd #300, Austin, TX 78759, USA",(512) 345-5003,https://www.wholefoodsmarket.com/eateries/market-sandwich-menu?utm_source=google&utm_medium=organic&utm_campaign=listings,0,0,6.85,Tesla Supercharger,183
+32,Steam & Squeeze,"9607 Research Blvd #300, Austin, TX 78759, USA",(512) 345-5003,http://www.wholefoodsmarket.com/stores/beecave?utm_source=google&utm_medium=organic&utm_campaign=listings,4.1,63,6.86,Tesla Supercharger,187
+33,IchiUmi Sushi (Haru Sushi),"9503 Research Blvd #500, Austin, TX 78759, USA",(512) 795-8666,http://ichiumisushitx.com/,4.5,2339,6.94,Tesla Supercharger,344
+34,Truluck's Ocean's Finest Seafood and Crab,"10225 Research Blvd Suite 4000, Austin, TX 78759, USA",(512) 794-8300,https://trulucks.com/locations/arboretum-austin-texas,4.7,1429,7.09,EVgo Charging Station,209
+35,Snap Kitchen - Arboretum,"10001 Research Blvd Ste 190, Austin, TX 78759, USA",(512) 387-8816,http://snapkitchen.com/,4.3,174,7.10,EVgo Charging Station,122
+36,Estância Brazilian Steakhouse - Austin,"10000 Research Blvd Suite B, Austin, TX 78759, USA",(512) 345-5600,http://estancia.com/,4.8,10593,7.32,EVgo Charging Station,181
+37,Barnes & Noble,"10000 Research Blvd #158, Austin, TX 78759, USA",(512) 418-8985,https://stores.barnesandnoble.com/store/2536,4.6,2261,7.35,EVgo Charging Station,295
+38,Juliet Italian Kitchen,"10000 Research Blvd Building C, Austin, TX 78759, USA",(512) 666-3067,https://www.juliet-austin.com/,4.1,845,7.38,EVgo Charging Station,237
+39,Honest Mary's,"9828 Great Hills Trl Suite 300, Austin, TX 78759, USA",(737) 300-9771,https://www.honestmarys.com/,4.5,1035,7.39,EVgo Charging Station,323
+40,Amy's Ice Creams,"10000 Research Blvd #140, Austin, TX 78759, USA",(512) 345-1006,,4.4,1056,7.46,EVgo Charging Station,382
+41,Teapioca Lounge,"10000 Research Blvd Suite #137, Austin, TX 78759, USA",(512) 838-3656,https://www.teapiocalounge.com/teapioca-arboretum-austin-boba-tea/,4.3,449,7.48,EVgo Charging Station,398
+42,Eskimo Hut - Frozen Daiquiris To-Go,"1045 Norwood Park Blvd #105, Austin, TX 78753, USA",(512) 333-4647,http://eskimohut.com/,4.6,807,7.49,EVgo Charging Station,268
+43,The Meltdown,"7100 N Interstate Hwy 35, Austin, TX 78752, USA",(512) 453-3617,https://themeltdown.com/?utm_source=G&utm_medium=organic&utm_campaign=DAC,3.4,51,8.44,Tesla Supercharger,373
+44,"DAM-A, Hot Pot & BBQ AYCE - Austin Hotpot","713 E Huntland Dr, Austin, TX 78752, USA",(512) 419-1400,https://www.damaaustintx.com/,4.6,321,8.76,Tesla Supercharger,78
+45,Sushi Japon & Hibachi Grill,"6801 N Interstate Hwy 35, Austin, TX 78752, USA",(512) 323-6663,https://www.sushijaponaustin.com/,4.2,1456,8.81,Tesla Supercharger,144
+46,Go go wok,"6718 Middle Fiskville Rd Suite A, Austin, TX 78752, USA",(737) 837-2329,,0,0,8.83,Tesla Supercharger,52
+47,Shanghai Chinese Restaurant,"6718 Middle Fiskville Rd, Austin, TX 78752, USA",(512) 458-8088,https://www.dimsumshanghai.com/,3.9,911,8.83,Tesla Supercharger,50
+48,Taqueria Los Altos,"6700 Middle Fiskville Rd STE 404-405, Austin, TX 78752, USA",(512) 236-1219,http://taquerialosatlosjalisco.com/,4.4,813,8.86,Tesla Supercharger,102
+49,Bombay to Kathmandu Indian and Nepali Cuisine,"6700 Middle Fiskville Rd Suits 406, Austin, TX 78752, USA",(512) 344-9679,https://www.bombaytokathmandukitchen.com/,4.2,745,8.90,Tesla Supercharger,128
+50,It's Just Wings,"6619 N Interstate Hwy 35, Austin, TX 78752, USA",(469) 480-1050,https://locations.itsjustwings.com/tx/austin/i-35-n-its-just-wings?utm_source=google&utm_medium=local&utm_campaign=IJW,3.6,9,8.91,Tesla Supercharger,206
+51,Seareinas,"6607 N Interstate Hwy 35, Austin, TX 78752, USA",(737) 222-5390,https://seareinas.club/,3.9,1177,8.91,Tesla Supercharger,274
+52,Easy Tiger - The Linc,"6406 N Interstate 35 Frontage Rd #1100, Austin, TX 78752, USA",(512) 494-4151,https://www.easytigerusa.com/location/north/,4.4,2052,9.05,Tesla Supercharger,239
+53,Texture,"6505 N Interstate Hwy 35, Austin, TX 78752, USA",(512) 454-3737,,4.1,48,9.06,Tesla Supercharger,350
+54,Kan Sushi,"6406 N Interstate 35 Frontage Rd, Austin, TX 78752, USA",(210) 418-2783,https://kan-sushi.com/,4.2,366,9.16,Tesla Supercharger,346
+55,Gen Korean BBQ House,"6406 N Interstate 35 Frontage Rd, Austin, TX 78752, USA",(210) 418-2664,https://www.genkoreanbbq.com/,3.8,102,9.16,Tesla Supercharger,347
+56,Lima Criolla Peruvian Restaurant,"6406 N Interstate 35 Frontage Rd, Austin, TX 78752, USA",(512) 323-5404,https://limacriolla.com/?utm_source=google,4.3,1889,9.16,Tesla Supercharger,346
+57,Market at Round Rock,"110 N Interstate Hwy 35, Round Rock, TX 78681, USA",(713) 599-3500,https://www.regencycenters.com/property/detail/615/Market-at-Round-Rock,4.4,2562,11.80,Tesla Supercharger,182
+58,Sichuan Garden,"110 N Interstate Hwy 35 #240, Round Rock, TX 78681, USA",(512) 255-6952,https://www.sichuangardenroundrock.com/,4.1,378,11.84,Tesla Supercharger,140
+59,Lammes Candies Round Rock,"110 N Interstate Hwy 35 #150, Round Rock, TX 78681, USA",(512) 872-4820,http://www.lammes.com/,4.7,86,11.95,Tesla Supercharger,54
+60,Project Disco,"3421 N Interstate Hwy 35, Austin, TX 78722, USA",(512) 710-4635,,5,5,12.05,Electrify America Charging Station,277
+61,True Texas BBQ,"1000 E 41st St, Austin, TX 78751, USA",(737) 443-8100,https://www.truetxbbq.com/?utm_source=google&utm_medium=organic&utm_campaign=gmb_restaurant&utm_content=425TT,4.8,188,12.30,Electrify America Charging Station,243
+62,Hancock Center,"1000 E 41st St, Austin, TX 78751, USA",(713) 599-3500,https://www.regencycenters.com/property/detail/665/Hancock-Center,4.4,6081,12.34,Electrify America Charging Station,193
+63,Lutie's,"Located at Commodore Perry Estate, Auberge Collection, 4100 Red River St, Austin, TX 78751, USA",(512) 675-2517,https://auberge.com/commodore-perry/dine/luties/?utm_source=gmb&utm_medium=Yext,4.4,445,12.37,Electrify America Charging Station,54
+64,Wingzup,"1000 E 41st St Ste 210, Austin, TX 78751, USA",(512) 323-2587,http://wingzup.com/,4.4,1533,12.38,Electrify America Charging Station,78
+65,Kismet Cafe,"1000 E 41st St Suite 200, Austin, TX 78751, USA",(512) 236-1811,http://kismetcafe.com/,4.3,1340,12.39,Electrify America Charging Station,91
+66,Menchie's Frozen Yogurt,"1000 E 41st St #255, Austin, TX 78751, USA",(512) 614-4221,https://www.menchies.com/locations/frozen-yogurt-hancock-center-tx,3.9,155,12.41,Electrify America Charging Station,115
+67,Chicken Salad Chick,"1000 E 41st St Suite 200, Austin, TX 78751, USA",(512) 851-8343,https://www.chickensaladchick.com/locations/tx/austin/1000-east-41st-street/,4.5,29,12.42,Electrify America Charging Station,108
+68,Red Horn Coffee House and Brewing Co.,"13010 W Parmer Ln #800, Cedar Park, TX 78613, USA",(512) 986-7038,http://www.redhornbrew.com/,4.7,2088,17.92,Tesla Supercharger,353
+69,Firewater Sports Bar Cafe,"13010 W Parmer Ln STE 300, Cedar Park, TX 78613, USA",(512) 986-7843,https://firewaterbarandkitchen.com/?utm_source=google,4.1,292,17.93,Tesla Supercharger,308
+70,Fajita Pete's - Cedar Park,"2800 E Whitestone Blvd Suite 130, Cedar Park, TX 78613, USA",(737) 337-8376,https://512fajitas.com/,3.9,73,18.00,Tesla Supercharger,125
+71,Desi Circle,"3101 E Whitestone Blvd Building F, Suite#200, Cedar Park, TX 78613, USA",(737) 757-1054,https://desicircleusa.com/,4.3,721,18.23,Tesla Supercharger,332
+72,Dog Haus Biergarten,"3101 E Whitestone Blvd Building G, Suite 200, Cedar Park, TX 78613, USA",(512) 456-7124,https://cedarpark.doghaus.com/,4.2,368,18.28,Tesla Supercharger,376
+73,"The Great Greek Mediterranean Grill - Cedar Park, TX","3101 E Whitestone Blvd Suite G100, Cedar Park, TX 78613, USA",(512) 528-5600,https://www.thegreatgreekgrill.com/cedar-park-tx,4.4,631,18.28,Tesla Supercharger,348
+74,The Continental Club,"1315 S Congress Ave, Austin, TX 78704, USA",(512) 441-2444,https://continentalclub.com/,4.7,2233,18.48,Tesla Supercharger,380
+75,White Tiger,"1321 S Congress Ave, Austin, TX 78704, USA",(737) 268-8286,,4.4,294,18.50,Tesla Supercharger,359
+76,Perla's,"1400 S Congress Ave, Austin, TX 78704, USA",(512) 291-7300,http://perlasaustin.com/,4.5,2862,18.58,Tesla Supercharger,309
+77,La La Land,"1400 S Congress Ave Ste A102, Austin, TX 78704, USA",(512) 284-7939,https://lalalandkindcafe.com/pages/s-congress-austin,4.2,280,18.60,Tesla Supercharger,278
+78,Gelato Paradiso,"1400 S Congress Ave Suite B160, Austin, TX 78704, USA",(512) 580-0094,https://gelatoparadiso.com/location-austin/,4.8,500,18.60,Tesla Supercharger,288
+79,Güero's Taco Bar,"1412 S Congress Ave, Austin, TX 78704, USA",(512) 447-7688,http://www.guerostacobar.com/,4.3,5183,18.67,Tesla Supercharger,220
+80,Mañana,"1603 S Congress Ave, Austin, TX 78704, USA",(512) 872-3144,https://mananaaustin.com/,4.4,729,18.84,Tesla Supercharger,23
+81,South Congress Hotel,"1603 S Congress Ave, Austin, TX 78704, USA",(512) 920-6405,http://southcongresshotel.com/?utm_source=google-gbp&utm_medium=organic&utm_campaign=gbp,4.4,1135,18.86,Tesla Supercharger,35
+82,Vespaio Restaurant,"1610 S Congress Ave S, Austin, TX 78704, USA",(512) 441-6100,http://vespaioristorante.com/,4.5,2051,18.86,Tesla Supercharger,73
+83,Café No Sé,"1603 S Congress Ave, Austin, TX 78704, USA",(512) 942-2061,https://cafenoseaustin.com/,4.5,1474,18.88,Tesla Supercharger,41
+84,Chapulín Cantina,"1610 S Congress Ave, Austin, TX 78704, USA",(512) 441-7672,http://chapulincantina.com/,4.5,433,18.88,Tesla Supercharger,82
+85,Big Top Candy Shop,"1706 S Congress Ave, Austin, TX 78704, USA",(512) 462-2220,https://www.bigtopcandyshop.com/,4.6,1215,18.93,Tesla Supercharger,105
+86,Neighborhood Sushi,"1716 S Congress Ave, Austin, TX 78704, USA",(512) 580-1390,http://neighborhoodsushi.com/,4.5,657,18.97,Tesla Supercharger,132
+87,June's,"1722 S Congress Ave, Austin, TX 78704, USA",(512) 416-1722,http://junesallday.com/,4.5,1254,18.99,Tesla Supercharger,152
+88,The Grove Wine Bar & Kitchen - Cedar Park,"1310 E Whitestone Blvd #530 #500, Cedar Park, TX 78613, USA",(512) 986-7041,https://www.grovewinebar.com/cedar-park/,4.4,2088,19.18,Tesla Destination Charger,325
+89,Happy Lemon - Boba Tea & Lemonades,"1310 E Whitestone Blvd #530, Cedar Park, TX 78613, USA",(512) 528-5090,http://happylemoncedarpark.com/,4.6,266,19.21,Tesla Destination Charger,305
+90,The Salty Donut,"2000 S Congress Ave, Austin, TX 78704, USA",(512) 494-4148,https://www.saltydonut.com/,4.6,1096,19.24,Tesla Supercharger,391
+91,Amy's Ice Creams,"1335 E Whitestone Blvd Suite 200, Cedar Park, TX 78613, USA",(512) 986-7682,https://www.amysicecreams.com/,4.3,138,19.42,Tesla Destination Charger,304
+92,Via 313 Pizza,"1335 E Whitestone Blvd Ste 200, Cedar Park, TX 78613, USA",(512) 817-3133,https://locations.via313.com/locations/1335-e-whitestone-blvd/,4.4,760,19.47,Tesla Destination Charger,330
+93,Mighty Fine Burgers Cedar Park,"1890 Ranch, Building AC, 1335 E Whitestone Blvd Suite 100, Cedar Park, TX 78613, USA",(512) 528-5421,https://www.mightyfineburgers.com/,4.4,2131,19.49,Tesla Destination Charger,343
+94,Tumble 22 - Texas Chicken Joint,"4501 183A Toll Rd, Cedar Park, TX 78613, USA",(512) 433-6006,http://tumble22.com/,4.3,1898,19.50,Tesla Destination Charger,165
+95,Lupe Tortilla Mexican Restaurant,"4501 183A Toll Rd Ste B, Cedar Park, TX 78613, USA",(512) 582-2210,https://tex-mex.com/austin-cedarpark/,4.2,3619,19.56,Tesla Destination Charger,210
+96,Blue Corn Harvest Bar & Grill Cedar Park,"700 E Whitestone Blvd #204, Cedar Park, TX 78613, USA",(512) 528-0889,http://www.bluecornharvest.com/,4.5,3452,19.59,Tesla Supercharger,394
+97,Menchie's Frozen Yogurt,"909 E Whitestone Blvd, Cedar Park, TX 78613, USA",(512) 986-7086,https://www.menchies.com/locations/frozen-yogurt-cedar-park-town-center-tx,4.2,156,19.61,Tesla Destination Charger,209
+98,Sushi Fever,"905 E Whitestone Blvd, Cedar Park, TX 78613, USA",(512) 259-1010,http://www.sushifevertx.com/,4.6,1167,19.68,Tesla Destination Charger,284
+99,Kung Fu Tea,"905 E Whitestone Blvd, Cedar Park, TX 78613, USA",(512) 986-7270,https://www.kungfutea.com/,4.4,357,19.70,Tesla Destination Charger,303
+100,Simply Pho House,"905 E Whitestone Blvd a, Cedar Park, TX 78613, USA",(512) 528-5059,https://simplyphohouse.com/,4.6,119,19.70,Tesla Supercharger,118
+101,Tiff's Treats Cookie Delivery,"4701 183A Toll Rd Ste. B200, Cedar Park, TX 78613, USA",(512) 975-7170,https://www.cookiedelivery.com/,4.5,184,19.85,Tesla Supercharger,399
+102,Spare Birdie,"1400 Discovery Blvd, Cedar Park, TX 78613, USA",(737) 587-3330,https://www.sparebirdie.com/,4.4,1159,20.01,Tesla Supercharger,370

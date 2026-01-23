@@ -165,3 +165,4 @@ Once the service is running:
 - ✅ `/tmp/secrets.sh` - Generated secrets (JWT_SECRET, TOKEN_ENCRYPTION_KEY)
 
 
+

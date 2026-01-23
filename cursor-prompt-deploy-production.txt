@@ -1,0 +1,154 @@
+## Task: Deploy Nerava Frontend and Backend to Production
+
+### Current Status
+- Code committed and pushed to `main` branch
+- Local build succeeded
+- S3 bucket `nerava-network-driver` doesn't exist
+- Need to set up infrastructure and deploy
+
+---
+
+## Part 1: Backend Deployment (AWS App Runner)
+
+The backend is deployed via AWS App Runner. To update:
+
+```bash
+# Navigate to backend directory
+cd /Users/jameskirk/Desktop/Nerava/nerava-backend-v9\ 2
+
+# Build and push Docker image to ECR
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 339712971032.dkr.ecr.us-east-1.amazonaws.com
+
+docker build --platform linux/amd64 -t nerava-backend .
+docker tag nerava-backend:latest 339712971032.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:latest
+docker push 339712971032.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:latest
+
+# Trigger App Runner deployment
+aws apprunner start-deployment --service-arn arn:aws:apprunner:us-east-1:339712971032:service/nerava-backend/YOUR_SERVICE_ID --region us-east-1
+```
+
+To find the App Runner service ARN:
+```bash
+aws apprunner list-services --region us-east-1
+```
+
+---
+
+## Part 2: Frontend Deployment (S3 + CloudFront)
+
+### Option A: Create Infrastructure First (if bucket doesn't exist)
+
+```bash
+cd /Users/jameskirk/Desktop/Nerava/nerava-app-driver
+
+# Deploy CloudFormation stack
+aws cloudformation create-stack \
+  --stack-name nerava-driver-app \
+  --template-body file://infrastructure/cloudformation.yml \
+  --region us-east-1
+
+# Wait for stack creation
+aws cloudformation wait stack-create-complete --stack-name nerava-driver-app --region us-east-1
+
+# Get outputs (bucket name and CloudFront distribution ID)
+aws cloudformation describe-stacks \
+  --stack-name nerava-driver-app \
+  --query 'Stacks[0].Outputs' \
+  --region us-east-1
+```
+
+### Option B: Manual S3 Bucket Creation
+
+```bash
+# Create bucket
+aws s3 mb s3://nerava-network-driver --region us-east-1
+
+# Enable static website hosting
+aws s3 website s3://nerava-network-driver --index-document index.html --error-document index.html
+```
+
+### Deploy Frontend to S3
+
+```bash
+cd /Users/jameskirk/Desktop/Nerava/nerava-app-driver
+
+# Install and build
+npm ci
+npm run build
+
+# Sync to S3
+aws s3 sync dist/ s3://nerava-network-driver --delete
+
+# If CloudFront exists, invalidate cache
+aws cloudfront create-invalidation \
+  --distribution-id YOUR_DISTRIBUTION_ID \
+  --paths "/*"
+```
+
+---
+
+## Part 3: GitHub Actions Setup (Automated Deployments)
+
+Add these secrets to GitHub repository settings:
+
+| Secret Name | Value |
+|-------------|-------|
+| `AWS_ACCESS_KEY_ID` | Your AWS access key |
+| `AWS_SECRET_ACCESS_KEY` | Your AWS secret key |
+| `AWS_S3_BUCKET_DRIVER` | `nerava-network-driver` (or from CloudFormation output) |
+| `AWS_CLOUDFRONT_DISTRIBUTION_ID_DRIVER` | From CloudFormation output |
+
+---
+
+## Part 4: Verification Commands
+
+```bash
+# Check App Runner service status
+aws apprunner describe-service --service-arn YOUR_SERVICE_ARN --region us-east-1
+
+# Check S3 bucket contents
+aws s3 ls s3://nerava-network-driver
+
+# Check CloudFront distribution status
+aws cloudfront get-distribution --id YOUR_DISTRIBUTION_ID
+
+# Test backend health
+curl https://api.nerava.network/health
+
+# Test frontend (after CloudFront propagation)
+curl -I https://app.nerava.network
+```
+
+---
+
+## Quick Deploy Script (after infrastructure exists)
+
+Create and run this script:
+
+```bash
+#!/bin/bash
+set -e
+
+echo "=== Deploying Nerava Backend ==="
+cd /Users/jameskirk/Desktop/Nerava/nerava-backend-v9\ 2
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 339712971032.dkr.ecr.us-east-1.amazonaws.com
+docker build --platform linux/amd64 -t nerava-backend .
+docker tag nerava-backend:latest 339712971032.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:latest
+docker push 339712971032.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:latest
+
+echo "=== Deploying Nerava Driver App ==="
+cd /Users/jameskirk/Desktop/Nerava/nerava-app-driver
+npm ci
+npm run build
+aws s3 sync dist/ s3://nerava-network-driver --delete
+
+echo "=== Done ==="
+```
+
+---
+
+## Files Reference
+- Backend Dockerfile: `/Users/jameskirk/Desktop/Nerava/nerava-backend-v9 2/Dockerfile`
+- Frontend build output: `/Users/jameskirk/Desktop/Nerava/nerava-app-driver/dist/`
+- CloudFormation template: `/Users/jameskirk/Desktop/Nerava/nerava-app-driver/infrastructure/cloudformation.yml`
+- GitHub Actions workflow: `/Users/jameskirk/Desktop/Nerava/nerava-app-driver/.github/workflows/deploy-driver-app.yml`

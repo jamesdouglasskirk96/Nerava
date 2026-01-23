@@ -79,3 +79,4 @@ App Runner might not be forwarding logs if observability configuration is missin
    - Observability configuration missing
    - CloudWatch log group permissions incorrect
 
+

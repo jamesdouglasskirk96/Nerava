@@ -904,6 +904,32 @@ export async function apiNovaMerchantsNearby({ lat, lng, radiusM = 2000 }) {
 }
 
 /**
+ * Get charger discovery data with nearby merchants
+ */
+export async function apiChargerDiscovery({ lat, lng, search = null }) {
+  try {
+    const params = new URLSearchParams({
+      lat: String(lat),
+      lng: String(lng),
+    });
+    
+    if (search && search.trim()) {
+      params.append('search', search.trim());
+    }
+
+    const url = `/v1/chargers/discovery?${params.toString()}`;
+    console.log('[API] Fetching charger discovery:', url);
+
+    const res = await _req(url);
+    console.log('[API] Charger discovery response:', res?.chargers?.length || 0, 'chargers');
+    return res || { chargers: [], within_radius: false, nearest_charger_id: null, nearest_distance_m: Infinity, radius_m: 400 };
+  } catch (e) {
+    console.error('[API] Failed to get charger discovery:', e.message);
+    return { chargers: [], within_radius: false, nearest_charger_id: null, nearest_distance_m: Infinity, radius_m: 400 };
+  }
+}
+
+/**
  * Track analytics event
  */
 export async function trackEvent(event, meta = {}) {

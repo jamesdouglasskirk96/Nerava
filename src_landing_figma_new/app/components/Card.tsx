@@ -1,0 +1,12 @@
+interface CardProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
+export function Card({ children, className = '' }: CardProps) {
+  return (
+    <div className={`p-6 bg-white border border-border rounded-lg ${className}`}>
+      {children}
+    </div>
+  );
+}

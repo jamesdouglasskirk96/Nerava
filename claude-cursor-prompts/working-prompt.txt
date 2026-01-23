@@ -1,0 +1,219 @@
+# Deployment Fix & Merchant Details Testing
+
+## Current Issues
+
+### 1. App Runner Deployment Rolling Back
+The backend deployments keep rolling back to `v19-photo-fix`. The magic link code (`v20-magic-link`, `v21-magic-debug`) is not being deployed.
+
+**Possible causes:**
+- Health check failing during deployment
+- Container startup timeout
+- Import error only occurring in container (not locally)
+
+### 2. Magic Link Import Test (PASSED locally)
+```bash
+cd "/Users/jameskirk/Desktop/Nerava/nerava-backend-v9 2"
+python3 -c "from app.routers import magic_link; print('Import OK:', magic_link.router)"
+# Output: Import OK: <fastapi.routing.APIRouter object at 0x...>
+```
+
+---
+
+## Part 1: Debug Deployment Locally with Docker
+
+**File:** Test locally before deploying
+
+```bash
+cd "/Users/jameskirk/Desktop/Nerava/nerava-backend-v9 2"
+
+# Build locally
+docker build --platform linux/arm64 -t nerava-backend-test .
+
+# Run locally to check startup
+docker run --rm -p 8000:8000 \
+  -e DATABASE_URL="postgresql+psycopg2://test:test@host.docker.internal:5432/test" \
+  -e JWT_SECRET="test-secret-key-12345" \
+  -e ENV="dev" \
+  -e SKIP_STARTUP_VALIDATION="true" \
+  nerava-backend-test
+
+# Check if it starts and responds
+curl http://localhost:8000/health
+```
+
+---
+
+## Part 2: Fix Potential Container Issues
+
+**File:** `/Users/jameskirk/Desktop/Nerava/nerava-backend-v9 2/app/main_simple.py`
+
+The magic_link import is already wrapped in try-except, but let's add more verbose logging:
+
+```python
+# Magic link router for SMS authentication
+try:
+    print("[STARTUP] Attempting to import magic_link router...", flush=True)
+    from .routers import magic_link
+    app.include_router(magic_link.router)  # /v1/magic/*
+    print("[STARTUP] Magic link router loaded successfully", flush=True)
+    logger.info("Magic link router loaded successfully")
+except Exception as e:
+    print(f"[STARTUP ERROR] Failed to load magic_link router: {e}", flush=True)
+    logger.error(f"Failed to load magic_link router: {e}")
+    import traceback
+    traceback.print_exc()
+```
+
+---
+
+## Part 3: Check Health Check Endpoint
+
+**File:** Verify `/health` and `/healthz` endpoints respond correctly
+
+The health check might be timing out. Check App Runner health check configuration:
+
+```bash
+aws apprunner describe-service \
+  --service-arn "arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3" \
+  --query 'Service.HealthCheckConfiguration'
+```
+
+---
+
+## Part 4: Run Migration for Merchant Details
+
+After debugging deployment, run the migration:
+
+```bash
+cd "/Users/jameskirk/Desktop/Nerava/nerava-backend-v9 2"
+
+# Set DATABASE_URL for production
+export DATABASE_URL="postgresql+psycopg2://nerava_admin:YJEDUbHGFIZBo6D5JiDPTbb4ZbmbE4ae@nerava-db.c27i820wot9o.us-east-1.rds.amazonaws.com:5432/nerava"
+
+# Run migration
+alembic upgrade head
+
+# Seed Asadas Grill with full details
+python scripts/seed_asadas_grill.py
+```
+
+---
+
+## Part 5: Rebuild and Deploy Backend
+
+```bash
+cd "/Users/jameskirk/Desktop/Nerava/nerava-backend-v9 2"
+
+# Login to ECR
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 566287346479.dkr.ecr.us-east-1.amazonaws.com
+
+# Build with no cache to ensure fresh
+docker build --platform linux/arm64 --no-cache -t 566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:v22-merchant-details .
+
+# Push
+docker push 566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:v22-merchant-details
+
+# Update App Runner
+aws apprunner update-service \
+  --service-arn "arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3" \
+  --source-configuration '{"ImageRepository":{"ImageIdentifier":"566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:v22-merchant-details","ImageRepositoryType":"ECR"}}'
+
+# Monitor deployment
+watch -n 10 'aws apprunner describe-service --service-arn "arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3" --query "Service.Status" --output text'
+```
+
+---
+
+## Part 6: Deploy Frontend
+
+```bash
+cd "/Users/jameskirk/Desktop/Nerava/nerava-app-driver"
+
+# Build
+npm run build
+
+# Deploy to S3
+aws s3 sync dist/ s3://app.nerava.network/ --delete
+
+# Invalidate CloudFront cache
+aws cloudfront create-invalidation --distribution-id E2UEQFQ3RSEEAR --paths "/*"
+```
+
+---
+
+## Part 7: Test Merchant Details
+
+After deployment, test Asadas Grill:
+
+1. Open https://app.nerava.network
+2. Navigate to Asadas Grill merchant details
+3. Verify all sections display:
+   - Hero image with walk time and exclusive badges
+   - Name: "Asadas Grill"
+   - Category: "Restaurant"
+   - **Exclusive Offer card** with options: "Soda, Coffee, or Margarita"
+   - **Distance**: "0.1 miles"
+   - **Hours Today**: "11 AM–11 PM · Open now"
+   - **Description**: "Laid-back option with a terrace..."
+   - Buttons: Get Directions, Activate Exclusive
+
+---
+
+## Part 8: Test Magic Link (after backend deploys)
+
+```bash
+# Test magic link generate endpoint
+curl -X POST https://api.nerava.network/v1/magic/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "phone": "+17133056318",
+    "exclusive_session_id": "demo_123",
+    "merchant_id": "ChIJKV41JMnORIYRu2cBs5CKtBc",
+    "charger_id": "tesla_market_heights"
+  }'
+```
+
+Expected response:
+```json
+{
+  "token": "abc123...",
+  "link": "https://app.nerava.network/magic?token=abc123...",
+  "expires_in_minutes": 30
+}
+```
+
+---
+
+## Summary Checklist
+
+- [ ] Test Docker build locally
+- [ ] Run migration (049_add_merchant_details_fields)
+- [ ] Run seed script (seed_asadas_grill.py)
+- [ ] Build and push Docker image v22-merchant-details
+- [ ] Update App Runner service
+- [ ] Wait for deployment (monitor for rollback)
+- [ ] Deploy frontend
+- [ ] Test merchant details page
+- [ ] Test magic link endpoint
+
+---
+
+## If Deployment Still Fails
+
+Check App Runner logs for startup errors:
+
+```bash
+# Get latest log stream
+STREAM=$(aws logs describe-log-streams \
+  --log-group-name "/aws/apprunner/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3/application" \
+  --order-by LastEventTime --descending --limit 1 \
+  --query 'logStreams[0].logStreamName' --output text)
+
+# Get startup logs
+aws logs get-log-events \
+  --log-group-name "/aws/apprunner/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3/application" \
+  --log-stream-name "$STREAM" \
+  --start-from-head \
+  --limit 100 \
+  --query 'events[*].message' --output text
+```
