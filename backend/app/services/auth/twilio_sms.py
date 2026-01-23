@@ -3,8 +3,10 @@ Twilio direct SMS OTP provider implementation (fallback)
 """
 import logging
 import secrets
+import asyncio
 from typing import Optional
 from twilio.rest import Client
+from twilio.http.http_client import TwilioHttpClient
 from twilio.base.exceptions import TwilioException
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
@@ -34,9 +36,18 @@ class TwilioSMSProvider(OTPProvider):
         if not settings.OTP_FROM_NUMBER:
             raise ValueError("OTP_FROM_NUMBER not configured for SMS provider")
         
-        self.client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+        # Create custom HTTP client with explicit timeout to prevent hanging
+        custom_http_client = TwilioHttpClient()
+        custom_http_client.timeout = settings.TWILIO_TIMEOUT_SECONDS
+        
+        self.client = Client(
+            settings.TWILIO_ACCOUNT_SID,
+            settings.TWILIO_AUTH_TOKEN,
+            http_client=custom_http_client
+        )
         self.from_number = settings.OTP_FROM_NUMBER
         self.db = db
+        self.timeout_seconds = settings.TWILIO_TIMEOUT_SECONDS
     
     def _generate_otp_code(self) -> str:
         """Generate a random 6-digit OTP code"""
@@ -75,18 +86,38 @@ class TwilioSMSProvider(OTPProvider):
         self.db.commit()
         
         # Send SMS
-        try:
-            message = self.client.messages.create(
+        from ...utils.phone import get_phone_last4
+        phone_last4 = get_phone_last4(phone)
+        
+        def _send_sms():
+            """Synchronous Twilio API call - runs in executor thread"""
+            return self.client.messages.create(
                 body=f"Your Nerava verification code is: {otp_code}",
                 from_=self.from_number,
                 to=phone
             )
+        
+        try:
+            # Run blocking Twilio call in executor to avoid blocking event loop
+            message = await asyncio.wait_for(
+                asyncio.to_thread(_send_sms),
+                timeout=self.timeout_seconds + 5  # Add buffer for executor overhead
+            )
             
-            logger.info(f"[OTP][TwilioSMS] SMS sent to {phone}, SID: {message.sid}")
+            logger.info(f"[OTP][TwilioSMS] SMS sent to {phone_last4}, SID: {message.sid}")
             return True
             
+        except asyncio.TimeoutError:
+            logger.error(f"[OTP][TwilioSMS] Timeout sending SMS to {phone_last4} (>{self.timeout_seconds}s)")
+            # Don't fail - OTP is stored, can be verified
+            return False
         except TwilioException as e:
-            logger.error(f"[OTP][TwilioSMS] Failed to send SMS to {phone}: {e}")
+            error_type = type(e).__name__
+            logger.error(f"[OTP][TwilioSMS] Twilio error sending SMS to {phone_last4}: {error_type}: {e}")
+            # Don't fail - OTP is stored, can be verified
+            return False
+        except Exception as e:
+            logger.error(f"[OTP][TwilioSMS] Unexpected error sending SMS to {phone_last4}: {type(e).__name__}: {e}", exc_info=True)
             # Don't fail - OTP is stored, can be verified
             return False
     

@@ -112,6 +112,7 @@ class Settings(BaseModel):
     OTP_FROM_NUMBER: str = os.getenv("OTP_FROM_NUMBER", "")
     OTP_PROVIDER: str = os.getenv("OTP_PROVIDER", "stub")  # twilio_verify, twilio_sms, stub
     OTP_DEV_ALLOWLIST: str = os.getenv("OTP_DEV_ALLOWLIST", "")  # Comma-separated phone numbers
+    TWILIO_TIMEOUT_SECONDS: int = int(os.getenv("TWILIO_TIMEOUT_SECONDS", "30"))  # Timeout for Twilio API calls
     
     # Refresh Token Configuration
     REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30"))
