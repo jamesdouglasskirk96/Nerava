@@ -17,8 +17,17 @@ A production-ready monorepo integrating landing page, driver app, merchant porta
 ├── packages/
 │   └── shared/           # Shared types, API client, UI primitives
 ├── e2e/                  # Playwright E2E tests
+├── docs/                 # Documentation (see docs/README.md)
 └── docker-compose.yml    # Local dev orchestration
 ```
+
+## Documentation
+
+See [docs/README.md](./docs/README.md) for full documentation including:
+- Deployment guides
+- Architecture documentation
+- API documentation
+- Security guidelines
 
 ## Quick Start
 
