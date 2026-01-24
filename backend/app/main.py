@@ -102,6 +102,8 @@ cors_origins = [
     "http://localhost:5173",
     "https://app.nerava.app",
     "https://www.nerava.app",
+    "https://app.nerava.network",
+    "https://www.nerava.network",
 ]
 
 # Add any additional origins from env if set
