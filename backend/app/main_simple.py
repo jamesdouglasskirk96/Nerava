@@ -120,6 +120,17 @@ from .core.startup_validation import (
 # CRITICAL: Make validations non-fatal to allow /healthz to serve even if validation fails
 # P0-4: Default STRICT_STARTUP_VALIDATION to true in prod, false in local
 # Note: is_local is already defined earlier (before Sentry initialization)
+#
+# IMPORTANT FOR APP RUNNER DEPLOYMENTS:
+# If containers fail to start with no logs, validation is likely failing with strict mode enabled.
+# Validation failures cause sys.exit(1) BEFORE uvicorn starts, so no HTTP server = no logs.
+# 
+# To debug:
+# 1. Set STRICT_STARTUP_VALIDATION=false temporarily to allow startup
+# 2. Check /tmp/startup_validation_error.log in container (if it exists)
+# 3. Check CloudWatch logs for "[STARTUP ERROR]" messages
+# 4. Verify all required env vars are set (REDIS_URL, TOKEN_ENCRYPTION_KEY, JWT_SECRET, etc.)
+#
 skip_validation = os.getenv("SKIP_STARTUP_VALIDATION", "false").lower() == "true"
 strict_validation_default = "true" if not is_local else "false"
 strict_validation = os.getenv("STRICT_STARTUP_VALIDATION", strict_validation_default).lower() == "true"
@@ -187,7 +198,23 @@ else:
         _startup_validation_failed = True
         _startup_validation_errors.append(error_msg)
         if strict_validation:
+            # Write error to file for debugging (App Runner might not capture stdout if exit is too fast)
+            try:
+                with open("/tmp/startup_validation_error.log", "w") as f:
+                    f.write(f"STARTUP VALIDATION FAILED\n")
+                    f.write(f"Error: {error_msg}\n")
+                    f.write(f"ENV={os.getenv('ENV', 'not set')}\n")
+                    f.write(f"STRICT_STARTUP_VALIDATION=true\n")
+                    f.write(f"All validation errors: {_startup_validation_errors}\n")
+                    import traceback
+                    f.write(f"\nTraceback:\n{traceback.format_exc()}\n")
+            except Exception as log_err:
+                print(f"[STARTUP] Failed to write error log: {log_err}", flush=True)
             print("[STARTUP] STRICT_STARTUP_VALIDATION enabled - exiting due to validation failure", flush=True)
+            print("[STARTUP] Error details written to /tmp/startup_validation_error.log", flush=True)
+            # Small delay to ensure logs are flushed
+            import time
+            time.sleep(1)
             sys.exit(1)
         else:
             print("[STARTUP] WARNING: Validation failed but continuing startup (STRICT_STARTUP_VALIDATION=false)", flush=True)
@@ -208,7 +235,23 @@ else:
         _startup_validation_failed = True
         _startup_validation_errors.append(error_msg)
         if strict_validation:
+            # Write error to file for debugging (App Runner might not capture stdout if exit is too fast)
+            try:
+                with open("/tmp/startup_validation_error.log", "w") as f:
+                    f.write(f"STARTUP VALIDATION FAILED\n")
+                    f.write(f"Error: {error_msg}\n")
+                    f.write(f"ENV={os.getenv('ENV', 'not set')}\n")
+                    f.write(f"STRICT_STARTUP_VALIDATION=true\n")
+                    f.write(f"All validation errors: {_startup_validation_errors}\n")
+                    import traceback
+                    f.write(f"\nTraceback:\n{traceback.format_exc()}\n")
+            except Exception as log_err:
+                print(f"[STARTUP] Failed to write error log: {log_err}", flush=True)
             print("[STARTUP] STRICT_STARTUP_VALIDATION enabled - exiting due to validation failure", flush=True)
+            print("[STARTUP] Error details written to /tmp/startup_validation_error.log", flush=True)
+            # Small delay to ensure logs are flushed
+            import time
+            time.sleep(1)
             sys.exit(1)
         else:
             print("[STARTUP] WARNING: Validation failed but continuing startup (STRICT_STARTUP_VALIDATION=false)", flush=True)
@@ -306,7 +349,7 @@ from .routers import debug_pool
 from .routers import discover_api, affiliate_api, insights_api
 from .routers import while_you_charge, pilot, pilot_debug, merchant_reports, merchant_balance, pilot_redeem, bootstrap, pilot_party
 from .routers import ev_smartcar, checkout, wallet_pass, demo_qr, demo_charging, demo_square, virtual_cards
-from .routers import intent, vehicle_onboarding, perks, merchant_onboarding, merchants, exclusive
+from .routers import intent, vehicle_onboarding, perks, merchant_onboarding, merchant_claim, merchants, exclusive
 from .services.nova_accrual import nova_accrual_service
 
 # Auth + JWT preferences
@@ -951,6 +994,7 @@ app.include_router(exclusive.router)  # /v1/exclusive/*
 app.include_router(vehicle_onboarding.router)
 app.include_router(perks.router)
 app.include_router(merchant_onboarding.router)
+app.include_router(merchant_claim.router)
 app.include_router(merchants.router)
 app.include_router(wallet.router)
 app.include_router(wallet_pass.router)
@@ -1109,12 +1153,24 @@ async def global_exception_handler(request: Request, exc: Exception):
         # Let Starlette's default handler deal with it - don't log or wrap
         raise exc
     
-    # Re-raise HTTPException to use existing handlers (before logging)
+    # Handle HTTPException with CORS headers (critical for browser requests)
     # Check both FastAPI and Starlette HTTPException
     from fastapi.exceptions import HTTPException as FastAPIHTTPException
     from starlette.exceptions import HTTPException as StarletteHTTPException
+    from fastapi.responses import JSONResponse
     if isinstance(exc, (FastAPIHTTPException, StarletteHTTPException)):
-        raise exc
+        # Return HTTPException as JSON with CORS headers to prevent CORS errors in browser
+        origin = request.headers.get("origin", "https://app.nerava.network")
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail if hasattr(exc, 'detail') else str(exc)},
+            headers={
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Api-Key",
+            }
+        )
     
     # Log unhandled exceptions (full traceback in logs)
     import traceback

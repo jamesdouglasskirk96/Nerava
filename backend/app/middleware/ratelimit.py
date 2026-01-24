@@ -88,8 +88,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     
     async def dispatch(self, request: Request, call_next):
         """Process request with rate limiting"""
-        client_id = self._get_client_id(request)
         path = request.url.path
+
+        # Skip rate limiting for health check endpoints and critical driver app endpoints
+        # Intent capture is critical for the driver app and should not be rate limited aggressively
+        if path in {"/healthz", "/health", "/readyz", "/livez", "/", "/v1/intent/capture", "/v1/drivers/location/check", "/v1/drivers/merchants/open"}:
+            return await call_next(request)
+
+        client_id = self._get_client_id(request)
         limit = self._get_limit_for_path(path)
         
         # P0-E: Try Redis-backed rate limiting first, fallback to in-memory
@@ -112,14 +118,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 # Rate limit exceeded - re-raise
                 raise
             except Exception as e:
-                # Redis error - fallback to in-memory
-                import os
-                env = os.getenv("ENV", "dev").lower()
-                is_local = env in {"local", "dev"}
-                if not is_local:
-                    # In non-local, fail fast if Redis is required
-                    raise RuntimeError(f"Redis rate limiting failed and not in local env: {e}")
-                # Fall through to in-memory fallback
+                # Redis error - gracefully fallback to in-memory
+                # Don't crash the app - rate limiting is not critical enough to fail requests
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Redis rate limiting failed, falling back to in-memory: {e}")
                 use_redis = False
         
         if not use_redis:
