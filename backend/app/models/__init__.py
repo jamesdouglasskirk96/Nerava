@@ -32,11 +32,14 @@ from .while_you_charge import (
     MerchantOfferCode,
     FavoriteMerchant,
     ChargerCluster,
+    AmenityVote,
 )
 from .intent import (
     IntentSession,
     PerkUnlock,
 )
+from .charge_intent import ChargeIntent
+from .user_reputation import UserReputation
 from .exclusive_session import (
     ExclusiveSession,
     ExclusiveSessionStatus,
@@ -60,6 +63,16 @@ from .merchant_account import (
     MerchantPlacementRule,
     MerchantPaymentMethod,
 )
+from .claim_session import ClaimSession
+from .verified_visit import VerifiedVisit
+from .user_consent import UserConsent
+from .arrival_session import ArrivalSession
+from .car_pin import CarPin
+from .merchant_notification_config import MerchantNotificationConfig
+from .merchant_pos_credentials import MerchantPOSCredentials
+from .billing_event import BillingEvent
+from .queued_order import QueuedOrder, QueuedOrderStatus
+from .virtual_key import VirtualKey
 from .extra import (
     CreditLedger,
     IncentiveRule,
@@ -125,9 +138,12 @@ __all__ = [
     "MerchantOfferCode",
     "FavoriteMerchant",
     "ChargerCluster",
+    "AmenityVote",
     # Intent models
     "IntentSession",
     "PerkUnlock",
+    "ChargeIntent",
+    "UserReputation",
     # Exclusive session models
     "ExclusiveSession",
     "ExclusiveSessionStatus",
@@ -144,6 +160,22 @@ __all__ = [
     "MerchantLocationClaim",
     "MerchantPlacementRule",
     "MerchantPaymentMethod",
+    # Claim session models
+    "ClaimSession",
+    # Verified visit models
+    "VerifiedVisit",
+    # User consent models
+    "UserConsent",
+    # EV Arrival models
+    "ArrivalSession",
+    "CarPin",
+    "MerchantNotificationConfig",
+    "MerchantPOSCredentials",
+    "BillingEvent",
+    "QueuedOrder",
+    "QueuedOrderStatus",
+    # Virtual Key models
+    "VirtualKey",
     # Extra models
     "CreditLedger",
     "IncentiveRule",

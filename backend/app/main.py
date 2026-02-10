@@ -104,6 +104,7 @@ cors_origins = [
     "https://www.nerava.app",
     "https://app.nerava.network",
     "https://www.nerava.network",
+    "https://merchant.nerava.network",
 ]
 
 # Add any additional origins from env if set
@@ -128,6 +129,11 @@ app.add_middleware(
 app.include_router(ops.router)
 app.include_router(flags.router)
 app.include_router(analytics.router)
+
+# Debug endpoints (only in non-production)
+if os.getenv("ENV", "dev") != "prod":
+    from .routers import analytics_debug
+    app.include_router(analytics_debug.router)
 
 # Health first
 app.include_router(health.router, prefix="/v1", tags=["health"])
@@ -172,7 +178,20 @@ from .routers import (
     notifications,
     account,
     bootstrap,
+    native_events,
 )
+from .routers import consent
+from .routers import merchant_funnel
+from .routers import merchant_claim
+from .routers import arrival
+from .routers import arrival_v2
+from .routers import charge_context
+from .routers import ev_context
+from .routers import virtual_key
+from .routers import mock_tesla
+from .routers import twilio_sms_webhook
+from .routers import merchant_arrivals
+from .routers import checkin
 
 # These are now the canonical /v1/* endpoints (no /domain/ prefix)
 app.include_router(auth_domain.router)  # /v1/auth/*
@@ -186,7 +205,20 @@ app.include_router(virtual_cards.router)  # /v1/virtual_cards/*
 app.include_router(client_telemetry.router)  # /v1/telemetry/*
 app.include_router(notifications.router)  # /v1/notifications/*
 app.include_router(account.router)  # /v1/account/*
+app.include_router(consent.router)  # /v1/consent/*
 app.include_router(bootstrap.router)  # /v1/bootstrap/*
+app.include_router(native_events.router)  # /v1/native/*
+app.include_router(merchant_funnel.router)  # /v1/merchant/funnel/*
+app.include_router(merchant_claim.router)  # /v1/merchant/claim/*
+app.include_router(arrival.router)  # /v1/arrival/* (legacy flow)
+app.include_router(arrival_v2.router)  # /v1/arrival/* (Phase 0 phone-first flow)
+app.include_router(charge_context.router)  # /v1/charge-context/*
+app.include_router(ev_context.router)  # /v1/ev-context/*
+app.include_router(virtual_key.router)  # /v1/virtual-key/*
+app.include_router(mock_tesla.router)  # /mock-tesla/* (dev/testing only)
+app.include_router(twilio_sms_webhook.router)  # /v1/webhooks/twilio-arrival-sms
+app.include_router(merchant_arrivals.router)  # /v1/merchants/{id}/arrivals + notification-config
+app.include_router(checkin.router)  # /v1/checkin/* (V0 EV Arrival Code flow)
 
 # Pilot party endpoints
 from .routers import pilot_party

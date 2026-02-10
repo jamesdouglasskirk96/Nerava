@@ -1,0 +1,114 @@
+/* Tesla browser optimized: dark theme, high contrast, large touch targets */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #000;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  min-height: 100vh;
+}
+
+.container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.logo {
+  width: 120px;
+  height: auto;
+  margin-bottom: 40px;
+}
+
+h1 {
+  font-size: 28px;
+  font-weight: 500;
+  margin-bottom: 40px;
+  color: #fff;
+}
+
+.pin-display {
+  font-size: 96px;
+  font-weight: 700;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
+  letter-spacing: 8px;
+  color: #00D4AA;
+  margin-bottom: 24px;
+  padding: 20px 40px;
+  background: rgba(0, 212, 170, 0.1);
+  border-radius: 16px;
+  border: 2px solid rgba(0, 212, 170, 0.3);
+}
+
+.expires {
+  font-size: 18px;
+  color: #888;
+  margin-bottom: 40px;
+}
+
+.refresh-button {
+  padding: 16px 40px;
+  font-size: 18px;
+  font-weight: 500;
+  background: #333;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.refresh-button:hover:not(:disabled) {
+  background: #444;
+}
+
+.refresh-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Error state */
+.error-container h1 {
+  color: #ff6b6b;
+}
+
+.error-message {
+  font-size: 20px;
+  color: #ff6b6b;
+  margin-bottom: 20px;
+}
+
+.help-text {
+  font-size: 16px;
+  color: #888;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+/* Loading state */
+.loading {
+  font-size: 20px;
+  color: #888;
+}
+
+/* Responsive for smaller car screens */
+@media (max-width: 600px) {
+  .pin-display {
+    font-size: 64px;
+    letter-spacing: 4px;
+    padding: 16px 24px;
+  }
+
+  h1 {
+    font-size: 22px;
+  }
+}
