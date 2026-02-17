@@ -41,6 +41,23 @@ class Settings(BaseModel):
     SMARTCAR_STATE_SECRET: str = os.getenv("SMARTCAR_STATE_SECRET", "")  # Distinct secret for Smartcar state JWT
     SMARTCAR_ENABLED: bool = os.getenv("SMARTCAR_ENABLED", "false").lower() == "true"  # Feature flag to disable Smartcar
     
+    # Tesla Fleet API configuration
+    TESLA_CLIENT_ID: str = os.getenv("TESLA_CLIENT_ID", "")
+    TESLA_CLIENT_SECRET: str = os.getenv("TESLA_CLIENT_SECRET", "")
+    TESLA_PUBLIC_KEY_URL: str = os.getenv("TESLA_PUBLIC_KEY_URL", "https://api.nerava.com/.well-known/appspecific/com.tesla.3p.public-key.pem")
+    TESLA_WEBHOOK_SECRET: str = os.getenv("TESLA_WEBHOOK_SECRET", "")
+    TESLA_FLEET_TELEMETRY_ENDPOINT: str = os.getenv("TESLA_FLEET_TELEMETRY_ENDPOINT", "wss://fleet-telemetry.nerava.com")
+    FEATURE_VIRTUAL_KEY_ENABLED: bool = os.getenv("FEATURE_VIRTUAL_KEY_ENABLED", "false").lower() == "true"
+    TESLA_MOCK_MODE: bool = os.getenv("TESLA_MOCK_MODE", "false").lower() == "true"
+
+    # App URLs
+    API_BASE_URL: str = os.getenv("API_BASE_URL", "https://api.nerava.network")
+    DRIVER_APP_URL: str = os.getenv("DRIVER_APP_URL", "https://app.nerava.network")
+
+    # Debug/Testing mode
+    DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
+    TESTING: bool = os.getenv("TESTING", "false").lower() == "true"
+    
     @property
     def smartcar_enabled(self) -> bool:
         """
@@ -78,11 +95,32 @@ class Settings(BaseModel):
     CHARGER_RADIUS_M: float = float(os.getenv("CHARGER_RADIUS_M", "150"))  # Charger radius for activation (meters)
     EXCLUSIVE_DURATION_MIN: int = int(os.getenv("EXCLUSIVE_DURATION_MIN", "60"))  # Exclusive session duration (minutes)
     
+    # Native iOS App Configuration
+    NATIVE_SESSION_ENGINE_ENABLED: bool = os.getenv("NATIVE_SESSION_ENGINE_ENABLED", "true").lower() == "true"
+    NATIVE_BRIDGE_ENABLED: bool = os.getenv("NATIVE_BRIDGE_ENABLED", "true").lower() == "true"
+    
+    # Native iOS session engine configuration
+    NATIVE_CHARGER_INTENT_RADIUS_M: float = float(os.getenv("NATIVE_CHARGER_INTENT_RADIUS_M", "400"))  # Charger intent zone radius (meters)
+    NATIVE_CHARGER_ANCHOR_RADIUS_M: float = float(os.getenv("NATIVE_CHARGER_ANCHOR_RADIUS_M", "30"))  # Charger anchor radius (meters)
+    NATIVE_CHARGER_DWELL_SECONDS: int = int(os.getenv("NATIVE_CHARGER_DWELL_SECONDS", "120"))  # Required dwell time at charger (seconds)
+    NATIVE_MERCHANT_UNLOCK_RADIUS_M: float = float(os.getenv("NATIVE_MERCHANT_UNLOCK_RADIUS_M", "40"))  # Merchant unlock radius (meters)
+    NATIVE_GRACE_PERIOD_SECONDS: int = int(os.getenv("NATIVE_GRACE_PERIOD_SECONDS", "900"))  # Grace period after leaving charger (seconds)
+    NATIVE_HARD_TIMEOUT_SECONDS: int = int(os.getenv("NATIVE_HARD_TIMEOUT_SECONDS", "3600"))  # Hard timeout for entire session (seconds)
+    NATIVE_LOCATION_ACCURACY_THRESHOLD_M: float = float(os.getenv("NATIVE_LOCATION_ACCURACY_THRESHOLD_M", "50"))  # Minimum location accuracy required (meters)
+    NATIVE_SPEED_THRESHOLD_FOR_DWELL_MPS: float = float(os.getenv("NATIVE_SPEED_THRESHOLD_FOR_DWELL_MPS", "1.5"))  # Max speed for dwell detection (m/s)
+    
     # Google Places search radius
     GOOGLE_PLACES_SEARCH_RADIUS_M: int = int(os.getenv("GOOGLE_PLACES_SEARCH_RADIUS_M", "800"))  # 800m radius for merchant search
     
     # Merchant cache TTL (in seconds)
     MERCHANT_CACHE_TTL_SECONDS: int = int(os.getenv("MERCHANT_CACHE_TTL_SECONDS", "3600"))  # 1 hour default
+    
+    # Privacy policy version for consent tracking
+    PRIVACY_POLICY_VERSION: str = os.getenv("PRIVACY_POLICY_VERSION", "1.0")
+    
+    # Redis configuration (for idempotency cache, rate limiting, etc.)
+    REDIS_URL: str = os.getenv("REDIS_URL", "")  # e.g., "redis://localhost:6379/0"
+    REDIS_ENABLED: bool = os.getenv("REDIS_ENABLED", "false").lower() == "true"
     
     # Vehicle onboarding photo retention (in days)
     VEHICLE_ONBOARDING_RETENTION_DAYS: int = int(os.getenv("VEHICLE_ONBOARDING_RETENTION_DAYS", "90"))  # 90 days default
@@ -139,6 +177,9 @@ class Settings(BaseModel):
     APPLE_WALLET_APNS_TEAM_ID: str = os.getenv("APPLE_WALLET_APNS_TEAM_ID", "")
     APPLE_WALLET_APNS_AUTH_KEY_PATH: str = os.getenv("APPLE_WALLET_APNS_AUTH_KEY_PATH", "")
     
+    # Preview signing key for merchant funnel (HMAC-SHA256)
+    PREVIEW_SIGNING_KEY: str = os.getenv("PREVIEW_SIGNING_KEY", "")
+
     # HubSpot Configuration
     HUBSPOT_ENABLED: bool = os.getenv("HUBSPOT_ENABLED", "false").lower() == "true"
     HUBSPOT_SEND_LIVE: bool = os.getenv("HUBSPOT_SEND_LIVE", "false").lower() == "true"

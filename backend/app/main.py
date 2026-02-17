@@ -103,6 +103,7 @@ cors_origins = [
     "https://app.nerava.app",
     "https://www.nerava.app",
     "https://app.nerava.network",
+    "https://link.nerava.network",
     "https://www.nerava.network",
     "https://merchant.nerava.network",
 ]
@@ -192,6 +193,7 @@ from .routers import mock_tesla
 from .routers import twilio_sms_webhook
 from .routers import merchant_arrivals
 from .routers import checkin
+from .routers import tesla_auth
 
 # These are now the canonical /v1/* endpoints (no /domain/ prefix)
 app.include_router(auth_domain.router)  # /v1/auth/*
@@ -219,6 +221,7 @@ app.include_router(mock_tesla.router)  # /mock-tesla/* (dev/testing only)
 app.include_router(twilio_sms_webhook.router)  # /v1/webhooks/twilio-arrival-sms
 app.include_router(merchant_arrivals.router)  # /v1/merchants/{id}/arrivals + notification-config
 app.include_router(checkin.router)  # /v1/checkin/* (V0 EV Arrival Code flow)
+app.include_router(tesla_auth.router)  # /v1/auth/tesla/* (Tesla OAuth and EV verification)
 
 # Pilot party endpoints
 from .routers import pilot_party

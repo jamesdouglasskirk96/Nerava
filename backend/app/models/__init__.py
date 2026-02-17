@@ -73,6 +73,7 @@ from .merchant_pos_credentials import MerchantPOSCredentials
 from .billing_event import BillingEvent
 from .queued_order import QueuedOrder, QueuedOrderStatus
 from .virtual_key import VirtualKey
+from .tesla_connection import TeslaConnection, EVVerificationCode
 from .extra import (
     CreditLedger,
     IncentiveRule,
