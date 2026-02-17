@@ -114,6 +114,8 @@ from .core.startup_validation import (
     validate_demo_mode,
     validate_merchant_auth_mock,
     check_schema_payload_hash,
+    ensure_merchant_schema,
+    ensure_verified_visits_table,
 )
 
 # Run validation before migrations
@@ -138,6 +140,17 @@ strict_validation = os.getenv("STRICT_STARTUP_VALIDATION", strict_validation_def
 # Initialize tracking variables for startup validation
 _startup_validation_failed = False
 _startup_validation_errors = []
+
+# Always run schema fix regardless of validation setting
+# This ensures database columns exist even when skipping validation
+try:
+    print("[STARTUP] Ensuring database schema is up to date...", flush=True)
+    ensure_merchant_schema()
+    print("[STARTUP] Merchant schema check passed", flush=True)
+    ensure_verified_visits_table()
+    print("[STARTUP] Verified visits table check passed", flush=True)
+except Exception as e:
+    print(f"[STARTUP] Schema fix failed (non-critical): {e}", flush=True)
 
 if skip_validation:
     logger.warning("Skipping strict startup validation (SKIP_STARTUP_VALIDATION=true)")
@@ -349,7 +362,7 @@ from .routers import debug_pool
 from .routers import discover_api, affiliate_api, insights_api
 from .routers import while_you_charge, pilot, pilot_debug, merchant_reports, merchant_balance, pilot_redeem, bootstrap, pilot_party
 from .routers import ev_smartcar, checkout, wallet_pass, demo_qr, demo_charging, demo_square, virtual_cards
-from .routers import intent, vehicle_onboarding, perks, merchant_onboarding, merchant_claim, merchants, exclusive
+from .routers import intent, vehicle_onboarding, perks, merchant_onboarding, merchant_claim, merchants, exclusive, native_events
 from .services.nova_accrual import nova_accrual_service
 
 # Auth + JWT preferences
@@ -894,10 +907,12 @@ final_origins = allowed_origins + [
     "https://www.nerava.network",
     "https://nerava.network",
     "https://app.nerava.network",
+    "https://link.nerava.network",
     "https://merchant.nerava.network",
     "https://admin.nerava.network",
     # S3 website origins (HTTP, not HTTPS)
     "http://app.nerava.network.s3-website-us-east-1.amazonaws.com",
+    "http://link.nerava.network.s3-website-us-east-1.amazonaws.com",
     "http://merchant.nerava.network.s3-website-us-east-1.amazonaws.com",
     "http://admin.nerava.network.s3-website-us-east-1.amazonaws.com",
     "http://nerava.network.s3-website-us-east-1.amazonaws.com",
@@ -954,6 +969,15 @@ app.include_router(ops.router)
 app.include_router(flags.router)
 app.include_router(analytics.router)
 
+# PostHog Events API (for manual event triggering via Swagger)
+from .routers import posthog_events
+app.include_router(posthog_events.router)
+
+# Debug endpoints (only in non-production)
+if os.getenv("ENV", "dev") != "prod":
+    from .routers import analytics_debug
+    app.include_router(analytics_debug.router)
+
 # Health first
 app.include_router(health.router, prefix="/v1", tags=["health"])
 
@@ -991,6 +1015,7 @@ app.include_router(recommend.router, prefix="/v1", tags=["recommend"])
 app.include_router(reservations.router, prefix="/v1/reservations", tags=["reservations"])
 app.include_router(intent.router)
 app.include_router(exclusive.router)  # /v1/exclusive/*
+app.include_router(native_events.router)  # /v1/native/*
 app.include_router(vehicle_onboarding.router)
 app.include_router(perks.router)
 app.include_router(merchant_onboarding.router)
@@ -1035,6 +1060,11 @@ app.include_router(discover_api.router)
 app.include_router(affiliate_api.router)
 app.include_router(insights_api.router)
 app.include_router(while_you_charge.router)
+
+# Phase 0 EV Arrival (phone-first PIN verification)
+from .routers import arrival_v2
+app.include_router(arrival_v2.router)  # /v1/arrival/*
+
 app.include_router(pilot.router)
 app.include_router(pilot_debug.router)
 app.include_router(merchant_reports.router)
@@ -1071,6 +1101,10 @@ app.include_router(nova_domain.router)  # /v1/nova/*
 
 # EV/Smartcar integration
 app.include_router(ev_smartcar.router)  # /v1/ev/* and /oauth/smartcar/callback
+
+# Tesla Fleet API OAuth integration
+from .routers import tesla_auth
+app.include_router(tesla_auth.router)  # /v1/auth/tesla/*
 
 # Debug router for logging verification
 from fastapi import APIRouter as DebugRouter
