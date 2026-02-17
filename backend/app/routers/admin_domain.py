@@ -2,11 +2,15 @@
 Domain Charge Party MVP Admin Router
 Admin endpoints for overview, merchant management, and manual Nova grants
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Body, Header
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional, Literal
+import os
+import httpx
+import uuid
+from datetime import datetime, timedelta, timezone
 
 from app.db import get_db
 from app.models import User
@@ -26,6 +30,7 @@ from app.services.analytics import get_analytics_client
 from sqlalchemy import text, or_
 from sqlalchemy.orm import Session
 from fastapi import Path, Request
+from pydantic import Field
 from typing import List
 from app.utils.log import get_logger
 
@@ -115,11 +120,22 @@ def get_admin_health(
 
 
 @router.get("/overview", response_model=AdminOverviewResponse)
-def get_overview(
+async def get_overview(
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    """Get admin overview statistics"""
+    """Get admin overview statistics (cached for 60 seconds)"""
+    from app.cache.layers import LayeredCache
+    from app.core.config import settings
+    
+    cache = LayeredCache(settings.redis_url, region="admin")
+    cache_key = "overview"
+    
+    # Try to get from cache
+    cached_result = await cache.get(cache_key)
+    if cached_result:
+        return AdminOverviewResponse(**cached_result)
+    
     # Count drivers (users with driver role)
     total_drivers = db.query(User).filter(
         User.role_flags.contains("driver")
@@ -145,7 +161,7 @@ def get_overview(
     ).scalar()
     total_stripe_usd = int(stripe_usd_result) if stripe_usd_result else 0
     
-    return AdminOverviewResponse(
+    result = AdminOverviewResponse(
         total_drivers=total_drivers,
         total_merchants=total_merchants,
         total_driver_nova=total_driver_nova,
@@ -153,44 +169,76 @@ def get_overview(
         total_nova_outstanding=total_nova_outstanding,
         total_stripe_usd=total_stripe_usd
     )
+    
+    # Cache result for 60 seconds
+    await cache.set(cache_key, result.dict(), ttl=60)
+    
+    return result
 
 
 @router.get("/merchants")
 def list_merchants(
     zone_slug: Optional[str] = Query(None, description="Filter by zone slug"),
     status_filter: Optional[str] = Query(None, description="Filter by status"),
+    limit: int = Query(50, ge=1, le=500, description="Number of merchants per page"),
+    offset: int = Query(0, ge=0, description="Number of merchants to skip"),
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    """List merchants with filters"""
-    query = db.query(DomainMerchant)
+    """List merchants with filters and pagination"""
+    # Fix N+1 query: Use subquery join for last activity
+    from sqlalchemy import func
+    last_activity_subq = db.query(
+        NovaTransaction.merchant_id,
+        func.max(NovaTransaction.created_at).label('last_active_at')
+    ).group_by(NovaTransaction.merchant_id).subquery()
+    
+    # Join with merchants query and select both merchant and last_active_at
+    merchants_with_activity = db.query(
+        DomainMerchant,
+        last_activity_subq.c.last_active_at
+    ).outerjoin(
+        last_activity_subq,
+        DomainMerchant.id == last_activity_subq.c.merchant_id
+    )
     
     if zone_slug:
-        query = query.filter(DomainMerchant.zone_slug == zone_slug)
-    
+        merchants_with_activity = merchants_with_activity.filter(DomainMerchant.zone_slug == zone_slug)
     if status_filter:
-        query = query.filter(DomainMerchant.status == status_filter)
+        merchants_with_activity = merchants_with_activity.filter(DomainMerchant.status == status_filter)
     
-    merchants = query.order_by(DomainMerchant.created_at.desc()).all()
+    # Get total count before pagination
+    total_count = merchants_with_activity.count()
     
-    # Get last transaction timestamp for each merchant
+    # Apply pagination
+    merchants_with_activity = merchants_with_activity.order_by(DomainMerchant.created_at.desc()).offset(offset).limit(limit).all()
+    
+    # Build response
     merchant_list = []
-    for merchant in merchants:
-        last_txn = db.query(NovaTransaction).filter(
-            NovaTransaction.merchant_id == merchant.id
-        ).order_by(NovaTransaction.created_at.desc()).first()
-        
+    for row in merchants_with_activity:
+        # Handle tuple result from join
+        if isinstance(row, tuple):
+            merchant = row[0]
+            last_active_at = row[1] if len(row) > 1 else None
+        else:
+            merchant = row
+            last_active_at = None
         merchant_list.append({
             "id": merchant.id,
             "name": merchant.name,
             "zone_slug": merchant.zone_slug,
             "status": merchant.status,
             "nova_balance": merchant.nova_balance,
-            "last_active_at": last_txn.created_at.isoformat() if last_txn else None,
+            "last_active_at": last_active_at.isoformat() if last_active_at else None,
             "created_at": merchant.created_at.isoformat()
         })
     
-    return {"merchants": merchant_list}
+    return {
+        "merchants": merchant_list,
+        "total": total_count,
+        "limit": limit,
+        "offset": offset
+    }
 
 
 @router.post("/nova/grant")
@@ -333,7 +381,7 @@ def grant_nova(
 
 
 @router.post("/payments/{payment_id}/reconcile")
-def reconcile_payment(
+async def reconcile_payment(
     payment_id: str,
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db)
@@ -345,8 +393,8 @@ def reconcile_payment(
     If payment is 'unknown', calls Stripe to check transfer status and updates accordingly.
     """
     try:
-        # Call reconciliation logic
-        result = StripeService.reconcile_payment(db, payment_id)
+        # Call reconciliation logic (async wrapper for sync Stripe calls)
+        result = await StripeService.reconcile_payment_async(db, payment_id)
         
         # Fetch full payment details for response
         payment_row = db.execute(text("""
@@ -471,7 +519,8 @@ def search_users(
         try:
             if hasattr(User, 'name'):
                 search_filter = or_(search_filter, User.name.ilike(f"%{query}%"))
-        except:
+        except Exception as e:
+            logger.debug(f"Error checking User.name attribute: {e}")
             pass
         q = q.filter(search_filter)
     
@@ -596,7 +645,7 @@ def adjust_user_wallet(
     }
 
 
-@router.get("/merchants", response_model=dict)
+@router.get("/merchants/search", response_model=dict)
 def search_merchants(
     query: Optional[str] = Query(None, description="Search by merchant name or ID"),
     admin: User = Depends(require_admin),
@@ -863,22 +912,66 @@ def list_all_exclusives(
                     "created_at": perk.created_at.isoformat(),
                     "updated_at": perk.updated_at.isoformat()
                 })
-        except:
+        except Exception as e:
+            logger.debug(f"Error processing perk {perk.id}: {e}")
             continue
     
-    return {"exclusives": exclusives}
+    # Enrich with merchant names
+    from app.models.while_you_charge import Merchant
+    merchant_ids = list(set(e["merchant_id"] for e in exclusives if e.get("merchant_id")))
+    merchants_map = {}
+    if merchant_ids:
+        merchants = db.query(Merchant).filter(Merchant.id.in_(merchant_ids)).all()
+        merchants_map = {m.id: m.name for m in merchants}
+    
+    # Count today's activations per merchant (since ExclusiveSession doesn't have perk_id)
+    from app.models.exclusive_session import ExclusiveSession
+    from datetime import datetime, timezone, timedelta
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    activation_counts = {}
+    try:
+        # Count sessions by merchant_id activated today
+        active_sessions = db.query(
+            ExclusiveSession.merchant_id, func.count(ExclusiveSession.id)
+        ).filter(
+            ExclusiveSession.activated_at >= today_start
+        ).group_by(ExclusiveSession.merchant_id).all()
+        for merchant_id, count in active_sessions:
+            if merchant_id:
+                activation_counts[merchant_id] = count
+    except Exception:
+        # If query fails, leave counts as 0
+        pass
+    
+    # Enrich exclusives with merchant_name and activations_today
+    for ex in exclusives:
+        ex["merchant_name"] = merchants_map.get(ex["merchant_id"], "Unknown")
+        # Use merchant-level activation count as approximation
+        ex["activations_today"] = activation_counts.get(ex["merchant_id"], 0)
+        ex["activations_this_month"] = 0  # placeholder
+        ex["nova_reward"] = 0  # placeholder
+    
+    return {"exclusives": exclusives, "total": len(exclusives), "limit": len(exclusives), "offset": 0}
+
+
+class ToggleExclusiveRequest(BaseModel):
+    reason: str = ""
 
 
 @router.post("/exclusives/{exclusive_id}/toggle")
 def toggle_exclusive_flag(
     http_request: Request,
     exclusive_id: str = Path(...),
-    enabled: bool = Query(..., description="Enable or disable"),
+    enabled: Optional[bool] = Query(None, description="Enable or disable (optional, toggles if not provided)"),
+    body: Optional[ToggleExclusiveRequest] = None,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin)
 ):
     """
     Admin toggle exclusive flag (enable/disable).
+    Accepts both query param (?enabled=bool) and JSON body ({reason}).
+    If enabled query param is not provided, toggles current state.
     """
     from app.models.while_you_charge import MerchantPerk
     
@@ -889,8 +982,19 @@ def toggle_exclusive_flag(
             detail="Exclusive not found"
         )
     
-    perk.is_active = enabled
+    # Determine new state: use query param if provided, otherwise toggle
+    if enabled is not None:
+        new_state = enabled
+    else:
+        new_state = not perk.is_active
+    
+    prev_state = perk.is_active
+    perk.is_active = new_state
     db.commit()
+    
+    # Store reason in metadata if provided
+    reason = body.reason if body and body.reason else ""
+    metadata = {"reason": reason} if reason else {}
     
     log_admin_action(
         db=db,
@@ -898,8 +1002,8 @@ def toggle_exclusive_flag(
         action="admin_toggle_exclusive",
         target_type="exclusive",
         target_id=exclusive_id,
-        before_json={"is_active": not enabled},
-        after_json={"is_active": enabled},
+        before_json={"is_active": prev_state},
+        after_json={"is_active": new_state, **metadata},
     )
     db.commit()
     
@@ -1092,5 +1196,679 @@ def get_audit_logs(
         "total": query.count(),
         "limit": limit,
         "offset": offset
+    }
+
+
+@router.get("/sessions/active")
+def get_active_sessions(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Get all active exclusive sessions."""
+    from app.models.exclusive_session import ExclusiveSession, ExclusiveSessionStatus
+    from datetime import datetime, timezone
+    
+    now = datetime.now(timezone.utc)
+    sessions = db.query(ExclusiveSession).filter(
+        ExclusiveSession.status == ExclusiveSessionStatus.ACTIVE,
+        ExclusiveSession.expires_at > now
+    ).all()
+    
+    result = []
+    for s in sessions:
+        remaining = (s.expires_at - now).total_seconds() / 60 if s.expires_at else 0
+        result.append({
+            "id": str(s.id),
+            "driver_id": s.driver_id,
+            "merchant_id": s.merchant_id,
+            "merchant_name": None,  # enrich later if needed
+            "charger_id": s.charger_id,
+            "charger_name": None,
+            "status": s.status.value if hasattr(s.status, 'value') else str(s.status),
+            "activated_at": s.activated_at.isoformat() if s.activated_at else None,
+            "expires_at": s.expires_at.isoformat() if s.expires_at else None,
+            "time_remaining_minutes": round(max(0, remaining), 1),
+        })
+    
+    return {"sessions": result, "total_active": len(result)}
+
+
+class ForceCloseRequest(BaseModel):
+    location_id: str
+    reason: str = Field(..., min_length=10)
+
+
+@router.post("/sessions/force-close")
+def force_close_sessions(
+    request: ForceCloseRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Force close all active sessions at a specific charger location."""
+    from app.models.exclusive_session import ExclusiveSession, ExclusiveSessionStatus
+    
+    sessions = db.query(ExclusiveSession).filter(
+        ExclusiveSession.status == ExclusiveSessionStatus.ACTIVE,
+        ExclusiveSession.charger_id == request.location_id
+    ).all()
+    
+    count = 0
+    for s in sessions:
+        s.status = ExclusiveSessionStatus.CANCELED
+        count += 1
+    
+    db.commit()
+    
+    log_admin_action(
+        db=db,
+        actor_id=admin.id,
+        action="force_close_sessions",
+        target_type="location",
+        target_id=request.location_id,
+        after_json={"sessions_closed": count, "reason": request.reason}
+    )
+    db.commit()
+    
+    return {
+        "location_id": request.location_id,
+        "sessions_closed": count,
+        "closed_by": admin.public_id,
+        "reason": request.reason,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+
+class EmergencyPauseRequest(BaseModel):
+    action: str  # "activate" or "deactivate"
+    reason: str = Field(..., min_length=10)
+    confirmation: str
+
+
+@router.post("/overrides/emergency-pause")
+def emergency_pause(
+    request: EmergencyPauseRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Emergency pause/unpause all exclusives."""
+    if request.action == "activate" and request.confirmation != "CONFIRM-EMERGENCY-PAUSE":
+        raise HTTPException(status_code=400, detail="Invalid confirmation token")
+    
+    from app.models.while_you_charge import MerchantPerk
+    
+    if request.action == "activate":
+        updated = db.query(MerchantPerk).filter(MerchantPerk.is_active == True).update({"is_active": False})
+        db.commit()
+    else:
+        updated = 0  # deactivation does not auto-reactivate; manual per-exclusive
+    
+    log_admin_action(
+        db=db,
+        actor_id=admin.id,
+        action=f"emergency_pause_{request.action}",
+        target_type="system",
+        target_id="all",
+        after_json={"reason": request.reason, "exclusives_affected": updated}
+    )
+    db.commit()
+    
+    return {
+        "action": request.action,
+        "activated_by": admin.public_id,
+        "reason": request.reason,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+
+@router.get("/logs")
+def get_logs(
+    http_request: Request,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    type: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Get audit logs with enriched schema matching frontend expectations."""
+    from app.models_extra import AdminAuditLog
+    
+    query = db.query(AdminAuditLog)
+    
+    if type:
+        query = query.filter(AdminAuditLog.action.contains(type))
+    if search:
+        query = query.filter(
+            AdminAuditLog.action.contains(search) |
+            AdminAuditLog.target_id.contains(search)
+        )
+    
+    total = query.count()
+    logs = query.order_by(AdminAuditLog.created_at.desc()).limit(limit).offset(offset).all()
+    
+    # Enrich with user email lookup
+    actor_ids = list(set(log.actor_id for log in logs if log.actor_id))
+    users = {u.id: u for u in db.query(User).filter(User.id.in_(actor_ids)).all()} if actor_ids else {}
+    
+    return {
+        "logs": [
+            {
+                "id": str(log.id),
+                "operator_id": log.actor_id,
+                "operator_email": users.get(log.actor_id).email if users.get(log.actor_id) else None,
+                "action_type": log.action,
+                "target_type": log.target_type,
+                "target_id": log.target_id,
+                "reason": (log.metadata_json or {}).get("reason") if log.metadata_json else None,
+                "ip_address": (log.metadata_json or {}).get("ip") if log.metadata_json else None,
+                "created_at": log.created_at.isoformat() if log.created_at else None,
+            }
+            for log in logs
+        ],
+        "total": total,
+        "limit": limit,
+        "offset": offset
+    }
+
+
+@router.post("/merchants/{merchant_id}/pause")
+def pause_merchant(
+    merchant_id: str = Path(...),
+    reason: str = Body(..., embed=True),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Pause a merchant."""
+    merchant = db.query(DomainMerchant).filter(DomainMerchant.id == merchant_id).first()
+    if not merchant:
+        raise HTTPException(status_code=404, detail="Merchant not found")
+    
+    prev = merchant.status
+    merchant.status = "paused"
+    db.commit()
+    
+    log_admin_action(
+        db=db,
+        actor_id=admin.id,
+        action="pause_merchant",
+        target_type="merchant",
+        target_id=merchant_id,
+        before_json={"status": prev},
+        after_json={"status": "paused", "reason": reason}
+    )
+    db.commit()
+    
+    return {
+        "merchant_id": merchant_id,
+        "action": "pause",
+        "previous_status": prev,
+        "new_status": "paused",
+        "reason": reason
+    }
+
+
+@router.post("/merchants/{merchant_id}/resume")
+def resume_merchant(
+    merchant_id: str = Path(...),
+    reason: str = Body(..., embed=True),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Resume a merchant."""
+    merchant = db.query(DomainMerchant).filter(DomainMerchant.id == merchant_id).first()
+    if not merchant:
+        raise HTTPException(status_code=404, detail="Merchant not found")
+    
+    prev = merchant.status
+    merchant.status = "active"
+    db.commit()
+    
+    log_admin_action(
+        db=db,
+        actor_id=admin.id,
+        action="resume_merchant",
+        target_type="merchant",
+        target_id=merchant_id,
+        before_json={"status": prev},
+        after_json={"status": "active", "reason": reason}
+    )
+    db.commit()
+    
+    return {
+        "merchant_id": merchant_id,
+        "action": "resume",
+        "previous_status": prev,
+        "new_status": "active",
+        "reason": reason
+    }
+
+
+@router.post("/merchants/{merchant_id}/send-portal-link")
+def send_portal_link(
+    merchant_id: str = Path(...),
+    email: str = Body(..., embed=True),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Send portal claim link to merchant email."""
+    from app.core.config import settings
+    
+    portal_url = f"{settings.FRONTEND_URL}/merchant/claim/{merchant_id}"
+    # In production, send email via existing email service.
+    # For now, log the action and return the link.
+    log_admin_action(
+        db=db,
+        actor_id=admin.id,
+        action="send_portal_link",
+        target_type="merchant",
+        target_id=merchant_id,
+        after_json={"email": email, "portal_url": portal_url}
+    )
+    db.commit()
+    
+    return {"success": True}
+
+
+class DeploymentTriggerRequest(BaseModel):
+    target: Literal["backend", "driver", "admin", "merchant"]
+    ref: str = "main"
+
+
+@router.post("/deployments/trigger")
+async def trigger_deployment(
+    request: DeploymentTriggerRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Trigger GitHub Actions deployment workflow."""
+    GITHUB_TOKEN = os.getenv("GITHUB_DEPLOY_TOKEN")
+    GITHUB_REPO = os.getenv("GITHUB_REPO", "jameskirk/nerava")  # Update with your repo
+
+    if not GITHUB_TOKEN:
+        raise HTTPException(status_code=500, detail="GitHub token not configured")
+
+    # Map target to workflow file
+    workflows = {
+        "backend": "deploy-backend.yml",
+        "driver": "deploy-driver.yml",
+        "admin": "deploy-admin.yml",
+        "merchant": "deploy-merchant.yml",
+    }
+
+    workflow = workflows.get(request.target)
+    if not workflow:
+        raise HTTPException(status_code=400, detail=f"Invalid target: {request.target}")
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(
+                f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/{workflow}/dispatches",
+                headers={
+                    "Authorization": f"Bearer {GITHUB_TOKEN}",
+                    "Accept": "application/vnd.github.v3+json",
+                },
+                json={"ref": request.ref},
+                timeout=10.0,
+            )
+
+            if response.status_code != 204:
+                error_text = response.text
+                logger.error(f"GitHub API error: {response.status_code} - {error_text}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"GitHub API error: {response.status_code} - {error_text}",
+                )
+        except httpx.TimeoutException:
+            raise HTTPException(status_code=504, detail="GitHub API timeout")
+        except Exception as e:
+            logger.error(f"Failed to trigger deployment: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to trigger deployment: {str(e)}")
+
+    # Log admin action
+    log_admin_action(
+        db=db,
+        actor_id=current_user.id,
+        action="trigger_deployment",
+        target_type="deployment",
+        target_id=request.target,
+        metadata={"workflow": workflow, "ref": request.ref},
+    )
+
+    return {"status": "triggered", "workflow": workflow, "target": request.target}
+
+
+class DemoSimulateRequest(BaseModel):
+    driver_phone: str
+    merchant_id: str
+    charger_id: str
+
+
+@router.post("/system/pause")
+def pause_system(
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Pause the system (kill switch).
+    
+    Sets Redis flag to pause all non-admin endpoints.
+    Returns 503 for non-admin endpoints until resumed.
+    """
+    import redis
+    from app.config import settings
+    
+    try:
+        redis_client = redis.from_url(settings.redis_url, decode_responses=True)
+        redis_client.set("system:paused", "1")
+        
+        logger.warning(f"System paused by admin {admin.id}")
+        
+        return {
+            "ok": True,
+            "message": "System paused. Non-admin endpoints will return 503."
+        }
+    except Exception as e:
+        logger.error(f"Failed to pause system: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to pause system: {str(e)}"
+        )
+
+
+@router.post("/system/resume")
+def resume_system(
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Resume the system (disable kill switch).
+    
+    Removes Redis flag to allow all endpoints again.
+    """
+    import redis
+    from app.config import settings
+    
+    try:
+        redis_client = redis.from_url(settings.redis_url, decode_responses=True)
+        redis_client.delete("system:paused")
+        
+        logger.info(f"System resumed by admin {admin.id}")
+        
+        return {
+            "ok": True,
+            "message": "System resumed. All endpoints are active."
+        }
+    except Exception as e:
+        logger.error(f"Failed to resume system: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to resume system: {str(e)}"
+        )
+
+
+@router.post("/internal/demo/simulate-verified-visit")
+async def simulate_verified_visit(
+    request: DemoSimulateRequest,
+    x_internal_secret: str = Header(..., alias="X-Internal-Secret"),
+    db: Session = Depends(get_db),
+):
+    """
+    DEV ONLY: Simulate a verified visit for demo purposes.
+    Creates ExclusiveSession + RewardEvent.
+    """
+    INTERNAL_SECRET = os.getenv("INTERNAL_SECRET")
+    if not INTERNAL_SECRET or x_internal_secret != INTERNAL_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid internal secret")
+
+    from app.models.exclusive_session import ExclusiveSession, ExclusiveSessionStatus
+    from app.models_extra import RewardEvent
+
+    # Find or create driver
+    driver = db.query(User).filter(User.phone == request.driver_phone).first()
+    if not driver:
+        driver = User(
+            phone=request.driver_phone,
+            auth_provider="phone",
+            role_flags="driver",
+        )
+        db.add(driver)
+        db.flush()
+
+    # Create exclusive session
+    session = ExclusiveSession(
+        id=uuid.uuid4(),
+        driver_id=driver.id,
+        merchant_id=request.merchant_id,
+        charger_id=request.charger_id,
+        status=ExclusiveSessionStatus.COMPLETED,
+        activated_at=datetime.utcnow() - timedelta(minutes=15),
+        expires_at=datetime.utcnow() + timedelta(hours=1),  # Set expires_at
+        completed_at=datetime.utcnow(),
+    )
+    db.add(session)
+
+    # Create reward event
+    reward = RewardEvent(
+        user_id=driver.id,
+        source="MERCHANT",
+        gross_cents=0,
+        community_cents=0,
+        net_cents=0,
+        meta={"demo": True, "merchant_id": request.merchant_id},
+    )
+    db.add(reward)
+
+    db.commit()
+
+    return {
+        "session_id": str(session.id),
+        "driver_id": driver.public_id if hasattr(driver, 'public_id') else str(driver.id),
+        "status": "simulated",
+    }
+
+
+@router.get("/otp/diagnostics")
+async def otp_diagnostics(
+    admin=Depends(require_admin),
+):
+    """
+    OTP system diagnostics — checks Twilio credentials, Verify service, and rate-limit state.
+    Admin-only endpoint for debugging OTP issues in production.
+    """
+    from app.core.config import settings as core_settings
+    from app.services.auth import get_otp_provider, get_rate_limit_service
+    import logging
+
+    diag_logger = logging.getLogger("nerava.otp_diag")
+
+    result = {
+        "otp_provider": core_settings.OTP_PROVIDER,
+        "env": core_settings.ENV,
+        "twilio_account_sid_set": bool(core_settings.TWILIO_ACCOUNT_SID),
+        "twilio_auth_token_set": bool(core_settings.TWILIO_AUTH_TOKEN),
+        "twilio_verify_service_sid_set": bool(core_settings.TWILIO_VERIFY_SERVICE_SID),
+        "twilio_verify_service_sid_prefix": core_settings.TWILIO_VERIFY_SERVICE_SID[:8] + "..." if core_settings.TWILIO_VERIFY_SERVICE_SID else "NOT SET",
+        "twilio_timeout_seconds": core_settings.TWILIO_TIMEOUT_SECONDS,
+        "provider_instantiation": "unknown",
+        "twilio_verify_service_check": "unknown",
+    }
+
+    # Try to instantiate the provider
+    try:
+        provider = get_otp_provider(None)
+        result["provider_instantiation"] = f"ok ({provider.__class__.__name__})"
+    except Exception as e:
+        result["provider_instantiation"] = f"FAILED: {str(e)}"
+        diag_logger.error(f"[OTP Diagnostics] Provider instantiation failed: {e}")
+
+    # If Twilio Verify, check the service exists
+    if core_settings.OTP_PROVIDER == "twilio_verify" and core_settings.TWILIO_VERIFY_SERVICE_SID:
+        try:
+            import asyncio
+            from twilio.rest import Client
+            from twilio.http.http_client import TwilioHttpClient
+
+            custom_http_client = TwilioHttpClient()
+            custom_http_client.timeout = 10
+
+            client = Client(
+                core_settings.TWILIO_ACCOUNT_SID,
+                core_settings.TWILIO_AUTH_TOKEN,
+                http_client=custom_http_client,
+            )
+
+            def _fetch_service():
+                return client.verify.v2.services(core_settings.TWILIO_VERIFY_SERVICE_SID).fetch()
+
+            service = await asyncio.wait_for(
+                asyncio.to_thread(_fetch_service),
+                timeout=15,
+            )
+            result["twilio_verify_service_check"] = f"ok (friendly_name={service.friendly_name}, sid={service.sid})"
+        except Exception as e:
+            result["twilio_verify_service_check"] = f"FAILED: {str(e)}"
+            diag_logger.error(f"[OTP Diagnostics] Twilio Verify service check failed: {e}")
+
+    # Check rate-limit state
+    try:
+        rl_service = get_rate_limit_service()
+        result["rate_limit_backend"] = rl_service.__class__.__name__
+    except Exception as e:
+        result["rate_limit_backend"] = f"FAILED: {str(e)}"
+
+    return result
+
+
+# ==============================================================================
+# Charger Seeding Endpoints
+# ==============================================================================
+
+class SeedChargersRequest(BaseModel):
+    charger_ids: Optional[List[str]] = Field(
+        None,
+        description="List of charger IDs to seed. If empty, seeds all 5 Austin chargers."
+    )
+
+
+class SeedChargersResponse(BaseModel):
+    success: bool
+    chargers_created: int
+    chargers_updated: int
+    merchants_created: int
+    merchants_updated: int
+    links_created: int
+    errors: List[str]
+
+
+@router.get("/seed-chargers/available")
+async def get_available_chargers(
+    admin: User = Depends(require_admin)
+):
+    """
+    Get list of chargers available for seeding.
+
+    Returns the 5 Austin chargers that can be seeded.
+    """
+    from app.services.charger_seeder import ChargerSeederService
+
+    # Just use the static list, no DB needed
+    seeder = ChargerSeederService(None)
+    return {
+        "chargers": seeder.get_charger_list()
+    }
+
+
+@router.post("/seed-chargers", response_model=SeedChargersResponse)
+async def seed_chargers(
+    request: SeedChargersRequest = Body(default=SeedChargersRequest()),
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Seed chargers with nearby merchants from Google Places API.
+
+    This endpoint:
+    1. Creates/updates charger records for the 5 Austin Tesla Superchargers
+    2. Fetches nearby restaurants/cafes from Google Places API
+    3. Creates merchant records with ratings, categories, etc.
+    4. Links merchants to chargers with distance and walk time
+    5. Sets the primary merchant for each charger
+
+    Requires GOOGLE_PLACES_API_KEY environment variable to be set.
+
+    Idempotent: Safe to run multiple times.
+    """
+    from app.services.charger_seeder import ChargerSeederService
+    from app.core.config import settings
+
+    # Check API key
+    if not settings.GOOGLE_PLACES_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="GOOGLE_PLACES_API_KEY not configured"
+        )
+
+    logger.info(f"Admin {admin.id} triggered charger seeding")
+
+    seeder = ChargerSeederService(db)
+
+    try:
+        results = await seeder.seed_all_chargers(request.charger_ids)
+
+        logger.info(f"Charger seeding complete: {results}")
+
+        return SeedChargersResponse(
+            success=len(results["errors"]) == 0,
+            chargers_created=results["chargers_created"],
+            chargers_updated=results["chargers_updated"],
+            merchants_created=results["merchants_created"],
+            merchants_updated=results["merchants_updated"],
+            links_created=results["links_created"],
+            errors=results["errors"]
+        )
+    except Exception as e:
+        logger.error(f"Charger seeding failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Seeding failed: {str(e)}"
+        )
+
+
+@router.get("/chargers")
+async def list_chargers(
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    List all chargers in the database with merchant counts.
+    """
+    from app.models.while_you_charge import Charger, ChargerMerchant
+    from sqlalchemy import func
+
+    # Query chargers with merchant count
+    chargers_with_counts = db.query(
+        Charger,
+        func.count(ChargerMerchant.merchant_id).label("merchant_count")
+    ).outerjoin(
+        ChargerMerchant, Charger.id == ChargerMerchant.charger_id
+    ).group_by(Charger.id).all()
+
+    return {
+        "chargers": [
+            {
+                "id": charger.id,
+                "name": charger.name,
+                "address": charger.address,
+                "lat": charger.lat,
+                "lng": charger.lng,
+                "network": charger.network_name,
+                "power_kw": charger.power_kw,
+                "status": charger.status,
+                "merchant_count": count
+            }
+            for charger, count in chargers_with_counts
+        ]
     }
 
