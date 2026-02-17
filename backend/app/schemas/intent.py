@@ -31,7 +31,7 @@ class MerchantSummary(BaseModel):
     name: str
     lat: float
     lng: float
-    distance_m: int
+    distance_m: float
     types: List[str]
     photo_url: Optional[str] = None
     icon_url: Optional[str] = None
@@ -50,7 +50,7 @@ class NextActions(BaseModel):
 
 class CaptureIntentResponse(BaseModel):
     """Response schema for capturing intent"""
-    session_id: str
+    session_id: Optional[str] = None  # None for anonymous users
     confidence_tier: str  # "A", "B", "C"
     charger_summary: Optional[ChargerSummary] = None
     merchants: List[MerchantSummary] = []
