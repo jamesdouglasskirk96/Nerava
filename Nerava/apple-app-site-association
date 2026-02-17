@@ -1,0 +1,23 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "XQV9A76Z96.EVcharging.Nerava",
+        "paths": [
+          "/merchant/*",
+          "/session/*",
+          "/exclusive/*",
+          "/s/*",
+          "/m/*",
+          "/*"
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "XQV9A76Z96.EVcharging.Nerava"
+    ]
+  }
+}
