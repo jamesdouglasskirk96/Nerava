@@ -1104,7 +1104,7 @@ app.include_router(ev_smartcar.router)  # /v1/ev/* and /oauth/smartcar/callback
 
 # Tesla Fleet API OAuth integration
 from .routers import tesla_auth
-app.include_router(tesla_auth.router)  # /v1/auth/tesla/*
+app.include_router(tesla_auth.router, prefix="/v1")  # /v1/auth/tesla/*
 
 # Debug router for logging verification
 from fastapi import APIRouter as DebugRouter
