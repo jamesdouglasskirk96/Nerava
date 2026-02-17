@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import User
 from app.models.tesla_connection import TeslaConnection, EVVerificationCode
-from app.dependencies.auth import get_current_user_optional, get_current_user
+from app.dependencies.domain import get_current_user_optional, get_current_user
 from app.services.tesla_oauth import (
     get_tesla_oauth_service,
     get_valid_access_token,
