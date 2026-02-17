@@ -118,6 +118,14 @@ resource "aws_ecs_task_definition" "backend" {
       {
         name      = "POSTHOG_KEY"
         valueFrom = aws_secretsmanager_secret.backend_posthog.arn
+      },
+      {
+        name      = "TESLA_CLIENT_ID"
+        valueFrom = "${data.aws_secretsmanager_secret.backend_tesla.arn}:client_id::"
+      },
+      {
+        name      = "TESLA_CLIENT_SECRET"
+        valueFrom = "${data.aws_secretsmanager_secret.backend_tesla.arn}:client_secret::"
       }
     ]
 

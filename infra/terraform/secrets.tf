@@ -187,3 +187,8 @@ resource "aws_secretsmanager_secret_version" "backend_posthog" {
   secret_string = "CHANGE_ME_OR_LEAVE_EMPTY_IF_NOT_USED"
 }
 
+# Tesla Fleet API Credentials (created via CLI, referenced here)
+data "aws_secretsmanager_secret" "backend_tesla" {
+  name = "${var.project_name}/backend/tesla"
+}
+
