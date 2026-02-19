@@ -69,7 +69,7 @@ async def stripe_webhook(
     payload = await request.body()
     
     try:
-        result = StripeService.handle_webhook(
+        result = await StripeService.handle_webhook_async(
             db=db,
             payload=payload,
             signature=stripe_signature,

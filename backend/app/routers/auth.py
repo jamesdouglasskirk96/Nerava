@@ -556,9 +556,10 @@ async def otp_verify(
                 "error": str(e),
             }
         )
+        logger.error(f"[Auth][OTP] OTP verify exception: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Invalid code."
+            detail="Verification service error. Please request a new code."
         )
 
 

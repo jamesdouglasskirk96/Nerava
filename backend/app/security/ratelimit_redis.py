@@ -46,7 +46,7 @@ def _get_redis_client():
                 # In non-local env without Redis URL, we should warn but allow in-memory fallback for now
                 pass
         
-        _redis_client = redis.from_url(redis_url, decode_responses=True)
+        _redis_client = redis.from_url(redis_url, decode_responses=True, socket_connect_timeout=3, socket_timeout=3)
         # Test connection
         _redis_client.ping()
         _redis_available = True
@@ -160,20 +160,9 @@ def rate_limit(endpoint: str, client_id: str, limit_per_min: int) -> bool:
     result = _redis_rate_limit(key, limit_per_min)
     
     if result is None:
-        # Redis unavailable - use fallback
-        is_local = _is_local_env()
-        
-        if not is_local:
-            # In non-local env, Redis should be available - fail fast
-            error_msg = (
-                "CRITICAL: Redis is required for rate limiting in non-local environment but is unavailable. "
-                "Please ensure REDIS_URL is configured correctly."
-            )
-            if logger:
-                logger.error(error_msg)
-            raise RuntimeError(error_msg)
-        
-        # Local dev: use in-memory fallback
+        # Redis unavailable - use in-memory fallback
+        if logger:
+            logger.warning("Redis unavailable for rate limiting, using in-memory fallback")
         result = _memory_rate_limit(key, limit_per_min)
     
     if not result:

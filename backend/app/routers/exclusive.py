@@ -4,21 +4,24 @@ Handles POST /v1/exclusive/activate, POST /v1/exclusive/complete, GET /v1/exclus
 """
 import logging
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.db import get_db
 from app.models import User
 from app.models.while_you_charge import Charger, Merchant
 from app.models.exclusive_session import ExclusiveSession, ExclusiveSessionStatus
+from app.models.verified_visit import VerifiedVisit
 from app.dependencies.driver import get_current_driver, get_current_driver_optional
 from app.services.geo import haversine_m
 from app.core.config import settings
+from app.core.env import is_local_env
 from app.utils.exclusive_logging import log_event
 from app.services.analytics import get_analytics_client
+from app.services.hubspot import get_hubspot_client
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +39,21 @@ class ActivateExclusiveRequest(BaseModel):
     charger_id: str
     charger_place_id: Optional[str] = None
     intent_session_id: Optional[str] = None
-    lat: float
-    lng: float
+    lat: Optional[float] = None  # V3: Optional, null when location unavailable
+    lng: Optional[float] = None  # V3: Optional, null when location unavailable
     accuracy_m: Optional[float] = None
+    # V3: Intent capture fields
+    intent: Optional[str] = None  # "eat" | "work" | "quick-stop"
+    party_size: Optional[int] = None
+    needs_power_outlet: Optional[bool] = None
+    is_to_go: Optional[bool] = None
+
+    @field_validator('intent')
+    @classmethod
+    def validate_intent(cls, v):
+        if v is not None and v not in ('eat', 'work', 'quick-stop'):
+            raise ValueError('intent must be one of: eat, work, quick-stop')
+        return v
 
 
 class ExclusiveSessionResponse(BaseModel):
@@ -53,6 +68,7 @@ class ExclusiveSessionResponse(BaseModel):
 class ActivateExclusiveResponse(BaseModel):
     status: str
     exclusive_session: ExclusiveSessionResponse
+    idempotent: Optional[bool] = None
 
 
 class CompleteExclusiveRequest(BaseModel):
@@ -62,10 +78,26 @@ class CompleteExclusiveRequest(BaseModel):
 
 class CompleteExclusiveResponse(BaseModel):
     status: str
+    idempotent: Optional[bool] = None
+    nova_earned: Optional[float] = None
 
 
 class ActiveExclusiveResponse(BaseModel):
     exclusive_session: Optional[ExclusiveSessionResponse] = None
+
+
+class VerifyVisitRequest(BaseModel):
+    exclusive_session_id: str
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+
+
+class VerifyVisitResponse(BaseModel):
+    status: str
+    verification_code: str
+    visit_number: int
+    merchant_name: str
+    verified_at: str
 
 
 def generate_session_id() -> str:
@@ -131,6 +163,27 @@ async def activate_exclusive(
                 status_code=status.HTTP_428_PRECONDITION_REQUIRED,
                 detail="OTP_REQUIRED"
             )
+        
+        # Idempotency check (P0 fix)
+        idempotency_key = http_request.headers.get("X-Idempotency-Key")
+        if idempotency_key:
+            existing_session = db.query(ExclusiveSession).filter(
+                ExclusiveSession.idempotency_key == idempotency_key
+            ).first()
+            if existing_session:
+                remaining_seconds = max(0, int((existing_session.expires_at - datetime.now(timezone.utc)).total_seconds()))
+                return ActivateExclusiveResponse(
+                    status=existing_session.status.value,
+                    exclusive_session=ExclusiveSessionResponse(
+                        id=str(existing_session.id),
+                        merchant_id=existing_session.merchant_id,
+                        charger_id=existing_session.charger_id,
+                        expires_at=existing_session.expires_at.isoformat(),
+                        activated_at=existing_session.activated_at.isoformat(),
+                        remaining_seconds=remaining_seconds
+                    ),
+                    idempotent=True
+                )
     
         # Validate merchant_id or merchant_place_id is provided
         if not request.merchant_id and not request.merchant_place_id:
@@ -150,10 +203,10 @@ async def activate_exclusive(
         
         if existing_active:
             # Check if expired
-            if existing_active.expires_at < datetime.utcnow():
+            if existing_active.expires_at < datetime.now(timezone.utc):
                 # Mark as expired
                 existing_active.status = ExclusiveSessionStatus.EXPIRED
-                existing_active.updated_at = datetime.utcnow()
+                existing_active.updated_at = datetime.now(timezone.utc)
                 db.commit()
                 log_event("exclusive_expired", {
                     "driver_id": driver.id,
@@ -162,7 +215,7 @@ async def activate_exclusive(
                 })
             else:
                 # Return existing active session
-                remaining_seconds = int((existing_active.expires_at - datetime.utcnow()).total_seconds())
+                remaining_seconds = int((existing_active.expires_at - datetime.now(timezone.utc)).total_seconds())
                 return ActivateExclusiveResponse(
                     status="ACTIVE",
                     exclusive_session=ExclusiveSessionResponse(
@@ -185,91 +238,76 @@ async def activate_exclusive(
                 }
             )
         
-        if request.lat is None or request.lng is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "error": "missing_location",
-                    "message": "lat and lng are required"
-                }
-            )
-        
-        # Validate charger radius
-        try:
-            distance_m, is_within_radius = validate_charger_radius(
-                db, request.charger_id, request.lat, request.lng
-            )
-        except HTTPException as e:
-            # Log the charger not found error with more context
-            logger.warning(
-                f"Charger not found: {request.charger_id}",
+        # TEMPORARY: Location is optional - just log if provided, don't block activation
+        # TODO: Re-enable location validation after demo period
+        distance_m = None
+        if request.lat is not None and request.lng is not None:
+            # Log the provided coordinates
+            logger.info(
+                f"Exclusive activation with location: lat={request.lat}, lng={request.lng}",
                 extra={
+                    "driver_id": driver.id,
                     "charger_id": request.charger_id,
                     "merchant_id": request.merchant_id,
                     "lat": request.lat,
                     "lng": request.lng
                 }
             )
-            # Re-raise HTTP exceptions (e.g., charger not found)
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={
-                    "error": "charger_not_found",
-                    "message": f"Charger not found: {request.charger_id}. Please run bootstrap endpoint first."
-                }
-            )
-        except Exception as e:
-            logger.exception(
-                "Failed to validate charger radius",
+
+            # Try to calculate distance for logging purposes only
+            try:
+                distance_m, is_within_radius = validate_charger_radius(
+                    db, request.charger_id, request.lat, request.lng
+                )
+                if not is_within_radius:
+                    # Just log, don't block
+                    logger.warning(
+                        f"Activation outside charger radius (allowed for demo): distance={distance_m:.0f}m, required={CHARGER_RADIUS_M}m",
+                        extra={
+                            "driver_id": driver.id,
+                            "charger_id": request.charger_id,
+                            "distance_m": distance_m,
+                            "radius_m": CHARGER_RADIUS_M,
+                        }
+                    )
+                    log_event("exclusive_activation_outside_radius_allowed", {
+                        "driver_id": driver.id,
+                        "charger_id": request.charger_id,
+                        "distance_m": distance_m,
+                        "radius_m": CHARGER_RADIUS_M,
+                    })
+            except Exception as e:
+                # Log but don't block if charger lookup fails
+                logger.warning(
+                    f"Could not validate charger radius (proceeding anyway): {e}",
+                    extra={
+                        "charger_id": request.charger_id,
+                        "error": str(e)
+                    }
+                )
+        else:
+            # No location provided - log and proceed
+            logger.info(
+                f"Exclusive activation without location (allowed for demo)",
                 extra={
+                    "driver_id": driver.id,
                     "charger_id": request.charger_id,
-                    "lat": request.lat,
-                    "lng": request.lng,
-                    "error": str(e)
+                    "merchant_id": request.merchant_id,
                 }
-            )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail={
-                    "error": "charger_validation_failed",
-                    "message": "Failed to validate charger location"
-                }
-            )
-        
-        if not is_within_radius:
-            log_event("exclusive_activation_blocked", {
-                "driver_id": driver.id,
-                "charger_id": request.charger_id,
-                "distance_m": distance_m,
-                "radius_m": CHARGER_RADIUS_M,
-            })
-            
-            # Analytics: Capture blocked activation
-            request_id = getattr(http_request.state, "request_id", None)
-            analytics = get_analytics_client()
-            analytics.capture(
-                event="server.driver.exclusive.activate.blocked",
-                distinct_id=driver.public_id,
-                request_id=request_id,
-                user_id=driver.public_id,
-                merchant_id=request.merchant_id,
-                charger_id=request.charger_id,
-                ip=http_request.client.host if http_request.client else None,
-                user_agent=http_request.headers.get("user-agent"),
-                properties={
-                    "distance_m": distance_m,
-                    "required_radius_m": CHARGER_RADIUS_M,
-                }
-            )
-            
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"You must be at the charger to activate. Distance: {distance_m:.0f}m, required: {CHARGER_RADIUS_M}m"
             )
         
         # Create exclusive session
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         expires_at = now + timedelta(minutes=EXCLUSIVE_DURATION_MIN)
+        
+        # Build intent_metadata dict if intent is provided
+        intent_metadata = None
+        if request.intent:
+            intent_metadata = {
+                'party_size': request.party_size,
+                'needs_power_outlet': request.needs_power_outlet,
+                'is_to_go': request.is_to_go,
+            }
         
         session = ExclusiveSession(
             id=generate_session_id(),
@@ -286,11 +324,57 @@ async def activate_exclusive(
             activation_lng=request.lng,
             activation_accuracy_m=request.accuracy_m,
             activation_distance_to_charger_m=distance_m,
+            # V3: Intent capture fields
+            intent=request.intent,
+            intent_metadata=intent_metadata,
+            idempotency_key=idempotency_key if idempotency_key else None,
         )
         
-        db.add(session)
-        db.commit()
-        db.refresh(session)
+        try:
+            db.add(session)
+            db.commit()
+            db.refresh(session)
+        except Exception as e:
+            db.rollback()
+            # Check if error is due to unique constraint violation on idempotency_key
+            error_str = str(e).lower()
+            if idempotency_key and ("unique" in error_str or "duplicate" in error_str or "constraint" in error_str):
+                # Fetch existing session by idempotency_key
+                existing_session = db.query(ExclusiveSession).filter(
+                    ExclusiveSession.idempotency_key == idempotency_key
+                ).first()
+                if existing_session:
+                    # Guard against idempotency key collision across drivers
+                    if existing_session.driver_id != driver.id:
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail="Idempotency key already used by another driver"
+                        )
+                    # Return idempotent response
+                    remaining_seconds = max(0, int((existing_session.expires_at - datetime.now(timezone.utc)).total_seconds()))
+                    return ActivateExclusiveResponse(
+                        status=existing_session.status.value,
+                        exclusive_session=ExclusiveSessionResponse(
+                            id=str(existing_session.id),
+                            merchant_id=existing_session.merchant_id,
+                            charger_id=existing_session.charger_id,
+                            expires_at=existing_session.expires_at.isoformat(),
+                            activated_at=existing_session.activated_at.isoformat(),
+                            remaining_seconds=remaining_seconds
+                        ),
+                        idempotent=True
+                    )
+            logger.error("exclusive_activate_failed", extra={
+                "driver_id": driver.id,
+                "merchant_id": request.merchant_id,
+                "charger_id": request.charger_id,
+                "idempotency_key": idempotency_key,
+                "error": str(e)
+            })
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to activate exclusive session"
+            )
         
         # Log activation event (both structured log and standard logger)
         log_event("exclusive_activated", {
@@ -312,13 +396,16 @@ async def activate_exclusive(
         request_id = getattr(http_request.state, "request_id", None)
         analytics = get_analytics_client()
         
-        # Get cluster_id if available (from charger)
+        # Get cluster_id if available (from charger) - non-fatal if table doesn't exist
         cluster_id = None
         if request.charger_id:
-            from app.models.while_you_charge import ChargerCluster
-            cluster = db.query(ChargerCluster).filter(ChargerCluster.charger_id == request.charger_id).first()
-            if cluster:
-                cluster_id = str(cluster.id)
+            try:
+                from app.models.while_you_charge import ChargerCluster
+                cluster = db.query(ChargerCluster).filter(ChargerCluster.charger_id == request.charger_id).first()
+                if cluster:
+                    cluster_id = str(cluster.id)
+            except Exception:
+                pass  # ChargerCluster table may not exist - that's OK
         
         analytics.capture(
             event="exclusive_activated",
@@ -386,34 +473,57 @@ async def activate_exclusive(
 async def complete_exclusive(
     request: CompleteExclusiveRequest,
     http_request: Request,
-    driver: Optional[User] = Depends(get_current_driver_optional),  # Optional auth for demo
+    driver: Optional[User] = Depends(get_current_driver_optional),
     db: Session = Depends(get_db)
 ):
     """
     Complete an exclusive session.
     
     Requires:
-    - Driver authentication (optional for demo)
+    - Driver authentication (required in production, optional in local/dev for demo)
     - Session must be ACTIVE
     - Session must belong to the driver
     """
-    # Create a default driver if not authenticated (for demo)
+    # P1 Security: Require auth in production (no demo fallback)
     if not driver:
-        default_driver = db.query(User).filter(User.email == "demo@nerava.local").first()
-        if not default_driver:
-            from app.models import User as UserModel
-            default_driver = UserModel(
-                id=1,
-                email="demo@nerava.local",
-                password_hash="demo",
-                is_active=True,
-                role_flags="driver",
-                auth_provider="local"
+        if is_local_env():
+            # Demo fallback only in local/dev environments
+            default_driver = db.query(User).filter(User.email == "demo@nerava.local").first()
+            if not default_driver:
+                from app.models import User as UserModel
+                default_driver = UserModel(
+                    id=1,
+                    email="demo@nerava.local",
+                    password_hash="demo",
+                    is_active=True,
+                    role_flags="driver",
+                    auth_provider="local"
+                )
+                db.add(default_driver)
+                db.commit()
+                db.refresh(default_driver)
+            driver = default_driver
+        else:
+            # Production: require authentication
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required",
+                headers={"WWW-Authenticate": "Bearer"}
             )
-            db.add(default_driver)
-            db.commit()
-            db.refresh(default_driver)
-        driver = default_driver
+    
+    # Idempotency check (P0 fix)
+    idempotency_key = http_request.headers.get("X-Idempotency-Key")
+    if idempotency_key:
+        existing_completed = db.query(ExclusiveSession).filter(
+            ExclusiveSession.idempotency_key == idempotency_key,
+            ExclusiveSession.status == ExclusiveSessionStatus.COMPLETED
+        ).first()
+        if existing_completed:
+            return CompleteExclusiveResponse(
+                status=existing_completed.status.value,
+                idempotent=True,
+                nova_earned=0.0  # Nova earned is tracked separately in nova_transactions
+            )
     
     session = db.query(ExclusiveSession).filter(
         ExclusiveSession.id == request.exclusive_session_id,
@@ -433,11 +543,27 @@ async def complete_exclusive(
         )
     
     # Mark as completed
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     session.status = ExclusiveSessionStatus.COMPLETED
     session.completed_at = now
     session.updated_at = now
-    db.commit()
+    if idempotency_key:
+        session.idempotency_key = idempotency_key
+    
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error("exclusive_complete_failed", extra={
+            "driver_id": driver.id,
+            "session_id": str(session.id),
+            "idempotency_key": idempotency_key,
+            "error": str(e)
+        })
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to complete exclusive session"
+        )
     
     # Calculate duration
     duration_seconds = int((now - session.activated_at).total_seconds())
@@ -473,32 +599,37 @@ async def complete_exclusive(
         }
     )
     
-    # HubSpot: Update driver contact on completion
-    # Check if this is the first completion for this driver
-    completed_count = db.query(ExclusiveSession).filter(
-        ExclusiveSession.driver_id == driver.id,
-        ExclusiveSession.status == ExclusiveSessionStatus.COMPLETED
-    ).count()
-    
-    hubspot = get_hubspot_client()
-    hubspot_properties = {
-        "exclusive_completions": completed_count,
-        "last_exclusive_completed_at": now.isoformat() + "Z",
-    }
-    
-    # If first completion, set lifecycle stage
-    if completed_count == 1:
-        hubspot_properties["lifecycle_stage"] = "engaged_driver"
-    
-    # Update contact by phone (if available) or by driver_id
-    if driver.phone:
-        contact_id = hubspot.upsert_contact(
-            phone=driver.phone,
-            properties=hubspot_properties
-        )
-        if contact_id:
-            hubspot.update_contact_properties(contact_id, hubspot_properties)
-    
+    # HubSpot: Update driver contact on completion (non-blocking)
+    # Failures here should NOT prevent the user from completing their exclusive
+    try:
+        # Check if this is the first completion for this driver
+        completed_count = db.query(ExclusiveSession).filter(
+            ExclusiveSession.driver_id == driver.id,
+            ExclusiveSession.status == ExclusiveSessionStatus.COMPLETED
+        ).count()
+
+        hubspot = get_hubspot_client()
+        hubspot_properties = {
+            "exclusive_completions": completed_count,
+            "last_exclusive_completed_at": now.isoformat() + "Z",
+        }
+
+        # If first completion, set lifecycle stage
+        if completed_count == 1:
+            hubspot_properties["lifecycle_stage"] = "engaged_driver"
+
+        # Update contact by phone (if available) or by driver_id
+        if driver.phone:
+            contact_id = hubspot.upsert_contact(
+                phone=driver.phone,
+                properties=hubspot_properties
+            )
+            if contact_id:
+                hubspot.update_contact_properties(contact_id, hubspot_properties)
+    except Exception as e:
+        # Log but don't fail - HubSpot is CRM, not critical path
+        logger.error(f"HubSpot update failed for driver {driver.id}: {e}")
+
     return CompleteExclusiveResponse(status="COMPLETED")
 
 
@@ -522,10 +653,10 @@ async def get_active_exclusive(
         return ActiveExclusiveResponse(exclusive_session=None)
     
     # Check if expired
-    if active_session.expires_at < datetime.utcnow():
+    if active_session.expires_at < datetime.now(timezone.utc):
         # Mark as expired
         active_session.status = ExclusiveSessionStatus.EXPIRED
-        active_session.updated_at = datetime.utcnow()
+        active_session.updated_at = datetime.now(timezone.utc)
         db.commit()
         
         log_event("exclusive_expired", {
@@ -539,7 +670,7 @@ async def get_active_exclusive(
         else:
             return ActiveExclusiveResponse(exclusive_session=None)
     else:
-        remaining_seconds = int((active_session.expires_at - datetime.utcnow()).total_seconds())
+        remaining_seconds = int((active_session.expires_at - datetime.now(timezone.utc)).total_seconds())
     
     return ActiveExclusiveResponse(
         exclusive_session=ExclusiveSessionResponse(
@@ -551,4 +682,424 @@ async def get_active_exclusive(
             remaining_seconds=max(0, remaining_seconds)
         )
     )
+
+
+class SessionLookupResponse(BaseModel):
+    exclusive_session: Optional[ExclusiveSessionResponse] = None
+    merchant_name: Optional[str] = None
+    exclusive_title: Optional[str] = None
+    staff_instructions: Optional[str] = None
+
+
+@router.get("/session/{session_id}", response_model=SessionLookupResponse)
+async def get_exclusive_session(
+    session_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Look up an exclusive session by ID.
+
+    Used by staff-facing CustomerExclusiveView to display session details.
+    No auth required — session ID acts as a capability token.
+    """
+    try:
+        session_uuid = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid session ID format"
+        )
+
+    session = db.query(ExclusiveSession).filter(
+        ExclusiveSession.id == session_uuid
+    ).first()
+
+    if not session:
+        return SessionLookupResponse(exclusive_session=None)
+
+    # Check if expired
+    if session.status == ExclusiveSessionStatus.ACTIVE and session.expires_at < datetime.now(timezone.utc):
+        session.status = ExclusiveSessionStatus.EXPIRED
+        session.updated_at = datetime.now(timezone.utc)
+        db.commit()
+
+    remaining_seconds = 0
+    if session.status == ExclusiveSessionStatus.ACTIVE:
+        remaining_seconds = max(0, int((session.expires_at - datetime.now(timezone.utc)).total_seconds()))
+
+    # Get merchant name
+    merchant_name = None
+    if session.merchant_id:
+        merchant = db.query(Merchant).filter(Merchant.id == session.merchant_id).first()
+        if merchant:
+            merchant_name = merchant.name
+
+    # Get exclusive title from merchant's active perk (if any)
+    exclusive_title = None
+    staff_instructions = None
+    # For now, use generic values — these can be enriched later
+    # when we add exclusive_id to the session model
+
+    return SessionLookupResponse(
+        exclusive_session=ExclusiveSessionResponse(
+            id=str(session.id),
+            merchant_id=session.merchant_id,
+            charger_id=session.charger_id,
+            expires_at=session.expires_at.isoformat(),
+            activated_at=session.activated_at.isoformat(),
+            remaining_seconds=remaining_seconds,
+        ),
+        merchant_name=merchant_name,
+        exclusive_title=exclusive_title,
+        staff_instructions=staff_instructions,
+    )
+
+
+@router.post("/verify", response_model=VerifyVisitResponse)
+async def verify_visit(
+    request: VerifyVisitRequest,
+    http_request: Request,
+    driver: User = Depends(get_current_driver),
+    db: Session = Depends(get_db)
+):
+    """
+    Verify a visit and generate a verification code.
+
+    This endpoint creates a verified_visit record with an incremental verification code
+    that merchants can use to link orders to redemptions.
+
+    The verification code follows the format: {REGION}-{MERCHANT_CODE}-{VISIT_NUMBER}
+    Example: ATX-ASADAS-023 (23rd visit to Asadas in Austin region)
+    """
+    try:
+        # Get the exclusive session
+        session = db.query(ExclusiveSession).filter(
+            ExclusiveSession.id == request.exclusive_session_id,
+            ExclusiveSession.driver_id == driver.id
+        ).first()
+
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Exclusive session not found"
+            )
+
+        # Get the merchant
+        merchant = db.query(Merchant).filter(
+            Merchant.id == session.merchant_id
+        ).first()
+
+        if not merchant:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Merchant not found"
+            )
+
+        # Ensure merchant has a short_code
+        if not merchant.short_code:
+            # Generate a short code from merchant name (first 6 chars, uppercase, no spaces)
+            base_code = ''.join(c for c in merchant.name.upper() if c.isalnum())[:6]
+            # Check for uniqueness and append number if needed
+            existing = db.query(Merchant).filter(Merchant.short_code == base_code).first()
+            if existing:
+                # Find unique code by appending a number
+                for i in range(1, 100):
+                    new_code = f"{base_code[:5]}{i}"
+                    if not db.query(Merchant).filter(Merchant.short_code == new_code).first():
+                        base_code = new_code
+                        break
+            merchant.short_code = base_code
+            merchant.region_code = merchant.region_code or "ATX"
+            db.flush()
+
+        region_code = merchant.region_code or "ATX"
+        merchant_code = merchant.short_code
+
+        # Check if a verified visit already exists for this session
+        existing_visit = db.query(VerifiedVisit).filter(
+            VerifiedVisit.exclusive_session_id == session.id
+        ).first()
+
+        if existing_visit:
+            # Return the existing verification code
+            return VerifyVisitResponse(
+                status="ALREADY_VERIFIED",
+                verification_code=existing_visit.verification_code,
+                visit_number=existing_visit.visit_number,
+                merchant_name=merchant.name,
+                verified_at=existing_visit.verified_at.isoformat()
+            )
+
+        # Get the next visit number for this merchant TODAY (resets daily)
+        from sqlalchemy import func
+        from datetime import date
+        today_start = datetime.combine(date.today(), datetime.min.time())
+
+        max_visit_today = db.query(func.max(VerifiedVisit.visit_number)).filter(
+            VerifiedVisit.merchant_id == merchant.id,
+            VerifiedVisit.verified_at >= today_start
+        ).scalar()
+        visit_number = (max_visit_today or 0) + 1
+
+        # Generate verification code
+        verification_code = VerifiedVisit.generate_verification_code(
+            region_code, merchant_code, visit_number
+        )
+
+        # Create the verified visit
+        now = datetime.now(timezone.utc)
+        verified_visit = VerifiedVisit(
+            id=str(uuid.uuid4()),
+            verification_code=verification_code,
+            region_code=region_code,
+            merchant_code=merchant_code,
+            visit_number=visit_number,
+            merchant_id=merchant.id,
+            driver_id=driver.id,
+            exclusive_session_id=session.id,
+            charger_id=session.charger_id,
+            verified_at=now,
+            visit_date=today_start,  # Store the date for daily reset
+            verification_lat=request.lat or session.activation_lat,
+            verification_lng=request.lng or session.activation_lng,
+        )
+
+        db.add(verified_visit)
+
+        # Mark the exclusive session as COMPLETED if not already
+        if session.status == ExclusiveSessionStatus.ACTIVE:
+            session.status = ExclusiveSessionStatus.COMPLETED
+            session.completed_at = now
+            session.updated_at = now
+
+        db.commit()
+        db.refresh(verified_visit)
+
+        # Log the verification event
+        log_event("visit_verified", {
+            "driver_id": driver.id,
+            "merchant_id": merchant.id,
+            "merchant_name": merchant.name,
+            "verification_code": verification_code,
+            "visit_number": visit_number,
+            "exclusive_session_id": str(session.id),
+        })
+        logger.info(
+            f"[Exclusive][Verify] Visit verified: {verification_code} for driver {driver.id} "
+            f"at {merchant.name} (visit #{visit_number})"
+        )
+
+        # Analytics: Capture verification event
+        request_id = getattr(http_request.state, "request_id", None)
+        analytics = get_analytics_client()
+        analytics.capture(
+            event="visit_verified",
+            distinct_id=driver.public_id,
+            request_id=request_id,
+            user_id=driver.public_id,
+            merchant_id=merchant.id,
+            charger_id=session.charger_id,
+            session_id=str(session.id),
+            ip=http_request.client.host if http_request.client else None,
+            user_agent=http_request.headers.get("user-agent"),
+            properties={
+                "verification_code": verification_code,
+                "visit_number": visit_number,
+                "merchant_name": merchant.name,
+            }
+        )
+
+        return VerifyVisitResponse(
+            status="VERIFIED",
+            verification_code=verification_code,
+            visit_number=visit_number,
+            merchant_name=merchant.name,
+            verified_at=now.isoformat()
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(
+            "Visit verification failed with unexpected error",
+            extra={
+                "exclusive_session_id": request.exclusive_session_id,
+                "driver_id": driver.id if driver else None,
+                "error_type": type(e).__name__,
+                "error_message": str(e)
+            }
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "internal_server_error",
+                "message": "Visit verification failed due to an unexpected error",
+                "request_id": getattr(http_request.state, "request_id", None)
+            }
+        )
+
+
+class VisitListItem(BaseModel):
+    verification_code: str
+    visit_number: int
+    driver_id: int
+    verified_at: str
+    redeemed_at: Optional[str] = None
+    order_reference: Optional[str] = None
+
+
+class MerchantVisitsResponse(BaseModel):
+    merchant_id: str
+    merchant_name: str
+    total_visits: int
+    visits_today: int
+    visits: list[VisitListItem]
+
+
+@router.get("/visits/{merchant_id}", response_model=MerchantVisitsResponse)
+async def get_merchant_visits(
+    merchant_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    driver: User = Depends(get_current_driver),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all verified visits for a merchant.
+
+    This endpoint allows merchants to look up all visits and their verification codes.
+    Requires authentication.
+    """
+    # Get the merchant
+    merchant = db.query(Merchant).filter(Merchant.id == merchant_id).first()
+    if not merchant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Merchant not found"
+        )
+
+    # Get total count
+    total = db.query(VerifiedVisit).filter(
+        VerifiedVisit.merchant_id == merchant_id
+    ).count()
+
+    # Get today's count
+    from datetime import date
+    today_start = datetime.combine(date.today(), datetime.min.time())
+    visits_today = db.query(VerifiedVisit).filter(
+        VerifiedVisit.merchant_id == merchant_id,
+        VerifiedVisit.verified_at >= today_start
+    ).count()
+
+    # Get visits with pagination
+    visits = db.query(VerifiedVisit).filter(
+        VerifiedVisit.merchant_id == merchant_id
+    ).order_by(VerifiedVisit.verified_at.desc()).offset(offset).limit(limit).all()
+
+    return MerchantVisitsResponse(
+        merchant_id=merchant_id,
+        merchant_name=merchant.name,
+        total_visits=total,
+        visits_today=visits_today,
+        visits=[
+            VisitListItem(
+                verification_code=v.verification_code,
+                visit_number=v.visit_number,
+                driver_id=v.driver_id,
+                verified_at=v.verified_at.isoformat(),
+                redeemed_at=v.redeemed_at.isoformat() if v.redeemed_at else None,
+                order_reference=v.order_reference
+            )
+            for v in visits
+        ]
+    )
+
+
+class VisitLookupResponse(BaseModel):
+    verification_code: str
+    visit_number: int
+    merchant_name: str
+    verified_at: str
+    redeemed_at: Optional[str] = None
+    order_reference: Optional[str] = None
+
+
+@router.get("/visits/lookup/{verification_code}", response_model=VisitLookupResponse)
+async def lookup_visit(
+    verification_code: str,
+    driver: User = Depends(get_current_driver),
+    db: Session = Depends(get_db)
+):
+    """
+    Look up a specific visit by verification code.
+
+    Merchants use this to verify a driver's visit code.
+    Requires authentication.
+    """
+    visit = db.query(VerifiedVisit).filter(
+        VerifiedVisit.verification_code == verification_code.upper()
+    ).first()
+
+    if not visit:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Verification code not found"
+        )
+
+    merchant = db.query(Merchant).filter(Merchant.id == visit.merchant_id).first()
+
+    return VisitLookupResponse(
+        verification_code=visit.verification_code,
+        visit_number=visit.visit_number,
+        merchant_name=merchant.name if merchant else "Unknown",
+        verified_at=visit.verified_at.isoformat(),
+        redeemed_at=visit.redeemed_at.isoformat() if visit.redeemed_at else None,
+        order_reference=visit.order_reference
+    )
+
+
+class MarkRedeemedRequest(BaseModel):
+    order_reference: Optional[str] = None
+    notes: Optional[str] = None
+
+
+@router.post("/visits/redeem/{verification_code}")
+async def mark_visit_redeemed(
+    verification_code: str,
+    request: MarkRedeemedRequest,
+    driver: User = Depends(get_current_driver),
+    db: Session = Depends(get_db)
+):
+    """
+    Mark a visit as redeemed by the merchant.
+
+    Merchants call this when they fulfill the customer's order.
+    """
+    visit = db.query(VerifiedVisit).filter(
+        VerifiedVisit.verification_code == verification_code.upper()
+    ).first()
+
+    if not visit:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Verification code not found"
+        )
+
+    if visit.redeemed_at:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Visit already redeemed"
+        )
+
+    visit.redeemed_at = datetime.now(timezone.utc)
+    visit.order_reference = request.order_reference
+    visit.redemption_notes = request.notes
+    db.commit()
+
+    logger.info(
+        f"[Exclusive][Redeem] Visit {verification_code} marked as redeemed, "
+        f"order_reference={request.order_reference}"
+    )
+
+    return {"status": "REDEEMED", "verification_code": verification_code}
 

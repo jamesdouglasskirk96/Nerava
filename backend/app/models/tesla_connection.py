@@ -8,14 +8,17 @@ from datetime import datetime
 from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, Boolean, Index
 from sqlalchemy.orm import relationship
 from ..db import Base
-from ..core.uuid_type import UUIDType
+
+
+def _uuid_str():
+    return str(uuid.uuid4())
 
 
 class TeslaConnection(Base):
     """Tesla OAuth connection and vehicle data."""
     __tablename__ = "tesla_connections"
 
-    id = Column(UUIDType(), primary_key=True, default=uuid.uuid4)
+    id = Column(String(36), primary_key=True, default=_uuid_str)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
     # OAuth tokens
@@ -53,9 +56,9 @@ class EVVerificationCode(Base):
     """EV verification codes generated when user enters merchant geofence while charging."""
     __tablename__ = "ev_verification_codes"
 
-    id = Column(UUIDType(), primary_key=True, default=uuid.uuid4)
+    id = Column(String(36), primary_key=True, default=_uuid_str)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    tesla_connection_id = Column(UUIDType(), ForeignKey("tesla_connections.id"), nullable=True)
+    tesla_connection_id = Column(String(36), ForeignKey("tesla_connections.id"), nullable=True)
 
     # Code format: EV-XXXX (4 alphanumeric characters)
     code = Column(String(10), unique=True, nullable=False, index=True)

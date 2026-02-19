@@ -3,7 +3,7 @@ import { ApiError } from './api'
 
 export { ApiError }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.nerava.network'
 
 export interface OTPStartRequest {
   phone: string
@@ -38,33 +38,47 @@ export async function otpStart(phone: string): Promise<OTPStartResponse> {
   const cleaned = phone.replace(/\D/g, '')
   const normalizedPhone = cleaned.length === 10 ? `+1${cleaned}` : cleaned.startsWith('+') ? cleaned : `+${cleaned}`
 
-  const response = await fetch(`${API_BASE_URL}/v1/auth/otp/start`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ phone: normalizedPhone }),
-  })
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 15000) // 15s timeout
 
-  if (!response.ok) {
-    let errorData: { error?: string; message?: string; detail?: string } = {}
-    try {
-      errorData = await response.json()
-    } catch {
-      errorData = { message: response.statusText }
+  try {
+    const response = await fetch(`${API_BASE_URL}/v1/auth/otp/start`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ phone: normalizedPhone }),
+      signal: controller.signal,
+    })
+
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      let errorData: { error?: string; message?: string; detail?: string } = {}
+      try {
+        errorData = await response.json()
+      } catch {
+        errorData = { message: response.statusText }
+      }
+      const errorMessage = errorData.message || errorData.detail || response.statusText
+      const errorCode = errorData.error
+
+      // Handle rate limiting
+      if (response.status === 429) {
+        throw new ApiError(429, errorCode || 'rate_limit', 'Too many requests. Please try again in a moment.')
+      }
+
+      throw new ApiError(response.status, errorCode, errorMessage)
     }
-    const errorMessage = errorData.message || errorData.detail || response.statusText
-    const errorCode = errorData.error
 
-    // Handle rate limiting
-    if (response.status === 429) {
-      throw new ApiError(429, errorCode || 'rate_limit', 'Too many requests. Please try again in a moment.')
+    return await response.json()
+  } catch (err) {
+    clearTimeout(timeoutId)
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new ApiError(408, 'timeout', 'Request timed out. Please try again.')
     }
-
-    throw new ApiError(response.status, errorCode, errorMessage)
+    throw err
   }
-
-  return await response.json()
 }
 
 /**
@@ -110,6 +124,11 @@ export async function otpVerify(phone: string, code: string): Promise<TokenRespo
   localStorage.setItem('access_token', data.access_token)
   if (data.refresh_token) {
     localStorage.setItem('refresh_token', data.refresh_token)
+  }
+  
+  // Store user info for account page
+  if (data.user) {
+    localStorage.setItem('nerava_user', JSON.stringify(data.user))
   }
 
   return data

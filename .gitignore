@@ -1,3 +1,6 @@
+# Files containing secrets
+claude-cursor-prompts/2026-01-23_deploy-with-full-config.md
+
 # Python
 __pycache__/
 *.py[cod]

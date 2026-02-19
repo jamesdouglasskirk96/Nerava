@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MapPin, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
 
-// Mock location data
-const mockLocations = [
+const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
+
+// Mock location data (only used in demo mode)
+const mockLocations = isDemoMode ? [
   {
     id: '1',
     name: 'Downtown Coffee Shop',
@@ -18,7 +20,7 @@ const mockLocations = [
     hours: 'Mon-Fri: 6am-8pm, Sat-Sun: 7am-7pm',
     claimed: false,
   },
-];
+] : [];
 
 export function SelectLocation() {
   const navigate = useNavigate();
@@ -141,12 +143,14 @@ export function SelectLocation() {
           </button>
         </div>
 
-        <button
-          onClick={handleLocationClaimed}
-          className="mt-4 text-sm text-neutral-500 hover:text-neutral-700 w-full text-center"
-        >
-          Demo: Show "Already Claimed" State
-        </button>
+        {isDemoMode && (
+          <button
+            onClick={handleLocationClaimed}
+            className="mt-4 text-sm text-neutral-500 hover:text-neutral-700 w-full text-center"
+          >
+            Demo: Show "Already Claimed" State
+          </button>
+        )}
       </div>
     </div>
   );

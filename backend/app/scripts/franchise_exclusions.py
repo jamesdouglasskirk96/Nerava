@@ -247,3 +247,6 @@ def filter_franchises(merchants: list) -> list:
 
 
 
+
+
+

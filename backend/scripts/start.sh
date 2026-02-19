@@ -17,6 +17,9 @@ cd /app
 RUN_MIGRATIONS=${RUN_MIGRATIONS_ON_BOOT:-false}
 
 if [ "$RUN_MIGRATIONS" = "true" ]; then
+    echo "=== Fixing alembic version if needed ==="
+    python /app/scripts/fix_alembic_version.py || true
+
     echo "=== Running database migrations ==="
     if python -m alembic upgrade head; then
         echo "Migrations completed successfully"
@@ -29,6 +32,12 @@ if [ "$RUN_MIGRATIONS" = "true" ]; then
         echo "  4. Migration files are corrupted or missing" >&2
         # Don't exit - continue to start the app
     fi
+
+    echo "=== Seeding demo merchant if needed ==="
+    python /app/scripts/seed_demo_merchant.py || true
+
+    echo "=== Seeding onboarding merchants ==="
+    python /app/scripts/seed_onboarding_merchants.py || true
     echo ""
 else
     echo "Skipping migrations (RUN_MIGRATIONS_ON_BOOT not set to 'true')"

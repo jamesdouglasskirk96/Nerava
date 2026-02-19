@@ -9,24 +9,30 @@ export function Overrides() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmationToken, setConfirmationToken] = useState('');
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   async function handleForceClose() {
     if (!selectedLocation || !reason || reason.length < 10) {
-      alert('Location and reason (min 10 chars) required');
+      setFeedback({ type: 'error', message: 'Location and reason (min 10 chars) required' });
+      setTimeout(() => setFeedback(null), 5000);
       return;
     }
 
     setLoading(true);
     setError(null);
+    setFeedback(null);
     try {
       const response = await forceCloseSessions(selectedLocation, reason);
-      alert(`Successfully closed ${response.sessions_closed} sessions`);
+      setFeedback({ type: 'success', message: `Successfully closed ${response.sessions_closed} sessions` });
+      setTimeout(() => setFeedback(null), 5000);
       setConfirmDialog(null);
       setReason('');
       setSelectedLocation('');
     } catch (err: any) {
       console.error('Force close failed:', err);
       setError(err.message || 'Failed to force close sessions');
+      setFeedback({ type: 'error', message: err.message || 'Failed to force close sessions' });
+      setTimeout(() => setFeedback(null), 5000);
     } finally {
       setLoading(false);
     }
@@ -34,26 +40,32 @@ export function Overrides() {
 
   async function handleEmergencyPause(action: 'activate' | 'deactivate') {
     if (!reason || reason.length < 10) {
-      alert('Reason required (min 10 chars)');
+      setFeedback({ type: 'error', message: 'Reason required (min 10 chars)' });
+      setTimeout(() => setFeedback(null), 5000);
       return;
     }
 
     if (action === 'activate' && confirmationToken !== 'CONFIRM-EMERGENCY-PAUSE') {
-      alert('Please enter the confirmation token: CONFIRM-EMERGENCY-PAUSE');
+      setFeedback({ type: 'error', message: 'Please enter the confirmation token: CONFIRM-EMERGENCY-PAUSE' });
+      setTimeout(() => setFeedback(null), 5000);
       return;
     }
 
     setLoading(true);
     setError(null);
+    setFeedback(null);
     try {
       await emergencyPause(action, reason, confirmationToken || 'CONFIRM-EMERGENCY-PAUSE');
-      alert(`Emergency pause ${action}d successfully`);
+      setFeedback({ type: 'success', message: `Emergency pause ${action}d successfully` });
+      setTimeout(() => setFeedback(null), 5000);
       setConfirmDialog(null);
       setReason('');
       setConfirmationToken('');
     } catch (err: any) {
       console.error('Emergency pause failed:', err);
       setError(err.message || 'Failed to execute emergency pause');
+      setFeedback({ type: 'error', message: err.message || 'Failed to execute emergency pause' });
+      setTimeout(() => setFeedback(null), 5000);
     } finally {
       setLoading(false);
     }
@@ -76,6 +88,18 @@ export function Overrides() {
       {error && (
         <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
           {error}
+        </div>
+      )}
+
+      {feedback && (
+        <div
+          className={`mb-4 border rounded-lg p-4 ${
+            feedback.type === 'success'
+              ? 'bg-green-50 border-green-200 text-green-700'
+              : 'bg-red-50 border-red-200 text-red-700'
+          }`}
+        >
+          {feedback.message}
         </div>
       )}
 

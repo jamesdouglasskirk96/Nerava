@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.db import get_db
+from app.dependencies_domain import get_current_user
+from app.models import User, ChargeIntent
 import uuid
 import math
 
@@ -17,80 +19,54 @@ def km_distance(p1, p2):
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
 
 @router.get("/v1/intent")
-async def get_intent(db: Session = Depends(get_db)):
+async def get_intent(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """Get saved intents for the user"""
     try:
-        me = "demo-user-123"
-        
-        # Check if table exists first
-        check_table = text("""
-            SELECT name FROM sqlite_master 
-            WHERE type='table' AND name='charge_intents'
-        """)
-        table_exists = db.execute(check_table).fetchone()
-        
-        if not table_exists:
-            # Table doesn't exist, return empty list
-            return []
-        
-        query = text("""
-            SELECT * FROM charge_intents 
-            WHERE user_id = :user_id
-            ORDER BY created_at DESC
-        """)
-        
-        result = db.execute(query, {'user_id': me})
-        intents = []
-        
-        for row in result:
-            # Helper to safely get datetime or string
-            def safe_datetime(idx):
-                if len(row) <= idx or row[idx] is None:
-                    return None
-                val = row[idx]
-                # If it's already a string, return it
-                if isinstance(val, str):
-                    return val
-                # If it's a datetime object, convert to ISO
-                if hasattr(val, 'isoformat'):
-                    return val.isoformat()
-                return str(val)
-            
-            intents.append({
-                'id': row[0] if len(row) > 0 else None,
-                'user_id': row[1] if len(row) > 1 else None,
-                'station_id': row[2] if len(row) > 2 else None,
-                'station_name': row[3] if len(row) > 3 else None,
-                'merchant_name': row[4] if len(row) > 4 else None,
-                'perk_title': row[5] if len(row) > 5 else None,
-                'address': row[6] if len(row) > 6 else None,
-                'eta_minutes': row[7] if len(row) > 7 else None,
-                'starts_at': safe_datetime(8),
-                'status': row[9] if len(row) > 9 else 'saved',
-                'merchant_lat': row[10] if len(row) > 10 else None,
-                'merchant_lng': row[11] if len(row) > 11 else None,
-                'station_lat': row[12] if len(row) > 12 else None,
-                'station_lng': row[13] if len(row) > 13 else None,
-                'merchant': row[16] if len(row) > 16 else None,  # New field
-                'perk_id': row[17] if len(row) > 17 else None,   # New field
-                'window_text': row[18] if len(row) > 18 else None,  # New field
-                'distance_text': row[19] if len(row) > 19 else None,  # New field
-                'created_at': safe_datetime(14)
-            })
-        
-        return intents
+        intents = db.query(ChargeIntent).filter(
+            ChargeIntent.user_id == str(current_user.id)
+        ).order_by(ChargeIntent.created_at.desc()).all()
+
+        return [
+            {
+                'id': i.id,
+                'user_id': i.user_id,
+                'station_id': i.station_id,
+                'station_name': i.station_name,
+                'merchant_name': i.merchant_name,
+                'perk_title': i.perk_title,
+                'address': i.address,
+                'eta_minutes': i.eta_minutes,
+                'starts_at': i.starts_at.isoformat() if i.starts_at else None,
+                'status': i.status or 'saved',
+                'merchant_lat': i.merchant_lat,
+                'merchant_lng': i.merchant_lng,
+                'station_lat': i.station_lat,
+                'station_lng': i.station_lng,
+                'merchant': i.merchant,
+                'perk_id': i.perk_id,
+                'window_text': i.window_text,
+                'distance_text': i.distance_text,
+                'created_at': i.created_at.isoformat() if i.created_at else None
+            }
+            for i in intents
+        ]
     except Exception as e:
         # Log error but return empty list instead of crashing
         import logging
-        logger = logging.getLogger(__name__)
-        logger.warning(f"Error fetching intents: {e}", exc_info=True)
-        # Return empty list so frontend doesn't crash
+        logging.getLogger(__name__).warning(f"Error fetching intents: {e}", exc_info=True)
         return []
 
 @router.post("/v1/intent")
-async def create_intent(payload: dict, db: Session = Depends(get_db)):
+async def create_intent(
+    payload: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """Save a perk/station combo for later activation on Earn page"""
-    me = "demo-user-123"
+    me = str(current_user.id)
     
     station_id = payload.get("station_id")
     merchant = payload.get("merchant")
@@ -106,7 +82,7 @@ async def create_intent(payload: dict, db: Session = Depends(get_db)):
       WHERE user_id=:uid AND status='saved'
         AND COALESCE(merchant,'') = COALESCE(:merchant,'')
         AND COALESCE(station_id,'') = COALESCE(:station_id,'')
-        AND created_at >= DATETIME('now','-10 minutes')
+        AND created_at >= NOW() - INTERVAL '10 minutes'
       ORDER BY created_at DESC LIMIT 1
     """)
     recent = db.execute(recent_query, {'uid': me, 'merchant': merchant, 'station_id': station_id}).first()
@@ -136,10 +112,13 @@ async def create_intent(payload: dict, db: Session = Depends(get_db)):
     return {"ok": True, "id": iid}
 
 @router.post("/v1/intents")
-async def save_intent(intent_data: dict, db: Session = Depends(get_db)):
+async def save_intent(
+    intent_data: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """Save a charge intent"""
-    # For demo purposes, use hardcoded user ID
-    me = "demo-user-123"
+    me = str(current_user.id)
     
     intent_id = str(uuid.uuid4())
     
@@ -170,9 +149,12 @@ async def save_intent(intent_data: dict, db: Session = Depends(get_db)):
     return {"ok": True, "id": intent_id}
 
 @router.get("/v1/intents/me")
-async def get_my_intents(db: Session = Depends(get_db)):
+async def get_my_intents(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """Get my open intents"""
-    me = "demo-user-123"
+    me = str(current_user.id)
     
     query = text("""
         SELECT * FROM charge_intents 
@@ -206,9 +188,13 @@ async def get_my_intents(db: Session = Depends(get_db)):
     return intents
 
 @router.patch("/v1/intents/{intent_id}/start")
-async def start_intent(intent_id: str, db: Session = Depends(get_db)):
+async def start_intent(
+    intent_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """Start an intent"""
-    me = "demo-user-123"
+    me = str(current_user.id)
     
     query = text("""
         UPDATE charge_intents
@@ -235,9 +221,14 @@ async def start_intent(intent_id: str, db: Session = Depends(get_db)):
     }
 
 @router.post("/v1/intents/{intent_id}/verify-geo")
-async def verify_geo(intent_id: str, geo_data: dict, db: Session = Depends(get_db)):
+async def verify_geo(
+    intent_id: str,
+    geo_data: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """Verify dual-zone geo location"""
-    me = "demo-user-123"
+    me = str(current_user.id)
     
     # Get intent
     query = text("SELECT * FROM charge_intents WHERE id = :id AND user_id = :user_id")

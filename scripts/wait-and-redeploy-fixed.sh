@@ -72,3 +72,6 @@ echo "Check manually:"
 echo "  aws apprunner list-services --region $REGION --query 'ServiceSummaryList[?contains(ServiceName, \`nerava\`)].{Name:ServiceName,Status:Status}' --output table"
 
 
+
+
+

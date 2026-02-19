@@ -1,5 +1,5 @@
 import { Button } from '../Button'
-import { getDriverCTAHref, getMerchantCTAHref, getChargerOwnerCTAHref } from './ctaLinks'
+import { getDriverCTAHref, getMerchantFindHref, getChargerOwnerCTAHref } from './ctaLinks'
 
 export default function Hero() {
   return (
@@ -19,8 +19,8 @@ export default function Hero() {
             <Button variant="primary" href={getDriverCTAHref()}>
               Open Nerava
             </Button>
-            <Button variant="primary" href={getMerchantCTAHref()}>
-              For Businesses
+            <Button variant="primary" href={getMerchantFindHref()}>
+              See how this works
             </Button>
           </div>
           <Button 

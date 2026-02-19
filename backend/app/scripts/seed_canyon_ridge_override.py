@@ -29,9 +29,9 @@ async def seed_canyon_ridge_override():
     db = SessionLocal()
     
     try:
-        # Canyon Ridge charger coordinates (approximate, verify via geocoding)
-        charger_lat = 30.2680
-        charger_lng = -97.7435
+        # Canyon Ridge charger coordinates (verified from production database)
+        charger_lat = 30.3979
+        charger_lng = -97.7044
         charger_address = "500 W Canyon Ridge Dr, Austin, TX 78753"
         charger_id = "canyon_ridge_tesla"
         
@@ -210,6 +210,9 @@ async def seed_canyon_ridge_override():
 
 if __name__ == "__main__":
     asyncio.run(seed_canyon_ridge_override())
+
+
+
 
 
 

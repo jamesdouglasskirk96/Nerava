@@ -2,12 +2,14 @@
 Production-ready OTP service using provider pattern
 """
 import logging
+import hashlib
 from typing import Optional
 from sqlalchemy.orm import Session
 from .auth import get_otp_provider, get_rate_limit_service
 from .auth.audit import AuditService
 from ..utils.phone import normalize_phone, get_phone_last4
 from ..core.config import settings
+from ..services.analytics import get_analytics_client
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +101,23 @@ class OTPServiceV2:
                     env=settings.ENV,
                 )
                 logger.info(f"[OTP] OTP sent successfully to {phone_last4}")
+                
+                # PostHog: Track OTP sent
+                analytics = get_analytics_client()
+                phone_hash = hashlib.sha256(normalized_phone.encode()).hexdigest()[:16]
+                provider_name = provider.__class__.__name__.replace('Provider', '').lower()
+                analytics.capture(
+                    event="server.otp.sent",
+                    distinct_id=f"phone:{phone_hash}",
+                    request_id=request_id,
+                    ip=ip,
+                    user_agent=user_agent,
+                    properties={
+                        "phone_hash": phone_hash,
+                        "provider": provider_name,
+                        "purpose": "login",  # Default, can be extended if needed
+                    }
+                )
             else:
                 logger.warning(f"[OTP] OTP send failed for {phone_last4}")
             
@@ -175,7 +194,7 @@ class OTPServiceV2:
                 )
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Invalid code."
+                detail="Too many attempts. Please wait a few minutes and try again."
             )
         
         # Get provider and verify OTP
@@ -196,6 +215,23 @@ class OTPServiceV2:
                     env=settings.ENV,
                 )
                 logger.info(f"[OTP] Verification successful for {phone_last4}")
+                
+                # PostHog: Track OTP verified
+                analytics = get_analytics_client()
+                phone_hash = hashlib.sha256(normalized_phone.encode()).hexdigest()[:16]
+                provider_name = provider.__class__.__name__.replace('Provider', '').lower()
+                analytics.capture(
+                    event="server.otp.verified",
+                    distinct_id=f"phone:{phone_hash}",
+                    request_id=request_id,
+                    ip=ip,
+                    user_agent=user_agent,
+                    properties={
+                        "phone_hash": phone_hash,
+                        "provider": provider_name,
+                    }
+                )
+                
                 return normalized_phone
             else:
                 # Audit log: fail
@@ -220,8 +256,11 @@ class OTPServiceV2:
             rate_limit_service.record_verify_attempt(normalized_phone, False)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Invalid code."
+                detail="Verification service error. Please try again."
             )
+
+
+
 
 
 

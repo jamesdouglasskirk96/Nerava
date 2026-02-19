@@ -1,6 +1,6 @@
 import { Button } from '../Button'
 import Card from './Card'
-import { getMerchantCTAHref } from './ctaLinks'
+import { getMerchantFindHref } from './ctaLinks'
 
 export default function MerchantsSection() {
   const benefits = [
@@ -38,8 +38,8 @@ export default function MerchantsSection() {
           ))}
         </div>
         <div className="text-center">
-          <Button variant="primary" href={getMerchantCTAHref()}>
-            Get listed near chargers
+          <Button variant="primary" href={getMerchantFindHref()}>
+            See how this works
           </Button>
         </div>
       </div>

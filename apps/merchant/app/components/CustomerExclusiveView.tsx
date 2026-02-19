@@ -1,37 +1,97 @@
 import { useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { CheckCircle, Clock } from 'lucide-react';
+import { CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { fetchAPI, ApiError } from '../services/api';
 
-// Mock exclusive data
-const mockExclusiveData = {
-  '1': {
-    merchantName: 'Downtown Coffee Shop',
-    exclusiveName: 'Free Pastry with Coffee',
-    staffInstructions: 'Provide any pastry from display case with coffee purchase',
-    activatedAt: new Date(),
-  },
-};
+interface ExclusiveSession {
+  id: string
+  merchant_id: string | null
+  charger_id: string | null
+  expires_at: string
+  activated_at: string
+  remaining_seconds: number
+}
+
+interface ExclusiveSessionResponse {
+  exclusive_session: ExclusiveSession | null
+  merchant_name: string | null
+  exclusive_title: string | null
+  staff_instructions: string | null
+}
 
 export function CustomerExclusiveView() {
   const { exclusiveId } = useParams();
-  const [timeRemaining, setTimeRemaining] = useState(300); // 5 minutes in seconds
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [session, setSession] = useState<ExclusiveSession | null>(null);
+  const [merchantName, setMerchantName] = useState<string>('');
+  const [exclusiveName, setExclusiveName] = useState<string>('');
+  const [staffInstructions, setStaffInstructions] = useState<string>('');
+  const [timeRemaining, setTimeRemaining] = useState<number>(0);
   
-  // Countdown timer
   useEffect(() => {
+    if (exclusiveId) {
+      loadExclusiveSession(exclusiveId);
+    }
+  }, [exclusiveId]);
+
+  const loadExclusiveSession = async (sessionId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const data = await fetchAPI<ExclusiveSessionResponse>(`/v1/exclusive/session/${sessionId}`);
+      
+      if (!data.exclusive_session) {
+        setError('Exclusive session not found or expired');
+        setLoading(false);
+        return;
+      }
+
+      setSession(data.exclusive_session);
+      setMerchantName(data.merchant_name || 'Merchant');
+      setExclusiveName(data.exclusive_title || 'Active Exclusive');
+      setStaffInstructions(data.staff_instructions || 'Verify customer activation');
+      
+    } catch (err) {
+      console.error('Failed to load exclusive session:', err);
+      setError(err instanceof ApiError ? err.message : 'Failed to load exclusive session');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Countdown timer - update timeRemaining when session changes
+  useEffect(() => {
+    if (!session) return;
+    
+    // Initialize from session
+    setTimeRemaining(session.remaining_seconds || 0);
+    
     const interval = setInterval(() => {
       setTimeRemaining(prev => Math.max(0, prev - 1));
     }, 1000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [session]);
 
-  const exclusive = mockExclusiveData[exclusiveId as keyof typeof mockExclusiveData];
-
-  if (!exclusive) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center p-6">
         <div className="text-center">
-          <h1 className="text-2xl text-neutral-900">Exclusive Not Found</h1>
+          <p className="text-neutral-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !session) {
+    return (
+      <div className="min-h-screen bg-neutral-50 flex items-center justify-center p-6">
+        <div className="text-center max-w-md">
+          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h1 className="text-2xl text-neutral-900 mb-2">Exclusive Not Found</h1>
+          <p className="text-neutral-600">{error || 'This exclusive session is not available'}</p>
         </div>
       </div>
     );
@@ -51,7 +111,7 @@ export function CustomerExclusiveView() {
           {/* Merchant Info */}
           <div className="text-center mb-8">
             <div className="text-sm text-neutral-600 mb-2">Exclusive at</div>
-            <h1 className="text-2xl text-neutral-900">{exclusive.merchantName}</h1>
+            <h1 className="text-2xl text-neutral-900">{merchantName}</h1>
           </div>
 
           {/* Active Badge */}
@@ -63,7 +123,7 @@ export function CustomerExclusiveView() {
                 </div>
               </div>
               <h2 className="text-xl text-green-900 mb-2">Exclusive Active</h2>
-              <p className="text-lg text-green-800">{exclusive.exclusiveName}</p>
+              <p className="text-lg text-green-800">{exclusiveName}</p>
             </div>
           </div>
 
@@ -79,10 +139,10 @@ export function CustomerExclusiveView() {
           </div>
 
           {/* Staff Instructions */}
-          {exclusive.staffInstructions && (
+          {staffInstructions && (
             <div className="border-t border-neutral-200 pt-6">
               <div className="text-xs text-neutral-600 mb-2">Staff Instructions</div>
-              <p className="text-sm text-neutral-900">{exclusive.staffInstructions}</p>
+              <p className="text-sm text-neutral-900">{staffInstructions}</p>
             </div>
           )}
         </div>

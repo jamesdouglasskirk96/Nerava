@@ -16,7 +16,19 @@ class Settings(BaseModel):
     # Stripe configuration
     STRIPE_SECRET_KEY: str = os.getenv("STRIPE_SECRET_KEY", os.getenv("STRIPE_SECRET", ""))  # Support both names
     STRIPE_WEBHOOK_SECRET: str = os.getenv("STRIPE_WEBHOOK_SECRET", "")
-    
+
+    # Stripe Express Payouts configuration
+    ENABLE_STRIPE_PAYOUTS: bool = os.getenv("ENABLE_STRIPE_PAYOUTS", "false").lower() == "true"
+    STRIPE_PAYOUT_WEBHOOK_SECRET: str = os.getenv("STRIPE_PAYOUT_WEBHOOK_SECRET", "")
+    MINIMUM_WITHDRAWAL_CENTS: int = int(os.getenv("MINIMUM_WITHDRAWAL_CENTS", "2000"))  # $20 minimum
+    WEEKLY_WITHDRAWAL_LIMIT_CENTS: int = int(os.getenv("WEEKLY_WITHDRAWAL_LIMIT_CENTS", "100000"))  # $1000/week
+
+    # Fidel CLO (Card Linked Offers) configuration
+    ENABLE_CLO: bool = os.getenv("ENABLE_CLO", "false").lower() == "true"
+    FIDEL_SECRET_KEY: str = os.getenv("FIDEL_SECRET_KEY", "")
+    FIDEL_PROGRAM_ID: str = os.getenv("FIDEL_PROGRAM_ID", "")
+    FIDEL_WEBHOOK_SECRET: str = os.getenv("FIDEL_WEBHOOK_SECRET", "")
+
     # Frontend URL for redirects
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:8001")
     

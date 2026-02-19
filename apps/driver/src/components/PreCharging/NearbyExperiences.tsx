@@ -21,8 +21,7 @@ export function NearbyExperiences({ experiences, maxItems = 2, onMerchantClick }
       onMerchantClick(merchant)
     } else {
       // Default: navigate to merchant details
-      const merchantId = merchant.place_id || merchant.id || ''
-      navigate(`/merchant/${merchantId}`)
+      navigate(`/merchant/${merchant.place_id}`)
     }
   }
   
@@ -34,8 +33,8 @@ export function NearbyExperiences({ experiences, maxItems = 2, onMerchantClick }
     return (
       <div className="mt-3 pt-3 border-t border-gray-200">
         <p className="text-xs font-semibold text-gray-700 mb-2">Nearby experience</p>
-        <div 
-          className="relative rounded-lg overflow-hidden bg-gray-100 aspect-[4/3] cursor-pointer active:scale-[0.98] transition-transform"
+        <div
+          className="relative rounded-lg overflow-hidden bg-gray-100 aspect-video cursor-pointer active:scale-[0.98] transition-transform"
           onClick={() => handleMerchantClick(exp)}
         >
           {exp.photo_url ? (
@@ -62,7 +61,7 @@ export function NearbyExperiences({ experiences, maxItems = 2, onMerchantClick }
           {/* Open/Closed badge */}
           {exp.open_now !== undefined && (
             <div className="absolute top-2 left-2">
-              <Badge variant={exp.open_now ? "success" : "error"}>
+              <Badge variant={exp.open_now ? "featured" : "default"}>
                 {exp.open_now ? 'Open' : 'Closed'}
               </Badge>
             </div>

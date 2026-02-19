@@ -43,7 +43,8 @@ export interface NextActions {
 export interface CaptureIntentResponse {
   session_id: string
   confidence_tier: 'A' | 'B' | 'C'
-  charger_summary?: ChargerSummary
+  charger_summary?: ChargerSummary  // Nearest charger (backward compat)
+  chargers?: ChargerSummary[]  // Up to 5 nearest chargers within 25km
   merchants: MerchantSummary[]
   fallback_message?: string
   next_actions: NextActions
@@ -51,12 +52,18 @@ export interface CaptureIntentResponse {
 
 export interface MerchantInfo {
   id: string
+  place_id?: string
   name: string
   category: string
+  description?: string
   photo_url?: string
   address?: string
   rating?: number
   price_level?: number
+  amenities?: {
+    bathroom: { upvotes: number; downvotes: number }
+    wifi: { upvotes: number; downvotes: number }
+  }
 }
 
 export interface MomentInfo {

@@ -194,6 +194,8 @@ from .routers import twilio_sms_webhook
 from .routers import merchant_arrivals
 from .routers import checkin
 from .routers import tesla_auth
+from .routers import driver_wallet
+from .routers import clo
 
 # These are now the canonical /v1/* endpoints (no /domain/ prefix)
 app.include_router(auth_domain.router)  # /v1/auth/*
@@ -222,6 +224,8 @@ app.include_router(twilio_sms_webhook.router)  # /v1/webhooks/twilio-arrival-sms
 app.include_router(merchant_arrivals.router)  # /v1/merchants/{id}/arrivals + notification-config
 app.include_router(checkin.router)  # /v1/checkin/* (V0 EV Arrival Code flow)
 app.include_router(tesla_auth.router)  # /v1/auth/tesla/* (Tesla OAuth and EV verification)
+app.include_router(driver_wallet.router)  # /v1/wallet/* (Driver payouts via Stripe Express)
+app.include_router(clo.router)  # /v1/clo/* (Card Linked Offers via Fidel)
 
 # Pilot party endpoints
 from .routers import pilot_party

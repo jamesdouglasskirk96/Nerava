@@ -10,15 +10,81 @@ body {
 }
 
 #root {
-  height: 100vh; /* Fallback for older browsers */
-  height: 100dvh; /* Dynamic viewport height - accounts for browser UI */
+  height: 100vh; /* Fallback */
+  height: 100dvh;
   width: 100%;
-  overflow: hidden; /* Prevent body scroll */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Ensure body doesn't scroll */
 body {
   overflow: hidden;
   height: 100vh;
   height: 100dvh;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+/* CSS variable for dynamic height */
+:root {
+  --app-height: 100dvh;
+}
+
+/* Shimmer animation for reservation code */
+@keyframes shimmer {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s ease-in-out infinite;
+}
+
+/* Skeleton loading shimmer — sweeping gradient */
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #E4E6EB 25%, #F3F4F6 50%, #E4E6EB 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Disable specific animations */
+  .animate-pulse,
+  .animate-spin,
+  .animate-bounce,
+  .animate-ping,
+  .animate-shimmer,
+  .skeleton-shimmer {
+    animation: none !important;
+  }
+}
+
+/* Focus-visible indicators for keyboard navigation */
+*:focus-visible {
+  outline: 2px solid #1877F2;
+  outline-offset: 2px;
+  border-radius: 4px;
 }

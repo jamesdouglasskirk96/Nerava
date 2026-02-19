@@ -90,7 +90,7 @@ export function chargerSummaryToMockCharger(
     name: charger.name,
     category: `${charger.network_name || 'Charging'} • ${plugTypes.join(' & ')}`,
     walkTime: `${driveMinutes} min drive`,
-    imageUrl: null,
+    imageUrl: charger.network_name?.toLowerCase().includes('tesla') ? '/tesla-logo.svg' : '/bolt-blue.svg',
     distance: distanceToMiles(charger.distance_m),
     hours: '24/7',
     hoursStatus: 'Available now',
@@ -132,20 +132,28 @@ export function groupMerchantsIntoSets(merchants: MerchantSummary[]): Array<{ fe
 }
 
 /**
- * Group chargers into sets (1 featured + 2 nearby)
+ * Group chargers into sets (1 featured per set)
+ * Now supports multiple chargers from the API
  */
 export function groupChargersIntoSets(
-  charger: ChargerSummary | undefined,
+  chargerOrChargers: ChargerSummary | ChargerSummary[] | undefined,
   nearbyMerchants: MerchantSummary[] = []
 ): Array<{ featured: MockCharger; nearby: MockCharger[] }> {
-  if (!charger) {
+  // Handle both single charger (backward compat) and array of chargers
+  const chargers = Array.isArray(chargerOrChargers)
+    ? chargerOrChargers
+    : chargerOrChargers
+    ? [chargerOrChargers]
+    : []
+
+  if (chargers.length === 0) {
     return []
   }
-  return [
-    {
-      featured: chargerSummaryToMockCharger(charger, nearbyMerchants),
-      nearby: [],
-    },
-  ]
+
+  // Create a set for each charger (featured charger + empty nearby for now)
+  return chargers.map((charger) => ({
+    featured: chargerSummaryToMockCharger(charger, nearbyMerchants),
+    nearby: [],
+  }))
 }
 

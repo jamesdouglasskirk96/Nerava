@@ -27,9 +27,10 @@ from app.services.google_places_new import _haversine_distance
 DATABASE_URL = "postgresql://nerava_admin:YJEDUbHGFIZBo6D5JiDPTbb4ZbmbE4ae@nerava-db.c27i820wot9o.us-east-1.rds.amazonaws.com:5432/nerava"
 
 # Demo chargers (from seed_demo_chargers.py)
+# Note: IDs must match frontend expectations (e.g., canyon_ridge_tesla)
 DEMO_CHARGERS = [
     {
-        "id": "charger_canyon_ridge",
+        "id": "canyon_ridge_tesla",  # Updated to match frontend expectation
         "name": "Canyon Ridge Supercharger",
         "address": "501 W Canyon Ridge Dr, Austin, TX 78753",
         "lat": 30.4027,
@@ -93,9 +94,19 @@ def extract_merchant_place_ids() -> Dict[str, List[str]]:
         print(f"⚠️  Warning: {chargers_dir} not found")
         return {}
     
+    # Map directory names to charger IDs (handle mismatch between dir names and IDs)
+    charger_id_map = {
+        "charger_canyon_ridge": "canyon_ridge_tesla",
+        "charger_mopac": "charger_mopac",
+        "charger_westlake": "charger_westlake",
+        "charger_ben_white": "charger_ben_white",
+        "charger_sunset_valley": "charger_sunset_valley",
+    }
+    
     for charger_dir in sorted(chargers_dir.iterdir()):
         if charger_dir.is_dir():
-            charger_id = charger_dir.name
+            # Map directory name to charger ID
+            charger_id = charger_id_map.get(charger_dir.name, charger_dir.name)
             merchants_dir = charger_dir / "merchants"
             
             if merchants_dir.exists():

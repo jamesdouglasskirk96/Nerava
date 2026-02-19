@@ -1,6 +1,7 @@
 // Merchant Carousel component matching Figma reference
 import { ChevronLeft, ChevronRight, Heart } from 'lucide-react'
 import { ImageWithFallback } from '../shared/ImageWithFallback'
+import { capture, DRIVER_EVENTS } from '../../analytics'
 import type { MockMerchant } from '../../mock/mockMerchants'
 import type { MockCharger } from '../../mock/mockChargers'
 
@@ -19,6 +20,7 @@ interface MerchantCarouselProps {
   currentSetIndex: number
   totalSets: number
   onMerchantClick: (item: CarouselItem) => void
+  onExperienceClick?: (experienceId: string, photoUrl?: string | null) => void
   likedMerchants: Set<string>
 }
 
@@ -35,6 +37,7 @@ export function MerchantCarousel({
   currentSetIndex,
   totalSets,
   onMerchantClick,
+  onExperienceClick,
   likedMerchants,
 }: MerchantCarouselProps) {
   const { featured, nearby } = merchantSet
@@ -49,22 +52,43 @@ export function MerchantCarousel({
   }
 
   return (
-    <div className="relative h-full flex flex-col justify-start pt-3 px-5">
+    <div className="relative h-full flex flex-col justify-start pt-2 px-5 pb-32">
       {/* Featured Merchant Card */}
       <div className="mb-4">
         <div
           className="bg-[#F7F8FA] rounded-2xl overflow-hidden shadow-md border border-[#E4E6EB] cursor-pointer"
-          onClick={() => onMerchantClick(featured)}
+          onClick={() => {
+            // Track merchant click
+            capture(DRIVER_EVENTS.MERCHANT_CLICKED, {
+              merchant_id: featured.id,
+              merchant_name: featured.name,
+              category: featured.category || 'unknown',
+              source: 'carousel',
+              path: window.location.pathname,
+            })
+            onMerchantClick(featured)
+          }}
         >
-          {/* Image */}
-          <div className="relative h-64 overflow-hidden">
-            <ImageWithFallback
-              src={featured.imageUrl}
-              alt={featured.name}
-              category={featured.category || 'coffee'}
-              className="w-full h-full"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+          {/* Image - Show logo centered for charger networks, photo for merchants */}
+          <div className="relative h-20 overflow-hidden">
+            {featured.imageUrl?.endsWith('.svg') ? (
+              /* Logo display for charger networks */
+              <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+                <img
+                  src={featured.imageUrl}
+                  alt={featured.name}
+                  className="w-16 h-16 object-contain"
+                />
+              </div>
+            ) : (
+              <ImageWithFallback
+                src={featured.imageUrl}
+                alt={featured.name}
+                category={featured.category || 'coffee'}
+                className="w-full h-full"
+              />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent" />
 
             {/* Walk Time Badge on Image */}
             <div className="absolute bottom-3 left-3">
@@ -84,7 +108,7 @@ export function MerchantCarousel({
           </div>
 
           {/* Content */}
-          <div className="p-5">
+          <div className="p-4">
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1">
                 <h3 className={getTitleFontSize(featured.name)}>{featured.name}</h3>
@@ -104,8 +128,8 @@ export function MerchantCarousel({
                   </div>
                 )}
                 {likedMerchants.has(featured.id) && (
-                  <div className="w-7 h-7 bg-[#1877F2]/10 rounded-full flex items-center justify-center flex-shrink-0 border border-[#1877F2]/20">
-                    <Heart className="w-4 h-4 text-[#1877F2] fill-[#1877F2]" />
+                  <div className="w-7 h-7 bg-[#1877F2]/10 rounded-full flex items-center justify-center flex-shrink-0 border border-[#1877F2]/20" role="img" aria-label="Favorited">
+                    <Heart className="w-4 h-4 text-[#1877F2] fill-[#1877F2]" aria-hidden="true" />
                   </div>
                 )}
               </div>
@@ -133,12 +157,19 @@ export function MerchantCarousel({
 
             {/* Experiences for chargers (pre-charging mode) */}
             {!isCharging && 'experiences' in featured && featured.experiences && featured.experiences.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-[#E4E6EB]">
+              <div className="mt-3 pt-3 border-t border-[#E4E6EB]">
                 <p className="text-xs text-[#65676B] mb-2">Nearby experiences:</p>
-                <div className="flex gap-2">
+                <div className={`flex gap-2 ${featured.experiences.length === 1 ? 'flex-col' : ''}`}>
                   {featured.experiences.slice(0, 2).map((exp) => (
-                    <div key={exp.id} className="flex-1 bg-white rounded-lg p-2 border border-[#E4E6EB]">
-                      <div className="relative h-16 rounded overflow-hidden mb-1.5">
+                    <div
+                      key={exp.id}
+                      className="flex-1 bg-white rounded-xl p-2.5 border border-[#E4E6EB] cursor-pointer hover:bg-gray-50 active:scale-[0.98] transition-all shadow-sm"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onExperienceClick?.(exp.id, exp.imageUrl)
+                      }}
+                    >
+                      <div className="relative h-36 rounded-lg overflow-hidden mb-2">
                         <ImageWithFallback
                           src={exp.imageUrl}
                           alt={exp.name}
@@ -146,10 +177,10 @@ export function MerchantCarousel({
                           className="w-full h-full"
                         />
                       </div>
-                      <p className="text-xs font-medium truncate">{exp.name}</p>
+                      <p className="text-sm font-medium truncate">{exp.name}</p>
                       {exp.badge && (
-                        <div className="mt-1 inline-block">
-                          <span className="text-[10px] text-yellow-700 bg-yellow-500/10 px-1.5 py-0.5 rounded">
+                        <div className="mt-1.5 inline-block">
+                          <span className="text-xs text-yellow-700 bg-yellow-500/10 px-2 py-1 rounded-full">
                             {exp.badge}
                           </span>
                         </div>
@@ -171,7 +202,17 @@ export function MerchantCarousel({
               <div
                 key={merchant.id}
                 className="bg-[#F7F8FA] rounded-2xl overflow-hidden border border-[#E4E6EB] cursor-pointer"
-                onClick={() => onMerchantClick(merchant)}
+                onClick={() => {
+                  // Track merchant click
+                  capture(DRIVER_EVENTS.MERCHANT_CLICKED, {
+                    merchant_id: merchant.id,
+                    merchant_name: merchant.name,
+                    category: merchant.category || 'unknown',
+                    source: 'carousel',
+                    path: window.location.pathname,
+                  })
+                  onMerchantClick(merchant)
+                }}
               >
                 {/* Image */}
                 <div className="relative h-[123px] overflow-hidden">
@@ -192,8 +233,8 @@ export function MerchantCarousel({
                     </div>
                     {/* Badge priority: 1. Liked, 2. Exclusive, 3. Sponsored */}
                     {likedMerchants.has(merchant.id) ? (
-                      <div className="w-6 h-6 bg-[#1877F2]/10 rounded-full flex items-center justify-center flex-shrink-0 border border-[#1877F2]/20">
-                        <Heart className="w-3.5 h-3.5 text-[#1877F2] fill-[#1877F2]" />
+                      <div className="w-6 h-6 bg-[#1877F2]/10 rounded-full flex items-center justify-center flex-shrink-0 border border-[#1877F2]/20" role="img" aria-label="Favorited">
+                        <Heart className="w-3.5 h-3.5 text-[#1877F2] fill-[#1877F2]" aria-hidden="true" />
                       </div>
                     ) : 'badges' in merchant && merchant.badges && merchant.badges.includes('Exclusive') ? (
                       <div className="px-2 py-1 bg-gradient-to-r from-yellow-500/15 to-amber-500/15 rounded-full border border-yellow-600/30 flex-shrink-0">
@@ -212,8 +253,8 @@ export function MerchantCarousel({
         </div>
       )}
 
-      {/* Navigation Controls */}
-      <div className="absolute bottom-0 left-0 right-0 bg-white pt-4 pb-6 px-5 border-t border-[#E4E6EB]">
+      {/* Navigation Controls - with safe area padding for iOS */}
+      <div className="absolute bottom-0 left-0 right-0 bg-white pt-4 px-5 border-t border-[#E4E6EB]" style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}>
         <div className="max-w-md mx-auto">
           <div className="flex items-center justify-between">
             <button
@@ -226,16 +267,20 @@ export function MerchantCarousel({
 
             {/* Dots Indicator with micro-copy */}
             <div className="flex flex-col items-center gap-2">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-0.5">
                 {Array.from({ length: totalSets }).map((_, index) => (
                   <div
                     key={index}
-                    className={`h-2 rounded-full transition-all ${
+                    className="flex items-center justify-center min-w-[44px] min-h-[44px]"
+                    role="img"
+                    aria-label={`Page ${index + 1} of ${totalSets}${index === currentSetIndex ? ', current' : ''}`}
+                  >
+                    <span className={`block h-2 rounded-full transition-all ${
                       index === currentSetIndex
                         ? 'w-8 bg-[#1877F2]'
                         : 'w-2 bg-[#E4E6EB]'
-                    }`}
-                  />
+                    }`} />
+                  </div>
                 ))}
               </div>
               <p className="text-xs text-[#65676B]">

@@ -1203,7 +1203,7 @@ def check_location(
     from app.services.verify_dwell import haversine_m
     
     # Query chargers and calculate distance
-    chargers = db.query(Charger).filter(Charger.is_active == True).all()
+    chargers = db.query(Charger).all()
     
     nearest_charger = None
     min_distance = float('inf')

@@ -1,75 +1,141 @@
+import { useState, useEffect } from 'react';
 import { Store, MapPin, Activity, AlertTriangle } from 'lucide-react';
+import { fetchAPI, getActiveSessions, getAuditLogs, type AuditLog } from '../services/api';
 
-const stats = [
-  {
-    label: 'Active Merchants',
-    value: '847',
-    icon: Store,
-    color: 'text-blue-600',
-    bgColor: 'bg-blue-50',
-  },
-  {
-    label: 'Active Charging Locations',
-    value: '1,243',
-    icon: MapPin,
-    color: 'text-green-600',
-    bgColor: 'bg-green-50',
-  },
-  {
-    label: 'Live Exclusive Sessions',
-    value: '312',
-    icon: Activity,
-    color: 'text-purple-600',
-    bgColor: 'bg-purple-50',
-  },
-  {
-    label: 'Alerts',
-    value: '7',
-    icon: AlertTriangle,
-    color: 'text-red-600',
-    bgColor: 'bg-red-50',
-  },
-];
-
-const recentAlerts = [
-  {
-    id: 1,
-    type: 'Merchant Abuse Flagged',
-    merchant: 'Voltage Coffee Bar',
-    timestamp: '2026-01-05 14:23',
-    severity: 'high',
-  },
-  {
-    id: 2,
-    type: 'Charger Data Unavailable',
-    location: 'Downtown Station #4',
-    timestamp: '2026-01-05 13:47',
-    severity: 'medium',
-  },
-  {
-    id: 3,
-    type: 'Location Mis-mapped',
-    location: 'Midtown Plaza',
-    timestamp: '2026-01-05 12:15',
-    severity: 'low',
-  },
-  {
-    id: 4,
-    type: 'Exclusive Misconfiguration',
-    merchant: 'Peak Hours Gym',
-    timestamp: '2026-01-05 11:02',
-    severity: 'medium',
-  },
-];
-
-const recentActivity = [
-  { action: 'Merchant paused', user: 'admin@nerava.com', target: 'Bolt Bistro', timestamp: '14:45' },
-  { action: 'Session extended', user: 'support@nerava.com', target: 'Session #8472', timestamp: '14:32' },
-  { action: 'Exclusive disabled', user: 'admin@nerava.com', target: 'FastCharge Premium', timestamp: '14:18' },
-  { action: 'Location reset', user: 'ops@nerava.com', target: 'Downtown Station #2', timestamp: '13:56' },
-];
+interface OverviewResponse {
+  total_drivers: number;
+  total_merchants: number;
+  total_driver_nova: number;
+  total_merchant_nova: number;
+  total_nova_outstanding: number;
+  total_stripe_usd: number;
+}
 
 export function Dashboard() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [overview, setOverview] = useState<OverviewResponse | null>(null);
+  const [activeSessionsCount, setActiveSessionsCount] = useState(0);
+  const [recentLogs, setRecentLogs] = useState<AuditLog[]>([]);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Load overview stats
+      const overviewData = await fetchAPI<OverviewResponse>('/v1/admin/overview');
+      setOverview(overviewData);
+
+      // Load active sessions count
+      try {
+        const sessionsData = await getActiveSessions();
+        setActiveSessionsCount(sessionsData.total_active);
+      } catch (err) {
+        console.error('Failed to load active sessions:', err);
+        setActiveSessionsCount(0);
+      }
+
+      // Load recent activity logs
+      try {
+        const logsData = await getAuditLogs(5, 0);
+        setRecentLogs(logsData.logs);
+      } catch (err) {
+        console.error('Failed to load recent logs:', err);
+        setRecentLogs([]);
+      }
+    } catch (err: any) {
+      console.error('Failed to load dashboard data:', err);
+      setError(err.message || 'Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatNumber = (num: number) => {
+    return new Intl.NumberFormat('en-US').format(num);
+  };
+
+  const formatCurrency = (cents: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(cents / 100);
+  };
+
+  const stats = overview
+    ? [
+        {
+          label: 'Total Merchants',
+          value: formatNumber(overview.total_merchants),
+          icon: Store,
+          color: 'text-blue-600',
+          bgColor: 'bg-blue-50',
+        },
+        {
+          label: 'Total Drivers',
+          value: formatNumber(overview.total_drivers),
+          icon: Activity,
+          color: 'text-green-600',
+          bgColor: 'bg-green-50',
+        },
+        {
+          label: 'Live Exclusive Sessions',
+          value: formatNumber(activeSessionsCount),
+          icon: Activity,
+          color: 'text-purple-600',
+          bgColor: 'bg-purple-50',
+        },
+        {
+          label: 'Total Stripe Revenue',
+          value: formatCurrency(overview.total_stripe_usd),
+          icon: AlertTriangle,
+          color: 'text-red-600',
+          bgColor: 'bg-red-50',
+        },
+      ]
+    : [];
+
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="mb-8">
+          <h1 className="text-2xl text-neutral-900">Dashboard</h1>
+          <p className="text-sm text-neutral-600 mt-1">System overview and monitoring</p>
+        </div>
+        <div className="text-center py-12">
+          <div className="text-neutral-600">Loading dashboard data...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-8">
+        <div className="mb-8">
+          <h1 className="text-2xl text-neutral-900">Dashboard</h1>
+          <p className="text-sm text-neutral-600 mt-1">System overview and monitoring</p>
+        </div>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="text-red-800 mb-2">Error loading dashboard</div>
+          <div className="text-sm text-red-600 mb-4">{error}</div>
+          <button
+            onClick={loadData}
+            className="px-4 py-2 bg-red-600 text-white rounded-md text-sm hover:bg-red-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="p-8">
       <div className="mb-8">
@@ -96,36 +162,13 @@ export function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 gap-6">
-        {/* Alerts */}
+        {/* Alerts - Coming Soon */}
         <div className="bg-white border border-neutral-200 rounded-lg">
           <div className="px-6 py-4 border-b border-neutral-200">
             <h2 className="text-lg text-neutral-900">Recent Alerts</h2>
           </div>
-          <div className="divide-y divide-neutral-100">
-            {recentAlerts.map((alert) => (
-              <div key={alert.id} className="px-6 py-4 hover:bg-neutral-50">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span
-                        className={`inline-block w-2 h-2 rounded-full ${
-                          alert.severity === 'high'
-                            ? 'bg-red-500'
-                            : alert.severity === 'medium'
-                            ? 'bg-yellow-500'
-                            : 'bg-blue-500'
-                        }`}
-                      />
-                      <span className="text-sm text-neutral-900">{alert.type}</span>
-                    </div>
-                    <div className="text-sm text-neutral-600">
-                      {alert.merchant || alert.location}
-                    </div>
-                  </div>
-                  <div className="text-xs text-neutral-500">{alert.timestamp}</div>
-                </div>
-              </div>
-            ))}
+          <div className="px-6 py-12 text-center text-neutral-500">
+            <p>Alert monitoring coming soon</p>
           </div>
         </div>
 
@@ -135,16 +178,33 @@ export function Dashboard() {
             <h2 className="text-lg text-neutral-900">Recent Activity</h2>
           </div>
           <div className="divide-y divide-neutral-100">
-            {recentActivity.map((item, index) => (
-              <div key={index} className="px-6 py-4 hover:bg-neutral-50">
-                <div className="flex items-start justify-between mb-1">
-                  <div className="text-sm text-neutral-900">{item.action}</div>
-                  <div className="text-xs text-neutral-500">{item.timestamp}</div>
+            {recentLogs.length > 0 ? (
+              recentLogs.map((log) => (
+                <div key={log.id} className="px-6 py-4 hover:bg-neutral-50">
+                  <div className="flex items-start justify-between mb-1">
+                    <div className="text-sm text-neutral-900">{log.action_type}</div>
+                    <div className="text-xs text-neutral-500">
+                      {log.created_at
+                        ? new Date(log.created_at).toLocaleTimeString('en-US', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : ''}
+                    </div>
+                  </div>
+                  <div className="text-sm text-neutral-600">
+                    {log.target_type}: {log.target_id}
+                  </div>
+                  {log.operator_email && (
+                    <div className="text-xs text-neutral-500 mt-1">by {log.operator_email}</div>
+                  )}
                 </div>
-                <div className="text-sm text-neutral-600">{item.target}</div>
-                <div className="text-xs text-neutral-500 mt-1">by {item.user}</div>
+              ))
+            ) : (
+              <div className="px-6 py-12 text-center text-neutral-500">
+                <p>No recent activity</p>
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>

@@ -204,3 +204,6 @@ echo "1. Check CloudWatch logs: aws logs tail /aws/apprunner/$SERVICE_NAME/servi
 echo "2. Monitor service: aws apprunner describe-service --service-arn $SERVICE_ARN --region $REGION"
 
 
+
+
+

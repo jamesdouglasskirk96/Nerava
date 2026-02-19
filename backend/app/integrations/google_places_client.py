@@ -6,6 +6,8 @@ import json
 import logging
 import os
 import httpx
+import asyncio
+import time
 from typing import List, Dict, Optional, Tuple
 
 from app.core.retry import retry_with_backoff
@@ -17,8 +19,86 @@ logger = logging.getLogger(__name__)
 # Initialize cache
 cache = LayeredCache(settings.redis_url, region="google_places")
 
-# Hardcoded API key (no longer reads from environment variables)
-GOOGLE_PLACES_API_KEY = "AIzaSyAs0PVYXj3-ztRXCjdd0ztUGUSjQR73FFg"
+# Circuit breaker state
+_circuit_breaker_state = {
+    "failures": 0,
+    "last_failure_time": None,
+    "is_open": False,
+}
+_circuit_breaker_lock = asyncio.Lock()
+
+# Request coalescing locks per geo cell
+_coalescing_locks: Dict[str, asyncio.Lock] = {}
+
+
+def _get_geo_cell(lat: float, lng: float, precision: int = 3) -> str:
+    """
+    Generate a geo cell identifier for request coalescing.
+    
+    Args:
+        lat: Latitude
+        lng: Longitude
+        precision: Decimal precision (default 3 = ~100m cells)
+    
+    Returns:
+        Geo cell identifier string
+    """
+    # Round to precision decimal places
+    lat_rounded = round(lat, precision)
+    lng_rounded = round(lng, precision)
+    return f"{lat_rounded:.{precision}f},{lng_rounded:.{precision}f}"
+
+
+async def _check_circuit_breaker() -> bool:
+    """
+    Check if circuit breaker is open.
+    
+    Returns:
+        True if circuit is closed (requests allowed), False if open (requests blocked)
+    """
+    async with _circuit_breaker_lock:
+        if not _circuit_breaker_state["is_open"]:
+            return True
+        
+        # Check if we should try to close the circuit (after 60 seconds)
+        if _circuit_breaker_state["last_failure_time"]:
+            elapsed = time.time() - _circuit_breaker_state["last_failure_time"]
+            if elapsed > 60:  # 60 seconds cooldown
+                logger.info("[GooglePlaces] Circuit breaker: attempting to close circuit")
+                _circuit_breaker_state["is_open"] = False
+                _circuit_breaker_state["failures"] = 0
+                return True
+        
+        return False
+
+
+async def _record_circuit_breaker_failure():
+    """Record a failure and potentially open the circuit breaker"""
+    async with _circuit_breaker_lock:
+        _circuit_breaker_state["failures"] += 1
+        _circuit_breaker_state["last_failure_time"] = time.time()
+        
+        if _circuit_breaker_state["failures"] >= 5:
+            _circuit_breaker_state["is_open"] = True
+            logger.warning(
+                "[GooglePlaces] Circuit breaker opened after %d failures",
+                _circuit_breaker_state["failures"]
+            )
+
+
+async def _record_circuit_breaker_success():
+    """Record a success and reset circuit breaker"""
+    async with _circuit_breaker_lock:
+        _circuit_breaker_state["failures"] = 0
+        _circuit_breaker_state["is_open"] = False
+
+# Google Places API key from environment variable
+import os
+GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "")
+if not GOOGLE_PLACES_API_KEY:
+    logging.getLogger(__name__).warning(
+        "GOOGLE_PLACES_API_KEY not set; Places lookups will fail"
+    )
 
 GOOGLE_PLACES_BASE_URL = "https://maps.googleapis.com/maps/api/place"
 
@@ -78,12 +158,38 @@ async def _nearby_search(
     limit: int,
     keyword: Optional[str] = None,
 ) -> List[PlaceData]:
-    """Use Places Nearby Search API"""
+    """Use Places Nearby Search API with circuit breaker, stale-while-revalidate, and request coalescing"""
     results: List[PlaceData] = []
 
     if not GOOGLE_PLACES_API_KEY:
         logger.error("[GooglePlaces] Cannot call Nearby Search: missing API key")
         return results
+    
+    # Check circuit breaker
+    circuit_closed = await _check_circuit_breaker()
+    if not circuit_closed:
+        logger.warning("[GooglePlaces] Circuit breaker is open, attempting stale-while-revalidate")
+        # Try to return stale cached data
+        geo_cell = _get_geo_cell(lat, lng)
+        cache_key = f"nearby:{geo_cell}:{types[0] if types else 'all'}:{radius_m}"
+        cached_result = await cache.get(cache_key)
+        if cached_result:
+            logger.info("[GooglePlaces] Returning stale cached data (circuit breaker open)")
+            return [PlaceData(place) for place in cached_result]
+        return results
+    
+    # Request coalescing: use lock per geo cell
+    geo_cell = _get_geo_cell(lat, lng)
+    if geo_cell not in _coalescing_locks:
+        _coalescing_locks[geo_cell] = asyncio.Lock()
+    
+    async with _coalescing_locks[geo_cell]:
+        # Check cache again after acquiring lock (another request might have populated it)
+        cache_key = f"nearby:{geo_cell}:{types[0] if types else 'all'}:{radius_m}"
+        cached_result = await cache.get(cache_key)
+        if cached_result:
+            logger.debug("[GooglePlaces] Cache hit (coalesced request)")
+            return [PlaceData(place) for place in cached_result]
 
     for place_type in types[:1] or [None]:  # Google only allows one type per request
         params = {
@@ -167,11 +273,36 @@ async def _nearby_search(
                         status,
                         data.get("error_message"),
                     )
+                    # Record failure for circuit breaker
+                    await _record_circuit_breaker_failure()
+                    # Stale-while-revalidate: return cached data if available
+                    cached_result = await cache.get(cache_key)
+                    if cached_result:
+                        logger.warning("[GooglePlaces] Returning stale cached data (API error)")
+                        return [PlaceData(place) for place in cached_result]
                     continue
-
+                
+                # Success: reset circuit breaker and cache results
+                await _record_circuit_breaker_success()
                 for place in raw_results[:limit]:
                     results.append(PlaceData(place))
                     logger.debug("[PLACES] Added place: %s (lat=%s, lng=%s)", place.get("name"), place.get("geometry", {}).get("location", {}).get("lat"), place.get("geometry", {}).get("location", {}).get("lng"))
+                
+                # Cache successful results (TTL: 1 hour)
+                if results:
+                    places_data = [{
+                        "place_id": p.place_id,
+                        "name": p.name,
+                        "geometry": {"location": {"lat": p.lat, "lng": p.lng}},
+                        "formatted_address": p.address,
+                        "rating": p.rating,
+                        "price_level": p.price_level,
+                        "types": p.types,
+                        "photos": p.photos,
+                        "icon": p.icon,
+                        "business_status": p.business_status,
+                    } for p in results]
+                    await cache.set(cache_key, places_data, ttl=3600)
 
         except Exception as e:
             logger.error(
@@ -182,6 +313,13 @@ async def _nearby_search(
                 place_type,
                 exc_info=True
             )
+            # Record failure for circuit breaker
+            await _record_circuit_breaker_failure()
+            # Stale-while-revalidate: return cached data if available
+            cached_result = await cache.get(cache_key)
+            if cached_result:
+                logger.warning("[GooglePlaces] Returning stale cached data (exception)")
+                return [PlaceData(place) for place in cached_result]
 
     return results[:limit]
 
@@ -194,7 +332,7 @@ async def _text_search(
     radius_m: int,
     limit: int
 ) -> List[PlaceData]:
-    """Use Places Text Search API"""
+    """Use Places Text Search API with circuit breaker, stale-while-revalidate, and request coalescing"""
     if not query:
         logger.info("[GooglePlaces][Text] Skipping: empty query")
         return []
@@ -202,6 +340,32 @@ async def _text_search(
     if not GOOGLE_PLACES_API_KEY:
         logger.error("[GooglePlaces][Text] Cannot call Text Search: missing API key")
         return []
+    
+    # Check circuit breaker
+    circuit_closed = await _check_circuit_breaker()
+    if not circuit_closed:
+        logger.warning("[GooglePlaces] Circuit breaker is open, attempting stale-while-revalidate")
+        # Try to return stale cached data
+        geo_cell = _get_geo_cell(lat, lng)
+        cache_key = f"text_search:{geo_cell}:{query}:{radius_m}"
+        cached_result = await cache.get(cache_key)
+        if cached_result:
+            logger.info("[GooglePlaces] Returning stale cached data (circuit breaker open)")
+            return [PlaceData(place) for place in cached_result]
+        return []
+    
+    # Request coalescing: use lock per geo cell
+    geo_cell = _get_geo_cell(lat, lng)
+    if geo_cell not in _coalescing_locks:
+        _coalescing_locks[geo_cell] = asyncio.Lock()
+    
+    async with _coalescing_locks[geo_cell]:
+        # Check cache again after acquiring lock
+        cache_key = f"text_search:{geo_cell}:{query}:{radius_m}"
+        cached_result = await cache.get(cache_key)
+        if cached_result:
+            logger.debug("[GooglePlaces] Cache hit (coalesced request)")
+            return [PlaceData(place) for place in cached_result]
 
     # Build query string
     query_str = query
@@ -266,17 +430,49 @@ async def _text_search(
                     status,
                     data.get("error_message"),
                 )
+                # Record failure for circuit breaker
+                await _record_circuit_breaker_failure()
+                # Stale-while-revalidate: return cached data if available
+                cached_result = await cache.get(cache_key)
+                if cached_result:
+                    logger.warning("[GooglePlaces] Returning stale cached data (API error)")
+                    return [PlaceData(place) for place in cached_result]
                 return []
 
+            # Success: reset circuit breaker and cache results
+            await _record_circuit_breaker_success()
             results: List[PlaceData] = []
             for place in raw_results[:limit]:
                 results.append(PlaceData(place))
                 logger.debug("[PLACES][Text] Added place: %s", place.get("name"))
+            
+            # Cache successful results (TTL: 1 hour)
+            if results:
+                places_data = [{
+                    "place_id": p.place_id,
+                    "name": p.name,
+                    "geometry": {"location": {"lat": p.lat, "lng": p.lng}},
+                    "formatted_address": p.address,
+                    "rating": p.rating,
+                    "price_level": p.price_level,
+                    "types": p.types,
+                    "photos": p.photos,
+                    "icon": p.icon,
+                    "business_status": p.business_status,
+                } for p in results]
+                await cache.set(cache_key, places_data, ttl=3600)
 
             return results
 
     except Exception as e:
         logger.error("[GooglePlaces][Text] error: %s", e, exc_info=True)
+        # Record failure for circuit breaker
+        await _record_circuit_breaker_failure()
+        # Stale-while-revalidate: return cached data if available
+        cached_result = await cache.get(cache_key)
+        if cached_result:
+            logger.warning("[GooglePlaces] Returning stale cached data (exception)")
+            return [PlaceData(place) for place in cached_result]
         return []
 
 

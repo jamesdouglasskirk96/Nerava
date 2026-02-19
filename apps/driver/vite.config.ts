@@ -29,6 +29,10 @@ export default defineConfig(({ mode }) => {
   return {
     base: process.env.VITE_PUBLIC_BASE || '/',
     plugins: [react()],
+    server: {
+      host: '0.0.0.0', // Allow access from network (for phone testing)
+      port: 5173,
+    },
     test: {
       globals: true,
       environment: 'jsdom',

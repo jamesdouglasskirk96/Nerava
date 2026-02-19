@@ -11,6 +11,7 @@ from fastapi.security import OAuth2PasswordBearer
 
 from ..db import get_db
 from ..models import User
+from ..models.admin_role import AdminRole, has_permission
 from ..services.auth_service import AuthService
 from ..core.config import settings
 from ..core.env import is_local_env
@@ -137,6 +138,44 @@ def get_current_user_id(
     return user.id
 
 
+def get_current_user_optional(
+    request: Request,
+    token: Optional[str] = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+) -> Optional[User]:
+    """
+    Get current user if authenticated, None otherwise.
+    Use this for endpoints that work for both authenticated and anonymous users.
+    """
+    # Try to get token from Authorization header first
+    if not token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+
+    # Try to get from cookie if no header token
+    if not token:
+        token = request.cookies.get("access_token")
+
+    # If no token, return None (anonymous user)
+    if not token:
+        return None
+
+    # Try to decode token and get user
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        public_id = payload.get("sub")
+        if public_id:
+            user = AuthService.get_user_by_public_id(db, public_id)
+            if user and user.is_active:
+                return user
+    except Exception:
+        # Invalid or expired token - treat as anonymous
+        pass
+
+    return None
+
+
 def require_role(role: str):
     """Dependency factory for requiring a specific role"""
     def role_checker(user: User = Depends(get_current_user)) -> User:
@@ -154,4 +193,29 @@ require_driver = require_role("driver")
 require_merchant_admin = require_role("merchant_admin")
 require_admin = require_role("admin")
 
+
+def require_permission(resource: str, action: str):
+    """Dependency factory for requiring a specific permission on a resource"""
+    def permission_checker(user: User = Depends(get_current_user)) -> User:
+        if not user.admin_role:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No admin role assigned"
+            )
+
+        try:
+            role = AdminRole(user.admin_role)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Invalid admin role: {user.admin_role}"
+            )
+
+        if not has_permission(role, resource, action):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission denied: {action} on {resource}"
+            )
+        return user
+    return permission_checker
 

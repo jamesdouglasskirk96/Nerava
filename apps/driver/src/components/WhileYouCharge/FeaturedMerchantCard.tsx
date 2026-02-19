@@ -1,11 +1,16 @@
 import { useNavigate } from 'react-router-dom'
 import type { MerchantSummary } from '../../types'
 import { Badge } from '../shared/Badge'
+import { SocialProofBadge } from '../shared/SocialProofBadge'
 import { PhotoPlaceholder, normalizeCategory } from '../../ui/categoryLogos'
+import { capture, DRIVER_EVENTS } from '../../analytics'
 
 interface ExtendedMerchant extends MerchantSummary {
+  id?: string  // Optional id for backwards compatibility
   brought_to_you_by?: string
   category_display?: string
+  neravaSessionsCount?: number
+  activeDriversCount?: number
 }
 
 interface FeaturedMerchantCardProps {
@@ -15,9 +20,8 @@ interface FeaturedMerchantCardProps {
 
 export function FeaturedMerchantCard({ merchant, onClick }: FeaturedMerchantCardProps) {
   const navigate = useNavigate()
-  const walkTime = merchant.walk_time_s 
-    ? Math.round(merchant.walk_time_s / 60) 
-    : Math.round((merchant.distance_m || 0) / 80) // Approximate walk time in minutes (80m/min)
+  // Approximate walk time in minutes (80m/min)
+  const walkTime = Math.round((merchant.distance_m || 0) / 80)
   const category = merchant.types?.[0] ? normalizeCategory(merchant.types[0]) : 'Other'
   const hasSponsored = merchant.badges?.includes('Sponsored')
   const hasExclusive = merchant.is_primary || merchant.badges?.includes('Exclusive')
@@ -28,12 +32,20 @@ export function FeaturedMerchantCard({ merchant, onClick }: FeaturedMerchantCard
   const photoUrl = (merchant as any).photo_urls?.[0] || merchant.photo_url
 
   const handleClick = () => {
+    // Track merchant click
+    capture(DRIVER_EVENTS.MERCHANT_CLICKED, {
+      merchant_id: merchant.place_id || merchant.id,
+      merchant_name: merchant.name,
+      category: merchant.types?.[0] || 'unknown',
+      source: 'featured',
+      path: window.location.pathname,
+    })
+    
     if (onClick) {
       onClick()
     } else {
       // Default: navigate to merchant details
-      const merchantId = merchant.place_id || merchant.id || ''
-      navigate(`/merchant/${merchantId}?charger_id=canyon_ridge_tesla`)
+      navigate(`/merchant/${merchant.place_id}?charger_id=canyon_ridge_tesla`)
     }
   }
 
@@ -82,7 +94,7 @@ export function FeaturedMerchantCard({ merchant, onClick }: FeaturedMerchantCard
         {/* Open/Closed badge - Top-left overlay */}
         {merchant.open_now !== undefined && (
           <div className="absolute top-4 left-5">
-            <Badge variant={merchant.open_now ? "success" : "error"}>
+            <Badge variant={merchant.open_now ? "featured" : "default"}>
               {merchant.open_now ? 'Open' : 'Closed'}
             </Badge>
           </div>
@@ -129,6 +141,14 @@ export function FeaturedMerchantCard({ merchant, onClick }: FeaturedMerchantCard
                 {merchant.open_until}
               </p>
             )}
+            
+            {/* Social Proof Badge */}
+            <div className="mt-2">
+              <SocialProofBadge
+                neravaSessionsCount={merchant.neravaSessionsCount}
+                activeDriversCount={merchant.activeDriversCount}
+              />
+            </div>
           </div>
           
           {/* "⭐ Exclusive" badge - Top-right in content area */}

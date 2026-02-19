@@ -1,7 +1,8 @@
 // Image component with category icon fallback
 // Fallback chain: brand_image_url > Google Places photo > category icon
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { CategoryIcon } from './CategoryIcon'
+import { getCachedImage, setCachedImage } from '../../utils/imageCache'
 
 interface ImageWithFallbackProps {
   src?: string | null
@@ -29,11 +30,20 @@ export function ImageWithFallback({
   className = '',
   fallbackClassName = '',
 }: ImageWithFallbackProps) {
-  const [hasError, setHasError] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
-
   // Determine image source priority: brand_image_url > src (Google Places) > null
   const imageSrc = brandImageUrl || src || googlePlacesPhoto || null
+  
+  // Check cache for this image
+  const cachedSrc = useMemo(() => imageSrc ? getCachedImage(imageSrc) : null, [imageSrc])
+  const [hasError, setHasError] = useState(false)
+  const [isLoading, setIsLoading] = useState(!cachedSrc)
+
+  useEffect(() => {
+    if (cachedSrc) {
+      setHasError(false)
+      setIsLoading(false)
+    }
+  }, [cachedSrc])
 
   // If no src or error occurred, show fallback icon
   if (!imageSrc || hasError) {
@@ -58,7 +68,12 @@ export function ImageWithFallback({
           setHasError(true)
           setIsLoading(false)
         }}
-        onLoad={() => setIsLoading(false)}
+        onLoad={() => {
+          if (imageSrc) {
+            setCachedImage(imageSrc)
+          }
+          setIsLoading(false)
+        }}
       />
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-[#F7F8FA]">

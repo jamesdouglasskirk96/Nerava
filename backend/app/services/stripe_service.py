@@ -29,6 +29,31 @@ class StripeService:
     """Service for Stripe Checkout and webhook handling"""
     
     @staticmethod
+    async def create_checkout_session_async(
+        db: Session,
+        merchant_id: str,
+        package_id: str
+    ) -> Dict[str, Any]:
+        """
+        Create Stripe Checkout session for Nova purchase (async wrapper).
+        
+        Wraps sync Stripe SDK call with asyncio.to_thread to avoid blocking event loop.
+        
+        Args:
+            merchant_id: Merchant ID
+            package_id: Package ID (e.g., "nova_100")
+        
+        Returns:
+            Dict with checkout_url
+        """
+        import asyncio
+        
+        def _create_session():
+            return StripeService.create_checkout_session(db, merchant_id, package_id)
+        
+        return await asyncio.to_thread(_create_session)
+    
+    @staticmethod
     def create_checkout_session(
         db: Session,
         merchant_id: str,
@@ -111,6 +136,33 @@ class StripeService:
             raise ValueError(f"Stripe error: {str(e)}")
     
     @staticmethod
+    async def handle_webhook_async(
+        db: Session,
+        payload: bytes,
+        signature: str,
+        webhook_secret: str
+    ) -> Dict[str, Any]:
+        """
+        Handle Stripe webhook event (async wrapper).
+        
+        Wraps sync Stripe SDK call with asyncio.to_thread to avoid blocking event loop.
+        
+        Args:
+            payload: Raw webhook payload
+            signature: Stripe signature header
+            webhook_secret: Stripe webhook secret
+        
+        Returns:
+            Dict with status and message
+        """
+        import asyncio
+        
+        def _handle_webhook():
+            return StripeService.handle_webhook(db, payload, signature, webhook_secret)
+        
+        return await asyncio.to_thread(_handle_webhook)
+    
+    @staticmethod
     def handle_webhook(
         db: Session,
         payload: bytes,
@@ -189,13 +241,13 @@ class StripeService:
             logger.error(f"Stripe payment not found for session {stripe_session_id}")
             return {"status": "error", "message": "Payment record not found"}
         
-        # Update payment status
+        # Update payment status and grant Nova atomically
         stripe_payment.status = "paid"
         stripe_payment.stripe_payment_intent_id = payment_intent_id
         stripe_payment.stripe_event_id = event_id
         db.flush()
         
-        # Grant Nova to merchant
+        # Grant Nova to merchant (atomic with payment update)
         try:
             NovaService.grant_to_merchant(
                 db=db,
@@ -209,6 +261,7 @@ class StripeService:
                 }
             )
             
+            # Single commit for entire operation
             db.commit()
             logger.info(f"Granted {nova_amount} Nova to merchant {merchant_id} via Stripe payment {stripe_payment.id}")
             
@@ -219,10 +272,33 @@ class StripeService:
             }
         except Exception as e:
             db.rollback()
+            # Record failure in separate transaction
             stripe_payment.status = "failed"
             db.commit()
-            logger.error(f"Failed to grant Nova after Stripe payment: {e}")
+            logger.error("stripe_webhook_failed", extra={
+                "event_id": event_id,
+                "payment_id": stripe_payment.id,
+                "merchant_id": merchant_id,
+                "error": str(e)
+            })
             return {"status": "error", "message": str(e)}
+    
+    @staticmethod
+    async def reconcile_payment_async(
+        db: Session,
+        payment_id: str
+    ) -> Dict[str, Any]:
+        """
+        Reconcile a payment (async wrapper).
+        
+        Wraps sync Stripe SDK calls with asyncio.to_thread to avoid blocking event loop.
+        """
+        import asyncio
+        
+        def _reconcile():
+            return StripeService.reconcile_payment(db, payment_id)
+        
+        return await asyncio.to_thread(_reconcile)
     
     @staticmethod
     def reconcile_payment(

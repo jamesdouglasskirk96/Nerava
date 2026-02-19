@@ -1,0 +1,111 @@
+{
+  "merchant": {
+    "name": "Asadas Grill",
+    "description": "Laid-back option with a terrace serving classic regional Mexican snacks & mains, plus happy hours.",
+    "category": "Mexican Restaurant",
+    "primary_category": "food"
+  },
+  "identifiers": {
+    "google_place_id": "ChIJKV41JMnORIYRu2cBs5CKtBc",
+    "nerava_merchant_id": "asadas_grill_canyon_ridge",
+    "nerava_cluster": "asadas_party"
+  },
+  "location": {
+    "address": "501 W Canyon Ridge Dr, Austin, TX 78753, USA",
+    "city": "Austin",
+    "state": "TX",
+    "zip_code": "78753",
+    "lat": 30.4027969,
+    "lng": -97.6719438,
+    "google_maps_url": "https://maps.google.com/?q=30.4027969,-97.6719438"
+  },
+  "contact": {
+    "phone": "(512) 719-3390",
+    "website": "https://www.asadas-grill.com/",
+    "email": "hector@asadas.com",
+    "email_note": "From bootstrap seed config — not from Google Places API. Google Places does not return email addresses."
+  },
+  "ratings": {
+    "google_rating": 4.5,
+    "google_review_count": 2407,
+    "price_level": 2,
+    "price_level_label": "$$"
+  },
+  "opening_hours": {
+    "monday": "11:00 AM – 10:00 PM",
+    "tuesday": "11:00 AM – 10:00 PM",
+    "wednesday": "11:00 AM – 10:00 PM",
+    "thursday": "11:00 AM – 10:00 PM",
+    "friday": "11:00 AM – 11:00 PM",
+    "saturday": "11:00 AM – 11:00 PM",
+    "sunday": "10:00 AM – 10:00 PM"
+  },
+  "opening_hours_periods": [
+    { "day": 0, "day_name": "Sunday", "open": "1000", "close": "2200" },
+    { "day": 1, "day_name": "Monday", "open": "1100", "close": "2200" },
+    { "day": 2, "day_name": "Tuesday", "open": "1100", "close": "2200" },
+    { "day": 3, "day_name": "Wednesday", "open": "1100", "close": "2200" },
+    { "day": 4, "day_name": "Thursday", "open": "1100", "close": "2200" },
+    { "day": 5, "day_name": "Friday", "open": "1100", "close": "2300" },
+    { "day": 6, "day_name": "Saturday", "open": "1100", "close": "2300" }
+  ],
+  "photos": {
+    "total_count": 10,
+    "production_urls": [
+      "https://photos.nerava.network/asadas_grill/asadas_grill_01.jpg",
+      "https://photos.nerava.network/asadas_grill/asadas_grill_02.jpg",
+      "https://photos.nerava.network/asadas_grill/asadas_grill_03.jpg",
+      "https://photos.nerava.network/asadas_grill/asadas_grill_04.jpg",
+      "https://photos.nerava.network/asadas_grill/asadas_grill_05.jpg",
+      "https://photos.nerava.network/asadas_grill/asadas_grill_06.jpg",
+      "https://photos.nerava.network/asadas_grill/asadas_grill_07.jpg",
+      "https://photos.nerava.network/asadas_grill/asadas_grill_08.jpg",
+      "https://photos.nerava.network/asadas_grill/asadas_grill_09.jpg",
+      "https://photos.nerava.network/asadas_grill/asadas_grill_10.jpg"
+    ],
+    "local_files": [
+      "merchant_photos_asadas_grill/asadas_grill_01.jpg",
+      "merchant_photos_asadas_grill/asadas_grill_02.jpg",
+      "merchant_photos_asadas_grill/asadas_grill_03.jpg",
+      "merchant_photos_asadas_grill/asadas_grill_04.jpg",
+      "merchant_photos_asadas_grill/asadas_grill_05.jpg",
+      "merchant_photos_asadas_grill/asadas_grill_06.jpg",
+      "merchant_photos_asadas_grill/asadas_grill_07.jpg",
+      "merchant_photos_asadas_grill/asadas_grill_08.jpg",
+      "merchant_photos_asadas_grill/asadas_grill_09.jpg",
+      "merchant_photos_asadas_grill/asadas_grill_10.jpg"
+    ],
+    "source": "Google Places API"
+  },
+  "nerava_exclusive_offer": {
+    "title": "Free Chips & Salsa",
+    "description": "Show this screen to your server for complimentary chips and salsa with any entree purchase while you charge!",
+    "is_primary_merchant": true,
+    "override_mode": "ALWAYS"
+  },
+  "associated_charger": {
+    "charger_id": "canyon_ridge_tesla",
+    "charger_name": "Tesla Supercharger - Canyon Ridge",
+    "charger_address": "500 W Canyon Ridge Dr, Austin, TX 78753",
+    "charger_lat": 30.3979,
+    "charger_lng": -97.7044,
+    "network": "Tesla",
+    "distance_from_charger_m": 149,
+    "walk_time_minutes": 2,
+    "charger_radius_m": 400,
+    "merchant_radius_m": 40
+  },
+  "nearby_merchants": [
+    { "name": "PINSTACK", "address": "500 W Canyon Ridge Dr", "distance_km": 0.15 },
+    { "name": "Tech Ridge Center", "address": "500 W Canyon Ridge Dr", "distance_km": 0.21 },
+    { "name": "True Texas BBQ", "address": "500 W Canyon Ridge Dr", "distance_km": 0.27 },
+    { "name": "Tsukimi", "address": "12400 N I-35", "distance_km": 0.42 },
+    { "name": "OneTaco @ Techridge", "address": "500 W Canyon Ridge Dr", "distance_km": 0.43 }
+  ],
+  "data_sources": {
+    "google_places_api": "Primary source for location, hours, rating, photos, phone, website",
+    "bootstrap_seed": "Source for email (hector@asadas.com), exclusive offer, charger association",
+    "nerava_outputs": "merchants_by_asadas_distance.csv for nearby merchant distances",
+    "note": "Google Places API does not return email addresses. The email listed was provided during merchant onboarding/bootstrap setup."
+  }
+}

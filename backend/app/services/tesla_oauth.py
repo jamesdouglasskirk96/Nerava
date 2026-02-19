@@ -3,6 +3,7 @@ Tesla OAuth2 service for user authentication and token management.
 
 Handles the complete OAuth2 flow for connecting user's Tesla account.
 """
+import asyncio
 import logging
 import httpx
 import secrets
@@ -232,6 +233,60 @@ class TeslaOAuthService:
         except Exception as e:
             logger.error(f"Error verifying charging: {e}")
             return False, {"error": str(e)}
+
+    async def verify_charging_all_vehicles(
+        self,
+        access_token: str,
+    ) -> Tuple[bool, Dict[str, Any], Optional[Dict[str, Any]]]:
+        """
+        Check ALL vehicles on the account for charging status.
+
+        Returns:
+            Tuple of (is_charging, charge_data, vehicle_info).
+            vehicle_info is the vehicle dict for the one found charging, or None.
+        """
+        vehicles = await self.get_vehicles(access_token)
+        if not vehicles:
+            return False, {"error": "No vehicles found on Tesla account"}, None
+
+        last_charge_data: Dict[str, Any] = {}
+        for vehicle in vehicles:
+            vehicle_id = str(vehicle.get("id"))
+            vin = vehicle.get("vin", "unknown")
+
+            # Wake then verify, with one retry on timeout
+            for attempt in range(2):
+                try:
+                    try:
+                        await self.wake_vehicle(access_token, vehicle_id)
+                    except Exception:
+                        pass  # Continue even if wake fails
+
+                    is_charging, charge_data = await self.verify_charging(
+                        access_token, vehicle_id
+                    )
+                    last_charge_data = charge_data
+
+                    if is_charging:
+                        logger.info(f"Vehicle {vin} is charging")
+                        return True, charge_data, vehicle
+                    # Not charging — no need to retry, move to next vehicle
+                    break
+
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 408 and attempt == 0:
+                        logger.warning(
+                            f"Timeout checking vehicle {vin}, retrying in 3s"
+                        )
+                        await asyncio.sleep(3)
+                        continue
+                    logger.warning(f"HTTP error checking vehicle {vin}: {e}")
+                    break
+                except Exception as e:
+                    logger.warning(f"Error checking vehicle {vin}: {e}")
+                    break
+
+        return False, last_charge_data, None
 
 
 def generate_ev_code() -> str:

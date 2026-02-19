@@ -238,7 +238,7 @@ class NovaTransaction(Base):
     transaction_meta = Column("metadata", JSON, nullable=True)  # Flexible JSON for additional context
     
     # Idempotency key for deduplication (P0 race condition fix)
-    idempotency_key = Column(String, nullable=True, index=True)
+    idempotency_key = Column(String, nullable=True, unique=True, index=True)
     
     # Payload hash for conflict detection (same idempotency_key + different payload → 409)
     payload_hash = Column(String, nullable=True)

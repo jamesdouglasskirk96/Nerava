@@ -6,7 +6,7 @@ Models for "While You Charge" feature
 - MerchantPerks (active rewards/offers)
 """
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text, Index
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text, Index, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.sqlite import JSON as SQLITE_JSON
 from ..db import Base
@@ -95,7 +95,16 @@ class Merchant(Base):
     
     # Google Places types (array)
     place_types = Column(JSON, default=list)
-    
+
+    # Verification code components (for visit logging)
+    short_code = Column(String(16), unique=True, nullable=True, index=True)  # e.g., "ASADAS"
+    region_code = Column(String(8), nullable=True, default="ATX")  # e.g., "ATX" for Austin
+
+    # EV Arrival: ordering info
+    ordering_url = Column(String(500), nullable=True)  # Deep link or web URL
+    ordering_app_scheme = Column(String(100), nullable=True)  # e.g., "toastapp://"
+    ordering_instructions = Column(Text, nullable=True)  # "Order at counter"
+
     # Category and charger proximity (cached for filtering)
     primary_category = Column(String(32), nullable=True, index=True)  # "coffee", "food", or "other"
     nearest_charger_id = Column(String(64), nullable=True)  # FK to charger
@@ -276,4 +285,25 @@ class FavoriteMerchant(Base):
         Index('idx_favorite_merchant_merchant', 'merchant_id'),
     )
 
+
+class AmenityVote(Base):
+    """User votes for merchant amenities (bathroom, wifi)"""
+    __tablename__ = "amenity_votes"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    merchant_id = Column(String, ForeignKey("merchants.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    amenity = Column(String(20), nullable=False)  # 'bathroom' or 'wifi'
+    vote_type = Column(String(10), nullable=False)  # 'up' or 'down'
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships (optional)
+    merchant = relationship("Merchant", foreign_keys=[merchant_id])
+    user = relationship("User", foreign_keys=[user_id])
+    
+    __table_args__ = (
+        UniqueConstraint('merchant_id', 'user_id', 'amenity', name='uq_amenity_vote'),
+        Index('idx_amenity_votes_merchant', 'merchant_id', 'amenity'),
+        Index('idx_amenity_votes_user', 'user_id'),
+    )
 

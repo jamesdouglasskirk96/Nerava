@@ -9,10 +9,11 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import User
-from app.models.while_you_charge import FavoriteMerchant, Merchant as WYCMerchant
-from app.schemas.merchants import MerchantDetailsResponse
+from app.models.while_you_charge import FavoriteMerchant, Merchant as WYCMerchant, AmenityVote
+from app.schemas.merchants import MerchantDetailsResponse, AmenityVoteRequest, AmenityVoteResponse
 from app.services.merchant_details import get_merchant_details
 from app.dependencies.driver import get_current_driver
+from sqlalchemy import func
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,110 @@ def remove_favorite(
         db.commit()
 
     return {"ok": True, "is_favorite": False}
+
+
+@router.post(
+    "/{merchant_id}/amenities/{amenity}/vote",
+    response_model=AmenityVoteResponse,
+    summary="Vote on a merchant amenity",
+    description="""
+    Vote on a merchant amenity (bathroom or wifi).
+    
+    - If user hasn't voted: creates a new vote
+    - If user voted same type: removes vote (toggle)
+    - If user voted different type: updates vote to new type
+    
+    Returns updated vote counts for the amenity.
+    """
+)
+def vote_amenity(
+    merchant_id: str,
+    amenity: str,
+    request: AmenityVoteRequest,
+    driver: User = Depends(get_current_driver),
+    db: Session = Depends(get_db)
+):
+    """
+    Vote on a merchant amenity (bathroom or wifi).
+    
+    Auth: Required (Bearer token)
+    Path params: merchant_id (string), amenity ('bathroom' | 'wifi')
+    Request body: { vote_type: 'up' | 'down' }
+    """
+    # Validate amenity
+    if amenity not in ['bathroom', 'wifi']:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid amenity. Must be 'bathroom' or 'wifi'"
+        )
+    
+    # Validate vote_type (already validated by Pydantic schema, but double-check)
+    if request.vote_type not in ['up', 'down']:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid vote_type. Must be 'up' or 'down'"
+        )
+    
+    # Check if merchant exists
+    merchant = db.query(WYCMerchant).filter(WYCMerchant.id == merchant_id).first()
+    if not merchant:
+        raise HTTPException(
+            status_code=404,
+            detail="Merchant not found"
+        )
+    
+    # Get existing vote (if any)
+    existing_vote = db.query(AmenityVote).filter(
+        AmenityVote.merchant_id == merchant_id,
+        AmenityVote.user_id == driver.id,
+        AmenityVote.amenity == amenity
+    ).first()
+    
+    # Upsert logic
+    if existing_vote:
+        if existing_vote.vote_type == request.vote_type:
+            # Same vote type: toggle (remove vote)
+            db.delete(existing_vote)
+        else:
+            # Different vote type: update
+            existing_vote.vote_type = request.vote_type
+    else:
+        # No existing vote: create new
+        new_vote = AmenityVote(
+            merchant_id=merchant_id,
+            user_id=driver.id,
+            amenity=amenity,
+            vote_type=request.vote_type
+        )
+        db.add(new_vote)
+    
+    db.commit()
+    
+    # Aggregate votes for response (single query)
+    vote_counts = db.query(
+        AmenityVote.vote_type,
+        func.count(AmenityVote.id).label('count')
+    ).filter(
+        AmenityVote.merchant_id == merchant_id,
+        AmenityVote.amenity == amenity
+    ).group_by(AmenityVote.vote_type).all()
+    
+    # Initialize counts
+    upvotes = 0
+    downvotes = 0
+    
+    # Update from query results
+    for vote_type, count in vote_counts:
+        if vote_type == 'up':
+            upvotes = count
+        elif vote_type == 'down':
+            downvotes = count
+    
+    return AmenityVoteResponse(
+        ok=True,
+        upvotes=upvotes,
+        downvotes=downvotes
+    )
 
 
 @router.get("/{merchant_id}/share-link")

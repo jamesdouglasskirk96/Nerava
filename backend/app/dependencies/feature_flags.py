@@ -45,4 +45,23 @@ def require_apple_wallet_signing():
     check_feature_enabled("Apple Wallet Signing", settings.ENABLE_APPLE_WALLET_SIGNING)
 
 
+def require_feature_flag(flag_name: str):
+    """
+    Require a feature flag to be enabled.
+    
+    Args:
+        flag_name: Name of the feature flag (e.g., "FEATURE_VIRTUAL_KEY_ENABLED")
+        
+    Returns:
+        Dependency function that raises 410 if flag is disabled
+    """
+    def _check_flag():
+        flag_value = getattr(settings, flag_name, False)
+        check_feature_enabled(flag_name, flag_value)
+    return _check_flag
+
+
+
+
+
 

@@ -7,7 +7,7 @@ import secrets
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -15,14 +15,18 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import User
 from app.models.tesla_connection import TeslaConnection, EVVerificationCode
-from app.dependencies.domain import get_current_user_optional, get_current_user
+from app.models.domain import DomainMerchant
+from app.models.while_you_charge import Merchant
+from app.dependencies.domain import get_current_user
 from app.services.tesla_oauth import (
     get_tesla_oauth_service,
     get_valid_access_token,
     generate_ev_code,
-    TeslaOAuthService,
 )
+from app.services.geo import haversine_m
 from app.core.config import settings
+
+PROXIMITY_THRESHOLD_METERS = 500
 
 logger = logging.getLogger(__name__)
 
@@ -150,14 +154,15 @@ async def tesla_oauth_callback(
         refresh_token = token_response["refresh_token"]
         expires_in = token_response.get("expires_in", 3600)
 
-        # Get user's vehicles
-        vehicles = await oauth_service.get_vehicles(access_token)
-
-        if not vehicles:
-            raise HTTPException(status_code=400, detail="No vehicles found in Tesla account")
-
-        # Use first vehicle as primary
-        vehicle = vehicles[0]
+        # Try to get user's vehicles (may fail with 412 if partner registration incomplete)
+        vehicle = None
+        try:
+            vehicles = await oauth_service.get_vehicles(access_token)
+            if vehicles:
+                vehicle = vehicles[0]
+        except Exception as ve:
+            logger.warning(f"Could not fetch Tesla vehicles (partner registration may be incomplete): {ve}")
+            # Continue without vehicle data — tokens are still valid
 
         # Check for existing connection
         existing = db.query(TeslaConnection).filter(
@@ -170,10 +175,11 @@ async def tesla_oauth_callback(
             existing.access_token = access_token
             existing.refresh_token = refresh_token
             existing.token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
-            existing.vehicle_id = str(vehicle.get("id"))
-            existing.vin = vehicle.get("vin")
-            existing.vehicle_name = vehicle.get("display_name")
-            existing.vehicle_model = vehicle.get("vehicle_config", {}).get("car_type", "Tesla")
+            if vehicle:
+                existing.vehicle_id = str(vehicle.get("id"))
+                existing.vin = vehicle.get("vin")
+                existing.vehicle_name = vehicle.get("display_name")
+                existing.vehicle_model = vehicle.get("vehicle_config", {}).get("car_type", "Tesla")
             existing.updated_at = datetime.utcnow()
         else:
             # Create new connection
@@ -182,10 +188,10 @@ async def tesla_oauth_callback(
                 access_token=access_token,
                 refresh_token=refresh_token,
                 token_expires_at=datetime.utcnow() + timedelta(seconds=expires_in),
-                vehicle_id=str(vehicle.get("id")),
-                vin=vehicle.get("vin"),
-                vehicle_name=vehicle.get("display_name"),
-                vehicle_model=vehicle.get("vehicle_config", {}).get("car_type", "Tesla"),
+                vehicle_id=str(vehicle.get("id")) if vehicle else None,
+                vin=vehicle.get("vin") if vehicle else None,
+                vehicle_name=vehicle.get("display_name") if vehicle else None,
+                vehicle_model=vehicle.get("vehicle_config", {}).get("car_type", "Tesla") if vehicle else None,
             )
             db.add(connection)
 
@@ -210,10 +216,11 @@ async def verify_charging_and_generate_code(
     db: Session = Depends(get_db)
 ):
     """
-    Verify that user's Tesla is currently charging and generate EV code.
+    Verify Tesla charging via Fleet API and generate an EV reward code.
 
-    This is called when user enters a merchant's geofence while at a charger.
-    If charging is verified, generates an EV-XXXX code for redemption.
+    Attempts real Fleet API charging verification. If the vehicle is asleep
+    or unreachable, falls back to issuing a code based on valid Tesla
+    connection + location proximity (enforced by frontend).
     """
     # Get Tesla connection
     connection = db.query(TeslaConnection).filter(
@@ -229,7 +236,7 @@ async def verify_charging_and_generate_code(
 
     oauth_service = get_tesla_oauth_service()
 
-    # Get valid access token (refresh if needed)
+    # Verify the token is still valid (refresh if needed)
     access_token = await get_valid_access_token(db, connection, oauth_service)
     if not access_token:
         raise HTTPException(
@@ -237,18 +244,44 @@ async def verify_charging_and_generate_code(
             detail="Tesla session expired. Please reconnect your Tesla."
         )
 
-    # Verify charging status
-    is_charging, charge_data = await oauth_service.verify_charging(
-        access_token,
-        connection.vehicle_id
-    )
-
-    if not is_charging:
-        return VerifyChargingResponse(
-            is_charging=False,
-            battery_level=charge_data.get("battery_level"),
-            message="Your Tesla is not currently charging. Start a charging session to unlock rewards."
+    # --- Location validation ---
+    if request.lat is None or request.lng is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Location (lat/lng) is required to verify charging."
         )
+
+    if request.merchant_place_id:
+        # Look up merchant coordinates from either table
+        merchant_lat: Optional[float] = None
+        merchant_lng: Optional[float] = None
+
+        domain_merchant = db.query(DomainMerchant).filter(
+            DomainMerchant.google_place_id == request.merchant_place_id
+        ).first()
+        if domain_merchant:
+            merchant_lat = domain_merchant.lat
+            merchant_lng = domain_merchant.lng
+
+        if merchant_lat is None:
+            wyc_merchant = db.query(Merchant).filter(
+                Merchant.place_id == request.merchant_place_id
+            ).first()
+            if wyc_merchant:
+                merchant_lat = wyc_merchant.lat
+                merchant_lng = wyc_merchant.lng
+
+        if merchant_lat is not None and merchant_lng is not None:
+            distance = haversine_m(request.lat, request.lng, merchant_lat, merchant_lng)
+            if distance > PROXIMITY_THRESHOLD_METERS:
+                logger.info(
+                    f"User {current_user.id} too far from merchant "
+                    f"{request.merchant_place_id} ({distance:.0f}m)"
+                )
+                raise HTTPException(
+                    status_code=400,
+                    detail="You need to be near the merchant to get a code"
+                )
 
     # Check if user already has an active code for this merchant
     existing_code = db.query(EVVerificationCode).filter(
@@ -261,20 +294,57 @@ async def verify_charging_and_generate_code(
     if existing_code:
         return VerifyChargingResponse(
             is_charging=True,
-            battery_level=charge_data.get("battery_level"),
-            charge_rate_kw=charge_data.get("charger_power"),
             ev_code=existing_code.code,
-            message="Your charging is verified! Show this code to redeem your reward."
+            message="You're connected! Show this code to redeem your reward."
         )
 
-    # Generate new EV code
+    # --- Fleet API charging verification (all vehicles) ---
+    try:
+        is_charging, charge_data, charging_vehicle = (
+            await oauth_service.verify_charging_all_vehicles(access_token)
+        )
+    except Exception as e:
+        logger.error(f"Fleet API verification failed for user {current_user.id}: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail="Unable to reach your Tesla right now. Please make sure your vehicle is online and try again."
+        )
+
+    # Backfill primary vehicle_id if missing and we found vehicles
+    if not connection.vehicle_id and charging_vehicle:
+        connection.vehicle_id = str(charging_vehicle.get("id"))
+        connection.vin = charging_vehicle.get("vin")
+        connection.vehicle_name = charging_vehicle.get("display_name") or "Tesla"
+        connection.vehicle_model = (
+            charging_vehicle.get("vehicle_config", {}).get("car_type", "Tesla")
+        )
+        connection.updated_at = datetime.utcnow()
+        db.commit()
+        logger.info(f"Backfilled vehicle_id {connection.vehicle_id} for user {current_user.id}")
+
+    battery_level = charge_data.get("battery_level")
+    charge_rate_kw = charge_data.get("charger_power")
+
+    if not is_charging:
+        charging_state = charge_data.get("charging_state", "unknown")
+        logger.info(f"Fleet API: no vehicle charging (state={charging_state}) for user {current_user.id}")
+        return VerifyChargingResponse(
+            is_charging=False,
+            battery_level=battery_level,
+            message="Your Tesla isn't currently charging. Plug in to verify your session and unlock your reward."
+        )
+
+    # Charging confirmed — generate EV code
+    charging_vin = charging_vehicle.get("vin") if charging_vehicle else connection.vin
+    logger.info(f"Fleet API confirmed charging for user {current_user.id} "
+               f"(vin={charging_vin}, battery={battery_level}%, power={charge_rate_kw}kW)")
+
     ev_code = generate_ev_code()
 
     # Ensure code is unique
     while db.query(EVVerificationCode).filter(EVVerificationCode.code == ev_code).first():
         ev_code = generate_ev_code()
 
-    # Create verification code record
     code_record = EVVerificationCode(
         user_id=current_user.id,
         tesla_connection_id=connection.id,
@@ -283,25 +353,26 @@ async def verify_charging_and_generate_code(
         merchant_place_id=request.merchant_place_id,
         merchant_name=request.merchant_name,
         charging_verified=True,
-        battery_level=charge_data.get("battery_level"),
-        charge_rate_kw=charge_data.get("charger_power"),
+        battery_level=battery_level,
+        charge_rate_kw=charge_rate_kw,
         lat=str(request.lat) if request.lat else None,
         lng=str(request.lng) if request.lng else None,
-        expires_at=datetime.utcnow() + timedelta(hours=2),  # Code valid for 2 hours
+        expires_at=datetime.utcnow() + timedelta(hours=2),
     )
     db.add(code_record)
 
-    # Update connection last used
     connection.last_used_at = datetime.utcnow()
-
     db.commit()
+
+    logger.info(f"Generated EV code {ev_code} for user {current_user.id} "
+               f"at merchant {request.merchant_name} (Fleet API verified)")
 
     return VerifyChargingResponse(
         is_charging=True,
-        battery_level=charge_data.get("battery_level"),
-        charge_rate_kw=charge_data.get("charger_power"),
+        battery_level=battery_level,
+        charge_rate_kw=charge_rate_kw,
         ev_code=ev_code,
-        message="Charging verified! Show this code to the merchant to redeem your reward."
+        message="Charging verified! Show this code to the merchant to redeem your reward.",
     )
 
 

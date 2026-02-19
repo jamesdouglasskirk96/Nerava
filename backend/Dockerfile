@@ -47,6 +47,7 @@ EXPOSE 8000
 # HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 #     CMD python3 -c "import os, urllib.request; port = os.getenv('PORT', '8000'); urllib.request.urlopen(f'http://localhost:{port}/healthz')" || exit 1
 
-# Simple exec form - no shell, just run uvicorn directly
-CMD ["python3", "-m", "uvicorn", "app.main_simple:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use startup script which handles migrations
+# The script checks RUN_MIGRATIONS_ON_BOOT env var
+CMD ["/bin/bash", "/app/scripts/start.sh"]
 

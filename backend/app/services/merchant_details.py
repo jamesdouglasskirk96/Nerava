@@ -7,7 +7,8 @@ import logging
 from typing import Optional, Dict, Any
 from datetime import datetime
 from sqlalchemy.orm import Session
-from app.models.while_you_charge import Merchant, MerchantPerk, ChargerMerchant
+from sqlalchemy import func
+from app.models.while_you_charge import Merchant, MerchantPerk, ChargerMerchant, AmenityVote
 from app.models.intent import IntentSession
 from app.schemas.merchants import MerchantDetailsResponse, MerchantInfo, MomentInfo, PerkInfo, WalletInfo, ActionsInfo
 
@@ -273,6 +274,41 @@ async def get_merchant_details(
     else:
         counts = {"activations_today": 0, "verified_visits_today": 0}
     
+    # Aggregate amenity votes (only for real merchants, not mocks)
+    amenity_votes = {}
+    if merchant.id and not merchant.id.startswith("m_mock_"):
+        # Single query to get all vote counts grouped by amenity and vote_type
+        vote_counts = db.query(
+            AmenityVote.amenity,
+            AmenityVote.vote_type,
+            func.count(AmenityVote.id).label('count')
+        ).filter(
+            AmenityVote.merchant_id == merchant.id
+        ).group_by(
+            AmenityVote.amenity,
+            AmenityVote.vote_type
+        ).all()
+        
+        # Initialize both amenities with zero counts
+        amenity_votes = {
+            'bathroom': {'upvotes': 0, 'downvotes': 0},
+            'wifi': {'upvotes': 0, 'downvotes': 0}
+        }
+        
+        # Update from query results
+        for amenity, vote_type, count in vote_counts:
+            if amenity in amenity_votes:
+                if vote_type == 'up':
+                    amenity_votes[amenity]['upvotes'] = count
+                elif vote_type == 'down':
+                    amenity_votes[amenity]['downvotes'] = count
+    else:
+        # Mock merchants: return empty amenities
+        amenity_votes = {
+            'bathroom': {'upvotes': 0, 'downvotes': 0},
+            'wifi': {'upvotes': 0, 'downvotes': 0}
+        }
+    
     # Build merchant info - only use primary_photo_url from Google Places (no fallback)
     merchant_info = MerchantInfo(
         id=merchant.id or merchant_id,  # Fallback to merchant_id if id is None
@@ -286,7 +322,9 @@ async def get_merchant_details(
         rating=getattr(merchant, 'rating', None),
         price_level=_convert_price_level(getattr(merchant, 'price_level', None)),
         activations_today=counts["activations_today"],
-        verified_visits_today=counts["verified_visits_today"]
+        verified_visits_today=counts["verified_visits_today"],
+        amenities=amenity_votes,
+        place_id=getattr(merchant, 'place_id', None)  # Google Places ID
     )
     
     # Build moment info

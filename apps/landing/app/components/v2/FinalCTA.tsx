@@ -1,5 +1,5 @@
 import { Button } from '../Button'
-import { getDriverCTAHref, getMerchantCTAHref, getChargerOwnerCTAHref } from './ctaLinks'
+import { getDriverCTAHref, getMerchantFindHref } from './ctaLinks'
 
 export default function FinalCTA() {
   return (
@@ -16,8 +16,8 @@ export default function FinalCTA() {
             <Button variant="primary" href={getDriverCTAHref()}>
               I'm a Driver
             </Button>
-            <Button variant="primary" href={getMerchantCTAHref()}>
-              I'm a Merchant Near a Charger
+            <Button variant="primary" href={getMerchantFindHref()}>
+              See how this works
             </Button>
           </div>
         </div>

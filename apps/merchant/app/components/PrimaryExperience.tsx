@@ -4,10 +4,12 @@ import { useState } from 'react';
 
 type PrimaryStatus = 'available' | 'active' | 'taken';
 
+const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
+
 export function PrimaryExperience() {
-  // Mock status - can be 'available', 'active', or 'taken'
-  const [status] = useState<PrimaryStatus>('available');
-  const currentHolder = 'Downtown Cafe'; // Only relevant if status is 'taken'
+  // Mock status - can be 'available', 'active', or 'taken' (only in demo mode)
+  const [status] = useState<PrimaryStatus>(isDemoMode ? 'available' : 'available');
+  const currentHolder = isDemoMode ? 'Downtown Cafe' : null; // Only relevant if status is 'taken'
 
   return (
     <div>
@@ -78,9 +80,16 @@ export function PrimaryExperience() {
               </div>
             </div>
 
-            <button className="bg-neutral-900 text-white px-8 py-4 rounded-lg hover:bg-neutral-800 transition-colors text-lg">
-              Reserve Primary Experience
-            </button>
+            {isDemoMode ? (
+              <button className="bg-neutral-900 text-white px-8 py-4 rounded-lg hover:bg-neutral-800 transition-colors text-lg">
+                Reserve Primary Experience
+              </button>
+            ) : (
+              <div className="bg-blue-50 p-4 rounded-lg text-center">
+                <p className="text-blue-900 text-sm">Coming Soon</p>
+                <p className="text-blue-700 text-xs mt-1">Primary Experience reservation will be available soon</p>
+              </div>
+            )}
 
             <div className="mt-6 p-4 bg-blue-50 rounded-lg text-left">
               <div className="flex items-start gap-2">
@@ -121,14 +130,21 @@ export function PrimaryExperience() {
               </div>
             </div>
 
-            <div className="flex gap-3">
-              <button className="flex-1 border border-neutral-300 text-neutral-700 py-3 px-6 rounded-lg hover:bg-neutral-50 transition-colors">
-                View Details
-              </button>
-              <button className="flex-1 border border-red-300 text-red-700 py-3 px-6 rounded-lg hover:bg-red-50 transition-colors">
-                Cancel Primary
-              </button>
-            </div>
+            {isDemoMode ? (
+              <div className="flex gap-3">
+                <button className="flex-1 border border-neutral-300 text-neutral-700 py-3 px-6 rounded-lg hover:bg-neutral-50 transition-colors">
+                  View Details
+                </button>
+                <button className="flex-1 border border-red-300 text-red-700 py-3 px-6 rounded-lg hover:bg-red-50 transition-colors">
+                  Cancel Primary
+                </button>
+              </div>
+            ) : (
+              <div className="bg-blue-50 p-4 rounded-lg text-center">
+                <p className="text-blue-900 text-sm">Coming Soon</p>
+                <p className="text-blue-700 text-xs mt-1">Primary Experience management will be available soon</p>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -149,15 +165,22 @@ export function PrimaryExperience() {
               Another business (<strong>{currentHolder}</strong>) currently holds the Primary Experience at this location.
             </p>
 
-            <div className="p-6 bg-neutral-50 rounded-lg mb-8">
-              <h3 className="text-lg text-neutral-900 mb-3">Join the Waitlist</h3>
-              <p className="text-sm text-neutral-600 mb-4">
-                We'll notify you immediately if the Primary Experience becomes available. You'll have priority access to claim it.
-              </p>
-              <button className="bg-neutral-900 text-white px-6 py-3 rounded-lg hover:bg-neutral-800 transition-colors">
-                Join Waitlist
-              </button>
-            </div>
+            {isDemoMode ? (
+              <div className="p-6 bg-neutral-50 rounded-lg mb-8">
+                <h3 className="text-lg text-neutral-900 mb-3">Join the Waitlist</h3>
+                <p className="text-sm text-neutral-600 mb-4">
+                  We'll notify you immediately if the Primary Experience becomes available. You'll have priority access to claim it.
+                </p>
+                <button className="bg-neutral-900 text-white px-6 py-3 rounded-lg hover:bg-neutral-800 transition-colors">
+                  Join Waitlist
+                </button>
+              </div>
+            ) : (
+              <div className="p-6 bg-neutral-50 rounded-lg mb-8 text-center">
+                <p className="text-neutral-600">Coming Soon</p>
+                <p className="text-sm text-neutral-500 mt-2">Waitlist functionality will be available soon</p>
+              </div>
+            )}
 
             <div className="p-4 bg-blue-50 rounded-lg text-left">
               <div className="flex items-start gap-2">

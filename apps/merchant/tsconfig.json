@@ -21,8 +21,12 @@
     }
   },
   "include": ["app"],
+  "exclude": ["app/**/*.test.ts", "app/**/*.test.tsx", "app/**/__tests__/**"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
+
+
+
 
 
 

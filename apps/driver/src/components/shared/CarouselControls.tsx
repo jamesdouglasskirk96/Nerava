@@ -52,18 +52,20 @@ export function CarouselControls({
       {/* Center section: Pagination dots + "More nearby while you charge" text */}
       <div className="flex flex-col items-center justify-center gap-2 flex-1 min-w-0 mx-4">
         {/* Pagination dots - properly centered and scaled */}
-        <div className="flex items-center justify-center gap-2.5">
+        <div className="flex items-center justify-center gap-0.5">
           {Array.from({ length: totalItems }).map((_, index) => (
             <button
               key={index}
               onClick={() => onDotClick(index)}
-              className={`transition-all rounded-full flex-shrink-0 ${
+              className="relative flex items-center justify-center min-w-[44px] min-h-[44px] flex-shrink-0"
+              aria-label={`Go to page ${index + 1} of ${totalItems}`}
+            >
+              <span className={`block transition-all rounded-full ${
                 index === currentIndex
-                  ? 'w-8 h-2 bg-[#1877F2]' // Active: 32px width, 8px height
-                  : 'w-2 h-2 bg-[#E4E6EB] hover:bg-gray-400' // Inactive: 8px circles
-              }`}
-              aria-label={`Go to item ${index + 1}`}
-            />
+                  ? 'w-8 h-2 bg-[#1877F2]'
+                  : 'w-2 h-2 bg-[#E4E6EB]'
+              }`} />
+            </button>
           ))}
         </div>
         

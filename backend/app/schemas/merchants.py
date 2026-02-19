@@ -2,7 +2,7 @@
 Schemas for Merchant Details API
 """
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Literal
 
 
 class MerchantInfo(BaseModel):
@@ -18,6 +18,8 @@ class MerchantInfo(BaseModel):
     price_level: Optional[int] = None
     activations_today: Optional[int] = 0
     verified_visits_today: Optional[int] = 0
+    amenities: Optional[Dict[str, Dict[str, int]]] = None  # {"bathroom": {"upvotes": 42, "downvotes": 3}, "wifi": {"upvotes": 38, "downvotes": 7}}
+    place_id: Optional[str] = None  # Google Places ID
 
     class Config:
         from_attributes = True
@@ -52,4 +54,16 @@ class MerchantDetailsResponse(BaseModel):
     perk: Optional[PerkInfo] = None  # Only merchants with exclusive offers have perks
     wallet: WalletInfo
     actions: ActionsInfo
+
+
+class AmenityVoteRequest(BaseModel):
+    """Request schema for voting on an amenity"""
+    vote_type: Literal['up', 'down']
+
+
+class AmenityVoteResponse(BaseModel):
+    """Response schema for amenity vote"""
+    ok: bool
+    upvotes: int
+    downvotes: int
 

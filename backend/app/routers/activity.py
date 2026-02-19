@@ -1,34 +1,51 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.db import get_db
 from app.core.config import settings
+from app.dependencies_domain import get_current_user
+from app.models import User, UserReputation
 
 router = APIRouter()
 
 @router.get("/v1/activity")
-async def get_activity_data(db: Session = Depends(get_db)):
+async def get_activity_data(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """Get user's activity data including reputation and follow earnings"""
     
-    # For demo purposes, we'll use a hardcoded user ID
-    # In production, this would come from authentication
-    me = "demo-user-123"
+    # Use authenticated user
+    me = str(current_user.id)
     
     # Get current month
     from datetime import datetime
     month = int(datetime.now().strftime("%Y%m"))
     
     # Get reputation with streak_days and counts
-    rep_query = text("SELECT score, tier, COALESCE(streak_days, 0), COALESCE(followers_count, 0), COALESCE(following_count, 0) FROM user_reputation WHERE user_id = :user_id")
-    rep_result = db.execute(rep_query, {'user_id': me})
-    rep_row = rep_result.fetchone()
-    reputation = {
-        'score': rep_row[0] if rep_row else 180,
-        'tier': rep_row[1] if rep_row else 'Silver',
-        'streakDays': rep_row[2] if rep_row else 7,
-        'followers_count': rep_row[3] if rep_row else 12,
-        'following_count': rep_row[4] if rep_row else 8
-    }
+    rep = db.query(UserReputation).filter(
+        UserReputation.user_id == me
+    ).first()
+
+    if rep:
+        reputation = {
+            'score': rep.score or 0,
+            'tier': rep.tier or 'Bronze',
+            'streakDays': rep.streak_days or 0,
+            'followers_count': rep.followers_count or 0,
+            'following_count': rep.following_count or 0,
+            'status': 'active'
+        }
+    else:
+        # No reputation row - new user
+        reputation = {
+            'score': 0,
+            'tier': 'Bronze',
+            'streakDays': 0,
+            'followers_count': 0,
+            'following_count': 0,
+            'status': 'new'
+        }
     
     # Get earnings from monthly table (fallback to demo data)
     earn_query = text("""
@@ -58,51 +75,7 @@ async def get_activity_data(db: Session = Depends(get_db)):
         })
         total_cents += int(row[4])
     
-    # If no earnings found, return demo data
-    if not earnings:
-        earnings = [
-            {
-                'userId': 'demo-user-1',
-                'handle': 'alex',
-                'avatarUrl': None,
-                'tier': 'Gold',
-                'amountCents': 185,
-                'context': 'charged and chilled at Starbucks'
-            },
-            {
-                'userId': 'demo-user-2',
-                'handle': 'sam', 
-                'avatarUrl': None,
-                'tier': 'Bronze',
-                'amountCents': 90,
-                'context': 'topped up at Target'
-            },
-            {
-                'userId': 'demo-user-3',
-                'handle': 'riley',
-                'avatarUrl': None,
-                'tier': 'Silver',
-                'amountCents': 75,
-                'context': 'smart-charged at Whole Foods'
-            },
-            {
-                'userId': 'demo-user-4',
-                'handle': 'jordan',
-                'avatarUrl': None,
-                'tier': 'Gold',
-                'amountCents': 120,
-                'context': 'queued and earned at H-E-B'
-            },
-            {
-                'userId': 'demo-user-5',
-                'handle': 'morgan',
-                'avatarUrl': None,
-                'tier': 'Bronze',
-                'amountCents': 60,
-                'context': 'plugged in at Costco'
-            }
-        ]
-        total_cents = 530
+    # If no earnings found, return empty list (no demo fallback)
     
     return {
         'month': month,
@@ -114,11 +87,16 @@ async def get_activity_data(db: Session = Depends(get_db)):
     }
 
 @router.post("/v1/session/verify")
-async def verify_session(session_data: dict, db: Session = Depends(get_db)):
+async def verify_session(
+    session_data: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """Verify a charging session and trigger auto-follow + rewards"""
     
-    # For demo purposes, we'll use hardcoded values
-    me = "demo-user-123"
+    # Use authenticated user
+    import uuid
+    me = str(current_user.id)
     session_id = session_data.get('sessionId', str(uuid.uuid4()))
     station_id = session_data.get('stationId', 'STATION_A')
     energy_kwh = session_data.get('energyKwh', 15.0)

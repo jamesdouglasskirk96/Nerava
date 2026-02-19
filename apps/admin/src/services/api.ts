@@ -12,7 +12,7 @@ export class ApiError extends Error {
   }
 }
 
-async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
+export async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`
   const token = localStorage.getItem('access_token')
   
@@ -95,7 +95,16 @@ export interface ActiveSession {
 
 // API Functions
 export async function searchMerchants(query: string): Promise<{ merchants: Merchant[] }> {
-  return fetchAPI(`/v1/admin/merchants?query=${encodeURIComponent(query)}`)
+  return fetchAPI(`/v1/admin/merchants/search?query=${encodeURIComponent(query)}`)
+}
+
+export async function listMerchants(limit = 50, offset = 0, zoneSlug?: string, statusFilter?: string): Promise<{ merchants: Merchant[]; total: number; limit: number; offset: number }> {
+  const params = new URLSearchParams()
+  params.append('limit', limit.toString())
+  params.append('offset', offset.toString())
+  if (zoneSlug) params.append('zone_slug', zoneSlug)
+  if (statusFilter) params.append('status_filter', statusFilter)
+  return fetchAPI(`/v1/admin/merchants?${params.toString()}`)
 }
 
 export async function getMerchantStatus(merchantId: string): Promise<any> {
@@ -182,20 +191,6 @@ export async function sendMerchantPortalLink(merchantId: string, email: string):
   })
 }
 
-export async function pauseMerchant(merchantId: string, reason: string): Promise<{ merchant_id: string; action: string; previous_status: string; new_status: string; reason: string }> {
-  return fetchAPI(`/v1/admin/merchants/${merchantId}/pause`, {
-    method: 'POST',
-    body: JSON.stringify({ reason }),
-  })
-}
-
-export async function resumeMerchant(merchantId: string, reason: string): Promise<{ merchant_id: string; action: string; previous_status: string; new_status: string; reason: string }> {
-  return fetchAPI(`/v1/admin/merchants/${merchantId}/resume`, {
-    method: 'POST',
-    body: JSON.stringify({ reason }),
-  })
-}
-
 // Auth
 export interface AdminLoginRequest {
   email: string
@@ -214,6 +209,7 @@ export async function adminLogin(request: AdminLoginRequest): Promise<TokenRespo
   })
   
   localStorage.setItem('access_token', response.access_token)
+  localStorage.setItem('admin_email', request.email)
   
   return response
 }

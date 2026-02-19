@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Eye, Ban, CheckCircle, Search, Mail, ExternalLink, Pause, Play } from 'lucide-react';
-import { searchMerchants, sendMerchantPortalLink, pauseMerchant, resumeMerchant, type Merchant } from '../services/api';
+import { Eye, Ban, CheckCircle, Search, Mail, ExternalLink, Pause, Play, ChevronLeft, ChevronRight } from 'lucide-react';
+import { searchMerchants, listMerchants, sendMerchantPortalLink, pauseMerchant, resumeMerchant, type Merchant } from '../services/api';
 
 export function Merchants() {
   const [merchants, setMerchants] = useState<Merchant[]>([]);
@@ -10,17 +10,26 @@ export function Merchants() {
   const [error, setError] = useState<string | null>(null);
   const [pauseDialog, setPauseDialog] = useState<{ merchantId: string; action: 'pause' | 'resume' } | null>(null);
   const [reason, setReason] = useState('');
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [emailDialog, setEmailDialog] = useState<{ merchantId: string; email: string } | null>(null);
+  const [total, setTotal] = useState(0);
+  const [limit] = useState(50);
+  const [offset, setOffset] = useState(0);
+  const [isSearchMode, setIsSearchMode] = useState(false);
 
   useEffect(() => {
-    loadMerchants();
-  }, []);
+    if (!isSearchMode) {
+      loadMerchants();
+    }
+  }, [offset, isSearchMode]);
 
   const loadMerchants = async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await searchMerchants('');
+      const data = await listMerchants(limit, offset);
       setMerchants(data.merchants);
+      setTotal(data.total);
     } catch (err) {
       console.error('Failed to load merchants:', err);
       setError('Failed to load merchants. Please try again.');
@@ -30,10 +39,18 @@ export function Merchants() {
   };
 
   const handleSearch = async () => {
+    if (!searchTerm.trim()) {
+      setIsSearchMode(false);
+      setOffset(0);
+      return;
+    }
     try {
       setLoading(true);
+      setIsSearchMode(true);
       const data = await searchMerchants(searchTerm);
       setMerchants(data.merchants);
+      setTotal(data.merchants.length);
+      setOffset(0);
     } catch (err) {
       console.error('Failed to search merchants:', err);
     } finally {
@@ -42,16 +59,26 @@ export function Merchants() {
   };
 
   const handleSendPortalLink = async (merchantId: string) => {
-    const email = prompt('Enter merchant email address:');
-    if (!email) return;
+    setEmailDialog({ merchantId, email: '' });
+  };
+
+  const confirmSendPortalLink = async () => {
+    if (!emailDialog || !emailDialog.email) {
+      setFeedback({ type: 'error', message: 'Please enter an email address' });
+      setTimeout(() => setFeedback(null), 5000);
+      return;
+    }
 
     try {
-      setSendingEmail(merchantId);
-      await sendMerchantPortalLink(merchantId, email);
-      alert('Portal link sent successfully!');
-    } catch (err) {
+      setSendingEmail(emailDialog.merchantId);
+      await sendMerchantPortalLink(emailDialog.merchantId, emailDialog.email);
+      setFeedback({ type: 'success', message: 'Portal link sent successfully!' });
+      setTimeout(() => setFeedback(null), 5000);
+      setEmailDialog(null);
+    } catch (err: any) {
       console.error('Failed to send portal link:', err);
-      alert('Failed to send portal link');
+      setFeedback({ type: 'error', message: err.message || 'Failed to send portal link' });
+      setTimeout(() => setFeedback(null), 5000);
     } finally {
       setSendingEmail(null);
     }
@@ -68,7 +95,8 @@ export function Merchants() {
 
   const confirmPauseResume = async () => {
     if (!pauseDialog || !reason || reason.length < 5) {
-      alert('Please provide a reason (minimum 5 characters)');
+      setFeedback({ type: 'error', message: 'Please provide a reason (minimum 5 characters)' });
+      setTimeout(() => setFeedback(null), 5000);
       return;
     }
 
@@ -78,12 +106,15 @@ export function Merchants() {
       } else {
         await resumeMerchant(pauseDialog.merchantId, reason);
       }
+      setFeedback({ type: 'success', message: `Merchant ${pauseDialog.action}d successfully` });
+      setTimeout(() => setFeedback(null), 5000);
       setPauseDialog(null);
       setReason('');
       loadMerchants(); // Refresh
     } catch (err: any) {
       console.error(`Failed to ${pauseDialog.action} merchant:`, err);
-      alert(err.message || `Failed to ${pauseDialog.action} merchant`);
+      setFeedback({ type: 'error', message: err.message || `Failed to ${pauseDialog.action} merchant` });
+      setTimeout(() => setFeedback(null), 5000);
     }
   };
 
@@ -117,6 +148,18 @@ export function Merchants() {
         <h1 className="text-2xl text-neutral-900">Merchants</h1>
         <p className="text-sm text-neutral-600 mt-1">Manage and monitor merchant accounts</p>
       </div>
+
+      {feedback && (
+        <div
+          className={`mb-4 border rounded-lg p-4 ${
+            feedback.type === 'success'
+              ? 'bg-green-50 border-green-200 text-green-700'
+              : 'bg-red-50 border-red-200 text-red-700'
+          }`}
+        >
+          {feedback.message}
+        </div>
+      )}
 
       {/* Search */}
       <div className="mb-6 flex gap-2">
@@ -210,6 +253,33 @@ export function Merchants() {
         <div className="text-center py-12 text-neutral-500">No merchants found</div>
       )}
 
+      {/* Pagination Controls */}
+      {!isSearchMode && total > limit && (
+        <div className="mt-6 flex items-center justify-between">
+          <div className="text-sm text-neutral-600">
+            Showing {offset + 1} to {Math.min(offset + limit, total)} of {total} merchants
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setOffset(Math.max(0, offset - limit))}
+              disabled={offset === 0}
+              className="px-4 py-2 border border-neutral-300 rounded-lg hover:bg-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Previous
+            </button>
+            <button
+              onClick={() => setOffset(offset + limit)}
+              disabled={offset + limit >= total}
+              className="px-4 py-2 border border-neutral-300 rounded-lg hover:bg-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              Next
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Pause/Resume Dialog */}
       {pauseDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -247,6 +317,41 @@ export function Merchants() {
                 } disabled:bg-neutral-300`}
               >
                 Confirm {pauseDialog.action === 'pause' ? 'Pause' : 'Resume'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email Dialog */}
+      {emailDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold mb-4">Send Portal Link</h3>
+            <p className="text-sm text-neutral-600 mb-4">
+              Enter merchant email address:
+            </p>
+            <input
+              type="email"
+              value={emailDialog.email}
+              onChange={(e) => setEmailDialog({ ...emailDialog, email: e.target.value })}
+              className="w-full px-3 py-2 border border-neutral-300 rounded-lg mb-4"
+              placeholder="merchant@example.com"
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setEmailDialog(null)}
+                className="px-4 py-2 border border-neutral-300 rounded-lg hover:bg-neutral-50"
+                disabled={sendingEmail === emailDialog.merchantId}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmSendPortalLink}
+                disabled={!emailDialog.email || sendingEmail === emailDialog.merchantId}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-neutral-300"
+              >
+                {sendingEmail === emailDialog.merchantId ? 'Sending...' : 'Send'}
               </button>
             </div>
           </div>

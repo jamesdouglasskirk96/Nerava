@@ -49,8 +49,9 @@ export function CompletionFeedbackModal({
                   ? 'bg-green-100 text-green-600'
                   : 'bg-[#F7F8FA] text-[#65676B] hover:bg-green-50'
               }`}
+              aria-label="Positive feedback"
             >
-              <ThumbsUp className="w-6 h-6" />
+              <ThumbsUp className="w-6 h-6" aria-hidden="true" />
             </button>
             <button
               onClick={() => setFeedback('negative')}
@@ -59,8 +60,9 @@ export function CompletionFeedbackModal({
                   ? 'bg-red-100 text-red-600'
                   : 'bg-[#F7F8FA] text-[#65676B] hover:bg-red-50'
               }`}
+              aria-label="Negative feedback"
             >
-              <ThumbsDown className="w-6 h-6" />
+              <ThumbsDown className="w-6 h-6" aria-hidden="true" />
             </button>
           </div>
         </div>

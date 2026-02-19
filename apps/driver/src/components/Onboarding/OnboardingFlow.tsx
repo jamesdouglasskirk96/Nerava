@@ -29,7 +29,7 @@ export function OnboardingFlow({ onComplete, onRequestLocation, onSkipLocation }
   }
 
   return (
-    <div className="min-h-screen bg-white text-[#050505] max-w-md mx-auto flex flex-col">
+    <div className="bg-white text-[#050505] max-w-md mx-auto flex flex-col" style={{ height: 'var(--app-height, 100dvh)' }}>
       {/* Header */}
       <header className="bg-white border-b border-[#E4E6EB] flex-shrink-0 px-5 py-3">
         <div className="flex items-center gap-1.5">
@@ -114,5 +114,8 @@ export function OnboardingFlow({ onComplete, onRequestLocation, onSkipLocation }
     </div>
   )
 }
+
+
+
 
 

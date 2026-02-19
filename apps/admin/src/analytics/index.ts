@@ -81,6 +81,46 @@ export function init(): void {
 }
 
 /**
+ * Check if analytics consent is granted
+ */
+async function hasAnalyticsConsent(): Promise<boolean> {
+  const stored = localStorage.getItem('consent_analytics')
+  if (stored === 'granted') {
+    return true
+  }
+  if (stored === 'denied') {
+    return false
+  }
+  
+  try {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
+    const token = localStorage.getItem('access_token')
+    
+    if (!token) {
+      return false
+    }
+    
+    const response = await fetch(`${API_BASE_URL}/v1/consent`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+    
+    if (response.ok) {
+      const data = await response.json()
+      const analyticsConsent = data.consents?.find((c: { consent_type: string }) => c.consent_type === 'analytics')
+      const granted = analyticsConsent?.granted === true
+      localStorage.setItem('consent_analytics', granted ? 'granted' : 'denied')
+      return granted
+    }
+  } catch (error) {
+    console.error('[Analytics] Failed to check consent:', error)
+  }
+  
+  return false
+}
+
+/**
  * Identify a user (call after login)
  */
 export function identify(userId: string, traits?: Record<string, unknown>): void {
@@ -105,6 +145,20 @@ export function identify(userId: string, traits?: Record<string, unknown>): void
     }
   } catch (error) {
     console.error('[Analytics] Failed to identify user:', error)
+  }
+}
+
+/**
+ * Identify a user only if analytics consent is granted
+ */
+export async function identifyIfConsented(userId: string, traits?: Record<string, unknown>): Promise<void> {
+  const consented = await hasAnalyticsConsent()
+  if (consented) {
+    identify(userId, traits)
+  } else {
+    if (import.meta.env.DEV) {
+      console.log('[Analytics] Skipping identify - analytics consent not granted')
+    }
   }
 }
 
@@ -200,6 +254,9 @@ export function storeSourceParams(searchParams: URLSearchParams): void {
 
 // Export events for use in components
 export { ADMIN_EVENTS }
+
+
+
 
 
 

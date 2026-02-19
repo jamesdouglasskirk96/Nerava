@@ -184,7 +184,7 @@ def check_location(
     # Calculate distance using haversine
     distance = haversine_m(lat, lng, merchant.lat, merchant.lng)
 
-    geofence_radius = merchant.geofence_radius_m or 150
+    geofence_radius = 150  # Default geofence radius in meters
 
     if distance > geofence_radius:
         return False, {
@@ -284,7 +284,7 @@ def get_session_status(db: Session, session_token: str) -> Optional[dict]:
             "address": merchant.address,
             "lat": merchant.lat,
             "lng": merchant.lng,
-            "geofence_radius_m": merchant.geofence_radius_m or 150,
+            "geofence_radius_m": 150,  # Default geofence radius
         } if merchant else None,
         "expires_at": session.expires_at.isoformat() if session.expires_at else None,
     }

@@ -161,3 +161,6 @@ VITE_DEMO_MODE=true   # Development: allow mock fallback, show demo badge
 - Browse mode uses default center (Austin: 30.2672, -97.7431) for charger discovery
 
 
+
+
+

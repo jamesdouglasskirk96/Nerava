@@ -1,5 +1,6 @@
 // Merchant Detail Modal - Full-screen modal with merchant details
-import { ArrowLeft, MapPin, Clock, Wallet, Heart, Share2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { ArrowLeft, MapPin, Clock, Activity, Heart, Share2, Check } from 'lucide-react'
 import { ImageWithFallback } from '../shared/ImageWithFallback'
 import { capture, DRIVER_EVENTS } from '../../analytics'
 import type { MockMerchant } from '../../mock/mockMerchants'
@@ -31,6 +32,17 @@ export function MerchantDetailModal({
 }: MerchantDetailModalProps) {
   const isLiked = likedMerchants.has(merchant.id)
   const hasExclusive = merchant.badges?.includes('Exclusive') || false
+  const [showShareToast, setShowShareToast] = useState(false)
+
+  // Track merchant detail view when modal opens
+  useEffect(() => {
+    capture(DRIVER_EVENTS.MERCHANT_DETAIL_VIEWED, {
+      merchant_id: merchant.id,
+      merchant_name: merchant.name,
+      category: merchant.category || 'unknown',
+      path: window.location.pathname,
+    })
+  }, [merchant.id, merchant.name, merchant.category])
 
   // Dynamic font size for titles to ensure single line
   const getTitleFontSize = (name: string) => {
@@ -42,9 +54,41 @@ export function MerchantDetailModal({
     return '1.125rem' // text-lg
   }
 
-  const handleShare = () => {
-    const url = `https://nerava.com/merchant/${merchant.id}`
-    navigator.clipboard.writeText(url)
+  const handleShare = async () => {
+    const url = `https://app.nerava.network/m/${merchant.id}`
+    const shareData = {
+      title: merchant.name,
+      text: `Check out ${merchant.name} on Nerava!`,
+      url: url,
+    }
+
+    // Try Web Share API first (mobile-native sharing)
+    if (navigator.share && navigator.canShare?.(shareData)) {
+      try {
+        await navigator.share(shareData)
+        capture(DRIVER_EVENTS.MERCHANT_SHARED, {
+          merchant_id: merchant.id,
+          method: 'native',
+        })
+        return
+      } catch (err) {
+        // User cancelled or share failed, fall back to clipboard
+        if ((err as Error).name === 'AbortError') return
+      }
+    }
+
+    // Fallback to clipboard
+    try {
+      await navigator.clipboard.writeText(url)
+      capture(DRIVER_EVENTS.MERCHANT_SHARED, {
+        merchant_id: merchant.id,
+        method: 'clipboard',
+      })
+      setShowShareToast(true)
+      setTimeout(() => setShowShareToast(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err)
+    }
   }
 
   return (
@@ -59,29 +103,32 @@ export function MerchantDetailModal({
             className="w-full h-full"
           />
 
-          {/* Back Button */}
+          {/* Back Button — 44px min touch target */}
           <button
             onClick={onClose}
-            className="absolute top-4 left-4 w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-lg hover:bg-gray-50 active:scale-95 transition-all"
+            className="absolute top-4 left-4 w-11 h-11 bg-white rounded-full flex items-center justify-center shadow-lg hover:bg-gray-50 active:scale-95 transition-all"
+            aria-label="Go back"
           >
-            <ArrowLeft className="w-5 h-5 text-[#050505]" />
+            <ArrowLeft className="w-5 h-5 text-[#050505]" aria-hidden="true" />
           </button>
 
-          {/* Action Buttons - Heart and Share */}
+          {/* Action Buttons - Heart and Share — 44px min touch target */}
           <div className="absolute top-4 right-4 flex gap-2">
             <button
               onClick={() => onToggleLike(merchant.id)}
-              className={`w-10 h-10 rounded-full flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-all ${
+              className={`w-11 h-11 rounded-full flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-all ${
                 isLiked ? 'bg-[#1877F2] text-white' : 'bg-white text-[#050505]'
               }`}
+              aria-label={isLiked ? 'Remove from favorites' : 'Add to favorites'}
             >
-              <Heart className={`w-5 h-5 ${isLiked ? 'fill-current' : ''}`} />
+              <Heart className={`w-5 h-5 ${isLiked ? 'fill-current' : ''}`} aria-hidden="true" />
             </button>
             <button
               onClick={handleShare}
-              className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-lg hover:bg-gray-50 active:scale-95 transition-all"
+              className="w-11 h-11 bg-white rounded-full flex items-center justify-center shadow-lg hover:bg-gray-50 active:scale-95 transition-all"
+              aria-label="Share merchant"
             >
-              <Share2 className="w-5 h-5 text-[#050505]" />
+              <Share2 className="w-5 h-5 text-[#050505]" aria-hidden="true" />
             </button>
           </div>
 
@@ -102,10 +149,10 @@ export function MerchantDetailModal({
           )}
         </div>
 
-        {/* Content */}
-        <div className="flex-1 px-6 py-5 overflow-hidden flex flex-col">
+        {/* Scrollable Content */}
+        <div className="flex-1 px-6 py-5 overflow-y-auto">
           {/* Title */}
-          <div className="mb-1 flex-shrink-0">
+          <div className="mb-1">
             <h1
               className="text-3xl inline whitespace-nowrap overflow-hidden text-ellipsis max-w-full"
               style={{ fontSize: getTitleFontSize(merchant.name) }}
@@ -116,15 +163,15 @@ export function MerchantDetailModal({
 
           {/* Category */}
           {merchant.category && (
-            <p className="text-sm text-[#65676B] mb-3 flex-shrink-0">{merchant.category}</p>
+            <p className="text-sm text-[#65676B] mb-3">{merchant.category}</p>
           )}
 
           {/* Exclusive Offer - Show prominently if it exists */}
           {hasExclusive && merchant.exclusiveOffer && (
-            <div className="bg-gradient-to-r from-yellow-500/10 to-amber-500/10 rounded-2xl p-4 mb-4 flex-shrink-0 border border-yellow-600/20">
+            <div className="bg-gradient-to-r from-yellow-500/10 to-amber-500/10 rounded-2xl p-4 mb-4 border border-yellow-600/20">
               <div className="flex items-start gap-3">
                 <div className="w-9 h-9 bg-yellow-500/20 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Wallet className="w-4 h-4 text-yellow-700" />
+                  <Activity className="w-4 h-4 text-yellow-700" />
                 </div>
                 <div className="flex-1">
                   <h3 className="font-medium text-sm mb-0.5 text-yellow-900">Exclusive Offer</h3>
@@ -137,7 +184,7 @@ export function MerchantDetailModal({
           )}
 
           {/* Distance Info */}
-          <div className="bg-[#F7F8FA] rounded-2xl p-3 mb-3 flex-shrink-0">
+          <div className="bg-[#F7F8FA] rounded-2xl p-3 mb-3">
             <div className="flex items-start gap-3">
               <div className="w-9 h-9 bg-[#1877F2]/10 rounded-full flex items-center justify-center flex-shrink-0">
                 <MapPin className="w-4 h-4 text-[#1877F2]" />
@@ -153,7 +200,7 @@ export function MerchantDetailModal({
 
           {/* Hours */}
           {merchant.hours && (
-            <div className="bg-[#F7F8FA] rounded-2xl p-3 mb-4 flex-shrink-0">
+            <div className="bg-[#F7F8FA] rounded-2xl p-3 mb-4">
               <div className="flex items-start gap-3">
                 <div className="w-9 h-9 bg-[#1877F2]/10 rounded-full flex items-center justify-center flex-shrink-0">
                   <Clock className="w-4 h-4 text-[#1877F2]" />
@@ -170,15 +217,17 @@ export function MerchantDetailModal({
 
           {/* Description - Only show for merchants in charging state */}
           {isCharging && merchant.description && (
-            <div className="mb-5 flex-shrink-0">
-              <div className="text-sm text-[#65676B] leading-relaxed max-h-32 overflow-y-auto pr-2">
+            <div className="mb-4">
+              <div className="text-sm text-[#65676B] leading-relaxed">
                 <p className="whitespace-pre-line">{merchant.description}</p>
               </div>
             </div>
           )}
+        </div>
 
-          {/* CTA Buttons */}
-          <div className="flex flex-col gap-3 flex-shrink-0 mt-auto">
+        {/* Fixed CTA Buttons - Always visible at bottom */}
+        <div className="flex-shrink-0 px-6 py-4 bg-white border-t border-gray-100" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)' }}>
+          <div className="flex flex-col gap-3">
             <button
               onClick={() => {
                 // Track Get Directions click
@@ -188,7 +237,7 @@ export function MerchantDetailModal({
                   is_charging: isCharging,
                   path: window.location.pathname,
                 })
-                
+
                 // Open Google Maps with directions
                 const merchantAddress = encodeURIComponent(merchant.name)
                 window.open(`https://www.google.com/maps/dir/?api=1&destination=${merchantAddress}`, '_blank')
@@ -208,8 +257,8 @@ export function MerchantDetailModal({
                       : 'bg-[#E4E6EB] text-[#65676B] cursor-not-allowed'
                   }`}
                 >
-                  <Wallet className="w-5 h-5" />
-                  {!isCharging ? 'Activate after arrival' : 'Activate Exclusive'}
+                  <Activity className="w-5 h-5" />
+                  {!isCharging ? 'Activate after arrival' : 'Activate Session'}
                 </button>
                 {!isCharging && (
                   <p className="text-xs text-[#65676B] text-center mt-2">
@@ -225,6 +274,14 @@ export function MerchantDetailModal({
             )}
           </div>
         </div>
+
+        {/* Share Toast */}
+        {showShareToast && (
+          <div className="absolute bottom-24 left-1/2 -translate-x-1/2 bg-[#050505] text-white px-4 py-2 rounded-full flex items-center gap-2 shadow-lg animate-fade-in">
+            <Check className="w-4 h-4" />
+            <span className="text-sm font-medium">Link copied!</span>
+          </div>
+        )}
       </div>
     </div>
   )

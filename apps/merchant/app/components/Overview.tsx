@@ -1,27 +1,41 @@
 import { useState, useEffect } from 'react';
 import { TrendingUp, Eye, CheckCircle, Star } from 'lucide-react';
-import { getMerchantAnalytics, type MerchantAnalytics } from '../services/api';
+import { getMerchantAnalytics, getMerchantExclusives, type MerchantAnalytics, type Exclusive } from '../services/api';
 import { capture, MERCHANT_EVENTS } from '../analytics';
 
 export function Overview() {
   const [analytics, setAnalytics] = useState<MerchantAnalytics | null>(null);
+  const [exclusives, setExclusives] = useState<Exclusive[]>([]);
   const [loading, setLoading] = useState(true);
-  const merchantId = localStorage.getItem('merchant_id') || 'current_merchant';
+  const merchantId = localStorage.getItem('merchant_id') || '';
 
   useEffect(() => {
-    loadAnalytics();
+    loadData();
     // Capture analytics view event
     capture(MERCHANT_EVENTS.ANALYTICS_VIEW);
   }, []);
 
-  const loadAnalytics = async () => {
+  const loadData = async () => {
+    if (!merchantId) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
-      const data = await getMerchantAnalytics(merchantId);
-      setAnalytics(data);
+      const [analyticsData, exclusivesData] = await Promise.all([
+        getMerchantAnalytics(merchantId).catch(() => ({
+          merchant_id: merchantId,
+          activations: 0,
+          completes: 0,
+          unique_drivers: 0,
+          completion_rate: 0,
+        })),
+        getMerchantExclusives(merchantId).catch(() => []),
+      ]);
+      setAnalytics(analyticsData);
+      setExclusives(exclusivesData);
     } catch (err) {
-      console.error('Failed to load analytics:', err);
-      // Use mock data on error
+      console.error('Failed to load data:', err);
       setAnalytics({
         merchant_id: merchantId,
         activations: 0,
@@ -29,6 +43,7 @@ export function Overview() {
         unique_drivers: 0,
         completion_rate: 0,
       });
+      setExclusives([]);
     } finally {
       setLoading(false);
     }
@@ -44,18 +59,13 @@ export function Overview() {
     conversionRate: 0,
   };
 
-const activeExclusive = {
-  name: 'Free Pastry with Coffee',
-  timeWindow: '7:00 AM - 11:00 AM',
-  status: 'on',
-  activationsToday: 43,
-  dailyCap: 100,
-};
+  // Find active exclusive (first active exclusive)
+  const activeExclusive = exclusives.find(ex => ex.is_active) || null;
 
-const primaryExperience = {
-  status: 'available', // 'available' | 'active' | 'taken'
-  explanation: 'Only one business per charging location can be the Primary Experience. This gives you maximum visibility to customers.',
-};
+  const primaryExperience: { status: 'available' | 'active' | 'taken'; explanation: string } = {
+    status: 'available', // TODO: Fetch real status from backend
+    explanation: 'Only one business per charging location can be the Primary Experience. This gives you maximum visibility to customers.',
+  };
 
   if (loading) {
     return (
@@ -113,42 +123,59 @@ const primaryExperience = {
       {/* Active Exclusive */}
       <div className="mb-8">
         <h2 className="text-lg text-neutral-900 mb-4">Active Exclusive</h2>
-        <div className="bg-white p-6 rounded-lg border border-neutral-200">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h3 className="text-xl text-neutral-900 mb-1">{activeExclusive.name}</h3>
-              <p className="text-sm text-neutral-600">{activeExclusive.timeWindow}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-neutral-600">Status:</span>
-              <div className={`px-3 py-1 rounded-full text-sm ${
-                activeExclusive.status === 'on' 
-                  ? 'bg-green-100 text-green-700' 
-                  : 'bg-neutral-100 text-neutral-600'
-              }`}>
-                {activeExclusive.status === 'on' ? 'On' : 'Off'}
+        {activeExclusive ? (
+          <div className="bg-white p-6 rounded-lg border border-neutral-200">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h3 className="text-xl text-neutral-900 mb-1">{activeExclusive.title}</h3>
+                {activeExclusive.description && (
+                  <p className="text-sm text-neutral-600">{activeExclusive.description}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-neutral-600">Status:</span>
+                <div className={`px-3 py-1 rounded-full text-sm ${
+                  activeExclusive.is_active 
+                    ? 'bg-green-100 text-green-700' 
+                    : 'bg-neutral-100 text-neutral-600'
+                }`}>
+                  {activeExclusive.is_active ? 'Active' : 'Paused'}
+                </div>
               </div>
             </div>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <div className="text-sm text-neutral-600 mb-1">Activations Today</div>
-              <div className="text-2xl text-neutral-900">{activeExclusive.activationsToday}</div>
-            </div>
-            <div>
-              <div className="text-sm text-neutral-600 mb-1">Daily Cap</div>
-              <div className="text-2xl text-neutral-900">{activeExclusive.dailyCap}</div>
-            </div>
-          </div>
+            
+            {activeExclusive.daily_cap && activeExclusive.daily_cap > 0 ? (
+              <>
+                <div className="grid grid-cols-2 gap-6 mb-4">
+                  <div>
+                    <div className="text-sm text-neutral-600 mb-1">Activations Today</div>
+                    <div className="text-2xl text-neutral-900">{todayStats.activationsToday}</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-neutral-600 mb-1">Daily Cap</div>
+                    <div className="text-2xl text-neutral-900">{activeExclusive.daily_cap}</div>
+                  </div>
+                </div>
 
-          <div className="mt-4 h-2 bg-neutral-100 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-neutral-900 rounded-full transition-all"
-              style={{ width: `${(activeExclusive.activationsToday / activeExclusive.dailyCap) * 100}%` }}
-            />
+                <div className="h-2 bg-neutral-100 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-neutral-900 rounded-full transition-all"
+                    style={{ width: `${Math.min((todayStats.activationsToday / activeExclusive.daily_cap) * 100, 100)}%` }}
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="text-sm text-neutral-600">
+                No daily cap set. Unlimited activations.
+              </div>
+            )}
           </div>
-        </div>
+        ) : (
+          <div className="bg-white p-6 rounded-lg border border-neutral-200 text-center">
+            <p className="text-neutral-600">No active exclusive</p>
+            <p className="text-sm text-neutral-500 mt-2">Create an exclusive to start attracting charging customers</p>
+          </div>
+        )}
       </div>
 
       {/* Primary Experience */}
@@ -176,14 +203,9 @@ const primaryExperience = {
                 {primaryExperience.explanation}
               </p>
               {primaryExperience.status === 'available' && (
-                <button className="bg-neutral-900 text-white px-6 py-2 rounded-lg hover:bg-neutral-800 transition-colors">
-                  Reserve Primary Experience
-                </button>
-              )}
-              {primaryExperience.status === 'taken' && (
-                <button className="border border-neutral-300 text-neutral-700 px-6 py-2 rounded-lg hover:bg-neutral-50 transition-colors">
-                  Join Waitlist
-                </button>
+                <span className="inline-block px-4 py-2 bg-blue-50 text-blue-700 text-sm rounded-lg">
+                  Coming Soon
+                </span>
               )}
             </div>
           </div>

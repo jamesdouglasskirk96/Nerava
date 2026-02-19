@@ -20,8 +20,8 @@ const DEFAULT_MERCHANT_APP_URL = 'http://localhost:5174'
  * If the app isn't running, the link will fail - user should start the driver app first
  */
 export function getDriverCTAHref(): string {
-  // Production URL fallback (use HTTP for now since CloudFront isn't set up)
-  const PRODUCTION_DRIVER_APP_URL = 'http://app.nerava.network'
+  // Production URL fallback
+  const PRODUCTION_DRIVER_APP_URL = 'https://app.nerava.network'
   
   // If NEXT_PUBLIC_DRIVER_APP_URL is set, use it (production build)
   if (process.env.NEXT_PUBLIC_DRIVER_APP_URL) {
@@ -46,8 +46,8 @@ export function getDriverCTAHref(): string {
  * If the app isn't running, the link will fail - user should start the merchant app first
  */
 export function getMerchantCTAHref(): string {
-  // Production URL fallback (use HTTP for now since CloudFront isn't set up)
-  const PRODUCTION_MERCHANT_APP_URL = 'http://merchant.nerava.network'
+  // Production URL fallback
+  const PRODUCTION_MERCHANT_APP_URL = 'https://merchant.nerava.network'
   
   // If NEXT_PUBLIC_MERCHANT_APP_URL is set, use it (production build)
   if (process.env.NEXT_PUBLIC_MERCHANT_APP_URL) {
@@ -78,6 +78,26 @@ export function getChargerOwnerCTAHref(): string {
   }
   
   return CHARGER_OWNER_FORM_FALLBACK
+}
+
+/**
+ * Get merchant find/funnel CTA URL with tracking parameters
+ * Routes to the /find page in the merchant app
+ */
+export function getMerchantFindHref(): string {
+  const PRODUCTION_MERCHANT_APP_URL = 'https://merchant.nerava.network'
+
+  if (process.env.NEXT_PUBLIC_MERCHANT_APP_URL) {
+    return `${process.env.NEXT_PUBLIC_MERCHANT_APP_URL}/find?src=landing&cta=merchant`
+  }
+
+  const isProduction = process.env.NODE_ENV === 'production' || typeof window === 'undefined'
+
+  if (isProduction) {
+    return `${PRODUCTION_MERCHANT_APP_URL}/find?src=landing&cta=merchant`
+  }
+
+  return `${DEFAULT_MERCHANT_APP_URL}/find?src=landing&cta=merchant`
 }
 
 // Legacy exports for backward compatibility (deprecated, use helper functions instead)

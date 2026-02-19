@@ -20,12 +20,15 @@ export function CheckInPrompt({ merchantId, onCheckIn }: Props) {
         const response = await fetch(`${API_BASE}/v1/merchants/${merchantId}`);
         if (response.ok) {
           const data = await response.json();
+          // API returns { merchant: {...}, perk: {...}, ... }
+          const merchantData = data.merchant || data;
+          const perkData = data.perk;
           setMerchant({
-            id: data.id || merchantId,
-            name: data.name || 'Merchant',
-            logo_url: data.logo_url,
-            offer: data.ev_offer_text || '$5 charging credit',
-            address: data.address,
+            id: merchantData.id || merchantId,
+            name: merchantData.name || 'Merchant',
+            logo_url: merchantData.photo_url || merchantData.logo_url,
+            offer: perkData?.title || merchantData.ev_offer_text || '$5 charging credit',
+            address: merchantData.address,
           });
         }
       } catch (error) {

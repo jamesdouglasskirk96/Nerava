@@ -1,10 +1,21 @@
 """
 FastAPI middleware for metrics collection.
+Tracks p95 latency for all endpoints, with special focus on critical endpoints.
 """
 import time
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.obs.obs import get_trace_id, record_request
+
+# Critical endpoints for p95 latency tracking
+CRITICAL_ENDPOINTS = {
+    "/v1/auth/otp/verify",
+    "/v1/exclusive/activate",
+    "/v1/exclusive/complete",
+    "/v1/intent/capture",
+    "/v1/merchants/nearby",
+    "/v1/verify-visit",
+}
 
 class MetricsMiddleware(BaseHTTPMiddleware):
     """Middleware to collect request metrics and set trace IDs."""
@@ -26,8 +37,21 @@ class MetricsMiddleware(BaseHTTPMiddleware):
         # Extract route from request
         route = f"{request.method} {request.url.path}"
         
-        # Record metrics
+        # Record metrics (tracks p95 latency via histogram buckets in obs.py)
         record_request(route, duration_ms)
+        
+        # Log critical endpoint latency if applicable
+        if request.url.path in CRITICAL_ENDPOINTS:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.debug(
+                f"[Metrics] Critical endpoint {route}: {duration_ms:.2f}ms",
+                extra={
+                    "endpoint": route,
+                    "duration_ms": duration_ms,
+                    "trace_id": trace_id,
+                }
+            )
         
         # Add trace ID to response headers
         response.headers["X-Trace-Id"] = trace_id

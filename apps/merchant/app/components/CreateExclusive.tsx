@@ -4,13 +4,11 @@ import { ArrowLeft, Info } from 'lucide-react';
 import { createExclusive, ApiError } from '../services/api';
 import { capture, MERCHANT_EVENTS } from '../analytics';
 
-type ExclusiveType = 'free' | 'paid' | 'pickup';
-
 export function CreateExclusive() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const merchantId = localStorage.getItem('merchant_id') || 'current_merchant';
+  const merchantId = localStorage.getItem('merchant_id') || '';
   
   // Capture exclusive create open event
   useEffect(() => {
@@ -20,15 +18,15 @@ export function CreateExclusive() {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    type: 'free' as ExclusiveType,
-    startTime: '09:00',
-    endTime: '17:00',
     dailyCap: '100',
-    staffInstructions: '',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!merchantId) {
+      setError('No merchant ID found. Please complete the claim flow.');
+      return;
+    }
     setLoading(true);
     setError(null);
     
@@ -119,80 +117,6 @@ export function CreateExclusive() {
             </label>
           </div>
 
-          {/* Type Selector */}
-          <div className="bg-white p-6 rounded-lg border border-neutral-200">
-            <div className="mb-3">
-              <span className="text-sm text-neutral-900">Exclusive Type</span>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <button
-                type="button"
-                onClick={() => handleChange('type', 'free')}
-                className={`p-4 rounded-lg border-2 transition-all text-left ${
-                  formData.type === 'free'
-                    ? 'border-neutral-900 bg-neutral-50'
-                    : 'border-neutral-200 hover:border-neutral-300'
-                }`}
-              >
-                <div className="text-sm mb-1 text-neutral-900">Free</div>
-                <div className="text-xs text-neutral-600">Complimentary offer</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleChange('type', 'paid')}
-                className={`p-4 rounded-lg border-2 transition-all text-left ${
-                  formData.type === 'paid'
-                    ? 'border-neutral-900 bg-neutral-50'
-                    : 'border-neutral-200 hover:border-neutral-300'
-                }`}
-              >
-                <div className="text-sm mb-1 text-neutral-900">Paid</div>
-                <div className="text-xs text-neutral-600">Special pricing</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleChange('type', 'pickup')}
-                className={`p-4 rounded-lg border-2 transition-all text-left ${
-                  formData.type === 'pickup'
-                    ? 'border-neutral-900 bg-neutral-50'
-                    : 'border-neutral-200 hover:border-neutral-300'
-                }`}
-              >
-                <div className="text-sm mb-1 text-neutral-900">Pickup Package</div>
-                <div className="text-xs text-neutral-600">Pre-order item</div>
-              </button>
-            </div>
-          </div>
-
-          {/* Time Window */}
-          <div className="bg-white p-6 rounded-lg border border-neutral-200">
-            <div className="mb-3">
-              <span className="text-sm text-neutral-900">Active Time Window</span>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <label className="block">
-                <span className="text-xs text-neutral-600">Start Time</span>
-                <input
-                  type="time"
-                  value={formData.startTime}
-                  onChange={(e) => handleChange('startTime', e.target.value)}
-                  className="mt-1 w-full px-4 py-3 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent"
-                  required
-                />
-              </label>
-              <label className="block">
-                <span className="text-xs text-neutral-600">End Time</span>
-                <input
-                  type="time"
-                  value={formData.endTime}
-                  onChange={(e) => handleChange('endTime', e.target.value)}
-                  className="mt-1 w-full px-4 py-3 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent"
-                  required
-                />
-              </label>
-            </div>
-          </div>
-
           {/* Daily Cap */}
           <div className="bg-white p-6 rounded-lg border border-neutral-200">
             <label className="block">
@@ -212,22 +136,17 @@ export function CreateExclusive() {
             </label>
           </div>
 
-          {/* Staff Instructions */}
-          <div className="bg-white p-6 rounded-lg border border-neutral-200">
-            <label className="block">
-              <span className="text-sm text-neutral-900">Staff Instructions</span>
-              <input
-                type="text"
-                value={formData.staffInstructions}
-                onChange={(e) => handleChange('staffInstructions', e.target.value)}
-                placeholder="Brief instructions for your team..."
-                className="mt-1 w-full px-4 py-3 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent"
-              />
-              <div className="mt-2 flex items-start gap-2 text-xs text-neutral-600">
-                <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                <span>Single-line note visible to staff when customers show their activation</span>
+          {/* Note: Type, time window, and staff instructions are not yet supported by backend API */}
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <div className="flex items-start gap-2">
+              <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-blue-900">
+                <div className="font-semibold mb-1">Coming Soon</div>
+                <div className="text-xs text-blue-700">
+                  Exclusive type, time windows, and staff instructions will be available in a future update.
+                </div>
               </div>
-            </label>
+            </div>
           </div>
 
           {/* Safety Note */}

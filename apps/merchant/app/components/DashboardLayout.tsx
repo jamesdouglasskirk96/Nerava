@@ -1,10 +1,36 @@
 import { Outlet, NavLink } from 'react-router-dom';
-import { LayoutDashboard, Sparkles, Star, Package, CreditCard, Settings, Users } from 'lucide-react';
+import { LayoutDashboard, Sparkles, Star, Package, CreditCard, Settings, Users, LogOut, Car } from 'lucide-react';
+import { logout } from '../services/api';
+import { useEffect } from 'react';
 
 export function DashboardLayout() {
+  
+  // Check token expiry on mount
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const exp = payload.exp;
+        if (exp && Date.now() >= exp * 1000) {
+          // Token expired
+          logout();
+        }
+      } catch {
+        // Invalid token format - clear session
+        logout();
+      }
+    }
+  }, []);
+
+  const handleLogout = () => {
+    logout();
+  };
+
   const navItems = [
     { to: '/overview', label: 'Overview', icon: LayoutDashboard },
     { to: '/exclusives', label: 'Exclusives', icon: Sparkles },
+    { to: '/ev-arrivals', label: 'EV Arrivals', icon: Car },
     { to: '/visits', label: 'Visits', icon: Users },
     { to: '/primary-experience', label: 'Primary Experience', icon: Star },
     { to: '/pickup-packages', label: 'Pickup Packages', icon: Package },
@@ -15,13 +41,13 @@ export function DashboardLayout() {
   return (
     <div className="min-h-screen bg-neutral-50 flex">
       {/* Left Sidebar */}
-      <aside className="w-64 bg-white border-r border-neutral-200 fixed h-full">
+      <aside className="w-64 bg-white border-r border-neutral-200 fixed h-full flex flex-col">
         <div className="p-6 border-b border-neutral-200">
           <h1 className="text-xl text-neutral-900">Nerava</h1>
           <p className="text-sm text-neutral-500 mt-1">Merchant Portal</p>
         </div>
         
-        <nav className="p-4">
+        <nav className="p-4 flex-1">
           <ul className="space-y-1">
             {navItems.map((item) => (
               <li key={item.to}>
@@ -42,6 +68,17 @@ export function DashboardLayout() {
             ))}
           </ul>
         </nav>
+
+        {/* Logout Button */}
+        <div className="p-4 border-t border-neutral-200">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-neutral-600 hover:bg-neutral-100 transition-colors"
+          >
+            <LogOut className="w-5 h-5" />
+            <span>Logout</span>
+          </button>
+        </div>
       </aside>
 
       {/* Main Content */}

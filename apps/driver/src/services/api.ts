@@ -21,7 +21,7 @@ import {
   MerchantDetailsResponseSchema,
 } from './schemas'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.nerava.network'
 
 // Check if mock mode is enabled - default to backend mode unless explicitly set
 export function isMockMode(): boolean {
@@ -76,7 +76,7 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit, retryOn401 =
       if (refreshToken) {
         try {
           console.log('[API] Attempting token refresh...')
-          const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh`, {
+          const refreshResponse = await fetch(`${API_BASE_URL}/v1/auth/refresh`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ refresh_token: refreshToken }),
@@ -127,6 +127,10 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit, retryOn401 =
       } else {
         // No refresh token, clear access token and throw
         localStorage.removeItem('access_token')
+        // Don't log 401 errors when retryOn401 is false (expected for anonymous users)
+        if (retryOn401) {
+          console.error('[API] No refresh token available for 401 retry')
+        }
         throw new ApiError(401, 'no_refresh_token', 'No refresh token available')
       }
     }
@@ -159,10 +163,16 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit, retryOn401 =
     console.log('[API] Response data:', data)
     return data
   } catch (error) {
-    console.error('[API] Fetch error:', error)
+    // Don't log 401 errors when retryOn401 is false (expected for anonymous users)
+    if (!(error instanceof ApiError && error.status === 401 && !retryOn401)) {
+      console.error('[API] Fetch error:', error)
+    }
     // Re-throw ApiError as-is, wrap other errors
     if (error instanceof ApiError) {
-      console.error('[API] Throwing ApiError:', error.status, error.code, error.message)
+      // Only log non-401 errors or 401s where retry was attempted
+      if (!(error.status === 401 && !retryOn401)) {
+        console.error('[API] Throwing ApiError:', error.status, error.code, error.message)
+      }
       throw error
     }
     // Network errors or other fetch failures
@@ -172,27 +182,123 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit, retryOn401 =
   }
 }
 
-// Intent Capture
+// Intent Capture - with module-level cache and pending request deduplication
+// This provides multiple layers of protection against infinite fetches
+interface IntentCache {
+  key: string
+  data: CaptureIntentResponse
+  timestamp: number
+}
+let intentCache: IntentCache | null = null
+let pendingIntentRequest: Promise<CaptureIntentResponse> | null = null
+let pendingIntentKey: string | null = null
+const INTENT_CACHE_TTL_MS = 60000 // 60 seconds cache TTL
+
+// AGGRESSIVE: Global flag to completely stop fetches after first success
+let hasSuccessfullyFetched = false
+let lastFetchTimestamp = 0
+const MIN_FETCH_INTERVAL_MS = 5000 // Minimum 5 seconds between fetches
+
 export function useIntentCapture(request: CaptureIntentRequest | null) {
+  // Use stable queryKey with ROUNDED coordinates to prevent refetch on GPS fluctuation
+  // GPS watchPosition returns slightly different values each time - round to 4 decimal places (~11m precision)
+  const roundedLat = request ? Math.round(request.lat * 10000) / 10000 : null
+  const roundedLng = request ? Math.round(request.lng * 10000) / 10000 : null
+  const cacheKey = request ? `${roundedLat},${roundedLng}` : ''
+  const queryKey = request
+    ? ['intent-capture', roundedLat, roundedLng]
+    : ['intent-capture', null]
+
   return useQuery({
-    queryKey: ['intent-capture', request],
+    queryKey,
     queryFn: async () => {
-      if (isMockMode() && request) {
-        // Use mock API in mock mode
-        return await captureIntentMock(request as MockCaptureIntentRequest)
+      const now = Date.now()
+
+      // AGGRESSIVE: Rate limit - prevent fetches within 5 seconds of last fetch
+      if (hasSuccessfullyFetched && (now - lastFetchTimestamp) < MIN_FETCH_INTERVAL_MS) {
+        console.log('[API] Intent capture rate limited (too soon after last fetch)')
+        if (intentCache) {
+          return intentCache.data
+        }
+        // If no cache but rate limited, throw to prevent infinite loops
+        throw new Error('Rate limited - please wait before retrying')
       }
-      // Use real API
-      const data = await fetchAPI<unknown>('/v1/intent/capture', {
-        method: 'POST',
-        body: JSON.stringify(request),
+
+      // Check module-level cache first - prevents unnecessary API calls
+      if (intentCache && intentCache.key === cacheKey && (now - intentCache.timestamp) < INTENT_CACHE_TTL_MS) {
+        console.log('[API] Intent capture using cached response (cache hit)')
+        return intentCache.data
+      }
+
+      // Check if there's already a pending request for the same key - deduplicate
+      if (pendingIntentRequest && pendingIntentKey === cacheKey) {
+        console.log('[API] Intent capture reusing pending request (deduplication)')
+        return pendingIntentRequest
+      }
+
+      // Create the actual fetch function
+      const doFetch = async (): Promise<CaptureIntentResponse> => {
+        if (isMockMode() && request) {
+          // Use mock API in mock mode
+          return await captureIntentMock(request as MockCaptureIntentRequest)
+        }
+        // Use real API - disable token refresh for anonymous requests
+        // This endpoint supports optional authentication
+        const hasToken = !!localStorage.getItem('access_token')
+        const data = await fetchAPI<unknown>('/v1/intent/capture', {
+          method: 'POST',
+          body: JSON.stringify(request),
+        }, hasToken) // Only retry token refresh if user has a token
+
+        // Debug: Log raw API response before validation
+        console.log('[API] Raw intent capture response:', {
+          merchants_count: Array.isArray((data as any)?.merchants) ? (data as any).merchants.length : 'not array',
+          merchants: (data as any)?.merchants,
+          charger_summary: (data as any)?.charger_summary,
+          confidence_tier: (data as any)?.confidence_tier,
+        })
+
+        // Validate response schema
+        const validated = validateResponse(CaptureIntentResponseSchema, data, '/v1/intent/capture') as unknown as CaptureIntentResponse
+
+        // Debug: Log validated response
+        console.log('[API] Validated intent capture response:', {
+          merchants_count: validated.merchants?.length || 0,
+          merchants: validated.merchants,
+          charger_summary: validated.charger_summary,
+          confidence_tier: validated.confidence_tier,
+        })
+
+        return validated
+      }
+
+      // Set pending request state and execute
+      pendingIntentKey = cacheKey
+      lastFetchTimestamp = now // Track fetch time for rate limiting
+      pendingIntentRequest = doFetch().then(validated => {
+        // Store in module-level cache on success
+        intentCache = { key: cacheKey, data: validated, timestamp: now }
+        hasSuccessfullyFetched = true // Mark as successfully fetched
+        lastFetchTimestamp = Date.now() // Update to completion time
+        return validated
+      }).finally(() => {
+        // Clear pending state when done
+        if (pendingIntentKey === cacheKey) {
+          pendingIntentRequest = null
+          pendingIntentKey = null
+        }
       })
-      // Validate response schema
-      return validateResponse(CaptureIntentResponseSchema, data, '/v1/intent/capture') as unknown as CaptureIntentResponse
+
+      return pendingIntentRequest
     },
     enabled: request !== null,
+    staleTime: 60000, // Data is fresh for 1 minute - prevents refetching
+    gcTime: 300000, // Keep in cache for 5 minutes
     retry: false, // Don't retry on error
-    retryOnMount: false, // Don't retry on mount
+    refetchOnMount: false, // Don't refetch on mount - CRITICAL for preventing loops
+    refetchOnReconnect: false, // Don't refetch on reconnect
     refetchOnWindowFocus: false, // Don't refetch on window focus
+    refetchInterval: false, // No automatic refetching
   })
 }
 
@@ -237,13 +343,18 @@ export function useWalletActivate() {
 // Exclusive Session Types
 export interface ActivateExclusiveRequest {
   merchant_id?: string
-  merchant_place_id?: string
+  merchant_place_id?: string | null
   charger_id: string
   charger_place_id?: string
   intent_session_id?: string
-  lat: number
-  lng: number
+  lat: number | null  // V3: null allowed when location unavailable
+  lng: number | null  // V3: null allowed when location unavailable
   accuracy_m?: number
+  // NEW: Intent capture fields (V3)
+  intent?: 'eat' | 'work' | 'quick-stop'
+  party_size?: number
+  needs_power_outlet?: boolean
+  is_to_go?: boolean
 }
 
 export interface ExclusiveSessionResponse {
@@ -293,9 +404,29 @@ export async function completeExclusive(request: CompleteExclusiveRequest): Prom
   })
 }
 
-export async function getActiveExclusive(): Promise<ActiveExclusiveResponse> {
-  const data = await fetchAPI<unknown>('/v1/exclusive/active')
-  return validateResponse(ActiveExclusiveResponseSchema, data, '/v1/exclusive/active') as unknown as ActiveExclusiveResponse
+export async function getActiveExclusive(): Promise<ActiveExclusiveResponse | null> {
+  // Check if user is authenticated before making request
+  const hasToken = !!localStorage.getItem('access_token')
+  if (!hasToken) {
+    // Return null for anonymous users (no active exclusive)
+    return { exclusive_session: null }
+  }
+  
+  try {
+    // Disable token refresh retry - if auth fails, user is not authenticated
+    const data = await fetchAPI<unknown>('/v1/exclusive/active', undefined, false)
+    return validateResponse(ActiveExclusiveResponseSchema, data, '/v1/exclusive/active') as unknown as ActiveExclusiveResponse
+  } catch (error) {
+    // Handle 401 gracefully - user is not authenticated, so no active exclusive
+    // This is expected for anonymous users, so don't log as error
+    if (error instanceof ApiError && error.status === 401) {
+      // Silently return null (no active exclusive for unauthenticated users)
+      return { exclusive_session: null }
+    }
+    // Log and re-throw other errors
+    console.error('[API] Error fetching active exclusive:', error)
+    throw error
+  }
 }
 
 // Location Check
@@ -324,10 +455,18 @@ export function useCompleteExclusive() {
 }
 
 export function useActiveExclusive() {
-  return useQuery({
+  // Check authentication state - handle 401 gracefully in getActiveExclusive
+  // Query will run but return null for anonymous users (no error thrown)
+  return useQuery<ActiveExclusiveResponse | null>({
     queryKey: ['active-exclusive'],
     queryFn: getActiveExclusive,
-    refetchInterval: 30000, // Poll every 30 seconds
+    retry: false, // Don't retry on error (401 is expected for anonymous users)
+    refetchInterval: () => {
+      // Only poll if we have a token (check on each interval)
+      const hasToken = !!localStorage.getItem('access_token')
+      return hasToken ? 30000 : false
+    },
+    // Note: onError was removed in React Query v5, errors are handled via the error state
   })
 }
 
@@ -394,3 +533,84 @@ export function useMerchantsForCharger(
   })
 }
 
+// Verify Visit - generates incremental verification code for merchant
+export interface VerifyVisitRequest {
+  exclusive_session_id: string
+  lat?: number
+  lng?: number
+}
+
+export interface VerifyVisitResponse {
+  status: string // "VERIFIED" or "ALREADY_VERIFIED"
+  verification_code: string // e.g., "ATX-ASADAS-023"
+  visit_number: number
+  merchant_name: string
+  verified_at: string
+}
+
+export async function verifyVisit(request: VerifyVisitRequest): Promise<VerifyVisitResponse> {
+  return fetchAPI<VerifyVisitResponse>('/v1/exclusive/verify', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  })
+}
+
+export function useVerifyVisit() {
+  return useMutation({
+    mutationFn: verifyVisit,
+  })
+}
+
+// Amenity Votes API
+export interface AmenityVoteRequest {
+  vote_type: 'up' | 'down'
+}
+
+export interface AmenityVoteResponse {
+  ok: boolean
+  upvotes: number
+  downvotes: number
+}
+
+export async function voteAmenity(
+  merchantId: string,
+  amenity: 'bathroom' | 'wifi',
+  voteType: 'up' | 'down'
+): Promise<AmenityVoteResponse> {
+  return fetchAPI<AmenityVoteResponse>(
+    `/v1/merchants/${merchantId}/amenities/${amenity}/vote`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ vote_type: voteType }),
+    }
+  )
+}
+
+export function useVoteAmenity() {
+  return useMutation({
+    mutationFn: ({ merchantId, amenity, voteType }: { merchantId: string; amenity: 'bathroom' | 'wifi'; voteType: 'up' | 'down' }) =>
+      voteAmenity(merchantId, amenity, voteType),
+  })
+}
+
+// API client object for convenience
+export const api = {
+  get: <T>(endpoint: string, retryOn401 = true): Promise<T> => {
+    return fetchAPI<T>(endpoint, { method: 'GET' }, retryOn401)
+  },
+  post: <T>(endpoint: string, data?: any, retryOn401 = true): Promise<T> => {
+    return fetchAPI<T>(endpoint, {
+      method: 'POST',
+      body: data ? JSON.stringify(data) : undefined,
+    }, retryOn401)
+  },
+  put: <T>(endpoint: string, data?: any, retryOn401 = true): Promise<T> => {
+    return fetchAPI<T>(endpoint, {
+      method: 'PUT',
+      body: data ? JSON.stringify(data) : undefined,
+    }, retryOn401)
+  },
+  delete: <T>(endpoint: string, retryOn401 = true): Promise<T> => {
+    return fetchAPI<T>(endpoint, { method: 'DELETE' }, retryOn401)
+  },
+}

@@ -35,7 +35,16 @@ class User(Base):
     role_flags = Column(String, nullable=True, default="driver")  # comma-separated: "driver,merchant_admin,admin"
     auth_provider = Column(String, nullable=False, default="local")  # local, google, apple, phone
     provider_sub = Column(String, nullable=True)  # OAuth subject ID (renamed from oauth_sub)
+    admin_role = Column(String, nullable=True)  # AdminRole enum value
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=True)
+
+    # EV Arrival: vehicle info (cached, one-time setup)
+    vehicle_color = Column(String(30), nullable=True)
+    vehicle_model = Column(String(60), nullable=True)
+    vehicle_set_at = Column(DateTime, nullable=True)
+    
+    # Virtual Keys relationship
+    virtual_keys = relationship("VirtualKey", foreign_keys="VirtualKey.user_id", back_populates="user")
     
     # Unique constraints enforced at application level (SQLite doesn't support partial unique indexes)
     __table_args__ = (

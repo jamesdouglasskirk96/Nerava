@@ -17,9 +17,39 @@ export class ApiError extends Error {
   }
 }
 
-async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
+/**
+ * Check if JWT token is expired
+ */
+function isTokenExpired(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    const exp = payload.exp
+    if (!exp) return false // No expiration claim
+    return Date.now() >= exp * 1000
+  } catch {
+    return false // Invalid token format
+  }
+}
+
+/**
+ * Clear session data and redirect to claim page
+ */
+function clearSessionAndRedirect() {
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('businessClaimed')
+  localStorage.removeItem('merchant_id')
+  window.location.href = '/merchant/claim'
+}
+
+export async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`
   const token = localStorage.getItem('access_token')
+  
+  // Check token expiry before making request
+  if (token && isTokenExpired(token)) {
+    clearSessionAndRedirect()
+    throw new ApiError(401, 'token_expired', 'Session expired')
+  }
   
   const headers = new Headers(options?.headers)
   headers.set('Content-Type', 'application/json')
@@ -32,6 +62,12 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
     ...options,
     headers,
   })
+
+  // Handle 401 Unauthorized - clear session and redirect
+  if (response.status === 401) {
+    clearSessionAndRedirect()
+    throw new ApiError(401, 'unauthorized', 'Authentication required')
+  }
 
   if (!response.ok) {
     let errorData: { error?: string; message?: string; detail?: string } = {}
@@ -189,3 +225,9 @@ export async function merchantGoogleAuth(request: MerchantAuthRequest): Promise<
   return response
 }
 
+/**
+ * Logout: clear session and redirect to claim page
+ */
+export function logout() {
+  clearSessionAndRedirect()
+}

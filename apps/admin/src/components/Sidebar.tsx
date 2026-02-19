@@ -1,8 +1,9 @@
-import { LayoutDashboard, Store, MapPin, Activity, Star, ShieldAlert, FileText } from 'lucide-react';
+import { LayoutDashboard, Store, MapPin, Activity, Star, ShieldAlert, FileText, Rocket } from 'lucide-react';
 
 interface SidebarProps {
   activeScreen: string;
   setActiveScreen: (screen: string) => void;
+  onLogout: () => void;
 }
 
 const navItems = [
@@ -12,10 +13,11 @@ const navItems = [
   { id: 'active-sessions', label: 'Active Sessions', icon: Activity },
   { id: 'exclusives', label: 'Exclusives', icon: Star },
   { id: 'overrides', label: 'Overrides', icon: ShieldAlert },
+  { id: 'deployments', label: 'Deployments', icon: Rocket },
   { id: 'logs', label: 'Logs', icon: FileText },
 ];
 
-export function Sidebar({ activeScreen, setActiveScreen }: SidebarProps) {
+export function Sidebar({ activeScreen, setActiveScreen, onLogout }: SidebarProps) {
   return (
     <aside className="w-64 bg-neutral-900 text-neutral-100 flex flex-col">
       <div className="p-6 border-b border-neutral-800">
@@ -49,10 +51,16 @@ export function Sidebar({ activeScreen, setActiveScreen }: SidebarProps) {
       </nav>
       
       <div className="p-4 border-t border-neutral-800">
-        <div className="text-xs text-neutral-500">
-          <div>Operator: admin@nerava.com</div>
+        <div className="text-xs text-neutral-500 mb-3">
+          <div>Operator: {localStorage.getItem('admin_email') || 'Admin'}</div>
           <div className="mt-1">Session: {new Date().toLocaleDateString()}</div>
         </div>
+        <button
+          onClick={onLogout}
+          className="w-full text-xs text-neutral-400 hover:text-white transition-colors text-left"
+        >
+          Log out
+        </button>
       </div>
     </aside>
   );

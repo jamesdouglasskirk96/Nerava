@@ -376,11 +376,11 @@ def seed_asadas_grill_charger():
         with open(place_details_path, 'r') as f:
             place_data = json.load(f)
         
-        # Charger details
-        charger_id = "canyon_ridge_supercharger"
-        charger_lat = 30.4027
-        charger_lng = -97.6719
-        charger_address = "501 W Canyon Ridge Dr, Austin, TX 78753"
+        # Charger details (verified from production database - canyon_ridge_tesla)
+        charger_id = "canyon_ridge_tesla"  # Match production charger ID
+        charger_lat = 30.3979
+        charger_lng = -97.7044
+        charger_address = "500 W Canyon Ridge Dr, Austin, TX 78753"
         
         # 1. Create or get charger
         charger = db.query(Charger).filter(Charger.id == charger_id).first()

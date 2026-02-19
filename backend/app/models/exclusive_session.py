@@ -4,10 +4,12 @@ Tracks driver exclusive activation sessions for web-only flow
 """
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum as SQLEnum
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from ..db import Base
 from ..core.uuid_type import UUIDType
 import enum
+import uuid
 
 
 class ExclusiveSessionStatus(str, enum.Enum):
@@ -22,7 +24,7 @@ class ExclusiveSession(Base):
     """Tracks driver exclusive activation sessions"""
     __tablename__ = "exclusive_sessions"
     
-    id = Column(UUIDType(), primary_key=True)
+    id = Column(UUIDType(), primary_key=True, default=uuid.uuid4)
     driver_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     
     # Merchant identification (store both if available)
@@ -51,6 +53,13 @@ class ExclusiveSession(Base):
     activation_lng = Column(Float, nullable=True)
     activation_accuracy_m = Column(Float, nullable=True)
     activation_distance_to_charger_m = Column(Float, nullable=True)  # Computed distance at activation
+    
+    # V3: Intent capture fields
+    intent = Column(String(50), nullable=True)  # "eat" | "work" | "quick-stop"
+    intent_metadata = Column(JSONB, nullable=True)  # {party_size, needs_power_outlet, is_to_go}
+    
+    # Idempotency key for deduplication (P0 race condition fix)
+    idempotency_key = Column(String, nullable=True, unique=True, index=True)
     
     # Relationships
     driver = relationship("User", foreign_keys=[driver_id])

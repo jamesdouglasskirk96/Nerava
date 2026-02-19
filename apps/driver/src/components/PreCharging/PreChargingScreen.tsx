@@ -3,7 +3,9 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChargerCard } from './ChargerCard'
 import { Badge } from '../shared/Badge'
-import { useMerchantsForCharger } from '../../services/api'
+import { ChargerCardSkeleton } from '../shared/Skeleton'
+import { FEATURE_FLAGS } from '../../config/featureFlags'
+import { useMerchantsForCharger, isDemoMode, isMockMode } from '../../services/api'
 import { useDriverSessionContext } from '../../contexts/DriverSessionContext'
 
 function PreChargingPill() {
@@ -16,18 +18,16 @@ function PreChargingPill() {
 
 export function PreChargingScreen() {
   const navigate = useNavigate()
-  const { locationPermission, coordinates } = useDriverSessionContext()
-  
+  // Driver session context provides location info (not used in this screen but available for future use)
+  useDriverSessionContext()
+
   // Hardcode to Canyon Ridge charger for primary merchant override
   const TESLA_CANYON_RIDGE_CHARGER_ID = 'canyon_ridge_tesla'
-  
-  // Check if location is not available (for browse mode badge)
-  const isBrowseMode = !coordinates && (locationPermission === 'denied' || locationPermission === 'skipped')
-  
+
   // Fetch merchants for Canyon Ridge charger (pre-charge state)
   // Should return ONLY the primary merchant (Asadas Grill)
   // Note: open_only=false to show merchant even if open status is unknown
-  const { data: merchants = [], isLoading: merchantsLoading, error: merchantsError } = useMerchantsForCharger(
+  const { data: merchants = [], isLoading: merchantsLoading, error: merchantsError, refetch: refetchMerchants } = useMerchantsForCharger(
     TESLA_CANYON_RIDGE_CHARGER_ID,
     { state: 'pre-charge', open_only: false }
   )
@@ -89,44 +89,28 @@ export function PreChargingScreen() {
     <div className="h-[100dvh] max-h-[100dvh] bg-white flex flex-col overflow-hidden">
       {/* Header - Matching Figma: 60px height, 20px horizontal padding */}
       <header className="bg-white px-5 h-[60px] flex-shrink-0 flex items-center justify-between border-b border-[#E4E6EB]">
-        {/* Logo: "NERAVA" + ⚡ icon - 16px font, 6px spacing */}
+        {/* Logo */}
         <div className="flex items-center gap-1.5">
-          <h1 
-            className="text-base font-normal text-[#050505]"
-            style={{ letterSpacing: '-0.7125px', lineHeight: '24px' }}
-          >
-            NERAVA
-          </h1>
-          <svg 
-            className="w-4 h-4 text-facebook-blue" 
-            fill="none" 
-            stroke="currentColor" 
-            viewBox="0 0 24 24"
-            strokeWidth={1.33}
-          >
-            <path 
-              strokeLinecap="round" 
-              strokeLinejoin="round" 
-              d="M13 10V3L4 14h7v7l9-11h-7z" 
-            />
-          </svg>
+          <img 
+            src="/nerava-logo.png" 
+            alt="Nerava" 
+            className="h-6 w-auto"
+          />
         </div>
         
         {/* Right side: Pre-Charging pill + Dev toggle */}
         <div className="flex items-center gap-2">
-          {/* Dev control: Toggle to Charging */}
-          <button
-            onClick={handleToggleToCharging}
-            className="px-2 py-1 text-xs text-[#656A6B] hover:text-[#050505] underline"
-            title="Switch to Charging state"
-          >
-            Charging
-          </button>
-          {isBrowseMode && (
-            <Badge variant="default" className="text-xs">
-              Browse mode
-            </Badge>
+          {/* Dev control: Toggle to Charging - only show in demo/dev mode */}
+          {(isDemoMode() || isMockMode()) && (
+            <button
+              onClick={handleToggleToCharging}
+              className="px-2 py-1 text-xs text-[#656A6B] hover:text-[#050505] underline"
+              title="Switch to Charging state"
+            >
+              Charging
+            </button>
           )}
+          {/* Hide browse mode badge - it's an internal state, not user-facing */}
           <PreChargingPill />
         </div>
       </header>
@@ -141,7 +125,7 @@ export function PreChargingScreen() {
               className="text-2xl font-medium leading-7 text-[#050505] text-center"
               style={{ letterSpacing: '0.395px' }}
             >
-              Find a charger near experiences
+              {FEATURE_FLAGS.LIVE_COORDINATION_UI_V1 ? '3 chargers with open stalls near you' : 'Find a charger near experiences'}
             </h2>
             
             {/* Subtitle: 14px Regular, line-height 20px, letter-spacing -0.15px, center-aligned */}
@@ -166,9 +150,30 @@ export function PreChargingScreen() {
                 {/* NO carousel controls - only one charger in pre-charge state */}
               </div>
             ) : merchantsLoading ? (
-              <div className="text-center text-[#656A6B] py-8">Loading experiences...</div>
+              <div className="space-y-3">
+                <ChargerCardSkeleton />
+              </div>
             ) : (
-              <div className="text-center text-[#656A6B] py-8">No experiences available at this charger.</div>
+              <div className="flex flex-col items-center justify-center py-12 px-6">
+                {/* Empty state illustration */}
+                <div className="w-20 h-20 bg-[#F7F8FA] rounded-full flex items-center justify-center mb-4">
+                  <svg className="w-10 h-10 text-[#656A6B]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-medium text-[#050505] mb-1">No chargers found</h3>
+                <p className="text-sm text-[#656A6B] text-center mb-4">
+                  {FEATURE_FLAGS.LIVE_COORDINATION_UI_V1
+                    ? 'No chargers with open stalls match your search right now.'
+                    : 'No experiences available at this charger.'}
+                </p>
+                <button
+                  onClick={() => refetchMerchants()}
+                  className="px-6 py-2.5 bg-[#1877F2] text-white text-sm font-medium rounded-full hover:bg-[#166FE5] active:scale-[0.98] transition-all"
+                >
+                  Refresh
+                </button>
+              </div>
             )}
           </div>
         </div>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { ArrivalSession } from '../../services/arrival';
 import { verifyPin, getStoredSessionToken } from '../../services/arrival';
 import { Button } from '../shared/Button';
@@ -7,15 +8,25 @@ import { TeslaConnect } from '../TeslaConnect';
 interface Props {
   session: ArrivalSession;
   onVerified: (session: ArrivalSession) => void;
+  onBack?: () => void;
 }
 
 type VerifyMethod = 'choose' | 'pin' | 'tesla';
 
-export function VerifyCarPrompt({ session: _session, onVerified }: Props) {
+export function VerifyCarPrompt({ session: _session, onVerified, onBack }: Props) {
+  const navigate = useNavigate();
   const [method, setMethod] = useState<VerifyMethod>('choose');
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+    } else {
+      navigate('/');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,7 +58,18 @@ export function VerifyCarPrompt({ session: _session, onVerified }: Props) {
   // Method selection screen
   if (method === 'choose') {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-white">
+      <div className="flex flex-col min-h-screen p-6 bg-white">
+        <button
+          onClick={handleBack}
+          className="flex items-center text-gray-600 mb-6"
+        >
+          <svg className="w-5 h-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          Back
+        </button>
+
+        <div className="flex-1 flex flex-col items-center justify-center">
         <h1 className="text-3xl font-bold text-gray-900 mb-4 text-center">
           Verify Your EV
         </h1>
@@ -98,6 +120,7 @@ export function VerifyCarPrompt({ session: _session, onVerified }: Props) {
               </div>
             </div>
           </button>
+        </div>
         </div>
       </div>
     );

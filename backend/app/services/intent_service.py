@@ -48,38 +48,91 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     return R * c
 
 
-def find_nearest_charger(db: Session, lat: float, lng: float) -> Optional[Tuple[Charger, float]]:
+def find_nearest_charger(db: Session, lat: float, lng: float, radius_m: float = 50000) -> Optional[Tuple[Charger, float]]:
     """
-    Find the nearest public charger to the given location.
-    
+    Find the nearest public charger using PostgreSQL spatial query.
+
     Args:
         db: Database session
         lat: Latitude
         lng: Longitude
-    
+        radius_m: Search radius in meters (default 50km)
+
     Returns:
         Tuple of (Charger, distance_m) or None if no charger found
     """
-    # Query all public chargers
-    chargers = db.query(Charger).filter(Charger.is_public == True).all()
-    
-    if not chargers:
-        return None
-    
-    # Find nearest charger using Haversine distance
-    nearest = None
-    min_distance = float('inf')
-    
-    for charger in chargers:
-        distance = haversine_distance(lat, lng, charger.lat, charger.lng)
-        if distance < min_distance:
-            min_distance = distance
-            nearest = charger
-    
-    if nearest:
-        return (nearest, min_distance)
-    
+    import math
+
+    # Bounding box pre-filter (approx 1 degree = 111km)
+    lat_delta = radius_m / 111000
+    lng_delta = radius_m / (111000 * math.cos(math.radians(lat)))
+
+    # PostgreSQL Haversine query with bounding box filter
+    result = db.query(
+        Charger,
+        (
+            6371000 * func.acos(
+                func.cos(func.radians(lat)) * func.cos(func.radians(Charger.lat)) *
+                func.cos(func.radians(Charger.lng) - func.radians(lng)) +
+                func.sin(func.radians(lat)) * func.sin(func.radians(Charger.lat))
+            )
+        ).label("distance_m")
+    ).filter(
+        Charger.is_public == True,
+        Charger.lat.between(lat - lat_delta, lat + lat_delta),
+        Charger.lng.between(lng - lng_delta, lng + lng_delta),
+    ).order_by("distance_m").limit(1).first()
+
+    if result:
+        charger, distance_m = result
+        return (charger, distance_m)
+
     return None
+
+
+def find_nearest_chargers(db: Session, lat: float, lng: float, radius_m: float = 25000, limit: int = 5) -> List[Tuple[Charger, float]]:
+    """
+    Find the nearest public chargers using PostgreSQL spatial query.
+
+    Args:
+        db: Database session
+        lat: Latitude
+        lng: Longitude
+        radius_m: Search radius in meters (default 25km - reasonable driving distance)
+        limit: Maximum number of chargers to return (default 5)
+
+    Returns:
+        List of (Charger, distance_m) tuples, sorted by distance
+    """
+    import math
+
+    # Bounding box pre-filter (approx 1 degree = 111km)
+    lat_delta = radius_m / 111000
+    lng_delta = radius_m / (111000 * math.cos(math.radians(lat)))
+
+    # PostgreSQL Haversine query with bounding box filter
+    results = db.query(
+        Charger,
+        (
+            6371000 * func.acos(
+                func.cos(func.radians(lat)) * func.cos(func.radians(Charger.lat)) *
+                func.cos(func.radians(Charger.lng) - func.radians(lng)) +
+                func.sin(func.radians(lat)) * func.sin(func.radians(Charger.lat))
+            )
+        ).label("distance_m")
+    ).filter(
+        Charger.is_public == True,
+        Charger.lat.between(lat - lat_delta, lat + lat_delta),
+        Charger.lng.between(lng - lng_delta, lng + lng_delta),
+    ).order_by("distance_m").limit(limit).all()
+
+    # Filter to only include chargers within the actual radius (bounding box is approximate)
+    chargers_in_radius = []
+    for charger, distance_m in results:
+        if distance_m <= radius_m:
+            chargers_in_radius.append((charger, distance_m))
+
+    return chargers_in_radius
 
 
 def assign_confidence_tier(distance_m: Optional[float]) -> str:
@@ -198,33 +251,74 @@ async def get_merchants_for_intent(
     lat: float,
     lng: float,
     confidence_tier: str,
+    charger_id: Optional[str] = None,
 ) -> List[Dict]:
     """
     Get merchants for intent session based on confidence tier.
-    
+
+    First tries to get linked merchants from ChargerMerchant database.
+    Falls back to Google Places API search if no database merchants found.
     Applies placement rules (boost_weight, badges, daily_cap_cents) if available.
-    
+
     Args:
         db: Database session
         lat: Latitude
         lng: Longitude
         confidence_tier: Confidence tier ("A", "B", or "C")
-    
+        charger_id: Optional charger ID to get linked merchants from database
+
     Returns:
         List of merchant dictionaries with placement rules applied
     """
     # Only search for merchants if Tier A or B
     if confidence_tier == "C":
         return []
-    
-    # Search Google Places
-    radius = settings.GOOGLE_PLACES_SEARCH_RADIUS_M
-    merchants = await search_nearby(
-        lat=lat,
-        lng=lng,
-        radius_m=radius,
-        max_results=20,
-    )
+
+    merchants = []
+
+    # First, try to get merchants from ChargerMerchant database if charger_id provided
+    if charger_id:
+        from app.models.while_you_charge import ChargerMerchant, Merchant
+
+        # Query linked merchants for this charger
+        merchant_links = (
+            db.query(ChargerMerchant, Merchant)
+            .join(Merchant, ChargerMerchant.merchant_id == Merchant.id)
+            .filter(ChargerMerchant.charger_id == charger_id)
+            .order_by(ChargerMerchant.is_primary.desc(), ChargerMerchant.distance_m.asc())
+            .limit(20)
+            .all()
+        )
+
+        if merchant_links:
+            logger.info(f"Found {len(merchant_links)} linked merchants for charger {charger_id}")
+            for link, merchant in merchant_links:
+                merchant_dict = {
+                    "place_id": merchant.place_id or merchant.id,
+                    "name": merchant.name,
+                    "lat": merchant.lat,
+                    "lng": merchant.lng,
+                    "distance_m": link.distance_m or 0,
+                    "types": merchant.place_types or [merchant.category or merchant.primary_category or "place"],
+                    "photo_url": merchant.primary_photo_url or merchant.photo_url or merchant.logo_url,
+                    "icon_url": None,
+                    "badges": ["Exclusive"] if link.exclusive_title else [],
+                    "is_primary": link.is_primary,
+                    "exclusive_title": link.exclusive_title,
+                    "exclusive_description": link.exclusive_description,
+                }
+                merchants.append(merchant_dict)
+
+    # Fall back to Google Places API if no database merchants found
+    if not merchants:
+        logger.info(f"No database merchants found, falling back to Google Places API for lat={lat}, lng={lng}")
+        radius = settings.GOOGLE_PLACES_SEARCH_RADIUS_M
+        merchants = await search_nearby(
+            lat=lat,
+            lng=lng,
+            radius_m=radius,
+            max_results=20,
+        )
     
     # Cache merchants in database
     geo_cell_lat, geo_cell_lng = _get_geo_cell(lat, lng)

@@ -14,6 +14,7 @@ export API_BASE_URL="${API_BASE_URL:-https://api.nerava.network}"
 # S3 Bucket names
 export LANDING_BUCKET="${LANDING_BUCKET:-nerava.network}"
 export DRIVER_BUCKET="${DRIVER_BUCKET:-app.nerava.network}"
+export LINK_BUCKET="${LINK_BUCKET:-link.nerava.network}"
 export MERCHANT_BUCKET="${MERCHANT_BUCKET:-merchant.nerava.network}"
 export ADMIN_BUCKET="${ADMIN_BUCKET:-admin.nerava.network}"
 export PHOTOS_BUCKET="${PHOTOS_BUCKET:-nerava-merchant-photos}"
@@ -21,6 +22,7 @@ export PHOTOS_BUCKET="${PHOTOS_BUCKET:-nerava-merchant-photos}"
 # CloudFront domain names
 export LANDING_DOMAIN="${LANDING_DOMAIN:-nerava.network}"
 export DRIVER_DOMAIN="${DRIVER_DOMAIN:-app.nerava.network}"
+export LINK_DOMAIN="${LINK_DOMAIN:-link.nerava.network}"
 export MERCHANT_DOMAIN="${MERCHANT_DOMAIN:-merchant.nerava.network}"
 export ADMIN_DOMAIN="${ADMIN_DOMAIN:-admin.nerava.network}"
 export PHOTOS_DOMAIN="${PHOTOS_DOMAIN:-photos.nerava.network}"
@@ -281,8 +283,8 @@ fi
 # Build Driver App
 echo ""
 echo "Building Driver App..."
-cd "$PROJECT_ROOT/nerava-app-driver"
-DRIVER_BUILD_DIR="$PROJECT_ROOT/nerava-app-driver/dist"
+cd "$PROJECT_ROOT/apps/driver"
+DRIVER_BUILD_DIR="$PROJECT_ROOT/apps/driver/dist"
 
 # Check if build already exists
 if [ -d "$DRIVER_BUILD_DIR" ] && [ -f "$DRIVER_BUILD_DIR/index.html" ]; then
@@ -361,6 +363,31 @@ else
     fi
 fi
 
+# Build Link App (Tesla browser PIN display)
+echo ""
+echo "Building Link App..."
+cd "$PROJECT_ROOT/apps/link"
+LINK_BUILD_DIR="$PROJECT_ROOT/apps/link/dist"
+
+# Check if build already exists
+if [ -d "$LINK_BUILD_DIR" ] && [ -f "$LINK_BUILD_DIR/index.html" ]; then
+    echo "✅ Using existing link app build"
+else
+    export VITE_API_URL="$API_BASE_URL"
+    export VITE_ENV=prod
+    npm install --silent || echo "⚠️  npm install had issues, continuing..."
+    if npm run build 2>&1 | tee /tmp/link-build.log; then
+        echo "✅ Link app built successfully"
+    else
+        echo "⚠️  Link app build failed"
+        if [ ! -d "$LINK_BUILD_DIR" ]; then
+            echo "   No existing build found - link app may not be deployed"
+        else
+            echo "   Using existing build"
+        fi
+    fi
+fi
+
 cd "$PROJECT_ROOT"
 
 # Create S3 buckets
@@ -368,6 +395,7 @@ echo ""
 echo "=== Creating S3 Buckets ==="
 create_s3_bucket "$LANDING_BUCKET"
 create_s3_bucket "$DRIVER_BUCKET"
+create_s3_bucket "$LINK_BUCKET"
 create_s3_bucket "$MERCHANT_BUCKET"
 create_s3_bucket "$ADMIN_BUCKET"
 create_s3_bucket "$PHOTOS_BUCKET"
@@ -377,6 +405,7 @@ echo ""
 echo "=== Creating Origin Access Controls ==="
 LANDING_OAC_ID=$(create_or_get_oac "nerava-landing-oac")
 DRIVER_OAC_ID=$(create_or_get_oac "nerava-driver-oac")
+LINK_OAC_ID=$(create_or_get_oac "nerava-link-oac")
 MERCHANT_OAC_ID=$(create_or_get_oac "nerava-merchant-oac")
 ADMIN_OAC_ID=$(create_or_get_oac "nerava-admin-oac")
 PHOTOS_OAC_ID=$(create_or_get_oac "nerava-photos-oac")
@@ -386,6 +415,7 @@ echo ""
 echo "=== Updating Bucket Policies ==="
 update_bucket_policy_for_oac "$LANDING_BUCKET" "dummy"
 update_bucket_policy_for_oac "$DRIVER_BUCKET" "dummy"
+update_bucket_policy_for_oac "$LINK_BUCKET" "dummy"
 update_bucket_policy_for_oac "$MERCHANT_BUCKET" "dummy"
 update_bucket_policy_for_oac "$ADMIN_BUCKET" "dummy"
 update_bucket_policy_for_oac "$PHOTOS_BUCKET" "dummy"
@@ -395,6 +425,7 @@ echo ""
 echo "=== Creating CloudFront Distributions ==="
 LANDING_DIST_ID=$(create_cloudfront_distribution "$LANDING_DOMAIN" "$LANDING_BUCKET" "landing" "$LANDING_OAC_ID")
 DRIVER_DIST_ID=$(create_cloudfront_distribution "$DRIVER_DOMAIN" "$DRIVER_BUCKET" "driver" "$DRIVER_OAC_ID")
+LINK_DIST_ID=$(create_cloudfront_distribution "$LINK_DOMAIN" "$LINK_BUCKET" "link" "$LINK_OAC_ID")
 MERCHANT_DIST_ID=$(create_cloudfront_distribution "$MERCHANT_DOMAIN" "$MERCHANT_BUCKET" "merchant" "$MERCHANT_OAC_ID")
 ADMIN_DIST_ID=$(create_cloudfront_distribution "$ADMIN_DOMAIN" "$ADMIN_BUCKET" "admin" "$ADMIN_OAC_ID")
 PHOTOS_DIST_ID=$(create_cloudfront_distribution "$PHOTOS_DOMAIN" "$PHOTOS_BUCKET" "photos" "$PHOTOS_OAC_ID")
@@ -422,6 +453,16 @@ echo "Uploading Driver App..."
 aws s3 sync "$DRIVER_BUILD_DIR" "s3://$DRIVER_BUCKET" --delete --cache-control "public, max-age=31536000, immutable" --exclude "*.html" --region "$REGION"
 aws s3 sync "$DRIVER_BUILD_DIR" "s3://$DRIVER_BUCKET" --delete --cache-control "no-cache, no-store, must-revalidate" --include "*.html" --region "$REGION"
 echo "✅ Driver app uploaded"
+
+# Upload Link App
+echo "Uploading Link App..."
+if [ -d "$LINK_BUILD_DIR" ]; then
+    aws s3 sync "$LINK_BUILD_DIR" "s3://$LINK_BUCKET" --delete --cache-control "public, max-age=31536000, immutable" --exclude "*.html" --region "$REGION"
+    aws s3 sync "$LINK_BUILD_DIR" "s3://$LINK_BUCKET" --delete --cache-control "no-cache, no-store, must-revalidate" --include "*.html" --region "$REGION"
+    echo "✅ Link app uploaded"
+else
+    echo "⚠️  Link app build directory not found at $LINK_BUILD_DIR"
+fi
 
 # Upload Merchant Portal
 echo "Uploading Merchant Portal..."
@@ -466,6 +507,7 @@ create_invalidation() {
 
 create_invalidation "$LANDING_DIST_ID" "Landing"
 create_invalidation "$DRIVER_DIST_ID" "Driver"
+create_invalidation "$LINK_DIST_ID" "Link"
 create_invalidation "$MERCHANT_DIST_ID" "Merchant"
 create_invalidation "$ADMIN_DIST_ID" "Admin"
 create_invalidation "$PHOTOS_DIST_ID" "Photos"
@@ -473,6 +515,7 @@ create_invalidation "$PHOTOS_DIST_ID" "Photos"
 # Get distribution domains
 LANDING_DIST_DOMAIN=$(aws cloudfront get-distribution --id "$LANDING_DIST_ID" --query 'Distribution.DomainName' --output text)
 DRIVER_DIST_DOMAIN=$(aws cloudfront get-distribution --id "$DRIVER_DIST_ID" --query 'Distribution.DomainName' --output text)
+LINK_DIST_DOMAIN=$(aws cloudfront get-distribution --id "$LINK_DIST_ID" --query 'Distribution.DomainName' --output text)
 MERCHANT_DIST_DOMAIN=$(aws cloudfront get-distribution --id "$MERCHANT_DIST_ID" --query 'Distribution.DomainName' --output text)
 ADMIN_DIST_DOMAIN=$(aws cloudfront get-distribution --id "$ADMIN_DIST_ID" --query 'Distribution.DomainName' --output text)
 PHOTOS_DIST_DOMAIN=$(aws cloudfront get-distribution --id "$PHOTOS_DIST_ID" --query 'Distribution.DomainName' --output text)
@@ -485,6 +528,7 @@ echo ""
 echo "S3 Buckets:"
 echo "  Landing: s3://$LANDING_BUCKET"
 echo "  Driver: s3://$DRIVER_BUCKET"
+echo "  Link: s3://$LINK_BUCKET"
 echo "  Merchant: s3://$MERCHANT_BUCKET"
 echo "  Admin: s3://$ADMIN_BUCKET"
 echo "  Photos: s3://$PHOTOS_BUCKET"
@@ -494,6 +538,8 @@ echo "  Landing ($LANDING_DOMAIN): $LANDING_DIST_ID"
 echo "    Domain: $LANDING_DIST_DOMAIN"
 echo "  Driver ($DRIVER_DOMAIN): $DRIVER_DIST_ID"
 echo "    Domain: $DRIVER_DIST_DOMAIN"
+echo "  Link ($LINK_DOMAIN): $LINK_DIST_ID"
+echo "    Domain: $LINK_DIST_DOMAIN"
 echo "  Merchant ($MERCHANT_DOMAIN): $MERCHANT_DIST_ID"
 echo "    Domain: $MERCHANT_DIST_DOMAIN"
 echo "  Admin ($ADMIN_DOMAIN): $ADMIN_DIST_ID"

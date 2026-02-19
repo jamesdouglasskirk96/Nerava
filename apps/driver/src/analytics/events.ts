@@ -45,13 +45,68 @@ export const DRIVER_EVENTS = {
   CTA_OPEN_MAPS_CLICK: 'driver.cta.open_maps.click',
   GET_DIRECTIONS_CLICKED: 'driver_get_directions_clicked',
   IM_AT_MERCHANT_CLICKED: 'driver_im_at_merchant_clicked',
+
+  // Share
+  MERCHANT_SHARED: 'driver.merchant.shared',
+  
+  // Merchant discovery
+  MERCHANT_CLICKED: 'driver_merchant_clicked',
+  MERCHANT_DETAIL_VIEWED: 'driver_merchant_detail_viewed',
   
   // Arrival confirmation
   ARRIVAL_DONE_CLICKED: 'driver_arrival_done_clicked',
-  
+  ARRIVAL_VERIFIED: 'driver_arrival_verified',
+  ARRIVAL_VERIFY_FAILED: 'driver_arrival_verify_failed',
+
   // Preferences
   PREFERENCES_SUBMIT: 'driver.preferences.submit',
   PREFERENCES_DONE_CLICKED: 'driver_preferences_done_clicked', // snake_case alias
+
+  // EV Arrival
+  EV_ARRIVAL_CTA_CLICKED: 'ev_arrival.cta_clicked',
+  EV_ARRIVAL_VEHICLE_SETUP: 'ev_arrival.vehicle_setup',
+  EV_ARRIVAL_CONFIRMED: 'ev_arrival.confirmed',
+  EV_ARRIVAL_ORDER_BOUND: 'ev_arrival.order_bound',
+  EV_ARRIVAL_GEOFENCE_TRIGGERED: 'ev_arrival.geofence_triggered',
+  EV_ARRIVAL_CANCELED: 'ev_arrival.canceled',
+  EV_ARRIVAL_FEEDBACK_SUBMITTED: 'ev_arrival.feedback_submitted',
+  EV_ARRIVAL_MODE_CHANGED: 'ev_arrival.mode_changed',
+  EV_ARRIVAL_COMPLETED: 'ev_arrival.completed',
+  EV_ARRIVAL_ORDER_LINK_CLICKED: 'ev_arrival.order_link_clicked',
+  EV_ARRIVAL_ORDER_QUEUED: 'ev_arrival.order_queued',
+  EV_ARRIVAL_ORDER_RELEASED: 'ev_arrival.order_released',
+  
+  // EV Order Flow
+  EV_ORDER_STARTED: 'ev_order.started',
+  EV_ORDER_QUEUED: 'ev_order.queued',
+  EV_ORDER_RELEASED: 'ev_order.released',
+
+  // Phone-First Check-in (SMS link flow)
+  CHECKIN_SESSION_LOADED: 'checkin.session_loaded',
+  CHECKIN_SESSION_ACTIVATED: 'checkin.session_activated',
+  CHECKIN_LOCATION_VERIFIED: 'checkin.location_verified',
+  CHECKIN_COMPLETED: 'checkin.completed',
+  
+  // Vehicle setup
+  VEHICLE_COLOR_SET: 'vehicle.color_set',
+  
+  // Virtual Key
+  VIRTUAL_KEY_PROMPT_SHOWN: 'virtual_key.prompt_shown',
+  VIRTUAL_KEY_PROMPT_ACCEPTED: 'virtual_key.prompt_accepted',
+  VIRTUAL_KEY_PROMPT_SKIPPED: 'virtual_key.prompt_skipped',
+  VIRTUAL_KEY_PAIRING_STARTED: 'virtual_key.pairing_started',
+  VIRTUAL_KEY_PAIRING_QR_DISPLAYED: 'virtual_key.qr_displayed',
+  VIRTUAL_KEY_PAIRING_COMPLETED: 'virtual_key.pairing_completed',
+  VIRTUAL_KEY_PAIRING_FAILED: 'virtual_key.pairing_failed',
+  VIRTUAL_KEY_PAIRING_TIMEOUT: 'virtual_key.pairing_timeout',
+  VIRTUAL_KEY_ARRIVAL_DETECTED: 'virtual_key.arrival_detected',
+  VIRTUAL_KEY_ARRIVAL_CONFIRMED: 'virtual_key.arrival_confirmed',
+  VIRTUAL_KEY_REVOKED: 'virtual_key.revoked',
+  VIRTUAL_KEY_PHONE_HANDOFF_SHOWN: 'virtual_key.phone_handoff_shown',
+  VIRTUAL_KEY_PHONE_HANDOFF_SCANNED: 'virtual_key.phone_handoff_scanned',
+
+  // Exclusive Active View
+  SHOW_HOST_CLICKED: 'driver.exclusive.show_host_clicked',
 } as const
 
 export type DriverEventName = typeof DRIVER_EVENTS[keyof typeof DRIVER_EVENTS]

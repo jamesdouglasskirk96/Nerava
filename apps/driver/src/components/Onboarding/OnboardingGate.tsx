@@ -10,7 +10,7 @@ interface OnboardingGateProps {
 
 export function OnboardingGate({ children }: OnboardingGateProps) {
   const { hasSeenOnboarding, completeOnboarding } = useOnboarding()
-  const { requestLocationPermission, locationPermission, setLocationPermission } = useDriverSessionContext()
+  const { requestLocationPermission, setLocationPermission } = useDriverSessionContext()
 
   const handleRequestLocation = () => {
     requestLocationPermission()

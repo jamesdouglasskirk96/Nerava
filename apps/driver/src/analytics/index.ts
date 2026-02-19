@@ -85,6 +85,50 @@ export function init(): void {
 }
 
 /**
+ * Check if analytics consent is granted
+ */
+async function hasAnalyticsConsent(): Promise<boolean> {
+  // Check localStorage first
+  const stored = localStorage.getItem('consent_analytics')
+  if (stored === 'granted') {
+    return true
+  }
+  if (stored === 'denied') {
+    return false
+  }
+  
+  // If not in localStorage, check API
+  try {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.nerava.network'
+    const token = localStorage.getItem('access_token')
+    
+    if (!token) {
+      return false
+    }
+    
+    const response = await fetch(`${API_BASE_URL}/v1/consent`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+    
+    if (response.ok) {
+      const data = await response.json()
+      const analyticsConsent = data.consents?.find((c: { consent_type: string }) => c.consent_type === 'analytics')
+      const granted = analyticsConsent?.granted === true
+      
+      // Cache result in localStorage
+      localStorage.setItem('consent_analytics', granted ? 'granted' : 'denied')
+      return granted
+    }
+  } catch (error) {
+    console.error('[Analytics] Failed to check consent:', error)
+  }
+  
+  return false
+}
+
+/**
  * Identify a user (call after OTP verification)
  */
 export function identify(userId: string, traits?: Record<string, unknown>): void {
@@ -114,12 +158,80 @@ export function identify(userId: string, traits?: Record<string, unknown>): void
 }
 
 /**
- * Capture an event
+ * Identify a user only if analytics consent is granted
+ */
+export async function identifyIfConsented(userId: string, traits?: Record<string, unknown>): Promise<void> {
+  const consented = await hasAnalyticsConsent()
+  if (consented) {
+    identify(userId, traits)
+  } else {
+    if (import.meta.env.DEV) {
+      console.log('[Analytics] Skipping identify - analytics consent not granted')
+    }
+  }
+}
+
+/**
+ * Get current location from browser (if available and permitted)
+ * Returns null if location is unavailable or user denied permission
+ */
+async function getCurrentLocation(): Promise<{ lat: number; lng: number; accuracy_m?: number } | null> {
+  if (!navigator.geolocation) {
+    return null
+  }
+
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy_m: position.coords.accuracy || undefined,
+        })
+      },
+      () => {
+        // User denied or error - silently fail
+        resolve(null)
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: 2000,
+        maximumAge: 60000, // Use cached location if < 1 minute old
+      }
+    )
+  })
+}
+
+/**
+ * Capture an event (synchronous wrapper for async implementation)
+ * 
+ * @param eventName - Event name
+ * @param properties - Event properties (can include lat/lng to override auto-detection)
+ * @param includeGeo - Whether to automatically include geo coordinates (default: true)
  */
 export function capture(
   eventName: string,
-  properties?: Record<string, unknown>
+  properties?: Record<string, unknown>,
+  includeGeo: boolean = true
 ): void {
+  // Fire and forget - don't block the UI
+  captureAsync(eventName, properties, includeGeo).catch((error) => {
+    console.error('[Analytics] Failed to capture event:', error)
+  })
+}
+
+/**
+ * Capture an event (async version with geo coordinates)
+ * 
+ * @param eventName - Event name
+ * @param properties - Event properties (can include lat/lng to override auto-detection)
+ * @param includeGeo - Whether to automatically include geo coordinates (default: true)
+ */
+async function captureAsync(
+  eventName: string,
+  properties?: Record<string, unknown>,
+  includeGeo: boolean = true
+): Promise<void> {
   if (!isInitialized) {
     return
   }
@@ -133,6 +245,28 @@ export function capture(
     const storedCta = localStorage.getItem('nerava_cta')
     const storedUtm = localStorage.getItem('nerava_utm')
     
+    // Get geo coordinates if requested and not already provided
+    let geoData: { lat?: number; lng?: number; accuracy_m?: number } = {}
+    if (includeGeo && !properties?.lat && !properties?.lng) {
+      const location = await getCurrentLocation()
+      if (location) {
+        geoData = {
+          lat: location.lat,
+          lng: location.lng,
+          ...(location.accuracy_m && { accuracy_m: location.accuracy_m }),
+        }
+      }
+    } else if (properties?.lat && properties?.lng) {
+      // Use provided coordinates
+      geoData = {
+        lat: properties.lat as number,
+        lng: properties.lng as number,
+      }
+      if (properties.accuracy_m) {
+        geoData.accuracy_m = properties.accuracy_m as number
+      }
+    }
+    
     const enrichedProperties = {
       app: 'driver',
       env: ENV,
@@ -141,7 +275,8 @@ export function capture(
       ...(storedSource && { src: storedSource }),
       ...(storedCta && { cta: storedCta }),
       ...(storedUtm && { utm: JSON.parse(storedUtm) }),
-      ...properties,
+      ...geoData, // Include geo coordinates
+      ...properties, // Custom properties override geo if provided
     }
     
     posthog.capture(eventName, enrichedProperties)
@@ -221,6 +356,9 @@ export function storeSourceParams(searchParams: URLSearchParams): void {
 
 // Export events for use in components
 export { DRIVER_EVENTS }
+
+
+
 
 
 

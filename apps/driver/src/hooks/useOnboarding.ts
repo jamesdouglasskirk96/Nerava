@@ -1,5 +1,5 @@
 // Hook for managing onboarding state
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 
 const ONBOARDING_STORAGE_KEY = 'nerava_onboarding_seen'
 
@@ -18,5 +18,8 @@ export function useOnboarding() {
     completeOnboarding,
   }
 }
+
+
+
 
 

@@ -90,49 +90,69 @@ class TwilioVerifyProvider(OTPProvider):
     async def verify_otp(self, phone: str, code: str) -> bool:
         """
         Verify OTP code via Twilio Verify.
-        
+
         Args:
             phone: Normalized phone number in E.164 format
             code: OTP code to verify
-            
+
         Returns:
             True if code is valid, False otherwise
+
+        Raises:
+            Exception: If Twilio API is unreachable (timeout or service error)
         """
         from ...utils.phone import get_phone_last4
-        
+
         phone_last4 = get_phone_last4(phone)
-        
+
+        logger.info(f"[OTP][TwilioVerify] Attempting verification for {phone_last4}, service_sid={self.service_sid[:8]}..., code_length={len(code)}")
+
         def _verify_code():
             """Synchronous Twilio API call - runs in executor thread"""
             return self.client.verify.v2.services(self.service_sid).verification_checks.create(
                 to=phone,
                 code=code
             )
-        
+
         try:
             # Run blocking Twilio call in executor to avoid blocking event loop
             verification_check = await asyncio.wait_for(
                 asyncio.to_thread(_verify_code),
                 timeout=self.timeout_seconds + 5  # Add buffer for executor overhead
             )
-            
+
             is_valid = verification_check.status == 'approved'
-            
+
             if is_valid:
                 logger.info(f"[OTP][TwilioVerify] Verification successful for {phone_last4}")
             else:
-                logger.warning(f"[OTP][TwilioVerify] Verification failed for {phone_last4}: {verification_check.status}")
-            
+                logger.warning(f"[OTP][TwilioVerify] Verification failed for {phone_last4}: status={verification_check.status}, sid={verification_check.sid}")
+
             return is_valid
-            
+
         except asyncio.TimeoutError:
-            logger.error(f"[OTP][TwilioVerify] Timeout verifying code for {phone_last4} (>{self.timeout_seconds}s)")
-            return False
+            logger.error(f"[OTP][TwilioVerify] TIMEOUT verifying code for {phone_last4} (>{self.timeout_seconds}s). Twilio Verify API may be unreachable.")
+            # Raise instead of returning False so the caller can show a proper error
+            raise Exception(f"Verification timed out after {self.timeout_seconds}s. Please try again.")
         except TwilioException as e:
             error_type = type(e).__name__
-            logger.error(f"[OTP][TwilioVerify] Twilio error verifying code for {phone_last4}: {error_type}: {e}")
-            return False
+            error_str = str(e)
+            logger.error(f"[OTP][TwilioVerify] Twilio error verifying code for {phone_last4}: {error_type}: {error_str}")
+            # Check for specific Twilio error codes
+            if "20404" in error_str:
+                logger.error(f"[OTP][TwilioVerify] ERROR 20404: Verify service SID not found: {self.service_sid}")
+                raise Exception("Verification service misconfigured. Please contact support.")
+            elif "60200" in error_str or "Max check attempts" in error_str:
+                logger.warning(f"[OTP][TwilioVerify] Max verification attempts exceeded for {phone_last4}")
+                return False  # Code was entered wrong too many times on Twilio's side
+            elif "60202" in error_str or "expired" in error_str.lower():
+                logger.warning(f"[OTP][TwilioVerify] Verification expired for {phone_last4}")
+                return False  # Code expired
+            else:
+                raise Exception(f"Verification service error: {error_str}")
         except Exception as e:
+            if "timed out" in str(e).lower() or "try again" in str(e).lower() or "misconfigured" in str(e).lower() or "service error" in str(e).lower():
+                raise  # Re-raise our own exceptions from above
             logger.error(f"[OTP][TwilioVerify] Unexpected error verifying code for {phone_last4}: {type(e).__name__}: {e}", exc_info=True)
-            return False
+            raise Exception(f"Verification failed: {str(e)}")
 

@@ -26,7 +26,8 @@ class AnalyticsClient:
     
     def __init__(self):
         self.enabled = os.getenv("ANALYTICS_ENABLED", "true").lower() == "true"
-        self.posthog_key = os.getenv("POSTHOG_KEY", "")
+        # Support both POSTHOG_KEY and POSTHOG_API_KEY for compatibility
+        self.posthog_key = os.getenv("POSTHOG_KEY") or os.getenv("POSTHOG_API_KEY", "")
         self.posthog_host = os.getenv("POSTHOG_HOST", "https://app.posthog.com")
         self.env = os.getenv("ENV", "dev")
         self.posthog_client = None
@@ -36,7 +37,7 @@ class AnalyticsClient:
             return
             
         if not self.posthog_key:
-            logger.warning("POSTHOG_KEY not set. Analytics events will not be sent.")
+            logger.warning("POSTHOG_KEY or POSTHOG_API_KEY not set. Analytics events will not be sent.")
             self.enabled = False
             return
             
@@ -67,6 +68,9 @@ class AnalyticsClient:
         session_id: Optional[str] = None,
         ip: Optional[str] = None,
         user_agent: Optional[str] = None,
+        lat: Optional[float] = None,
+        lng: Optional[float] = None,
+        accuracy_m: Optional[float] = None,
     ) -> None:
         """
         Capture an event to PostHog
@@ -82,6 +86,9 @@ class AnalyticsClient:
             session_id: Session ID when relevant
             ip: Client IP address
             user_agent: User agent string
+            lat: Latitude (geo coordinate)
+            lng: Longitude (geo coordinate)
+            accuracy_m: Location accuracy in meters
         """
         if not self.enabled:
             return
@@ -116,7 +123,14 @@ class AnalyticsClient:
             if user_agent:
                 enriched_properties["user_agent"] = user_agent
             
-            # Merge custom properties
+            # Add geo coordinates (if provided)
+            if lat is not None and lng is not None:
+                enriched_properties["lat"] = lat
+                enriched_properties["lng"] = lng
+                if accuracy_m is not None:
+                    enriched_properties["accuracy_m"] = accuracy_m
+            
+            # Merge custom properties (can override geo if explicitly set)
             if properties:
                 enriched_properties.update(properties)
             

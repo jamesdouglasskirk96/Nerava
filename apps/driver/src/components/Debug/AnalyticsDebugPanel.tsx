@@ -15,8 +15,9 @@ export function AnalyticsDebugPanel() {
     properties: Record<string, unknown>
   } | null>(null)
 
-  // Only render in dev mode
-  if (import.meta.env.MODE === 'production') {
+  // Only render in dev mode AND if PostHog key is configured
+  const posthogKey = import.meta.env.VITE_POSTHOG_KEY
+  if (import.meta.env.MODE === 'production' || !posthogKey) {
     return null
   }
 
@@ -91,6 +92,9 @@ export function AnalyticsDebugPanel() {
     </div>
   )
 }
+
+
+
 
 
 

@@ -32,19 +32,13 @@ router = APIRouter(prefix="/v1/bootstrap", tags=["bootstrap"])
 
 def verify_bootstrap_key(x_bootstrap_key: Optional[str] = Header(None, alias="X-Bootstrap-Key")) -> str:
     """Verify bootstrap key from header"""
-    env = os.getenv("ENV", "dev").lower()
-    
-    # In prod, require BOOTSTRAP_KEY to be explicitly set
-    if env == "prod":
-        bootstrap_key = os.getenv("BOOTSTRAP_KEY", "")
-        if not bootstrap_key:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="BOOTSTRAP_KEY must be configured in production"
-            )
-    else:
-        # In non-prod, use default if not set
-        bootstrap_key = os.getenv("BOOTSTRAP_KEY", "dev-bootstrap-key")
+    # Require BOOTSTRAP_KEY env var in all environments (no dev default)
+    bootstrap_key = os.getenv("BOOTSTRAP_KEY")
+    if not bootstrap_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="BOOTSTRAP_KEY must be configured"
+        )
     
     if not x_bootstrap_key or x_bootstrap_key != bootstrap_key:
         raise HTTPException(

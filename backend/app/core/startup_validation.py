@@ -18,7 +18,7 @@ def validate_jwt_secret():
     if is_local_env():
         return
     
-    if settings.jwt_secret == settings.database_url:
+    if settings.jwt_secret == settings.DATABASE_URL:
         error_msg = (
             "CRITICAL SECURITY ERROR: JWT secret cannot equal database_url in non-local environment. "
             f"ENV={os.getenv('ENV', 'dev')}. Set JWT_SECRET environment variable to a secure random value."
@@ -44,7 +44,7 @@ def validate_database_url():
     if is_local_env():
         return
     
-    database_url = os.getenv("DATABASE_URL", settings.database_url)
+    database_url = os.getenv("DATABASE_URL", settings.DATABASE_URL)
     if re.match(r'^sqlite:', database_url, re.IGNORECASE):
         # Extract scheme only for logging (security: don't print full URL)
         db_scheme = "sqlite:///..." if "sqlite" in database_url.lower() else "unknown"
@@ -65,7 +65,7 @@ def validate_redis_url():
     if is_local_env():
         return
     
-    redis_url = os.getenv("REDIS_URL", settings.redis_url)
+    redis_url = os.getenv("REDIS_URL", settings.REDIS_URL)
     # Check if Redis URL is set and not the default localhost value
     if not redis_url or redis_url == "redis://localhost:6379/0":
         error_msg = (
@@ -254,6 +254,117 @@ def validate_merchant_auth_mock():
         raise ValueError(error_msg)
     
     logger.info("Merchant auth mock validation passed (disabled in prod)")
+
+
+def ensure_merchant_schema():
+    """Ensure merchants table has short_code and region_code columns.
+
+    This handles cases where Alembic migrations are out of sync with the database.
+    Runs in all environments to fix schema mismatches.
+    """
+    try:
+        from sqlalchemy import text
+        from app.db import SessionLocal
+
+        db = SessionLocal()
+        try:
+            # Check if short_code column exists
+            result = db.execute(text("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'merchants' AND column_name = 'short_code'
+            """))
+            has_short_code = result.fetchone() is not None
+
+            if not has_short_code:
+                logger.info("Adding missing short_code and region_code columns to merchants table...")
+
+                # Add columns
+                db.execute(text("ALTER TABLE merchants ADD COLUMN IF NOT EXISTS short_code VARCHAR(16)"))
+                db.execute(text("ALTER TABLE merchants ADD COLUMN IF NOT EXISTS region_code VARCHAR(8) DEFAULT 'ATX'"))
+
+                # Create index (PostgreSQL specific syntax)
+                db.execute(text("""
+                    CREATE INDEX IF NOT EXISTS ix_merchants_short_code ON merchants(short_code)
+                """))
+
+                db.commit()
+                logger.info("Successfully added short_code and region_code columns to merchants table")
+            else:
+                logger.debug("Merchant schema check passed: short_code column exists")
+
+        except Exception as e:
+            db.rollback()
+            logger.warning(f"Schema migration for merchants failed (non-critical): {e}")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"Could not check merchant schema (non-critical): {e}")
+
+
+def ensure_verified_visits_table():
+    """Ensure verified_visits table exists.
+
+    This handles cases where Alembic migrations are out of sync with the database.
+    """
+    try:
+        from sqlalchemy import text
+        from app.db import SessionLocal
+
+        db = SessionLocal()
+        try:
+            # Check if table exists
+            result = db.execute(text("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables
+                    WHERE table_name = 'verified_visits'
+                )
+            """))
+            table_exists = result.scalar()
+
+            if not table_exists:
+                logger.info("Creating verified_visits table...")
+
+                # Note: Removed FK constraints on exclusive_session_id and charger_id
+                # due to UUID/VARCHAR type mismatch issues
+                db.execute(text("""
+                    CREATE TABLE IF NOT EXISTS verified_visits (
+                        id VARCHAR(36) PRIMARY KEY,
+                        verification_code VARCHAR(32) UNIQUE NOT NULL,
+                        region_code VARCHAR(8) NOT NULL,
+                        merchant_code VARCHAR(16) NOT NULL,
+                        visit_number INTEGER NOT NULL,
+                        merchant_id VARCHAR NOT NULL,
+                        driver_id INTEGER NOT NULL,
+                        exclusive_session_id VARCHAR(36),
+                        charger_id VARCHAR,
+                        verified_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                        redeemed_at TIMESTAMP WITH TIME ZONE,
+                        order_reference VARCHAR(128),
+                        redemption_notes VARCHAR(512),
+                        verification_lat FLOAT,
+                        verification_lng FLOAT,
+                        visit_date TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+                    )
+                """))
+
+                # Create indexes
+                db.execute(text("CREATE INDEX IF NOT EXISTS ix_verified_visits_verification_code ON verified_visits(verification_code)"))
+                db.execute(text("CREATE INDEX IF NOT EXISTS ix_verified_visits_merchant_id ON verified_visits(merchant_id)"))
+                db.execute(text("CREATE INDEX IF NOT EXISTS ix_verified_visits_driver_id ON verified_visits(driver_id)"))
+
+                db.commit()
+                logger.info("Successfully created verified_visits table")
+            else:
+                logger.debug("Schema check passed: verified_visits table exists")
+
+        except Exception as e:
+            db.rollback()
+            logger.warning(f"Schema migration for verified_visits failed (non-critical): {e}")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"Could not check verified_visits schema (non-critical): {e}")
 
 
 def check_schema_payload_hash():

@@ -52,7 +52,8 @@ class CaptureIntentResponse(BaseModel):
     """Response schema for capturing intent"""
     session_id: Optional[str] = None  # None for anonymous users
     confidence_tier: str  # "A", "B", "C"
-    charger_summary: Optional[ChargerSummary] = None
+    charger_summary: Optional[ChargerSummary] = None  # Nearest charger (backward compat)
+    chargers: List[ChargerSummary] = []  # Up to 5 nearest chargers within 25km
     merchants: List[MerchantSummary] = []
     fallback_message: Optional[str] = None
     next_actions: NextActions

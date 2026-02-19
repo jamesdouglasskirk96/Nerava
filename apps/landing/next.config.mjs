@@ -3,9 +3,13 @@ const nextConfig = {
   basePath: process.env.NEXT_PUBLIC_BASE_PATH || '',
   // Use 'export' for static S3 deployment, 'standalone' for server-side rendering
   output: process.env.NEXT_STATIC_EXPORT === 'true' ? 'export' : 'standalone',
+  // Enable trailing slash for S3 static hosting (generates /privacy/index.html instead of privacy.html)
+  trailingSlash: true,
   reactStrictMode: true,
   images: {
     formats: ['image/avif', 'image/webp'],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
   },
   eslint: {
     // Fail the build on ESLint errors during production builds

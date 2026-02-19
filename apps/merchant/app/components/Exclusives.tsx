@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Users, AlertCircle } from 'lucide-react';
 import { 
   getMerchantExclusives, 
-  toggleExclusive, 
+  toggleExclusive,
+  getMerchantAnalytics,
   type Exclusive,
+  type MerchantAnalytics,
   ApiError 
 } from '../services/api';
 import { capture, MERCHANT_EVENTS } from '../analytics';
@@ -14,15 +16,39 @@ export function Exclusives() {
   const [exclusives, setExclusives] = useState<Exclusive[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [toggleError, setToggleError] = useState<string | null>(null);
+  const [analytics, setAnalytics] = useState<MerchantAnalytics | null>(null);
   
   // Get merchant ID from localStorage or context (for MVP, use a placeholder)
-  const merchantId = localStorage.getItem('merchant_id') || 'current_merchant';
+  const merchantId = localStorage.getItem('merchant_id') || '';
 
   useEffect(() => {
     loadExclusives();
+    loadAnalytics();
   }, []);
 
+  const loadAnalytics = async () => {
+    if (!merchantId) return;
+    try {
+      const data = await getMerchantAnalytics(merchantId);
+      setAnalytics(data);
+    } catch (err) {
+      console.error('Failed to load analytics:', err);
+      setAnalytics({
+        merchant_id: merchantId,
+        activations: 0,
+        completes: 0,
+        unique_drivers: 0,
+        completion_rate: 0,
+      });
+    }
+  };
+
   const loadExclusives = async () => {
+    if (!merchantId) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const data = await getMerchantExclusives(merchantId);
@@ -40,6 +66,7 @@ export function Exclusives() {
 
   const toggleExclusiveStatus = async (id: string, currentStatus: boolean) => {
     const newStatus = !currentStatus
+    setToggleError(null);
     try {
       await toggleExclusive(merchantId, id, newStatus);
       
@@ -53,24 +80,24 @@ export function Exclusives() {
       await loadExclusives();
     } catch (err) {
       console.error('Failed to toggle exclusive:', err);
-      alert(err instanceof ApiError ? err.message : 'Failed to update exclusive');
+      setToggleError(err instanceof ApiError ? err.message : 'Failed to update exclusive');
     }
   };
 
   const getStatusColor = (exclusive: Exclusive) => {
-    if (exclusive.daily_cap && exclusive.daily_cap > 0) {
-      // TODO: Check activations today from analytics
-      // For now, just check is_active
+    if (!exclusive.is_active) {
+      return 'bg-neutral-100 text-neutral-600';
     }
-    if (exclusive.is_active) {
-      return 'bg-green-100 text-green-700';
+    if (analytics && exclusive.daily_cap && analytics.activations >= exclusive.daily_cap) {
+      return 'bg-amber-100 text-amber-700';
     }
-    return 'bg-neutral-100 text-neutral-600';
+    return 'bg-green-100 text-green-700';
   };
 
   const getStatusText = (exclusive: Exclusive) => {
-    // TODO: Check if cap reached from analytics
-    return exclusive.is_active ? 'Active' : 'Paused';
+    if (!exclusive.is_active) return 'Paused';
+    if (analytics && exclusive.daily_cap && analytics.activations >= exclusive.daily_cap) return 'Cap Reached';
+    return 'Active';
   };
 
   return (
@@ -90,6 +117,18 @@ export function Exclusives() {
           Create Exclusive
         </button>
       </div>
+
+      {toggleError && (
+        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center justify-between">
+          <span>{toggleError}</span>
+          <button
+            onClick={() => setToggleError(null)}
+            className="text-red-700 hover:text-red-900"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="bg-white rounded-lg border border-neutral-200 p-12 text-center">
@@ -163,17 +202,17 @@ export function Exclusives() {
                 </button>
               </div>
 
-              {/* Progress bar - show only if daily_cap is set */}
-              {exclusive.daily_cap && exclusive.daily_cap > 0 && (
+              {/* Progress bar - show only if daily_cap is set and we have activation data */}
+              {exclusive.daily_cap && exclusive.daily_cap > 0 && analytics && (
                 <div className="mt-4">
                   <div className="flex items-center justify-between text-xs text-neutral-600 mb-1">
                     <span>Daily Cap</span>
-                    <span>{exclusive.daily_cap} activations</span>
+                    <span>{analytics.activations} / {exclusive.daily_cap} activations</span>
                   </div>
                   <div className="h-2 bg-neutral-100 rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all bg-neutral-900"
-                      style={{ width: '0%' }}
+                      style={{ width: `${Math.min((analytics.activations / exclusive.daily_cap) * 100, 100)}%` }}
                     />
                   </div>
                 </div>

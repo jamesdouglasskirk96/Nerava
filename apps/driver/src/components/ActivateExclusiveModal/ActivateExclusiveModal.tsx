@@ -1,9 +1,9 @@
 // Activate Exclusive Modal with phone number and OTP entry
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Smartphone, AlertCircle } from 'lucide-react'
 import { otpStart, otpVerify } from '../../services/auth'
 import { ApiError } from '../../services/api'
-import { capture, identify, DRIVER_EVENTS } from '../../analytics'
+import { capture, identifyIfConsented, DRIVER_EVENTS } from '../../analytics'
 import { ExclusiveInfoTooltip } from '../shared/ExclusiveInfoTooltip'
 
 interface ActivateExclusiveModalProps {
@@ -24,19 +24,18 @@ export function ActivateExclusiveModal({
 }: ActivateExclusiveModalProps) {
   const [step, setStep] = useState<'phone' | 'code'>('phone')
   const [phoneNumber, setPhoneNumber] = useState('')
-  const [otp, setOtp] = useState(['', '', '', '', '', ''])
+  const [otp, setOtp] = useState('')
   const [error, setError] = useState('')
   const [canResend, setCanResend] = useState(false)
   const [resendTimer, setResendTimer] = useState(30)
   const [isLoading, setIsLoading] = useState(false)
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([])
 
   // Reset state when modal opens/closes
   useEffect(() => {
     if (!isOpen) {
       setStep('phone')
       setPhoneNumber('')
-      setOtp(['', '', '', '', '', ''])
+      setOtp('')
       setError('')
       setCanResend(false)
       setResendTimer(30)
@@ -100,33 +99,31 @@ export function ActivateExclusiveModal({
     }
   }
 
-  const handleOTPChange = (index: number, value: string) => {
-    if (!/^\d*$/.test(value)) return
-    
-    const newOtp = [...otp]
-    newOtp[index] = value
-    setOtp(newOtp)
+  const handleOTPChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Extract only digits, max 6
+    const value = e.target.value.replace(/\D/g, '').slice(0, 6)
+    setOtp(value)
     setError('')
 
-    // Auto-focus next input
-    if (value && index < 5) {
-      inputRefs.current[index + 1]?.focus()
-    }
-
-    // Auto-submit when all 6 digits are entered
-    if (index === 5 && value && newOtp.every(digit => digit)) {
-      handleVerifyCode(newOtp.join(''))
+    // Auto-submit when 6 digits entered
+    if (value.length === 6) {
+      handleVerifyCode(value)
     }
   }
 
-  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' && !otp[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus()
+  const handleOTPPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault()
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
+    setOtp(pasted)
+    setError('')
+
+    if (pasted.length === 6) {
+      handleVerifyCode(pasted)
     }
   }
 
   const handleVerifyCode = async (code?: string) => {
-    const codeToVerify = code || otp.join('')
+    const codeToVerify = code || otp
     
     if (codeToVerify.length !== 6) {
       setError('Please enter the complete 6-digit code')
@@ -142,7 +139,7 @@ export function ActivateExclusiveModal({
       
       // Identify user after successful OTP verification
       if (result.user?.public_id) {
-        identify(result.user.public_id, {
+        identifyIfConsented(result.user.public_id, {
           phone_last4: cleaned.slice(-4),
           created_at: new Date().toISOString(),
         })
@@ -180,8 +177,7 @@ export function ActivateExclusiveModal({
       } else {
         setError('Network error. Please check your connection and try again.')
       }
-      setOtp(['', '', '', '', '', ''])
-      inputRefs.current[0]?.focus()
+      setOtp('')
     } finally {
       setIsLoading(false)
     }
@@ -195,20 +191,23 @@ export function ActivateExclusiveModal({
     
     try {
       await otpStart(phoneNumber)
+      // Only reset timer and clear OTP on success
       setCanResend(false)
       setResendTimer(30)
-      setOtp(['', '', '', '', '', ''])
-      inputRefs.current[0]?.focus()
+      setOtp('')
     } catch (err: unknown) {
+      // On failure: show error but do NOT reset timer
+      // Keep canResend true so user can retry
       if (err instanceof ApiError) {
         if (err.status === 429) {
           setError('Too many requests. Please try again in a moment.')
         } else {
-          setError(err.message || 'Failed to resend code. Please try again.')
+          setError('Failed to resend code. Try again.')
         }
       } else {
-        setError('Network error. Please check your connection and try again.')
+        setError('Failed to resend code. Try again.')
       }
+      // Do NOT reset timer or canResend - allow user to retry immediately
     } finally {
       setIsLoading(false)
     }
@@ -216,7 +215,7 @@ export function ActivateExclusiveModal({
 
   const handleEditPhone = () => {
     setStep('phone')
-    setOtp(['', '', '', '', '', ''])
+    setOtp('')
     setError('')
   }
 
@@ -267,6 +266,7 @@ export function ActivateExclusiveModal({
                 onChange={handlePhoneChange}
                 placeholder="555-123-4567"
                 maxLength={12}
+                aria-label="Phone number"
                 className="w-full px-4 py-4 bg-[#F7F8FA] border-2 border-[#E4E6EB] rounded-2xl text-center text-lg tracking-wider focus:border-[#1877F2] focus:outline-none transition-colors"
               />
               {error && (
@@ -286,9 +286,16 @@ export function ActivateExclusiveModal({
             <button
               onClick={handleSendCode}
               disabled={isLoading}
-              className="w-full py-4 bg-[#1877F2] text-white rounded-2xl font-medium hover:bg-[#166FE5] active:scale-98 transition-all mb-3 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-4 bg-[#1877F2] text-white rounded-2xl font-medium hover:bg-[#166FE5] active:scale-98 transition-all mb-3 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              {isLoading ? 'Sending...' : 'Send code'}
+              {isLoading ? (
+                <>
+                  <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                  Sending code...
+                </>
+              ) : (
+                'Send code'
+              )}
             </button>
 
             {/* Cancel Button */}
@@ -320,24 +327,34 @@ export function ActivateExclusiveModal({
               </button>
             </p>
 
-            {/* OTP Input */}
-            <div className="flex gap-2 justify-center mb-4">
-              {otp.map((digit, index) => (
-                <input
-                  key={index}
-                  ref={el => { inputRefs.current[index] = el }}
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={1}
-                  value={digit}
-                  onChange={(e) => handleOTPChange(index, e.target.value)}
-                  onKeyDown={(e) => handleKeyDown(index, e)}
-                  className={`w-12 h-14 text-center text-xl font-medium bg-[#F7F8FA] border-2 rounded-xl focus:border-[#1877F2] focus:outline-none transition-colors ${
-                    error ? 'border-red-500' : 'border-[#E4E6EB]'
-                  }`}
-                  autoFocus={index === 0}
-                />
-              ))}
+            {/* OTP Input - Single field for iOS autofill support */}
+            <div className="mb-4 relative">
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]*"
+                maxLength={6}
+                value={otp}
+                onChange={handleOTPChange}
+                onPaste={handleOTPPaste}
+                placeholder="000000"
+                aria-label="6-digit verification code"
+                disabled={isLoading && otp.length === 6}
+                className={`w-full px-4 py-4 bg-[#F7F8FA] border-2 rounded-2xl text-center text-2xl font-medium tracking-[0.5em] focus:border-[#1877F2] focus:outline-none transition-colors ${
+                  error ? 'border-red-500' : isLoading && otp.length === 6 ? 'border-[#1877F2] opacity-60' : 'border-[#E4E6EB]'
+                }`}
+                autoFocus
+              />
+              {/* Inline verification spinner — shown after auto-submit on 6th digit */}
+              {isLoading && otp.length === 6 && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-[#F7F8FA]/80">
+                  <div className="flex items-center gap-2">
+                    <span className="animate-spin h-5 w-5 border-2 border-[#1877F2] border-t-transparent rounded-full" />
+                    <span className="text-sm text-[#1877F2] font-medium">Verifying...</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Error Message */}

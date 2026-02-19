@@ -89,8 +89,10 @@ export function TeslaConnect({ merchantPlaceId, merchantName, chargerId, onCodeG
       if (response.ev_code && onCodeGenerated) {
         onCodeGenerated(response.ev_code);
       }
-    } catch (e) {
-      setError('Failed to verify charging status. Please try again.');
+    } catch (e: any) {
+      const detail = e?.message || 'Unknown error';
+      console.error('[TeslaConnect] Verify charging failed:', e);
+      setError(`Failed to verify charging: ${detail}`);
     } finally {
       setVerifying(false);
     }

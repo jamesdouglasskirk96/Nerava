@@ -10,8 +10,39 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 from app.security.jwt import jwt_manager
 from app.security.rbac import get_user_role, Role
+from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Redis client for kill switch check
+_redis_client = None
+
+def _get_redis_client():
+    """Get Redis client for kill switch"""
+    global _redis_client
+    if _redis_client is None:
+        try:
+            import redis
+            if settings.redis_url:
+                _redis_client = redis.from_url(settings.redis_url, decode_responses=True, socket_connect_timeout=3, socket_timeout=3)
+                _redis_client.ping()  # Test connection
+        except Exception as e:
+            logger.warning(f"Failed to initialize Redis for kill switch: {e}")
+            _redis_client = None
+    return _redis_client
+
+def _is_system_paused() -> bool:
+    """Check if system is paused via Redis flag"""
+    redis_client = _get_redis_client()
+    if not redis_client:
+        return False  # If Redis unavailable, don't pause system
+    
+    try:
+        paused = redis_client.get("system:paused")
+        return paused == "1" or paused == "true"
+    except Exception as e:
+        logger.warning(f"Failed to check system pause status: {e}")
+        return False  # If check fails, don't pause system
 
 security = HTTPBearer()
 
@@ -45,9 +76,22 @@ class AuthMiddleware(BaseHTTPMiddleware):
             "/v1/auth",  # Auth endpoints are public
             "/v1/merchants",  # Merchant endpoints - auth handled at dependency level
             "/v1/exclusive",  # Exclusive endpoints - auth handled at dependency level
+            "/v1/intent",  # Intent endpoints - auth handled at dependency level (supports anonymous)
         ]
     
     async def dispatch(self, request: Request, call_next):
+        # Check kill switch: if system is paused, block non-admin endpoints
+        if _is_system_paused():
+            # Allow admin endpoints and health/metrics endpoints
+            is_admin_endpoint = request.url.path.startswith("/v1/admin")
+            is_health_endpoint = request.url.path in ["/healthz", "/readyz", "/metrics"]
+            
+            if not (is_admin_endpoint or is_health_endpoint):
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="System is temporarily paused. Please try again later."
+                )
+        
         # Skip authentication for excluded paths
         if request.url.path in self.excluded_paths:
             return await call_next(request)

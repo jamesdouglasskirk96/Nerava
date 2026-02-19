@@ -48,13 +48,26 @@ def start_session(request: StartRequest, db: Session = Depends(get_db)):
     """
     Start a new phone session for a merchant.
     Called when driver taps "Check In" on merchant page.
+
+    Accepts either internal merchant ID (m_xxx) or Google Place ID (ChIJxxx).
     """
-    # Validate merchant exists
-    merchant = db.query(Merchant).filter(Merchant.id == request.merchant_id).first()
+    merchant_id = request.merchant_id
+
+    # Try to find merchant by ID first
+    merchant = db.query(Merchant).filter(Merchant.id == merchant_id).first()
+
+    # If not found and looks like a Google Place ID, try place_id lookup
+    if not merchant and merchant_id.startswith("ChIJ"):
+        merchant = db.query(Merchant).filter(Merchant.place_id == merchant_id).first()
+        if merchant:
+            merchant_id = merchant.id  # Use internal ID for session
+            logger.info(f"[ARRIVAL] Resolved Place ID {request.merchant_id} to merchant {merchant.id}")
+
     if not merchant:
+        logger.warning(f"[ARRIVAL] Merchant not found: {request.merchant_id}")
         raise HTTPException(status_code=404, detail="Merchant not found")
 
-    session, token = service.create_phone_session(db, request.merchant_id)
+    session, token = service.create_phone_session(db, merchant_id)
 
     return {
         "session_id": str(session.id),
@@ -75,14 +88,22 @@ def start_session(request: StartRequest, db: Session = Depends(get_db)):
 def generate_car_pin(request: Request, db: Session = Depends(get_db)):
     """
     Generate a PIN for display in car browser.
-    REQUIRES EV browser User-Agent.
     PIN is NOT tied to any session - it's a standalone linking token.
-    """
-    # Validate EV browser
-    user_agent = request.headers.get("user-agent", "")
-    require_ev_browser(request)  # Raises 403 if not EV browser
 
+    Note: EV browser restriction removed for demo. User-Agent logged for future verification.
+    """
+    user_agent = request.headers.get("user-agent", "")
     ip_address = request.client.host if request.client else None
+
+    # Log user agent for future verification (removed EV browser requirement for demo)
+    from app.utils.ev_browser import detect_ev_browser
+    ev_info = detect_ev_browser(user_agent)
+    is_ev_browser = ev_info is not None
+
+    logger.info(f"[CAR-PIN] User-Agent: {user_agent[:200]}")
+    logger.info(f"[CAR-PIN] IP: {ip_address}, Is EV Browser: {is_ev_browser}")
+    if ev_info:
+        logger.info(f"[CAR-PIN] EV Info: brand={ev_info.brand}, firmware={ev_info.firmware_version}")
 
     car_pin = service.create_car_pin(db, user_agent, ip_address)
 
@@ -90,6 +111,7 @@ def generate_car_pin(request: Request, db: Session = Depends(get_db)):
         "pin": car_pin.pin,
         "expires_in_seconds": 300,
         "display_message": "Enter this code on your phone",
+        "is_ev_browser": is_ev_browser,
     }
 
 
@@ -115,7 +137,7 @@ def verify_pin(request: VerifyPinRequest, db: Session = Depends(get_db)):
             "address": merchant.address,
             "lat": merchant.lat,
             "lng": merchant.lng,
-            "geofence_radius_m": merchant.geofence_radius_m or 150,
+            "geofence_radius_m": 150,  # Default geofence radius
         } if merchant else None,
     }
 

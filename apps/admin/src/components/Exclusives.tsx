@@ -10,6 +10,7 @@ export function Exclusives() {
   const [toggleDialog, setToggleDialog] = useState<{ id: string; currentState: boolean } | null>(null);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
     loadExclusives();
@@ -38,18 +39,26 @@ export function Exclusives() {
   async function confirmToggle() {
     if (!toggleDialog) return;
     if (!reason || reason.length < 5) {
-      alert('Please provide a reason (minimum 5 characters)');
+      setFeedback({ type: 'error', message: 'Please provide a reason (minimum 5 characters)' });
+      setTimeout(() => setFeedback(null), 5000);
       return;
     }
 
+    setError(null);
+    setFeedback(null);
     try {
       await toggleExclusive(toggleDialog.id, reason);
       setToggleDialog(null);
       setReason('');
+      setFeedback({ type: 'success', message: `Exclusive ${toggleDialog.currentState ? 'paused' : 'activated'} successfully` });
+      setTimeout(() => setFeedback(null), 5000);
       loadExclusives(); // Refresh
     } catch (err: any) {
       console.error('Failed to toggle exclusive:', err);
-      alert(err.message || 'Failed to toggle exclusive');
+      const errorMessage = err.message || 'Failed to toggle exclusive';
+      setError(errorMessage);
+      setFeedback({ type: 'error', message: errorMessage });
+      setTimeout(() => setFeedback(null), 5000);
     }
   }
 
@@ -84,6 +93,18 @@ export function Exclusives() {
         <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
           {error}
           <button onClick={loadExclusives} className="ml-4 underline">Retry</button>
+        </div>
+      )}
+
+      {feedback && (
+        <div
+          className={`mb-4 border rounded-lg p-4 ${
+            feedback.type === 'success'
+              ? 'bg-green-50 border-green-200 text-green-700'
+              : 'bg-red-50 border-red-200 text-red-700'
+          }`}
+        >
+          {feedback.message}
         </div>
       )}
 

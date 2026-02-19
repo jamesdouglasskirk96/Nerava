@@ -1,6 +1,7 @@
 // Charger card component for pre-charging screen
 import type { ChargerWithExperiences } from '../../mock/types'
 import { Badge } from '../shared/Badge'
+import { LiveStallIndicator } from '../shared/LiveStallIndicator'
 import { NearbyExperiences } from './NearbyExperiences'
 import { Button } from '../shared/Button'
 
@@ -31,18 +32,15 @@ export function ChargerCard({ charger, onClick }: ChargerCardProps) {
         </div>
 
         {/* Charger details */}
-        <div className="flex items-center gap-4 mt-2 text-xs text-gray-600">
-          <div className="flex items-center gap-1">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-              />
-            </svg>
-            <span>{charger.stalls} stalls</span>
-          </div>
+        <div className="flex flex-col gap-2 mt-2">
+          {/* Stall availability indicator */}
+          <LiveStallIndicator
+            availableStalls={(charger as any).availableStalls ?? charger.stalls}
+            totalStalls={charger.stalls}
+            lastUpdatedAt={(charger as any).lastUpdatedAt}
+          />
+          {/* Other charger details */}
+          <div className="flex items-center gap-4 text-xs text-gray-600">
           <div className="flex items-center gap-1">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
@@ -62,6 +60,7 @@ export function ChargerCard({ charger, onClick }: ChargerCardProps) {
               <span>{charger.rating.toFixed(1)}</span>
             </div>
           )}
+          </div>
         </div>
 
         {/* Nearby experiences */}

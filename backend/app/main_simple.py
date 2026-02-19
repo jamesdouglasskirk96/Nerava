@@ -420,6 +420,20 @@ async def root_health():
         "status": "healthy"
     }
 
+@app.get("/.well-known/appspecific/com.tesla.3p.public-key.pem")
+async def tesla_public_key():
+    """Serve Tesla Fleet API public key for partner registration."""
+    from fastapi.responses import PlainTextResponse
+    TESLA_PUBLIC_KEY = """-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4uafZwnneewhvV7DM7t682nwl5ux
+tbK1A4U3xq7RBW3WNEKKYZXltqSD3RD/6AmHkQYGJRlqYGySK3PRATpGBA==
+-----END PUBLIC KEY-----
+"""
+    return PlainTextResponse(
+        content=TESLA_PUBLIC_KEY,
+        media_type="application/x-pem-file",
+    )
+
 @app.get("/test-wallet-pass")
 async def test_wallet_pass():
     """Serve the pre-built signed .pkpass for testing on iPhone.
@@ -953,7 +967,8 @@ if DEMO_CHARGERS_DIR.exists() and DEMO_CHARGERS_DIR.is_dir():
     logger.info("Mounted /static/demo_chargers from directory: %s", str(DEMO_CHARGERS_DIR))
 
 # Mount merchant photos directory - MUST be before /static
-MERCHANT_PHOTOS_DIR = Path(__file__).parent.parent.parent / "merchant_photos_asadas_grill"
+# Photos are in backend/static/merchant_photos_asadas_grill/ (copied from repo root for Docker)
+MERCHANT_PHOTOS_DIR = Path(__file__).parent.parent / "static" / "merchant_photos_asadas_grill"
 if MERCHANT_PHOTOS_DIR.exists() and MERCHANT_PHOTOS_DIR.is_dir():
     app.mount("/static/merchant_photos_asadas_grill", StaticFiles(directory=str(MERCHANT_PHOTOS_DIR), html=False), name="merchant_photos")
     logger.info("Mounted /static/merchant_photos_asadas_grill from directory: %s", str(MERCHANT_PHOTOS_DIR))

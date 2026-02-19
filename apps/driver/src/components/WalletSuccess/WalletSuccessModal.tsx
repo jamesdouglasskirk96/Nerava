@@ -20,8 +20,7 @@ export function WalletSuccessModal({
     if (onViewWallet) {
       onViewWallet()
     } else {
-      // Default: show stub wallet preview or close
-      alert('Wallet pass preview - Coming soon')
+      // Sessions preview not yet implemented — close modal gracefully
       onClose()
     }
   }
@@ -61,9 +60,9 @@ export function WalletSuccessModal({
           </div>
         </div>
 
-        {/* Title - "Exclusive Activated" - 24px Bold, center-aligned */}
+        {/* Title - "Active Session" - 24px Bold, center-aligned */}
         <h2 className="text-2xl font-bold text-[#050505] text-center mb-2">
-          Exclusive Activated
+          Active Session
         </h2>
 
         {/* Subtitle - Active copy text - 16px Regular, center-aligned */}
@@ -79,9 +78,9 @@ export function WalletSuccessModal({
           </div>
         </div>
 
-        {/* CTA - "View Wallet" - Full width, primary style */}
+        {/* CTA - "View Sessions" - Full width, primary style */}
         <Button variant="primary" className="w-full" onClick={handleViewWallet}>
-          View Wallet
+          View Sessions
         </Button>
       </div>
     </div>
