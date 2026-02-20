@@ -56,7 +56,7 @@ class Settings(BaseModel):
     # Tesla Fleet API configuration
     TESLA_CLIENT_ID: str = os.getenv("TESLA_CLIENT_ID", "")
     TESLA_CLIENT_SECRET: str = os.getenv("TESLA_CLIENT_SECRET", "")
-    TESLA_PUBLIC_KEY_URL: str = os.getenv("TESLA_PUBLIC_KEY_URL", "https://api.nerava.com/.well-known/appspecific/com.tesla.3p.public-key.pem")
+    TESLA_PUBLIC_KEY_URL: str = os.getenv("TESLA_PUBLIC_KEY_URL", "https://api.nerava.network/.well-known/appspecific/com.tesla.3p.public-key.pem")
     TESLA_WEBHOOK_SECRET: str = os.getenv("TESLA_WEBHOOK_SECRET", "")
     TESLA_FLEET_TELEMETRY_ENDPOINT: str = os.getenv("TESLA_FLEET_TELEMETRY_ENDPOINT", "wss://fleet-telemetry.nerava.com")
     FEATURE_VIRTUAL_KEY_ENABLED: bool = os.getenv("FEATURE_VIRTUAL_KEY_ENABLED", "false").lower() == "true"
