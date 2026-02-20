@@ -134,3 +134,77 @@ export async function otpVerify(phone: string, code: string): Promise<TokenRespo
   return data
 }
 
+/**
+ * Authenticate with Google ID token
+ */
+export async function googleAuth(idToken: string): Promise<TokenResponse> {
+  const response = await fetch(`${API_BASE_URL}/v1/auth/google`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ id_token: idToken }),
+  })
+
+  if (!response.ok) {
+    let errorData: { error?: string; message?: string; detail?: string } = {}
+    try {
+      errorData = await response.json()
+    } catch {
+      errorData = { message: response.statusText }
+    }
+    const errorMessage = errorData.message || errorData.detail || response.statusText
+    const errorCode = errorData.error
+    throw new ApiError(response.status, errorCode, errorMessage)
+  }
+
+  const data = await response.json()
+
+  localStorage.setItem('access_token', data.access_token)
+  if (data.refresh_token) {
+    localStorage.setItem('refresh_token', data.refresh_token)
+  }
+  if (data.user) {
+    localStorage.setItem('nerava_user', JSON.stringify(data.user))
+  }
+
+  return data
+}
+
+/**
+ * Authenticate with Apple ID token
+ */
+export async function appleAuth(idToken: string): Promise<TokenResponse> {
+  const response = await fetch(`${API_BASE_URL}/v1/auth/apple`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ id_token: idToken }),
+  })
+
+  if (!response.ok) {
+    let errorData: { error?: string; message?: string; detail?: string } = {}
+    try {
+      errorData = await response.json()
+    } catch {
+      errorData = { message: response.statusText }
+    }
+    const errorMessage = errorData.message || errorData.detail || response.statusText
+    const errorCode = errorData.error
+    throw new ApiError(response.status, errorCode, errorMessage)
+  }
+
+  const data = await response.json()
+
+  localStorage.setItem('access_token', data.access_token)
+  if (data.refresh_token) {
+    localStorage.setItem('refresh_token', data.refresh_token)
+  }
+  if (data.user) {
+    localStorage.setItem('nerava_user', JSON.stringify(data.user))
+  }
+
+  return data
+}
+
