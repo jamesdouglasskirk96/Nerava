@@ -78,10 +78,28 @@ export function TeslaConnect({ merchantPlaceId, merchantName, chargerId, onCodeG
     setVerifying(true);
 
     try {
+      // Get current location for server-side proximity check
+      let lat: number | undefined;
+      let lng: number | undefined;
+      try {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 10000,
+          })
+        );
+        lat = pos.coords.latitude;
+        lng = pos.coords.longitude;
+      } catch {
+        // Location unavailable — send without it, backend will skip proximity check
+      }
+
       const response = await api.post<VerifyChargingResponse>('/v1/auth/tesla/verify-charging', {
         merchant_place_id: merchantPlaceId,
         merchant_name: merchantName,
         charger_id: chargerId,
+        lat,
+        lng,
       });
 
       setVerifyResult(response);

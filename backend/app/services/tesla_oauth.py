@@ -271,8 +271,8 @@ class TeslaOAuthService:
             vehicle_id = str(vehicle.get("id"))
             vin = vehicle.get("vin", "unknown")
 
-            # Wake then verify, with one retry on timeout
-            for attempt in range(2):
+            # Wake then verify, with retries on timeout or unknown state
+            for attempt in range(3):
                 try:
                     try:
                         await self.wake_vehicle(access_token, vehicle_id)
@@ -287,15 +287,27 @@ class TeslaOAuthService:
                     if is_charging:
                         logger.info(f"Vehicle {vin} is charging")
                         return True, charge_data, vehicle
-                    # Not charging — no need to retry, move to next vehicle
+
+                    # If charging_state is None, vehicle may still be waking up
+                    # — retry with a longer delay to let it fully come online
+                    if charge_data.get("charging_state") is None and attempt < 2:
+                        logger.warning(
+                            f"Vehicle {vin} returned unknown state "
+                            f"(attempt {attempt + 1}), retrying in 5s"
+                        )
+                        await asyncio.sleep(5)
+                        continue
+
+                    # Got a definitive state — move to next vehicle
                     break
 
                 except httpx.HTTPStatusError as e:
-                    if e.response.status_code == 408 and attempt == 0:
+                    if e.response.status_code == 408 and attempt < 2:
                         logger.warning(
-                            f"Timeout checking vehicle {vin}, retrying in 3s"
+                            f"Timeout checking vehicle {vin} "
+                            f"(attempt {attempt + 1}), retrying in 5s"
                         )
-                        await asyncio.sleep(3)
+                        await asyncio.sleep(5)
                         continue
                     logger.warning(f"HTTP error checking vehicle {vin}: {e}")
                     break

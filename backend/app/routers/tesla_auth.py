@@ -244,14 +244,8 @@ async def verify_charging_and_generate_code(
             detail="Tesla session expired. Please reconnect your Tesla."
         )
 
-    # --- Location validation ---
-    if request.lat is None or request.lng is None:
-        raise HTTPException(
-            status_code=400,
-            detail="Location (lat/lng) is required to verify charging."
-        )
-
-    if request.merchant_place_id:
+    # --- Location validation (optional — skip proximity check if unavailable) ---
+    if request.merchant_place_id and request.lat is not None and request.lng is not None:
         # Look up merchant coordinates from either table
         merchant_lat: Optional[float] = None
         merchant_lng: Optional[float] = None
