@@ -168,7 +168,21 @@ class TeslaOAuthService:
             response = await client.get(url, headers=headers, params=params)
             response.raise_for_status()
             data = response.json()
-            return data.get("response", {})
+            vehicle_resp = data.get("response", {})
+            # Debug: log raw charge_state from Fleet API
+            raw_charge = vehicle_resp.get("charge_state", {})
+            logger.info(
+                f"Fleet API raw charge_state for vehicle {vehicle_id}: "
+                f"charging_state={raw_charge.get('charging_state')} "
+                f"battery_level={raw_charge.get('battery_level')} "
+                f"charge_rate={raw_charge.get('charge_rate')} "
+                f"charger_power={raw_charge.get('charger_power')} "
+                f"charger_voltage={raw_charge.get('charger_voltage')} "
+                f"charge_port_latch={raw_charge.get('charge_port_latch')} "
+                f"charge_port_door_open={raw_charge.get('charge_port_door_open')} "
+                f"conn_charge_cable={raw_charge.get('conn_charge_cable')}"
+            )
+            return vehicle_resp
 
     async def wake_vehicle(self, access_token: str, vehicle_id: str) -> bool:
         """
