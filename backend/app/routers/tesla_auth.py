@@ -327,7 +327,12 @@ async def verify_charging_and_generate_code(
 
     if not is_charging:
         charging_state = charge_data.get("charging_state", "unknown")
-        logger.info(f"Fleet API: no vehicle charging (state={charging_state}) for user {current_user.id}")
+        logger.warning(
+            f"Fleet API: no vehicle charging for user {current_user.id} | "
+            f"state={charging_state} battery={charge_data.get('battery_level')} "
+            f"rate={charge_data.get('charge_rate')} power={charge_data.get('charger_power')} "
+            f"error={charge_data.get('error', 'none')}"
+        )
         return VerifyChargingResponse(
             is_charging=False,
             battery_level=battery_level,

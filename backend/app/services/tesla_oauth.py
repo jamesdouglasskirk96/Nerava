@@ -193,6 +193,10 @@ class TeslaOAuthService:
             data = response.json()
             return data.get("response", {}).get("state") == "online"
 
+    # States the Tesla Fleet API reports when the vehicle is actively charging
+    # or about to start (e.g. during initial power negotiation).
+    CHARGING_STATES = {"Charging", "Starting"}
+
     async def verify_charging(
         self,
         access_token: str,
@@ -207,32 +211,31 @@ class TeslaOAuthService:
 
         Returns:
             Tuple of (is_charging, charge_data)
+
+        Raises:
+            httpx.HTTPStatusError: Propagated so callers can retry on 408.
         """
-        try:
-            vehicle_data = await self.get_vehicle_data(access_token, vehicle_id)
-            charge_state = vehicle_data.get("charge_state", {})
+        vehicle_data = await self.get_vehicle_data(access_token, vehicle_id)
+        charge_state = vehicle_data.get("charge_state", {})
 
-            is_charging = charge_state.get("charging_state") == "Charging"
-            charge_data = {
-                "is_charging": is_charging,
-                "charging_state": charge_state.get("charging_state"),
-                "battery_level": charge_state.get("battery_level"),
-                "charge_rate": charge_state.get("charge_rate"),
-                "charger_power": charge_state.get("charger_power"),
-                "minutes_to_full": charge_state.get("minutes_to_full_charge"),
-                "supercharger": charge_state.get("fast_charger_present", False),
-            }
+        charging_state_str = charge_state.get("charging_state")
+        is_charging = charging_state_str in self.CHARGING_STATES
+        charge_data = {
+            "is_charging": is_charging,
+            "charging_state": charging_state_str,
+            "battery_level": charge_state.get("battery_level"),
+            "charge_rate": charge_state.get("charge_rate"),
+            "charger_power": charge_state.get("charger_power"),
+            "minutes_to_full": charge_state.get("minutes_to_full_charge"),
+            "supercharger": charge_state.get("fast_charger_present", False),
+        }
 
-            # Also get location
-            drive_state = vehicle_data.get("drive_state", {})
-            charge_data["latitude"] = drive_state.get("latitude")
-            charge_data["longitude"] = drive_state.get("longitude")
+        # Also get location
+        drive_state = vehicle_data.get("drive_state", {})
+        charge_data["latitude"] = drive_state.get("latitude")
+        charge_data["longitude"] = drive_state.get("longitude")
 
-            return is_charging, charge_data
-
-        except Exception as e:
-            logger.error(f"Error verifying charging: {e}")
-            return False, {"error": str(e)}
+        return is_charging, charge_data
 
     async def verify_charging_all_vehicles(
         self,
