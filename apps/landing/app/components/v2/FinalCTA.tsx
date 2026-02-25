@@ -1,5 +1,5 @@
 import { Button } from '../Button'
-import { getDriverCTAHref, getMerchantFindHref } from './ctaLinks'
+import { getMerchantFindHref, getChargerOwnerCTAHref } from './ctaLinks'
 
 export default function FinalCTA() {
   return (
@@ -12,14 +12,17 @@ export default function FinalCTA() {
           <p className="text-lg text-muted-foreground mb-10">
             Join the network that's transforming idle charging time into local discovery and commerce.
           </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button variant="primary" href={getDriverCTAHref()}>
-              I'm a Driver
-            </Button>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
             <Button variant="primary" href={getMerchantFindHref()}>
-              See how this works
+              I'm a Merchant
+            </Button>
+            <Button variant="secondary" href={getChargerOwnerCTAHref()}>
+              I'm a Charger Owner
             </Button>
           </div>
+          <p className="text-sm text-muted-foreground">
+            Interested in sponsoring charging incentives? <a href="mailto:sponsors@nerava.network" className="text-primary underline hover:opacity-80">sponsors@nerava.network</a>
+          </p>
         </div>
       </div>
     </section>

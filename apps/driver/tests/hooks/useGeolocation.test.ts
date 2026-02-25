@@ -5,6 +5,8 @@ import { useGeolocation } from '../../src/hooks/useGeolocation'
 describe('useGeolocation', () => {
   const mockGeolocation = {
     getCurrentPosition: vi.fn(),
+    watchPosition: vi.fn().mockReturnValue(1),
+    clearWatch: vi.fn(),
   }
 
   beforeEach(() => {
@@ -18,14 +20,20 @@ describe('useGeolocation', () => {
   })
 
   it('returns location when geolocation is successful', async () => {
+    const position = {
+      coords: {
+        latitude: 30.2672,
+        longitude: -97.7431,
+        accuracy: 50,
+      },
+    }
+
     mockGeolocation.getCurrentPosition.mockImplementation((success) => {
-      success({
-        coords: {
-          latitude: 30.2672,
-          longitude: -97.7431,
-          accuracy: 50,
-        },
-      })
+      success(position)
+    })
+    mockGeolocation.watchPosition.mockImplementation((success) => {
+      success(position)
+      return 1
     })
 
     const { result } = renderHook(() => useGeolocation())
@@ -46,6 +54,13 @@ describe('useGeolocation', () => {
         code: 1,
         message: 'User denied geolocation',
       })
+    })
+    mockGeolocation.watchPosition.mockImplementation((_, error) => {
+      error({
+        code: 1,
+        message: 'User denied geolocation',
+      })
+      return 1
     })
 
     const { result } = renderHook(() => useGeolocation())
@@ -72,4 +87,3 @@ describe('useGeolocation', () => {
     expect(result.current.error).toContain('not supported')
   })
 })
-

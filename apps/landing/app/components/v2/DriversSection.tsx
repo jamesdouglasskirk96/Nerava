@@ -1,6 +1,4 @@
-import { Button } from '../Button'
 import Card from './Card'
-import { getDriverCTAHref } from './ctaLinks'
 
 export default function DriversSection() {
   const benefits = [
@@ -23,24 +21,19 @@ export default function DriversSection() {
       <div className="max-w-7xl mx-auto px-6 md:px-8">
         <div className="max-w-3xl mx-auto text-center mb-16">
           <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-            For drivers
+            The driver experience
           </h2>
           <p className="text-lg text-muted-foreground">
-            Nerava works quietly in the background, surfacing nearby businesses exactly when you need them most: during your charging session.
+            Nerava works quietly in the background, surfacing nearby businesses exactly when drivers need them most: during their charging session.
           </p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
           {benefits.map((benefit, index) => (
             <Card key={index}>
               <h3 className="font-bold text-foreground mb-2">{benefit.title}</h3>
               <p className="text-muted-foreground">{benefit.description}</p>
             </Card>
           ))}
-        </div>
-        <div className="text-center">
-          <Button variant="primary" href={getDriverCTAHref()}>
-            Join the driver waitlist
-          </Button>
         </div>
       </div>
     </section>

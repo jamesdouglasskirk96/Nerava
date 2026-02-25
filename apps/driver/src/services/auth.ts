@@ -174,6 +174,91 @@ export async function googleAuth(idToken: string): Promise<TokenResponse> {
 /**
  * Authenticate with Apple ID token
  */
+// ==================== Tesla Login ====================
+
+export interface TeslaLoginUrlResponse {
+  authorization_url: string
+  state: string
+}
+
+export interface TeslaVehicle {
+  id: string
+  vin?: string
+  display_name?: string
+  model?: string
+}
+
+export interface TeslaLoginResponse extends TokenResponse {
+  vehicles: TeslaVehicle[]
+}
+
+/**
+ * Start Tesla OAuth login — returns URL to redirect user to
+ */
+export async function teslaLoginStart(): Promise<TeslaLoginUrlResponse> {
+  const response = await fetch(`${API_BASE_URL}/v1/auth/tesla/login-url`)
+
+  if (!response.ok) {
+    let errorData: { detail?: string } = {}
+    try { errorData = await response.json() } catch {}
+    throw new ApiError(response.status, 'tesla_login_start', errorData.detail || response.statusText)
+  }
+
+  return response.json()
+}
+
+/**
+ * Complete Tesla login by exchanging code + state for Nerava tokens
+ */
+export async function teslaLoginCallback(code: string, state: string): Promise<TeslaLoginResponse> {
+  const response = await fetch(`${API_BASE_URL}/v1/auth/tesla/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, state }),
+  })
+
+  if (!response.ok) {
+    let errorData: { detail?: string } = {}
+    try { errorData = await response.json() } catch {}
+    throw new ApiError(response.status, 'tesla_login', errorData.detail || response.statusText)
+  }
+
+  const data = await response.json()
+
+  localStorage.setItem('access_token', data.access_token)
+  if (data.refresh_token) {
+    localStorage.setItem('refresh_token', data.refresh_token)
+  }
+  if (data.user) {
+    localStorage.setItem('nerava_user', JSON.stringify(data.user))
+  }
+
+  return data
+}
+
+/**
+ * Select a vehicle after Tesla login
+ */
+export async function teslaSelectVehicle(vehicleId: string): Promise<{ success: boolean; vehicle: TeslaVehicle }> {
+  const token = localStorage.getItem('access_token')
+  const response = await fetch(`${API_BASE_URL}/v1/auth/tesla/select-vehicle`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ vehicle_id: vehicleId }),
+  })
+
+  if (!response.ok) {
+    let errorData: { detail?: string } = {}
+    try { errorData = await response.json() } catch {}
+    throw new ApiError(response.status, 'select_vehicle', errorData.detail || response.statusText)
+  }
+
+  return response.json()
+}
+
 export async function appleAuth(idToken: string): Promise<TokenResponse> {
   const response = await fetch(`${API_BASE_URL}/v1/auth/apple`, {
     method: 'POST',

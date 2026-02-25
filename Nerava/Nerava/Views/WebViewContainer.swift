@@ -257,6 +257,8 @@ struct WebViewRepresentable: UIViewRepresentable {
         weak var webView: WKWebView?
         weak var refreshControl: UIRefreshControl?
         var initialRequest: URLRequest?
+        private var autoRetryCount: Int = 0
+        private let maxAutoRetries: Int = 2
 
         init(locationService: LocationService,
              sessionEngine: SessionEngine,
@@ -282,6 +284,7 @@ struct WebViewRepresentable: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            autoRetryCount = 0
             setLoading(false)
             setError(nil)
             endRefreshing()
@@ -303,9 +306,13 @@ struct WebViewRepresentable: UIViewRepresentable {
         }
 
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-            setLoading(false)
-            setError(.processTerminated)
+            Log.bridge.info("Web content process terminated — auto-reloading")
             endRefreshing()
+            setLoading(true)
+            // Auto-reload after a brief pause to let the process recover
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.reload(webView)
+            }
         }
 
         func webView(_ webView: WKWebView,
@@ -349,12 +356,24 @@ struct WebViewRepresentable: UIViewRepresentable {
         }
 
         private func handleWebError(_ error: Error) {
-            if let mappedError = classifyError(error) {
-                setLoading(false)
-                setError(mappedError)
-                endRefreshing()
-                Log.bridge.error("Navigation failed: \(error.localizedDescription)")
+            guard let mappedError = classifyError(error) else { return }
+
+            // Auto-retry network/server errors up to maxAutoRetries before showing overlay
+            if autoRetryCount < maxAutoRetries, case .network = mappedError,
+               let webView = webView {
+                autoRetryCount += 1
+                Log.bridge.info("Auto-retrying navigation (attempt \(self.autoRetryCount)/\(self.maxAutoRetries))")
+                setLoading(true)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                    self?.reload(webView)
+                }
+                return
             }
+
+            setLoading(false)
+            setError(mappedError)
+            endRefreshing()
+            Log.bridge.error("Navigation failed: \(error.localizedDescription)")
         }
 
         private func classifyError(_ error: Error) -> WebViewError? {

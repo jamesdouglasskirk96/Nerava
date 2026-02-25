@@ -1,0 +1,97 @@
+name: Backend Security Scan
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+  schedule:
+    - cron: '0 4 * * 1'  # Weekly: Monday at 4am UTC
+
+jobs:
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-audit
+
+      - name: Run pip-audit
+        working-directory: backend
+        run: pip-audit -r requirements.txt --desc on
+
+  sast:
+    name: Static Analysis (Bandit)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install bandit
+        run: pip install bandit[toml]
+
+      - name: Run bandit
+        working-directory: backend
+        run: |
+          bandit -r app/ \
+            -f json \
+            -o bandit-report.json \
+            --severity-level medium \
+            --confidence-level medium \
+            -x app/tests \
+            || true
+
+      - name: Display results summary
+        if: always()
+        working-directory: backend
+        run: |
+          if [ -f bandit-report.json ]; then
+            python -c "
+          import json
+          with open('bandit-report.json') as f:
+              data = json.load(f)
+          metrics = data.get('metrics', {}).get('_totals', {})
+          results = data.get('results', [])
+          print(f'Files scanned: {metrics.get(\"loc\", \"?\")} lines')
+          high = [r for r in results if r['issue_severity'] == 'HIGH']
+          med = [r for r in results if r['issue_severity'] == 'MEDIUM']
+          print(f'Issues found: {len(high)} high, {len(med)} medium')
+          for r in high:
+              print(f'  HIGH: {r[\"issue_text\"]} ({r[\"filename\"]}:{r[\"line_number\"]})')
+          for r in med[:5]:
+              print(f'  MED:  {r[\"issue_text\"]} ({r[\"filename\"]}:{r[\"line_number\"]})')
+          if len(high) > 0:
+              print('::error::Bandit found HIGH severity issues')
+              exit(1)
+          "
+          fi
+
+      - name: Upload bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: backend/bandit-report.json
+          retention-days: 30

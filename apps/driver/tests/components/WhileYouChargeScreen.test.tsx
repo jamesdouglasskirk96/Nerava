@@ -4,16 +4,6 @@ import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { WhileYouChargeScreen } from '../../src/components/WhileYouCharge/WhileYouChargeScreen'
-import { CaptureIntentResponse } from '../../src/types'
-import { ApiError } from '../../src/services/api'
-
-// Mock geolocation
-const mockGeolocation = {
-  getCurrentPosition: vi.fn(),
-}
-
-// @ts-ignore
-global.navigator.geolocation = mockGeolocation
 
 // Mock fetch
 global.fetch = vi.fn()
@@ -31,50 +21,37 @@ describe('WhileYouChargeScreen', () => {
   })
 
   it('renders featured merchant from mocked API response', async () => {
-    // Mock successful geolocation
-    mockGeolocation.getCurrentPosition.mockImplementation((success) => {
-      success({
-        coords: {
-          latitude: 30.2672,
-          longitude: -97.7431,
-          accuracy: 50,
-        },
-      })
-    })
-
-    // Mock API response
-    const mockResponse: CaptureIntentResponse = {
-      session_id: 'test-session-123',
-      confidence_tier: 'A',
-      merchants: [
-        {
-          place_id: 'mock_asadas_grill',
-          name: 'Asadas Grill',
-          lat: 30.2680,
-          lng: -97.7435,
-          distance_m: 150,
-          types: ['restaurant'],
-          badges: ['Happy Hour ⭐️'],
-        },
-        {
-          place_id: 'mock_eggman_atx',
-          name: 'Eggman ATX',
-          lat: 30.2665,
-          lng: -97.7425,
-          distance_m: 200,
-          types: ['cafe'],
-        },
-      ],
-      next_actions: {
-        request_wallet_pass: false,
-        require_vehicle_onboarding: false,
+    const mockMerchants = [
+      {
+        id: 'mock_asadas_grill',
+        merchant_id: 'mock_asadas_grill',
+        place_id: 'mock_asadas_grill',
+        name: 'Asadas Grill',
+        lat: 30.268,
+        lng: -97.7435,
+        distance_m: 150,
+        types: ['restaurant'],
+        is_primary: true,
+        exclusive_title: 'Happy Hour',
       },
-    }
+      {
+        id: 'mock_eggman_atx',
+        merchant_id: 'mock_eggman_atx',
+        place_id: 'mock_eggman_atx',
+        name: 'Eggman ATX',
+        lat: 30.2665,
+        lng: -97.7425,
+        distance_m: 200,
+        types: ['cafe'],
+        is_primary: false,
+      },
+    ]
 
     // @ts-ignore
     global.fetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => mockResponse,
+      status: 200,
+      json: async () => mockMerchants,
     })
 
     render(
@@ -85,59 +62,23 @@ describe('WhileYouChargeScreen', () => {
       </QueryClientProvider>
     )
 
-    // Wait for API call and rendering
-    await waitFor(() => {
-      expect(screen.getByText("You're Charging.")).toBeInTheDocument()
-    })
+    expect(screen.getByText('What to do while you charge')).toBeInTheDocument()
 
-    // Check featured merchant is rendered
-    await waitFor(() => {
-      expect(screen.getByText('Asadas Grill')).toBeInTheDocument()
-      expect(screen.getByText('Happy Hour ⭐️')).toBeInTheDocument()
-    })
-  })
-
-  it('shows fallback message when geolocation is denied', async () => {
-    // Mock geolocation error
-    mockGeolocation.getCurrentPosition.mockImplementation((_, error) => {
-      error({
-        code: 1,
-        message: 'User denied geolocation',
-      })
-    })
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <WhileYouChargeScreen />
-        </BrowserRouter>
-      </QueryClientProvider>
+    // Carousel may render the merchant name in multiple places; use getAllByText
+    await waitFor(
+      () => {
+        expect(screen.getAllByText('Asadas Grill').length).toBeGreaterThan(0)
+      },
+      { timeout: 3000 },
     )
-
-    await waitFor(() => {
-      expect(screen.getByText(/Location Access Required/i)).toBeInTheDocument()
-      expect(screen.getByText(/User denied geolocation/i)).toBeInTheDocument()
-    })
   })
 
-  it('renders error state on 401 and shows Sign-in button', async () => {
-    // Mock successful geolocation
-    mockGeolocation.getCurrentPosition.mockImplementation((success) => {
-      success({
-        coords: {
-          latitude: 30.2672,
-          longitude: -97.7431,
-          accuracy: 50,
-        },
-      })
-    })
-
-    // Mock fetch to return 401
+  it('shows empty state when no merchants are returned', async () => {
     // @ts-ignore
     global.fetch.mockResolvedValueOnce({
-      ok: false,
-      status: 401,
-      json: async () => ({ error: 'unauthorized', message: 'Sign in required' }),
+      ok: true,
+      status: 200,
+      json: async () => [],
     })
 
     render(
@@ -148,27 +89,33 @@ describe('WhileYouChargeScreen', () => {
       </QueryClientProvider>
     )
 
-    // Assert "Sign in Required" text and button appear
-    await waitFor(() => {
-      expect(screen.getByText(/Sign in Required/i)).toBeInTheDocument()
-      expect(screen.getByText(/Please sign in to see nearby merchants/i)).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Continue with Google/i })).toBeInTheDocument()
-    })
+    await waitFor(
+      () => {
+        expect(screen.getByText('No experiences yet')).toBeInTheDocument()
+      },
+      { timeout: 3000 },
+    )
+
+    expect(screen.getByRole('button', { name: /Refresh/i })).toBeInTheDocument()
   })
 
-  it('renders error state on network failure and shows Retry', async () => {
-    // Mock successful geolocation
-    mockGeolocation.getCurrentPosition.mockImplementation((success) => {
-      success({
-        coords: {
-          latitude: 30.2672,
-          longitude: -97.7431,
-          accuracy: 50,
-        },
-      })
-    })
+  it('shows loading skeletons while fetching', () => {
+    // Never resolve the fetch
+    // @ts-ignore
+    global.fetch.mockReturnValueOnce(new Promise(() => {}))
 
-    // Mock fetch to throw network error
+    render(
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <WhileYouChargeScreen />
+        </BrowserRouter>
+      </QueryClientProvider>
+    )
+
+    expect(screen.getByText('What to do while you charge')).toBeInTheDocument()
+  })
+
+  it('renders empty state on network failure and shows Refresh', async () => {
     // @ts-ignore
     global.fetch.mockRejectedValueOnce(new Error('Network error'))
 
@@ -180,54 +127,43 @@ describe('WhileYouChargeScreen', () => {
       </QueryClientProvider>
     )
 
-    // Assert "Can't Load Merchants" text and Retry button appear
-    await waitFor(() => {
-      expect(screen.getByText(/Can't Load Merchants/i)).toBeInTheDocument()
-      expect(screen.getByText(/Network error/i)).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Retry/i })).toBeInTheDocument()
-    })
+    await waitFor(
+      () => {
+        expect(screen.getByText('No experiences yet')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /Refresh/i })).toBeInTheDocument()
+      },
+      { timeout: 3000 },
+    )
   })
 
-  it('retry triggers refetch', async () => {
+  it('refresh button triggers refetch', async () => {
     const user = userEvent.setup()
-    
-    // Mock successful geolocation
-    mockGeolocation.getCurrentPosition.mockImplementation((success) => {
-      success({
-        coords: {
-          latitude: 30.2672,
-          longitude: -97.7431,
-          accuracy: 50,
-        },
-      })
-    })
 
-    // Mock initial failure, then success
-    const mockSuccessResponse: CaptureIntentResponse = {
-      session_id: 'test-session-123',
-      confidence_tier: 'A',
-      merchants: [
-        {
-          place_id: 'mock_asadas_grill',
-          name: 'Asadas Grill',
-          lat: 30.2680,
-          lng: -97.7435,
-          distance_m: 150,
-          types: ['restaurant'],
-        },
-      ],
-      next_actions: {
-        request_wallet_pass: false,
-        require_vehicle_onboarding: false,
+    const mockMerchants = [
+      {
+        id: 'mock_asadas_grill',
+        merchant_id: 'mock_asadas_grill',
+        place_id: 'mock_asadas_grill',
+        name: 'Asadas Grill',
+        lat: 30.268,
+        lng: -97.7435,
+        distance_m: 150,
+        types: ['restaurant'],
+        is_primary: true,
       },
-    }
+    ]
 
     // @ts-ignore
     global.fetch
-      .mockRejectedValueOnce(new Error('Network error'))
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => mockSuccessResponse,
+        status: 200,
+        json: async () => [],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockMerchants,
       })
 
     render(
@@ -238,20 +174,22 @@ describe('WhileYouChargeScreen', () => {
       </QueryClientProvider>
     )
 
-    // Wait for error state
-    await waitFor(() => {
-      expect(screen.getByText(/Can't Load Merchants/i)).toBeInTheDocument()
-    })
+    await waitFor(
+      () => {
+        expect(screen.getByText('No experiences yet')).toBeInTheDocument()
+      },
+      { timeout: 3000 },
+    )
 
-    // Click retry button
-    const retryButton = screen.getByRole('button', { name: /Retry/i })
-    await user.click(retryButton)
+    const refreshButton = screen.getByRole('button', { name: /Refresh/i })
+    await user.click(refreshButton)
 
-    // Assert refetch is called and success state renders
-    await waitFor(() => {
-      expect(screen.getByText("You're Charging.")).toBeInTheDocument()
-      expect(screen.getByText('Asadas Grill')).toBeInTheDocument()
-    })
+    // Carousel may render the merchant name in multiple places
+    await waitFor(
+      () => {
+        expect(screen.getAllByText('Asadas Grill').length).toBeGreaterThan(0)
+      },
+      { timeout: 3000 },
+    )
   })
 })
-

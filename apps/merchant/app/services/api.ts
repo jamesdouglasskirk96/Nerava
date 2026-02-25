@@ -38,7 +38,7 @@ function clearSessionAndRedirect() {
   localStorage.removeItem('access_token')
   localStorage.removeItem('businessClaimed')
   localStorage.removeItem('merchant_id')
-  window.location.href = '/merchant/claim'
+  window.location.href = `${import.meta.env.BASE_URL}claim`
 }
 
 export async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { usePageVisibility } from './usePageVisibility'
 
 export interface GeolocationState {
   lat: number | null
@@ -39,6 +40,18 @@ export function useGeolocation(throttleMs: number = 5000): GeolocationState {
       loading: false,
     })
   }, [throttleMs])
+
+  // Force a fresh location fix when app returns to foreground
+  usePageVisibility(useCallback(() => {
+    if (navigator.geolocation) {
+      lastUpdateRef.current = 0 // Reset throttle so update goes through
+      navigator.geolocation.getCurrentPosition(
+        updatePosition,
+        () => {}, // Ignore errors on foreground refresh
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      )
+    }
+  }, [updatePosition]))
 
   useEffect(() => {
     if (!navigator.geolocation) {

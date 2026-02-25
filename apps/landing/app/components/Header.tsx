@@ -1,7 +1,6 @@
 'use client'
 
 import { Button } from './Button'
-import { getDriverCTAHref } from './v2/ctaLinks'
 
 export default function Header() {
   const scrollToSection = (sectionId: string) => {
@@ -27,8 +26,8 @@ export default function Header() {
             />
           </a>
           <nav className="hidden md:flex items-center gap-6">
-            <a 
-              href="#activates-moment" 
+            <a
+              href="#activates-moment"
               onClick={(e) => {
                 e.preventDefault()
                 scrollToSection('activates-moment')
@@ -37,8 +36,8 @@ export default function Header() {
             >
               How It Works
             </a>
-            <a 
-              href="#built-to-scale" 
+            <a
+              href="#built-to-scale"
               onClick={(e) => {
                 e.preventDefault()
                 scrollToSection('built-to-scale')
@@ -47,21 +46,21 @@ export default function Header() {
             >
               For Charger Owners
             </a>
-            <Button 
-              variant="primary" 
-              href={getDriverCTAHref()}
+            <Button
+              variant="primary"
+              onClick={scrollToContact}
               className="px-4 py-2"
             >
-              Get Started
+              Get in Touch
             </Button>
           </nav>
           <div className="md:hidden">
-            <Button 
-              variant="primary" 
+            <Button
+              variant="primary"
               onClick={scrollToContact}
               className="px-3 py-1.5 text-sm"
             >
-              Get Started
+              Get in Touch
             </Button>
           </div>
         </div>

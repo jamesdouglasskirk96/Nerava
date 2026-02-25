@@ -15,13 +15,13 @@ describe('WalletSuccessModal', () => {
       />
     )
 
-    expect(screen.getByText('Added to Wallet')).toBeInTheDocument()
+    expect(screen.getByText('Active Session')).toBeInTheDocument()
     expect(screen.getByText(/Asadas Grill/i)).toBeInTheDocument()
-    expect(screen.getByText(/Happy Hour ⭐️/i)).toBeInTheDocument()
-    expect(screen.getByText(/Active while charging/i)).toBeInTheDocument()
+    expect(screen.getByText(/Happy Hour/i)).toBeInTheDocument()
+    expect(screen.getByText(/Active for the next 60 minutes/i)).toBeInTheDocument()
   })
 
-  it('calls onClose when Done button is clicked', async () => {
+  it('calls onClose when View Sessions button is clicked (no onViewWallet)', async () => {
     const user = userEvent.setup()
     const onClose = vi.fn()
 
@@ -33,9 +33,10 @@ describe('WalletSuccessModal', () => {
       />
     )
 
-    const doneButton = screen.getByRole('button', { name: /Done/i })
-    await user.click(doneButton)
+    const viewButton = screen.getByRole('button', { name: /View Sessions/i })
+    await user.click(viewButton)
 
+    // Without onViewWallet, clicking "View Sessions" falls back to onClose
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
@@ -52,11 +53,10 @@ describe('WalletSuccessModal', () => {
     )
 
     // Click on backdrop (the outer div)
-    const backdrop = screen.getByText('Added to Wallet').closest('.fixed')
+    const backdrop = screen.getByText('Active Session').closest('.fixed')
     if (backdrop) {
       await user.click(backdrop)
       expect(onClose).toHaveBeenCalledTimes(1)
     }
   })
 })
-

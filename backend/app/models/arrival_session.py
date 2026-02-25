@@ -112,7 +112,7 @@ class ArrivalSession(Base):
     vehicle_soc_at_arrival = Column(Float, nullable=True)  # Battery % from telemetry
 
     # Billing
-    platform_fee_bps = Column(Integer, nullable=False, default=500)  # 5% = 500 bps
+    platform_fee_bps = Column(Integer, nullable=False, default=2000)  # 20% = 2000 bps
     billable_amount_cents = Column(Integer, nullable=True)
     billing_status = Column(String(20), default="pending")  # pending, invoiced, paid
 

@@ -41,6 +41,7 @@ declare global {
       getSessionState: () => Promise<{ state: SessionState }>;
       getPermissionStatus: () => Promise<PermissionStatus>;
       getAuthToken: () => Promise<AuthTokenResponse>;
+      openExternalUrl: (url: string) => void;
     };
   }
 }
@@ -105,16 +106,14 @@ export function useNativeBridge() {
 
       if (action === 'SESSION_START_REJECTED') {
         console.warn('[NativeBridge] Session start rejected:', payload.reason);
+        window.dispatchEvent(new CustomEvent('nerava:session-rejected', { detail: { reason: payload.reason } }));
       }
 
       if (action === 'AUTH_REQUIRED') {
         console.warn('[NativeBridge] Auth required - token may be expired');
-        // V1 BEHAVIOR: Clear tokens and log error. User will re-authenticate when needed.
-        // The driver app uses OTP authentication via modals, not a /login route.
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        // FUTURE (V2): Show error banner prompting re-authentication
-        // FUTURE (V2): Implement token refresh if refresh tokens are available
+        window.dispatchEvent(new CustomEvent('nerava:auth-required'));
       }
 
       if (action === 'EVENT_EMISSION_FAILED') {

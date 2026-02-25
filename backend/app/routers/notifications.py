@@ -1,15 +1,20 @@
 """
-Notification preferences router
+Notification preferences and device token registration router
 """
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from datetime import datetime
+from typing import Literal
 
 from app.db import get_db
 from app.models import User
 from app.models.notification_prefs import UserNotificationPrefs
+from app.models.device_token import DeviceToken
 from app.dependencies_domain import get_current_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/notifications", tags=["notifications"])
 
@@ -84,13 +89,63 @@ def update_notification_prefs(
         if update.wallet_reminders is not None:
             prefs.wallet_reminders = update.wallet_reminders
         prefs.updated_at = datetime.utcnow()
-    
+
     db.commit()
     db.refresh(prefs)
-    
+
     return NotificationPrefsResponse(
         earned_nova=prefs.earned_nova,
         nearby_nova=prefs.nearby_nova,
         wallet_reminders=prefs.wallet_reminders
     )
+
+
+# ---------------------------------------------------------------------------
+# Device token registration (FCM / APNs)
+# ---------------------------------------------------------------------------
+
+class RegisterDeviceRequest(BaseModel):
+    fcm_token: str
+    platform: Literal["android", "ios"]
+
+
+class RegisterDeviceResponse(BaseModel):
+    ok: bool
+
+
+@router.post("/register-device", response_model=RegisterDeviceResponse)
+def register_device(
+    payload: RegisterDeviceRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Register (or refresh) a push-notification device token.
+
+    The Android app calls this on every FCM token refresh.
+    Upserts by token value — if the same token already exists for this user
+    it just bumps updated_at; if it belongs to a different user the ownership
+    is transferred (a device can only belong to one signed-in user).
+    """
+    existing = db.query(DeviceToken).filter(
+        DeviceToken.token == payload.fcm_token,
+    ).first()
+
+    if existing:
+        # Transfer ownership if user changed, reactivate if deactivated
+        existing.user_id = current_user.id
+        existing.platform = payload.platform
+        existing.is_active = True
+        existing.updated_at = datetime.utcnow()
+    else:
+        device = DeviceToken(
+            user_id=current_user.id,
+            token=payload.fcm_token,
+            platform=payload.platform,
+        )
+        db.add(device)
+
+    db.commit()
+    logger.info("Device token registered for user %s (%s)", current_user.id, payload.platform)
+    return RegisterDeviceResponse(ok=True)
 

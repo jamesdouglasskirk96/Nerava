@@ -122,46 +122,37 @@ async def search_businesses(
     lng: Optional[float] = Query(None),
 ):
     """Google Places text search wrapper (max 10 results)."""
-    from app.services.google_places_new import search_text
+    from app.services.google_places_new import search_text, get_photo_url
 
     location_bias = None
     if lat is not None and lng is not None:
         location_bias = {"lat": lat, "lng": lng}
 
     try:
-        raw_places = await search_text(query=q, location_bias=location_bias, max_results=10)
+        places = await search_text(query=q, location_bias=location_bias, max_results=10)
     except Exception as e:
         logger.error("[MerchantFunnel] search_text error: %s", e, exc_info=True)
-        raw_places = []
+        places = []
 
     results = []
-    for p in raw_places:
-        display_name = p.get("displayName", {})
-        name = display_name.get("text", "") if isinstance(display_name, dict) else str(display_name)
-        location = p.get("location", {})
-
-        # Best-effort photo URL
-        photo_url = None
-        photos = p.get("photos", [])
-        if photos:
-            photo_name = photos[0].get("name", "")
-            if photo_name:
-                photo_ref = photo_name.replace("places/", "").split("/photos/")[-1]
-                if photo_ref:
-                    from app.services.google_places_new import get_photo_url
-                    try:
-                        photo_url = await get_photo_url(photo_ref, max_width=400)
-                    except Exception:
-                        pass
+    for p in places:
+        # Resolve photo_ref: prefix to actual URL
+        photo_url = p.get("photo_url")
+        if photo_url and photo_url.startswith("photo_ref:"):
+            photo_ref = photo_url.replace("photo_ref:", "")
+            try:
+                photo_url = await get_photo_url(photo_ref, max_width=400)
+            except Exception:
+                photo_url = None
 
         results.append(SearchResult(
-            place_id=p.get("id", ""),
-            name=name,
-            address=p.get("formattedAddress"),
-            lat=location.get("latitude"),
-            lng=location.get("longitude"),
+            place_id=p.get("place_id", ""),
+            name=p.get("name", ""),
+            address=p.get("address"),
+            lat=p.get("lat"),
+            lng=p.get("lng"),
             rating=p.get("rating"),
-            user_rating_count=p.get("userRatingCount"),
+            user_rating_count=p.get("user_rating_count"),
             photo_url=photo_url,
             types=p.get("types", []),
         ))
@@ -188,12 +179,26 @@ async def resolve_merchant(body: ResolveRequest, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(merchant)
 
-        # Enrich from Google Places (best effort)
+    # Always update name/location from the search result (authoritative source)
+    merchant.name = body.name
+    merchant.lat = body.lat
+    merchant.lng = body.lng
+    db.commit()
+
+    # Enrich from Google Places if missing photo/rating data (best effort)
+    needs_enrichment = not merchant.primary_photo_url and not merchant.photo_url
+    if needs_enrichment:
         try:
             from app.services.merchant_enrichment import enrich_from_google_places
             await enrich_from_google_places(db, merchant, body.place_id, force_refresh=True)
         except Exception as e:
             logger.warning("[MerchantFunnel] enrichment failed for %s: %s", merchant.id, e)
+            # Ensure session is usable after enrichment failure
+            try:
+                db.rollback()
+                db.refresh(merchant)
+            except Exception:
+                pass
 
     expires_at = int(time.time()) + (PREVIEW_TTL_DAYS * 86400)
     sig = sign_preview(merchant.id, expires_at)
@@ -286,7 +291,7 @@ async def get_preview(
         lng=merchant.lng,
         rating=merchant.rating,
         user_rating_count=merchant.user_rating_count,
-        photo_url=merchant.primary_photo_url or merchant.photo_url,
+        photo_url=merchant.primary_photo_url or merchant.photo_url or (merchant.photo_urls[0] if merchant.photo_urls else None),
         photo_urls=merchant.photo_urls or [],
         open_now=merchant.open_now,
         business_status=merchant.business_status,

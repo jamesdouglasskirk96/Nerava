@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { checkLocation } from '../services/arrival';
+import { usePageVisibility } from './usePageVisibility';
 
 interface PollingResult {
   arrived: boolean;
@@ -16,9 +17,14 @@ export function useArrivalLocationPolling(
 ): PollingResult {
   const [result, setResult] = useState<PollingResult>({ arrived: false });
   const intervalRef = useRef<number | null>(null);
+  const isVisible = usePageVisibility();
 
   useEffect(() => {
-    if (!sessionToken || !isActive) {
+    if (!sessionToken || !isActive || !isVisible) {
+      if (intervalRef.current) {
+        window.clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
       return;
     }
 
@@ -48,25 +54,17 @@ export function useArrivalLocationPolling(
       }
     };
 
-    // Poll immediately, then on interval
+    // Poll immediately on (re-)activation (covers foreground return), then on interval
     poll();
     intervalRef.current = window.setInterval(poll, intervalMs);
-
-    // Also poll on visibility change (app comes back to foreground)
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        poll();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       if (intervalRef.current) {
         window.clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
-      document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [sessionToken, isActive, intervalMs]);
+  }, [sessionToken, isActive, intervalMs, isVisible]);
 
   return result;
 }

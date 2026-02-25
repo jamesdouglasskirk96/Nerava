@@ -107,6 +107,12 @@ export const DRIVER_EVENTS = {
 
   // Exclusive Active View
   SHOW_HOST_CLICKED: 'driver.exclusive.show_host_clicked',
+
+  // Charging Sessions
+  CHARGING_SESSION_DETECTED: 'charging.session_detected',
+  CHARGING_SESSION_ENDED: 'charging.session_ended',
+  CHARGING_INCENTIVE_EARNED: 'charging.incentive_earned',
+  CHARGING_ACTIVITY_OPENED: 'charging.activity_opened',
 } as const
 
 export type DriverEventName = typeof DRIVER_EVENTS[keyof typeof DRIVER_EVENTS]

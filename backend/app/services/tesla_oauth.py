@@ -17,9 +17,9 @@ from app.models.tesla_connection import TeslaConnection
 
 logger = logging.getLogger(__name__)
 
-# Tesla OAuth endpoints
-TESLA_AUTH_URL = "https://auth.tesla.com/oauth2/v3/authorize"
-TESLA_TOKEN_URL = "https://auth.tesla.com/oauth2/v3/token"
+# Tesla OAuth endpoints (fleet-auth.tesla.com is the canonical OIDC provider)
+TESLA_AUTH_URL = "https://fleet-auth.tesla.com/oauth2/v3/authorize"
+TESLA_TOKEN_URL = "https://fleet-auth.tesla.com/oauth2/v3/token"
 TESLA_FLEET_API_URL = "https://fleet-api.prd.na.vn.cloud.tesla.com"
 
 # OAuth scopes for charging verification
@@ -41,31 +41,33 @@ class TeslaOAuthService:
         self.client_secret = settings.TESLA_CLIENT_SECRET
         self.redirect_uri = f"{settings.API_BASE_URL}/v1/auth/tesla/callback"
 
-    def get_authorization_url(self, state: str) -> str:
+    def get_authorization_url(self, state: str, redirect_uri: Optional[str] = None) -> str:
         """
         Generate Tesla OAuth authorization URL.
 
         Args:
             state: CSRF state token to verify callback
+            redirect_uri: Override redirect URI (e.g. for login vs connect flow)
 
         Returns:
             Authorization URL to redirect user to
         """
         params = {
             "client_id": self.client_id,
-            "redirect_uri": self.redirect_uri,
+            "redirect_uri": redirect_uri or self.redirect_uri,
             "response_type": "code",
             "scope": " ".join(TESLA_SCOPES),
             "state": state,
         }
         return f"{TESLA_AUTH_URL}?{urlencode(params)}"
 
-    async def exchange_code_for_tokens(self, code: str) -> Dict[str, Any]:
+    async def exchange_code_for_tokens(self, code: str, redirect_uri: Optional[str] = None) -> Dict[str, Any]:
         """
         Exchange authorization code for access and refresh tokens.
 
         Args:
             code: Authorization code from callback
+            redirect_uri: Override redirect URI (must match the one used in authorize)
 
         Returns:
             Token response with access_token, refresh_token, expires_in
@@ -78,7 +80,7 @@ class TeslaOAuthService:
             "client_id": self.client_id,
             "client_secret": self.client_secret,
             "code": code,
-            "redirect_uri": self.redirect_uri,
+            "redirect_uri": redirect_uri or self.redirect_uri,
         }
 
         async with httpx.AsyncClient(timeout=30.0) as client:

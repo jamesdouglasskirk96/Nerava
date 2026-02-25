@@ -61,12 +61,18 @@ test-results/
 *.pem
 *.cer
 *.csr
+*.keystore
+*.jks
 cookies.txt
 .env
 .env.*
 !.env.example
 *.backup
 *.bak
+
+# === Android signing & Firebase ===
+keystore.properties
+google-services.json
 
 # === Backup directory (local only) ===
 backups/

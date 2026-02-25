@@ -3,7 +3,7 @@
     "apps": [],
     "details": [
       {
-        "appID": "XQV9A76Z96.EVcharging.Nerava",
+        "appID": "XQV9A76Z96.com.nerava.driver",
         "paths": [
           "/merchant/*",
           "/session/*",
@@ -17,7 +17,7 @@
   },
   "webcredentials": {
     "apps": [
-      "XQV9A76Z96.EVcharging.Nerava"
+      "XQV9A76Z96.com.nerava.driver"
     ]
   }
 }

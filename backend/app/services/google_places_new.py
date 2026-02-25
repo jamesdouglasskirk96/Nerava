@@ -379,7 +379,7 @@ PLACE_DETAILS_FIELD_MASK = (
 
 SEARCH_TEXT_FIELD_MASK = (
     "places.id,places.displayName,places.location,places.types,"
-    "places.photos,places.rating,places.userRatingCount"
+    "places.photos,places.rating,places.userRatingCount,places.formattedAddress"
 )
 
 
@@ -532,6 +532,7 @@ async def search_text(
             merchant_data = {
                 "place_id": place_id,
                 "name": place.get("displayName", {}).get("text", "") if isinstance(place.get("displayName"), dict) else str(place.get("displayName", "")),
+                "address": place.get("formattedAddress"),
                 "lat": place_lat,
                 "lng": place_lng,
                 "types": place.get("types", []),

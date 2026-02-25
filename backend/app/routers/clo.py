@@ -10,7 +10,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..dependencies.auth import get_current_user
+from ..dependencies.domain import get_current_user
 from ..services.spend_verification_service import SpendVerificationService
 
 router = APIRouter(prefix="/v1/clo", tags=["clo"])

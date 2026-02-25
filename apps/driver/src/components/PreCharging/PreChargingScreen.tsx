@@ -76,9 +76,9 @@ export function PreChargingScreen() {
     }] : []
   }), [primaryMerchant])
 
-  const handleChargerClick = (chargerId: string) => {
-    // TODO: Wire to backend navigation
-    console.log('Navigate to charger:', chargerId)
+  const handleChargerClick = (_chargerId: string) => {
+    const destination = encodeURIComponent(canyonRidgeCharger.name)
+    window.open(`https://www.google.com/maps/search/?api=1&query=${destination}`, '_blank')
   }
 
   const handleToggleToCharging = () => {

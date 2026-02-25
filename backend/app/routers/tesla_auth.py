@@ -1,19 +1,20 @@
 """
 Tesla OAuth and EV Verification Router.
 
-Handles Tesla account connection and charging verification for EV rewards.
+Handles Tesla account connection, Tesla-based login, and charging verification for EV rewards.
 """
 import secrets
+import uuid
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import User
+from app.models import User, UserPreferences
 from app.models.tesla_connection import TeslaConnection, EVVerificationCode
 from app.models.domain import DomainMerchant
 from app.models.while_you_charge import Merchant
@@ -23,6 +24,9 @@ from app.services.tesla_oauth import (
     get_valid_access_token,
     generate_ev_code,
 )
+from app.services.tesla_auth_service import verify_tesla_id_token, fetch_tesla_user_profile
+from app.core.security import create_access_token
+from app.services.refresh_token_service import RefreshTokenService
 from app.services.geo import haversine_m
 from app.core.config import settings
 
@@ -50,6 +54,30 @@ class TeslaConnectResponse(BaseModel):
     state: str
 
 
+class TeslaLoginRequest(BaseModel):
+    code: str
+    state: str
+
+
+class VehicleInfo(BaseModel):
+    id: str
+    vin: Optional[str] = None
+    display_name: Optional[str] = None
+    model: Optional[str] = None
+
+
+class TeslaLoginResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    user: dict
+    vehicles: List[VehicleInfo] = []
+
+
+class SelectVehicleRequest(BaseModel):
+    vehicle_id: str
+
+
 class VerifyChargingRequest(BaseModel):
     lat: Optional[float] = None
     lng: Optional[float] = None
@@ -73,7 +101,243 @@ class EVCodeResponse(BaseModel):
     status: str
 
 
-# ==================== Endpoints ====================
+# ==================== Tesla Login Endpoints ====================
+
+@router.get("/login-url")
+async def get_tesla_login_url():
+    """
+    Start Tesla OAuth login flow (no auth required).
+
+    Returns authorization URL to redirect the user to Tesla sign-in.
+    """
+    oauth_service = get_tesla_oauth_service()
+
+    state = secrets.token_urlsafe(32)
+    _oauth_states[state] = {
+        "purpose": "login",
+        "created_at": datetime.utcnow(),
+    }
+
+    login_redirect_uri = f"{settings.API_BASE_URL}/v1/auth/tesla/login-callback"
+    auth_url = oauth_service.get_authorization_url(state, redirect_uri=login_redirect_uri)
+
+    return {"authorization_url": auth_url, "state": state}
+
+
+@router.get("/login-callback")
+async def tesla_login_callback(
+    code: str = Query(...),
+    state: str = Query(...),
+):
+    """
+    Handle Tesla OAuth redirect for login flow.
+
+    Redirects the browser back to the driver app with code and state
+    so the frontend can complete the login via POST /auth/tesla/login.
+    """
+    app_url = settings.DRIVER_APP_URL or "https://app.nerava.network"
+    return RedirectResponse(
+        url=f"{app_url}/tesla-callback?code={code}&state={state}"
+    )
+
+
+@router.post("/login", response_model=TeslaLoginResponse)
+async def tesla_login(
+    payload: TeslaLoginRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Complete Tesla login: exchange code, verify id_token, find-or-create user.
+
+    No auth required — this IS the login endpoint.
+    """
+    # Validate state
+    state_data = _oauth_states.pop(payload.state, None)
+    if not state_data:
+        raise HTTPException(status_code=400, detail="Invalid or expired state")
+
+    if state_data.get("purpose") != "login":
+        raise HTTPException(status_code=400, detail="State not valid for login flow")
+
+    if datetime.utcnow() - state_data["created_at"] > timedelta(minutes=10):
+        raise HTTPException(status_code=400, detail="State expired")
+
+    oauth_service = get_tesla_oauth_service()
+    login_redirect_uri = f"{settings.API_BASE_URL}/v1/auth/tesla/login-callback"
+
+    try:
+        # Exchange code for tokens
+        token_response = await oauth_service.exchange_code_for_tokens(
+            payload.code, redirect_uri=login_redirect_uri
+        )
+
+        tesla_access_token = token_response["access_token"]
+        tesla_refresh_token = token_response["refresh_token"]
+        expires_in = token_response.get("expires_in", 3600)
+
+        # Verify id_token to get Tesla sub
+        id_token_str = token_response.get("id_token")
+        if not id_token_str:
+            raise HTTPException(status_code=400, detail="Tesla did not return an id_token")
+
+        tesla_claims = verify_tesla_id_token(id_token_str)
+        tesla_sub = tesla_claims["sub"]
+
+        # Best-effort fetch email/name from userinfo
+        profile = await fetch_tesla_user_profile(tesla_access_token)
+
+        # Fetch vehicles
+        vehicles_raw = []
+        try:
+            vehicles_raw = await oauth_service.get_vehicles(tesla_access_token)
+        except Exception as ve:
+            logger.warning(f"Could not fetch Tesla vehicles during login: {ve}")
+
+        # Find or create user
+        user = db.query(User).filter(
+            User.auth_provider == "tesla",
+            User.provider_sub == tesla_sub,
+        ).first()
+
+        if not user:
+            user = User(
+                public_id=str(uuid.uuid4()),
+                email=profile.get("email"),
+                auth_provider="tesla",
+                provider_sub=tesla_sub,
+                is_active=True,
+            )
+            db.add(user)
+            db.flush()
+            db.add(UserPreferences(user_id=user.id))
+        else:
+            # Update email if we got one and user doesn't have one
+            if profile.get("email") and not user.email:
+                user.email = profile["email"]
+
+        # Store / update TeslaConnection
+        existing_conn = db.query(TeslaConnection).filter(
+            TeslaConnection.user_id == user.id,
+            TeslaConnection.is_active == True,
+        ).first()
+
+        if existing_conn:
+            existing_conn.access_token = tesla_access_token
+            existing_conn.refresh_token = tesla_refresh_token
+            existing_conn.token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+            existing_conn.tesla_user_id = tesla_sub
+            existing_conn.updated_at = datetime.utcnow()
+        else:
+            conn = TeslaConnection(
+                user_id=user.id,
+                access_token=tesla_access_token,
+                refresh_token=tesla_refresh_token,
+                token_expires_at=datetime.utcnow() + timedelta(seconds=expires_in),
+                tesla_user_id=tesla_sub,
+            )
+            db.add(conn)
+
+        # Issue Nerava JWT + refresh token
+        nerava_access_token = create_access_token(user.public_id, auth_provider="tesla")
+        refresh_token_plain, _rt_model = RefreshTokenService.create_refresh_token(db, user)
+
+        db.commit()
+        db.refresh(user)
+
+        # Build vehicle list for response
+        vehicles_out = [
+            VehicleInfo(
+                id=str(v.get("id")),
+                vin=v.get("vin"),
+                display_name=v.get("display_name"),
+                model=v.get("vehicle_config", {}).get("car_type"),
+            )
+            for v in vehicles_raw
+        ]
+
+        logger.info(f"Tesla login successful for user {user.id} (sub={tesla_sub})")
+
+        return TeslaLoginResponse(
+            access_token=nerava_access_token,
+            refresh_token=refresh_token_plain,
+            token_type="bearer",
+            user={
+                "public_id": user.public_id,
+                "auth_provider": user.auth_provider,
+                "email": user.email,
+                "phone": user.phone if hasattr(user, "phone") else None,
+            },
+            vehicles=vehicles_out,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Tesla login failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Tesla login failed: {str(e)}",
+        )
+
+
+@router.post("/select-vehicle")
+async def select_vehicle(
+    payload: SelectVehicleRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Select a vehicle after Tesla login. Updates the TeslaConnection with vehicle details.
+    """
+    connection = db.query(TeslaConnection).filter(
+        TeslaConnection.user_id == current_user.id,
+        TeslaConnection.is_active == True,
+    ).first()
+
+    if not connection:
+        raise HTTPException(status_code=400, detail="No active Tesla connection")
+
+    oauth_service = get_tesla_oauth_service()
+    access_token = await get_valid_access_token(db, connection, oauth_service)
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Tesla session expired. Please log in again.")
+
+    try:
+        vehicles = await oauth_service.get_vehicles(access_token)
+    except Exception as e:
+        logger.error(f"Failed to fetch vehicles for select: {e}")
+        raise HTTPException(status_code=502, detail="Could not reach Tesla API")
+
+    selected = None
+    for v in vehicles:
+        if str(v.get("id")) == payload.vehicle_id:
+            selected = v
+            break
+
+    if not selected:
+        raise HTTPException(status_code=404, detail="Vehicle not found on your Tesla account")
+
+    connection.vehicle_id = str(selected.get("id"))
+    connection.vin = selected.get("vin")
+    connection.vehicle_name = selected.get("display_name")
+    connection.vehicle_model = selected.get("vehicle_config", {}).get("car_type", "Tesla")
+    connection.updated_at = datetime.utcnow()
+    db.commit()
+
+    logger.info(f"User {current_user.id} selected vehicle {connection.vin}")
+
+    return {
+        "success": True,
+        "vehicle": {
+            "id": connection.vehicle_id,
+            "vin": connection.vin,
+            "display_name": connection.vehicle_name,
+            "model": connection.vehicle_model,
+        },
+    }
+
+
+# ==================== Existing Endpoints ====================
 
 @router.get("/status", response_model=TeslaConnectionStatus)
 async def get_tesla_connection_status(

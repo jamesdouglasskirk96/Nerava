@@ -105,6 +105,9 @@ class Merchant(Base):
     ordering_app_scheme = Column(String(100), nullable=True)  # e.g., "toastapp://"
     ordering_instructions = Column(Text, nullable=True)  # "Order at counter"
 
+    # Corporate chain flag (e.g., Starbucks, McDonald's) — still shown in app, may not have incentives
+    is_corporate = Column(Boolean, default=False, nullable=False, server_default="false", index=True)
+
     # Category and charger proximity (cached for filtering)
     primary_category = Column(String(32), nullable=True, index=True)  # "coffee", "food", or "other"
     nearest_charger_id = Column(String(64), nullable=True)  # FK to charger

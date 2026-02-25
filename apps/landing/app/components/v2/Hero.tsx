@@ -1,5 +1,5 @@
 import { Button } from '../Button'
-import { getDriverCTAHref, getMerchantFindHref, getChargerOwnerCTAHref } from './ctaLinks'
+import { getMerchantFindHref, getChargerOwnerCTAHref } from './ctaLinks'
 
 export default function Hero() {
   return (
@@ -16,20 +16,13 @@ export default function Hero() {
             Nerava connects EV drivers with walkable businesses during active charging sessions.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
-            <Button variant="primary" href={getDriverCTAHref()}>
-              Open Nerava
-            </Button>
             <Button variant="primary" href={getMerchantFindHref()}>
-              See how this works
+              See how it works
+            </Button>
+            <Button variant="secondary" href={getChargerOwnerCTAHref()}>
+              I'm a Charger Owner
             </Button>
           </div>
-          <Button 
-            variant="text" 
-            href={getChargerOwnerCTAHref()}
-            className="text-sm"
-          >
-            I'm a Charger Owner
-          </Button>
         </div>
       </div>
     </section>

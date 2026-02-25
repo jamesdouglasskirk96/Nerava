@@ -141,8 +141,8 @@ class Settings(BaseModel):
     MAX_PERK_UNLOCKS_PER_SESSION: int = int(os.getenv("MAX_PERK_UNLOCKS_PER_SESSION", "1"))  # Max unlocks per intent session
     PERK_COOLDOWN_MINUTES_PER_MERCHANT: int = int(os.getenv("PERK_COOLDOWN_MINUTES_PER_MERCHANT", "60"))  # Cooldown in minutes per merchant
     
-    # Platform fee configuration (in basis points, 1500 = 15%)
-    PLATFORM_FEE_BPS: int = int(os.getenv("PLATFORM_FEE_BPS", "1500"))
+    # Platform fee configuration (in basis points, 2000 = 20%)
+    PLATFORM_FEE_BPS: int = int(os.getenv("PLATFORM_FEE_BPS", "2000"))
     
     # Auth Provider Configuration
     GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
@@ -160,7 +160,7 @@ class Settings(BaseModel):
     TWILIO_AUTH_TOKEN: str = os.getenv("TWILIO_AUTH_TOKEN", "")
     TWILIO_VERIFY_SERVICE_SID: str = os.getenv("TWILIO_VERIFY_SERVICE_SID", "")
     OTP_FROM_NUMBER: str = os.getenv("OTP_FROM_NUMBER", "")
-    OTP_PROVIDER: str = os.getenv("OTP_PROVIDER", "stub")  # twilio_verify, twilio_sms, stub
+    OTP_PROVIDER: str = os.getenv("OTP_PROVIDER", "twilio_verify")  # twilio_verify, twilio_sms, stub
     OTP_DEV_ALLOWLIST: str = os.getenv("OTP_DEV_ALLOWLIST", "")  # Comma-separated phone numbers
     TWILIO_TIMEOUT_SECONDS: int = int(os.getenv("TWILIO_TIMEOUT_SECONDS", "30"))  # Timeout for Twilio API calls
     

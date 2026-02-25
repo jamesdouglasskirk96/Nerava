@@ -55,7 +55,8 @@ class NovaService:
         session_id: Optional[str] = None,
         event_id: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
-        idempotency_key: Optional[str] = None
+        idempotency_key: Optional[str] = None,
+        auto_commit: bool = True,
     ) -> NovaTransaction:
         """
         Grant Nova to a driver.
@@ -152,8 +153,11 @@ class NovaService:
             if hasattr(NovaTransaction, 'payload_hash'):
                 transaction.payload_hash = payload_hash
             db.add(transaction)
-            db.commit()
-            db.refresh(transaction)
+            if auto_commit:
+                db.commit()
+                db.refresh(transaction)
+            else:
+                db.flush()
         except OperationalError as e:
             if "no such column" in str(e).lower() and "payload_hash" in str(e).lower():
                 db.rollback()
@@ -163,10 +167,11 @@ class NovaService:
                     detail="Database schema is out of date. Run: alembic upgrade head (and ensure you're pointing at the same DB file)."
                 )
             raise
-        
+
         # Mark wallet activity for pass refresh
         mark_wallet_activity(db, driver_id)
-        db.commit()
+        if auto_commit:
+            db.commit()
         
         logger.info(f"Granted {amount} Nova to driver {driver_id} (type: {type}, session: {session_id})")
         

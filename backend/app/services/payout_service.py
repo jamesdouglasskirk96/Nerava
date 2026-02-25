@@ -163,18 +163,20 @@ class PayoutService:
 
         # Production: Create real Stripe Express account
         try:
-            account = stripe.Account.create(
-                type="express",
-                country="US",
-                email=email,
-                capabilities={
+            account_params = {
+                "type": "express",
+                "country": "US",
+                "capabilities": {
                     "transfers": {"requested": True},
                 },
-                metadata={
+                "metadata": {
                     "driver_id": str(driver_id),
                     "platform": "nerava",
                 },
-            )
+            }
+            if email:
+                account_params["email"] = email
+            account = stripe.Account.create(**account_params)
             wallet.stripe_account_id = account.id
             wallet.stripe_account_status = "restricted"
             wallet.updated_at = datetime.utcnow()
@@ -412,9 +414,9 @@ class PayoutService:
         event_type = event["type"]
         data = event["data"]["object"]
 
-        if event_type == "transfer.paid":
+        if event_type in ("transfer.paid", "payout.paid"):
             return PayoutService._handle_transfer_paid(db, data)
-        elif event_type == "transfer.failed":
+        elif event_type in ("transfer.failed", "payout.failed"):
             return PayoutService._handle_transfer_failed(db, data)
         elif event_type == "account.updated":
             return PayoutService._handle_account_updated(db, data)

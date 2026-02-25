@@ -32,20 +32,20 @@ router = APIRouter(prefix="/v1/bootstrap", tags=["bootstrap"])
 
 def verify_bootstrap_key(x_bootstrap_key: Optional[str] = Header(None, alias="X-Bootstrap-Key")) -> str:
     """Verify bootstrap key from header"""
-    # Require BOOTSTRAP_KEY env var in all environments (no dev default)
-    bootstrap_key = os.getenv("BOOTSTRAP_KEY")
+    # Accept BOOTSTRAP_KEY or fall back to JWT_SECRET for environments without BOOTSTRAP_KEY
+    bootstrap_key = os.getenv("BOOTSTRAP_KEY") or os.getenv("JWT_SECRET")
     if not bootstrap_key:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="BOOTSTRAP_KEY must be configured"
+            detail="BOOTSTRAP_KEY or JWT_SECRET must be configured"
         )
-    
+
     if not x_bootstrap_key or x_bootstrap_key != bootstrap_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing X-Bootstrap-Key header"
         )
-    
+
     return x_bootstrap_key
 
 
@@ -807,4 +807,66 @@ async def get_bootstrap_schema():
             "magic_link_sent": True
         }
     }
+
+
+@router.post("/create-admin")
+def bootstrap_create_admin(
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_bootstrap_key),
+):
+    """
+    Create or update admin user. Protected by BOOTSTRAP_KEY.
+    Uses ADMIN_EMAIL / ADMIN_PASSWORD env vars.
+    """
+    from app.core.security import hash_password
+
+    email = os.getenv("ADMIN_EMAIL", "james@nerava.network")
+    password = os.getenv("ADMIN_PASSWORD", "BIGAppleNerava")
+
+    user = db.query(User).filter(User.email == email).first()
+    if user:
+        user.password_hash = hash_password(password)
+        if "admin" not in (user.role_flags or ""):
+            user.role_flags = (user.role_flags or "") + ",admin"
+        db.commit()
+        return {"ok": True, "action": "updated", "email": email, "user_id": user.id}
+
+    user = User(
+        email=email,
+        password_hash=hash_password(password),
+        role_flags="admin",
+        auth_provider="email",
+    )
+    db.add(user)
+    db.commit()
+    return {"ok": True, "action": "created", "email": email, "user_id": user.id}
+
+
+@router.post("/trigger-seed")
+async def bootstrap_trigger_seed(
+    seed_type: str = "chargers",
+    states: Optional[str] = None,
+    max_cells: Optional[int] = None,
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_bootstrap_key),
+):
+    """
+    Trigger charger/merchant seed directly (runs synchronously).
+    Protected by BOOTSTRAP_KEY.
+
+    seed_type: 'chargers' or 'merchants'
+    states: comma-separated state codes (optional, for chargers)
+    max_cells: max grid cells (optional, for merchants)
+    """
+    if seed_type == "chargers":
+        from scripts.seed_chargers_bulk import seed_chargers
+        state_list = states.split(",") if states else None
+        result = await seed_chargers(db, states=state_list)
+        return {"ok": True, "type": "chargers", "result": result}
+    elif seed_type == "merchants":
+        from scripts.seed_merchants_free import seed_merchants
+        result = await seed_merchants(db, max_cells=max_cells)
+        return {"ok": True, "type": "merchants", "result": result}
+    else:
+        raise HTTPException(status_code=400, detail="seed_type must be 'chargers' or 'merchants'")
 

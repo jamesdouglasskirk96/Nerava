@@ -1,4 +1,4 @@
-import { LayoutDashboard, Store, MapPin, Activity, Star, ShieldAlert, FileText, Rocket } from 'lucide-react';
+import { LayoutDashboard, Store, MapPin, Activity, Star, ShieldAlert, FileText, Rocket, Database } from 'lucide-react';
 
 interface SidebarProps {
   activeScreen: string;
@@ -15,6 +15,7 @@ const navItems = [
   { id: 'overrides', label: 'Overrides', icon: ShieldAlert },
   { id: 'deployments', label: 'Deployments', icon: Rocket },
   { id: 'logs', label: 'Logs', icon: FileText },
+  { id: 'data-seeding', label: 'Data Seeding', icon: Database },
 ];
 
 export function Sidebar({ activeScreen, setActiveScreen, onLogout }: SidebarProps) {

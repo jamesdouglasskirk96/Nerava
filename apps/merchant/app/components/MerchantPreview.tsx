@@ -5,7 +5,7 @@ import { capture } from '../analytics'
 import { MERCHANT_EVENTS } from '../analytics/events'
 import { LoomModal } from './LoomModal'
 
-const CALENDLY_URL = import.meta.env.VITE_CALENDLY_URL || 'https://calendly.com/nerava'
+const CALENDLY_URL = import.meta.env.VITE_CALENDLY_URL || 'https://calendly.com/james-nerava/30min'
 
 interface NearestCharger {
   name: string
@@ -81,7 +81,7 @@ export function MerchantPreview() {
     if (!data) return
     capture(MERCHANT_EVENTS.FUNNEL_CTA_CLAIM, { merchant_id: data.merchant_id })
     localStorage.setItem('merchant_id', data.merchant_id)
-    navigate('/claim')
+    navigate(`/claim/${data.merchant_id}`)
   }
 
   function handleSchedule() {

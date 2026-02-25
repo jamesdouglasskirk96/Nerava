@@ -20,7 +20,7 @@ class WithdrawRequest(BaseModel):
 
 
 class CreateAccountRequest(BaseModel):
-    email: str
+    email: str = ""
 
 
 class AccountLinkRequest(BaseModel):

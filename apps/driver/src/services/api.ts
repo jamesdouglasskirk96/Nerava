@@ -461,10 +461,12 @@ export function useActiveExclusive() {
     queryKey: ['active-exclusive'],
     queryFn: getActiveExclusive,
     retry: false, // Don't retry on error (401 is expected for anonymous users)
+    refetchOnWindowFocus: true, // Refetch when app returns from background
     refetchInterval: () => {
-      // Only poll if we have a token (check on each interval)
+      // Only poll if we have a token AND page is visible
       const hasToken = !!localStorage.getItem('access_token')
-      return hasToken ? 30000 : false
+      const isVisible = !document.hidden
+      return hasToken && isVisible ? 30000 : false
     },
     // Note: onError was removed in React Query v5, errors are handled via the error state
   })
@@ -475,7 +477,11 @@ export function useLocationCheck(lat: number | null, lng: number | null) {
     queryKey: ['location-check', lat, lng],
     queryFn: () => lat !== null && lng !== null ? checkLocation(lat, lng) : null,
     enabled: lat !== null && lng !== null,
-    refetchInterval: 10000, // Check every 10 seconds
+    refetchOnWindowFocus: true, // Refetch when app returns from background
+    refetchInterval: () => {
+      // Only poll when page is visible
+      return document.hidden ? false : 10000
+    },
   })
 }
 
@@ -590,6 +596,199 @@ export function useVoteAmenity() {
   return useMutation({
     mutationFn: ({ merchantId, amenity, voteType }: { merchantId: string; amenity: 'bathroom' | 'wifi'; voteType: 'up' | 'down' }) =>
       voteAmenity(merchantId, amenity, voteType),
+  })
+}
+
+// ===================== Charging Sessions =====================
+
+export interface ChargingSessionIncentive {
+  grant_id: string
+  campaign_id: string
+  amount_cents: number
+  status: string
+  granted_at: string | null
+}
+
+export interface ChargingSession {
+  id: string
+  session_start: string | null
+  session_end: string | null
+  duration_minutes: number | null
+  charger_id: string | null
+  charger_network: string | null
+  connector_type: string | null
+  power_kw: number | null
+  kwh_delivered: number | null
+  verified: boolean
+  lat: number | null
+  lng: number | null
+  battery_start_pct: number | null
+  battery_end_pct: number | null
+  quality_score: number | null
+  ended_reason: string | null
+  incentive: ChargingSessionIncentive | null
+}
+
+export interface ChargingSessionsResponse {
+  sessions: ChargingSession[]
+  count: number
+}
+
+export interface ActiveSessionResponse {
+  session: ChargingSession | null
+  active: boolean
+}
+
+export interface PollSessionResponse {
+  session_active: boolean
+  session_id?: string
+  duration_minutes?: number
+  kwh_delivered?: number | null
+  cached?: boolean
+  session_ended?: boolean
+  incentive_granted?: boolean
+  incentive_amount_cents?: number
+  error?: string
+}
+
+export interface TeslaConnectionStatus {
+  connected: boolean
+  vehicle_name?: string | null
+  vehicle_model?: string | null
+  vin?: string | null
+}
+
+export async function fetchChargingSessions(limit = 50, offset = 0): Promise<ChargingSessionsResponse> {
+  return fetchAPI<ChargingSessionsResponse>(`/v1/charging-sessions/?limit=${limit}&offset=${offset}`)
+}
+
+export async function fetchActiveSession(): Promise<ActiveSessionResponse> {
+  return fetchAPI<ActiveSessionResponse>('/v1/charging-sessions/active')
+}
+
+export async function pollChargingSession(): Promise<PollSessionResponse> {
+  return fetchAPI<PollSessionResponse>('/v1/charging-sessions/poll', { method: 'POST' })
+}
+
+export async function fetchTeslaStatus(): Promise<TeslaConnectionStatus> {
+  return fetchAPI<TeslaConnectionStatus>('/v1/auth/tesla/status')
+}
+
+export function useChargingSessions(limit = 50, offset = 0) {
+  return useQuery({
+    queryKey: ['charging-sessions', limit, offset],
+    queryFn: () => fetchChargingSessions(limit, offset),
+    enabled: !!localStorage.getItem('access_token'),
+    staleTime: 30000,
+    refetchOnWindowFocus: true,
+  })
+}
+
+export function useActiveChargingSession() {
+  return useQuery({
+    queryKey: ['charging-sessions', 'active'],
+    queryFn: fetchActiveSession,
+    enabled: !!localStorage.getItem('access_token'),
+    refetchInterval: 60000,
+    refetchOnWindowFocus: true,
+  })
+}
+
+export function useTeslaStatus() {
+  return useQuery({
+    queryKey: ['tesla-status'],
+    queryFn: fetchTeslaStatus,
+    enabled: !!localStorage.getItem('access_token'),
+    staleTime: 300000, // 5 min
+    retry: false,
+  })
+}
+
+// ===================== Wallet & Payouts =====================
+
+export interface WalletBalance {
+  available_cents: number
+  pending_cents: number
+  total_earned_cents: number
+  total_withdrawn_cents: number
+  can_withdraw: boolean
+  minimum_withdrawal_cents: number
+  stripe_onboarding_complete: boolean
+}
+
+export interface StripeAccountResult {
+  stripe_account_id: string
+  status: string
+  onboarding_complete: boolean
+}
+
+export interface StripeAccountLinkResult {
+  url: string
+  expires_at: string
+}
+
+export interface WithdrawResult {
+  payout_id: string
+  status: string
+  amount_cents: number
+  stripe_transfer_id?: string
+  mock?: boolean
+}
+
+export interface PayoutHistoryEntry {
+  id: string
+  amount_cents: number
+  status: string
+  created_at: string
+  paid_at: string | null
+  failure_reason: string | null
+}
+
+export async function fetchWalletBalance(): Promise<WalletBalance> {
+  return fetchAPI<WalletBalance>('/v1/wallet/balance')
+}
+
+export async function createStripeAccount(email: string): Promise<StripeAccountResult> {
+  return fetchAPI<StripeAccountResult>('/v1/wallet/stripe/account', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  })
+}
+
+export async function createStripeAccountLink(returnUrl: string, refreshUrl: string): Promise<StripeAccountLinkResult> {
+  return fetchAPI<StripeAccountLinkResult>('/v1/wallet/stripe/account-link', {
+    method: 'POST',
+    body: JSON.stringify({ return_url: returnUrl, refresh_url: refreshUrl }),
+  })
+}
+
+export async function requestWithdrawal(amountCents: number): Promise<WithdrawResult> {
+  return fetchAPI<WithdrawResult>('/v1/wallet/withdraw', {
+    method: 'POST',
+    body: JSON.stringify({ amount_cents: amountCents }),
+  })
+}
+
+export async function fetchPayoutHistory(limit = 20): Promise<{ payouts: PayoutHistoryEntry[] }> {
+  return fetchAPI<{ payouts: PayoutHistoryEntry[] }>(`/v1/wallet/history?limit=${limit}`)
+}
+
+export function useWalletBalance() {
+  return useQuery({
+    queryKey: ['wallet'],
+    queryFn: fetchWalletBalance,
+    enabled: !!localStorage.getItem('access_token'),
+    staleTime: 15000,
+    refetchOnWindowFocus: true,
+  })
+}
+
+export function usePayoutHistory(limit = 20) {
+  return useQuery({
+    queryKey: ['wallet', 'payouts', limit],
+    queryFn: () => fetchPayoutHistory(limit),
+    enabled: !!localStorage.getItem('access_token'),
+    staleTime: 30000,
   })
 }
 

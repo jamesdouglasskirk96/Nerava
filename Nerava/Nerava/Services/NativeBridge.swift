@@ -1,4 +1,5 @@
 import WebKit
+import UIKit
 import Foundation
 import CoreLocation
 import os
@@ -166,6 +167,10 @@ final class NativeBridge: NSObject {
 
                 getAuthToken: function() {
                     return this.request('GET_AUTH_TOKEN', {});
+                },
+
+                openExternalUrl: function(url) {
+                    this.postMessage('OPEN_EXTERNAL_URL', { url: url });
                 }
             };
 
@@ -337,6 +342,13 @@ extension NativeBridge: WKScriptMessageHandler {
             guard let requestId = requestId else { return }
             let token = KeychainService.shared.getAccessToken()
             sendToWeb(.authTokenResponse(requestId: requestId, token: token))
+
+        case "OPEN_EXTERNAL_URL":
+            guard let urlString = payload["url"] as? String,
+                  let url = URL(string: urlString) else { return }
+            DispatchQueue.main.async {
+                UIApplication.shared.open(url, options: [:], completionHandler: nil)
+            }
 
         default:
             Log.bridge.warning("Unknown action: \(actionStr)")

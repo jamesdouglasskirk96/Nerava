@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Search, Filter, Download } from 'lucide-react';
-import { getAdminLogs, type AuditLog } from '../services/api';
+import { getAuditLogs, type AuditLog } from '../services/api';
 
 export function Logs() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -22,7 +22,7 @@ export function Logs() {
     try {
       const type = filterType === 'all' ? undefined : filterType;
       const search = searchTerm || undefined;
-      const response = await getAdminLogs(limit, offset, type, search);
+      const response = await getAuditLogs(limit, offset, type, search);
       setLogs(response.logs);
       setTotal(response.total);
     } catch (err: any) {

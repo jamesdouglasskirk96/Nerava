@@ -1,13 +1,19 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { BrowserRouter, MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MerchantDetailsScreen } from '../../src/components/MerchantDetails/MerchantDetailsScreen'
-import { MerchantDetailsResponse } from '../../src/types'
 
 // Mock fetch
 global.fetch = vi.fn()
+
+// Mock geolocation — the component uses getCurrentPosition in activation flows
+const mockGeolocation = {
+  getCurrentPosition: vi.fn(),
+  watchPosition: vi.fn().mockReturnValue(1),
+  clearWatch: vi.fn(),
+}
 
 describe('MerchantDetailsScreen', () => {
   let queryClient: QueryClient
@@ -20,13 +26,33 @@ describe('MerchantDetailsScreen', () => {
       },
     })
     vi.clearAllMocks()
+
+    // Simulate authenticated user
+    localStorage.setItem('access_token', 'test-token')
+
+    // Mock geolocation — resolve immediately with test coordinates
+    // @ts-ignore
+    global.navigator.geolocation = mockGeolocation
+    mockGeolocation.getCurrentPosition.mockImplementation((success) => {
+      success({
+        coords: {
+          latitude: 30.2672,
+          longitude: -97.7431,
+          accuracy: 50,
+        },
+      })
+    })
   })
 
-  it('renders merchant details and Add to Wallet triggers modal on success', async () => {
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  it('renders merchant details and Activate Exclusive triggers modal on success', async () => {
     const user = userEvent.setup()
 
-    // Mock merchant details response
-    const mockMerchantDetails: MerchantDetailsResponse = {
+    // Mock merchant details response (matches MerchantDetailsResponseSchema)
+    const mockMerchantDetails = {
       merchant: {
         id: 'mock_asadas_grill',
         name: 'Asadas Grill',
@@ -43,7 +69,7 @@ describe('MerchantDetailsScreen', () => {
       },
       perk: {
         title: 'Happy Hour',
-        badge: 'Happy Hour ⭐️',
+        badge: 'Happy Hour',
         description: 'Show your pass to access Happy Hour.',
       },
       wallet: {
@@ -56,60 +82,76 @@ describe('MerchantDetailsScreen', () => {
       },
     }
 
-    // Mock wallet activate response
-    const mockWalletActivate = {
+    // Mock exclusive activation response
+    const mockActivateResponse = {
       status: 'ok',
-      wallet_state: {
-        state: 'ACTIVE',
+      exclusive_session: {
+        id: 'exc-123',
         merchant_id: 'mock_asadas_grill',
+        charger_id: 'canyon_ridge_tesla',
         expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-        active_copy: "This pass is active while you're charging.",
+        activated_at: new Date().toISOString(),
+        remaining_seconds: 3600,
       },
     }
 
-    // @ts-ignore
+    // @ts-ignore — first call returns merchant details, second returns activation
     global.fetch
       .mockResolvedValueOnce({
         ok: true,
+        status: 200,
         json: async () => mockMerchantDetails,
       })
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => mockWalletActivate,
+        status: 200,
+        json: async () => mockActivateResponse,
       })
 
     render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={['/m/mock_asadas_grill?session_id=test-session']}>
-          <MerchantDetailsScreen />
+          <Routes>
+            <Route path="/m/:merchantId" element={<MerchantDetailsScreen />} />
+          </Routes>
         </MemoryRouter>
       </QueryClientProvider>
     )
 
     // Wait for merchant details to load
-    await waitFor(() => {
-      expect(screen.getByText('Asadas Grill')).toBeInTheDocument()
-      expect(screen.getByText('Restaurant • Food')).toBeInTheDocument()
-    })
+    await waitFor(
+      () => {
+        expect(screen.getByText('Asadas Grill')).toBeInTheDocument()
+      },
+      { timeout: 3000 },
+    )
 
-    // Click Add to Wallet button
-    const addButton = screen.getByRole('button', { name: /Add to Wallet/i })
-    await user.click(addButton)
+    expect(screen.getByText('Restaurant • Food')).toBeInTheDocument()
 
-    // Wait for success modal
-    await waitFor(() => {
-      expect(screen.getByText('Added to Wallet')).toBeInTheDocument()
-      expect(screen.getByText(/This pass is active while you're charging/i)).toBeInTheDocument()
-    })
+    // Click Activate Exclusive button
+    const activateButton = screen.getByRole('button', { name: /Activate Exclusive/i })
+    await user.click(activateButton)
 
-    // Click Done button
-    const doneButton = screen.getByRole('button', { name: /Done/i })
-    await user.click(doneButton)
+    // Wait for success modal — ExclusiveActivatedModal shows "Exclusive Activated"
+    await waitFor(
+      () => {
+        expect(screen.getByText('Exclusive Activated')).toBeInTheDocument()
+      },
+      { timeout: 3000 },
+    )
+
+    expect(screen.getByText(/Active while you're charging/i)).toBeInTheDocument()
+
+    // Click "Start Walking" button
+    const startWalkingButton = screen.getByRole('button', { name: /Start Walking/i })
+    await user.click(startWalkingButton)
 
     // Modal should be closed
-    await waitFor(() => {
-      expect(screen.queryByText('Added to Wallet')).not.toBeInTheDocument()
-    })
+    await waitFor(
+      () => {
+        expect(screen.queryByText('Exclusive Activated')).not.toBeInTheDocument()
+      },
+      { timeout: 3000 },
+    )
   })
 })
-

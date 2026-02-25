@@ -9,6 +9,7 @@ import { Exclusives } from './components/Exclusives';
 import { Overrides } from './components/Overrides';
 import { Deployments } from './components/Deployments';
 import { Logs } from './components/Logs';
+import { SeedManager } from './components/SeedManager';
 import { ConsentBanner } from './components/ConsentBanner';
 import './App.css'
 
@@ -45,6 +46,8 @@ export default function App() {
         return <Deployments />;
       case 'logs':
         return <Logs />;
+      case 'data-seeding':
+        return <SeedManager />;
       default:
         return <Dashboard />;
     }

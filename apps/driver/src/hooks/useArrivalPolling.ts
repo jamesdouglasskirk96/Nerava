@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../services/api';
+import { usePageVisibility } from './usePageVisibility';
 
 interface UseArrivalPollingOptions {
   sessionId: string;
@@ -25,10 +26,12 @@ export function useArrivalPolling({
   const [polling, setPolling] = useState(false);
   const [lastCheck, setLastCheck] = useState<Date | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isVisible = usePageVisibility();
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !isVisible) {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      if (!enabled) setPolling(false);
       return;
     }
 
@@ -92,7 +95,7 @@ export function useArrivalPolling({
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [sessionId, merchantLat, merchantLng, enabled, onArrival]);
+  }, [sessionId, merchantLat, merchantLng, enabled, onArrival, isVisible]);
 
   return { polling, lastCheck };
 }

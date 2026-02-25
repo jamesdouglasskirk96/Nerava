@@ -1,5 +1,6 @@
 // DriverHome - Main orchestrator component for driver app
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { usePageVisibility } from '../../hooks/usePageVisibility'
 import { useNavigate } from 'react-router-dom'
 // Zap import removed - using logo image instead
 import { useDriverSessionContext } from '../../contexts/DriverSessionContext'
@@ -27,7 +28,7 @@ import { PreferencesModal } from '../Preferences/PreferencesModal'
 import { AnalyticsDebugPanel } from '../Debug/AnalyticsDebugPanel'
 import { AccountPage } from '../Account/AccountPage'
 import { WalletModal } from '../Wallet/WalletModal'
-import { User, Wallet } from 'lucide-react'
+import { User, Wallet, Activity } from 'lucide-react'
 import { groupMerchantsIntoSets, groupChargersIntoSets } from '../../utils/dataMapping'
 import { getChargerSetsWithExperiences } from '../../mock/mockChargers'
 import { isMockMode, isDemoMode } from '../../services/api'
@@ -47,6 +48,10 @@ import type { ExclusiveMerchant } from '../../hooks/useExclusiveSessionState'
 import type { MerchantSummary } from '../../types'
 import { isTeslaBrowser } from '../../utils/evBrowserDetection'
 import { EVHome } from '../EVHome/EVHome'
+import { useSessionPolling } from '../../hooks/useSessionPolling'
+import { useChargingSessions, useWalletBalance } from '../../services/api'
+import { ActiveSessionBanner } from '../SessionActivity/ActiveSessionBanner'
+import { SessionActivityScreen } from '../SessionActivity/SessionActivityScreen'
 
 /**
  * Main entry point that orchestrates the three states:
@@ -181,6 +186,13 @@ export function DriverHome() {
       clearInterval(interval)
     }
   }, [])
+
+  // Refresh stale data when app returns from background
+  usePageVisibility(useCallback(() => {
+    // Invalidate all React Query caches so data is re-fetched fresh
+    queryClient.invalidateQueries()
+  }, [queryClient]))
+
   // Initialize browse mode if location is unavailable
   const [browseMode, setBrowseMode] = useState(() => {
     // Check if we should start in browse mode (no coordinates available)
@@ -213,6 +225,27 @@ export function DriverHome() {
   const [showTransitionToast, setShowTransitionToast] = useState(false)
   const [showAccountPage, setShowAccountPage] = useState(false)
   const [showWalletModal, setShowWalletModal] = useState(false)
+  const [showSessionActivity, setShowSessionActivity] = useState(false)
+  const [incentiveToast, setIncentiveToast] = useState<number | null>(null)
+  const [nativeBridgeError, setNativeBridgeError] = useState<string | null>(null)
+
+  // Listen for native bridge events (session-rejected, auth-required)
+  useEffect(() => {
+    const handleSessionRejected = (e: Event) => {
+      const reason = (e as CustomEvent).detail?.reason || 'Session could not be started'
+      setNativeBridgeError(reason)
+      setTimeout(() => setNativeBridgeError(null), 8000)
+    }
+    const handleAuthRequired = () => {
+      setShowAccountPage(true)
+    }
+    window.addEventListener('nerava:session-rejected', handleSessionRejected)
+    window.addEventListener('nerava:auth-required', handleAuthRequired)
+    return () => {
+      window.removeEventListener('nerava:session-rejected', handleSessionRejected)
+      window.removeEventListener('nerava:auth-required', handleAuthRequired)
+    }
+  }, [])
 
   // Active EV session state (from Tesla verify-charging)
   const [activeEVSession, setActiveEVSession] = useState<{
@@ -222,38 +255,38 @@ export function DriverHome() {
   } | null>(null)
   const [showEVCodeOverlay, setShowEVCodeOverlay] = useState(false)
 
-  // Wallet balance state (auth state is declared above with localStorage check)
-  const [walletBalance, setWalletBalance] = useState(0)
-  const [walletPending, setWalletPending] = useState(0)
-  const [mockTransactions] = useState<Array<{ id: string; type: 'credit' | 'withdrawal'; description: string; amount: number; timestamp: string }>>([])
+  // Wallet balance (React Query)
+  const { data: walletData, refetch: refetchWallet } = useWalletBalance()
+  const walletBalance = walletData?.available_cents ?? 0
+  const walletPending = walletData?.pending_cents ?? 0
+  // Session polling — detects charging via Tesla API
+  const sessionPolling = useSessionPolling()
+  const { data: sessionsData } = useChargingSessions(20)
 
-  // Fetch wallet balance when authenticated
+  // Show incentive toast when session ends with a reward
   useEffect(() => {
-    const token = localStorage.getItem('access_token')
-    if (token) {
-      const fetchWalletBalance = async () => {
-        try {
-          const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.nerava.network'
-          const response = await fetch(`${API_BASE}/v1/wallet/balance`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
-          })
-          if (response.ok) {
-            const data = await response.json()
-            setWalletBalance(data.available_cents || 0)
-            setWalletPending(data.pending_cents || 0)
-          }
-        } catch (err) {
-          console.error('Failed to fetch wallet balance:', err)
-        }
-      }
-      fetchWalletBalance()
-    } else {
-      setWalletBalance(0)
-      setWalletPending(0)
+    if (sessionPolling.lastIncentive && sessionPolling.lastIncentive.amountCents > 0) {
+      capture(DRIVER_EVENTS.CHARGING_INCENTIVE_EARNED, {
+        amount_cents: sessionPolling.lastIncentive.amountCents,
+      })
+      setIncentiveToast(sessionPolling.lastIncentive.amountCents)
+      const timer = setTimeout(() => {
+        setIncentiveToast(null)
+        sessionPolling.clearIncentive()
+      }, 5000)
+      return () => clearTimeout(timer)
     }
-  }, [isAuthenticated])
+  }, [sessionPolling.lastIncentive])
+
+  // Track session detection
+  useEffect(() => {
+    if (sessionPolling.isActive && sessionPolling.sessionId) {
+      capture(DRIVER_EVENTS.CHARGING_SESSION_DETECTED, {
+        session_id: sessionPolling.sessionId,
+      })
+    }
+  }, [sessionPolling.isActive, sessionPolling.sessionId])
+
   // Fetch active EV session (Tesla verify-charging codes)
   useEffect(() => {
     const token = localStorage.getItem('access_token')
@@ -1044,6 +1077,37 @@ export function DriverHome() {
           </button>
         )}
 
+        {/* Active Charging Session Banner */}
+        {sessionPolling.isActive && (
+          <ActiveSessionBanner
+            durationMinutes={sessionPolling.durationMinutes}
+            kwhDelivered={sessionPolling.kwhDelivered}
+            onTap={() => {
+              capture(DRIVER_EVENTS.CHARGING_ACTIVITY_OPENED)
+              setShowSessionActivity(true)
+            }}
+          />
+        )}
+
+        {/* Incentive Toast */}
+        {incentiveToast !== null && (
+          <div className="bg-green-50 border-b border-green-200 px-4 py-3 flex items-center gap-3 flex-shrink-0">
+            <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 text-white" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+            </div>
+            <p className="flex-1 text-sm font-medium text-green-800">
+              You earned ${(incentiveToast / 100).toFixed(2)} from charging!
+            </p>
+            <button
+              onClick={() => { setIncentiveToast(null); sessionPolling.clearIncentive() }}
+              className="text-green-500 hover:text-green-700 p-1"
+              aria-label="Dismiss"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+            </button>
+          </div>
+        )}
+
         {/* Status Header */}
         <header className="bg-white border-b border-[#E4E6EB] flex-shrink-0">
           <div className="flex items-center justify-between px-5 py-3">
@@ -1071,6 +1135,22 @@ export function DriverHome() {
                 >
                   <Wallet className="w-4 h-4 text-[#1877F2]" aria-hidden="true" />
                   <span className="text-sm font-medium text-[#050505]">${(walletBalance / 100).toFixed(2)}</span>
+                </button>
+              )}
+              {/* Charging Activity button - only show when logged in */}
+              {isAuthenticated && (
+                <button
+                  onClick={() => {
+                    capture(DRIVER_EVENTS.CHARGING_ACTIVITY_OPENED)
+                    setShowSessionActivity(true)
+                  }}
+                  className="relative p-2 hover:bg-gray-100 rounded-full transition-all"
+                  aria-label="Charging Activity"
+                >
+                  <Activity className="w-5 h-5 text-[#050505]" aria-hidden="true" />
+                  {sessionPolling.isActive && (
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-green-500 rounded-full" />
+                  )}
                 </button>
               )}
               {/* Account button - always visible */}
@@ -1111,6 +1191,13 @@ export function DriverHome() {
 
         {/* Merchant Carousel */}
         <div className="flex-1 overflow-hidden flex flex-col">
+          {/* Native bridge error banner */}
+          {nativeBridgeError && (
+            <ErrorBanner
+              message={nativeBridgeError}
+              onRetry={() => setNativeBridgeError(null)}
+            />
+          )}
           {/* Show error banner if API failed and not in demo mode */}
           {hasApiError && !useDemoData && !useMockData && (
             <ErrorBanner
@@ -1310,6 +1397,16 @@ export function DriverHome() {
         onClose={handlePreferencesDone}
       />
 
+      {/* Session Activity Screen */}
+      {showSessionActivity && (
+        <SessionActivityScreen
+          onClose={() => setShowSessionActivity(false)}
+          isActive={sessionPolling.isActive}
+          durationMinutes={sessionPolling.durationMinutes}
+          kwhDelivered={sessionPolling.kwhDelivered}
+        />
+      )}
+
       {/* Account Page */}
       {showAccountPage && <AccountPage onClose={() => setShowAccountPage(false)} />}
 
@@ -1319,12 +1416,19 @@ export function DriverHome() {
         onClose={() => setShowWalletModal(false)}
         balance={walletBalance}
         pendingBalance={walletPending}
-        activeSessions={[]}
-        recentTransactions={mockTransactions}
-        onWithdraw={() => {
-          // Would open Stripe Express onboarding
-          console.log('Open Stripe Express payout')
-        }}
+        stripeOnboardingComplete={walletData?.stripe_onboarding_complete ?? false}
+        recentTransactions={
+          sessionsData?.sessions
+            ?.filter((s) => s.incentive && s.incentive.amount_cents > 0)
+            .map((s) => ({
+              id: s.id,
+              type: 'credit' as const,
+              description: `Charging reward${s.charger_network ? ` • ${s.charger_network}` : ''}`,
+              amount: s.incentive!.amount_cents,
+              timestamp: s.incentive!.granted_at || s.session_end || s.session_start || new Date().toISOString(),
+            })) || []
+        }
+        onBalanceChanged={() => refetchWallet()}
       />
 
       {/* Active EV Code Overlay */}

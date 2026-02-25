@@ -86,10 +86,20 @@ async def enrich_from_google_places(
             if user_rating_count is not None:
                 merchant.user_rating_count = int(user_rating_count)
             
-            # Update price level
+            # Update price level (Google Places API New returns string enum)
             price_level = place_data.get("priceLevel")
             if price_level is not None:
-                merchant.price_level = int(price_level)
+                price_map = {
+                    "PRICE_LEVEL_FREE": 0,
+                    "PRICE_LEVEL_INEXPENSIVE": 1,
+                    "PRICE_LEVEL_MODERATE": 2,
+                    "PRICE_LEVEL_EXPENSIVE": 3,
+                    "PRICE_LEVEL_VERY_EXPENSIVE": 4,
+                }
+                if isinstance(price_level, str):
+                    merchant.price_level = price_map.get(price_level)
+                else:
+                    merchant.price_level = int(price_level)
             
             # Update business status
             business_status = place_data.get("businessStatus")
@@ -101,12 +111,12 @@ async def enrich_from_google_places(
             if types:
                 merchant.place_types = types
             
-            # Handle photos
+            # Handle photos (truncate URLs to fit varchar(255) columns)
             photos = place_data.get("photos", [])
             if photos:
                 photo_urls = []
                 primary_photo_url = None
-                
+
                 # Process up to 5 photos
                 for i, photo in enumerate(photos[:5]):
                     photo_name = photo.get("name", "")
@@ -118,15 +128,17 @@ async def enrich_from_google_places(
                             photo_url = await get_photo_url(photo_ref, max_width=800)
                             if photo_url:
                                 photo_urls.append(photo_url)
-                                # First photo is primary
+                                # First photo is primary (must fit varchar(255))
                                 if i == 0:
                                     primary_photo_url = photo_url
-                                    merchant.primary_photo_url = photo_url
-                
+                                    if len(photo_url) <= 255:
+                                        merchant.primary_photo_url = photo_url
+
                 merchant.photo_urls = photo_urls
                 # Also update legacy photo_url field for backward compatibility
                 if primary_photo_url:
-                    merchant.photo_url = primary_photo_url
+                    if len(primary_photo_url) <= 255:
+                        merchant.photo_url = primary_photo_url
             
             # Store opening hours
             opening_hours = place_data.get("regularOpeningHours")

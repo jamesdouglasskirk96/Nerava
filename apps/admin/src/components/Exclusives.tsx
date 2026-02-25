@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Pause, Play, Edit, Ban } from 'lucide-react';
-import { getAllExclusives, toggleExclusive, type Exclusive } from '../services/api';
+import { getAllExclusives, toggleExclusive, banExclusive, type Exclusive } from '../services/api';
 
 export function Exclusives() {
   const [exclusives, setExclusives] = useState<Exclusive[]>([]);
@@ -219,6 +219,26 @@ export function Exclusives() {
                             <Play className="w-4 h-4" />
                           </button>
                         )}
+                        <button
+                          onClick={async () => {
+                            const banReason = prompt('Enter reason for banning this exclusive:');
+                            if (banReason && banReason.length >= 5) {
+                              try {
+                                await banExclusive(exclusive.id, banReason);
+                                setFeedback({ type: 'success', message: 'Exclusive banned successfully' });
+                                setTimeout(() => setFeedback(null), 5000);
+                                loadExclusives();
+                              } catch (err: any) {
+                                setFeedback({ type: 'error', message: err.message || 'Failed to ban exclusive' });
+                                setTimeout(() => setFeedback(null), 5000);
+                              }
+                            }
+                          }}
+                          className="p-1.5 hover:bg-red-50 rounded text-red-600 hover:text-red-700"
+                          title="Ban Exclusive"
+                        >
+                          <Ban className="w-4 h-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>

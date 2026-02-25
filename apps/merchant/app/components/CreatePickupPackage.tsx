@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Info } from 'lucide-react';
+import { toast } from 'sonner';
 
 export function CreatePickupPackage() {
   const navigate = useNavigate();
@@ -11,10 +12,39 @@ export function CreatePickupPackage() {
     startTime: '09:00',
     endTime: '17:00',
   });
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    navigate('/pickup-packages');
+    setSubmitting(true);
+    try {
+      const token = localStorage.getItem('merchant_token') || localStorage.getItem('access_token');
+      const res = await fetch('/v1/merchants/me/pickup-packages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          description: formData.description,
+          price_cents: Math.round(parseFloat(formData.price) * 100),
+          start_time: formData.startTime,
+          end_time: formData.endTime,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Failed to create package' }));
+        toast.error(err.detail || 'Failed to create package');
+        return;
+      }
+      toast.success('Package created');
+      navigate('/pickup-packages');
+    } catch {
+      toast.error('Network error. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleChange = (field: string, value: string) => {
@@ -137,9 +167,10 @@ export function CreatePickupPackage() {
             </button>
             <button
               type="submit"
-              className="flex-1 bg-neutral-900 text-white py-3 px-6 rounded-lg hover:bg-neutral-800 transition-colors"
+              disabled={submitting}
+              className="flex-1 bg-neutral-900 text-white py-3 px-6 rounded-lg hover:bg-neutral-800 disabled:bg-neutral-400 transition-colors"
             >
-              Create Package
+              {submitting ? 'Creating...' : 'Create Package'}
             </button>
           </div>
         </form>

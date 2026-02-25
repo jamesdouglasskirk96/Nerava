@@ -587,7 +587,7 @@ class CheckinService:
         # Create billing event if we have a total
         total = order_total_cents or session.order_total_cents
         if total and total > 0:
-            fee_bps = session.platform_fee_bps or 500  # 5% default
+            fee_bps = session.platform_fee_bps or settings.PLATFORM_FEE_BPS
             billable_cents = (total * fee_bps) // 10000
 
             # Apply min/max
@@ -605,6 +605,22 @@ class CheckinService:
 
             session.billable_amount_cents = billable_cents
             session.billing_status = 'pending'
+
+        # Auto-grant Nova to driver on merchant confirmation
+        if session.driver_id and billing_event:
+            try:
+                from app.services.nova_service import NovaService
+                NovaService.grant_to_driver(
+                    db,
+                    driver_id=session.driver_id,
+                    amount=billable_cents,
+                    session_id=str(session.id),
+                    idempotency_key=f"merchant_confirm_{session.id}",
+                    metadata={"source": "merchant_confirm", "order_total_cents": total},
+                    auto_commit=False,
+                )
+            except Exception as e:
+                logger.error(f"Failed to auto-grant Nova for session {session.id}: {e}")
 
         session.completed_at = now
 

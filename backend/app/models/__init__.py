@@ -74,6 +74,9 @@ from .billing_event import BillingEvent
 from .queued_order import QueuedOrder, QueuedOrderStatus
 from .virtual_key import VirtualKey
 from .tesla_connection import TeslaConnection, EVVerificationCode
+from .device_token import DeviceToken
+from .campaign import Campaign
+from .session_event import SessionEvent, IncentiveGrant
 from .extra import (
     CreditLedger,
     IncentiveRule,
@@ -177,6 +180,12 @@ __all__ = [
     "QueuedOrderStatus",
     # Virtual Key models
     "VirtualKey",
+    # Device token models
+    "DeviceToken",
+    # Campaign / Incentive models
+    "Campaign",
+    "SessionEvent",
+    "IncentiveGrant",
     # Extra models
     "CreditLedger",
     "IncentiveRule",

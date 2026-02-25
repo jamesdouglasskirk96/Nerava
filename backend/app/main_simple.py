@@ -894,6 +894,7 @@ else:
             "http://localhost:8080",
             "http://localhost:5173",  # Vite default
             "http://localhost:5174",  # Vite alternate port
+            "http://localhost:5176",  # Campaign console
             "https://app.nerava.app",  # Production frontend
             "https://www.nerava.app",  # Production frontend (www)
         ]
@@ -924,6 +925,7 @@ final_origins = allowed_origins + [
     "https://link.nerava.network",
     "https://merchant.nerava.network",
     "https://admin.nerava.network",
+    "https://console.nerava.network",
     # S3 website origins (HTTP, not HTTPS)
     "http://app.nerava.network.s3-website-us-east-1.amazonaws.com",
     "http://link.nerava.network.s3-website-us-east-1.amazonaws.com",
@@ -1086,6 +1088,43 @@ app.include_router(merchant_reports.router)
 app.include_router(merchant_balance.router)
 app.include_router(pilot_redeem.router)
 
+# 14 previously missing routers (hardening fix)
+from .routers import (
+    checkin as checkin_router,
+    driver_wallet,
+    charge_context,
+    ev_context,
+    virtual_key,
+    clo,
+    notifications,
+    account,
+    consent,
+    merchant_funnel,
+    merchant_arrivals,
+    twilio_sms_webhook,
+    client_telemetry,
+    arrival as arrival_router,
+)
+app.include_router(checkin_router.router)
+app.include_router(driver_wallet.router)
+app.include_router(charge_context.router)
+app.include_router(ev_context.router)
+app.include_router(virtual_key.router)
+app.include_router(clo.router)
+app.include_router(notifications.router)
+app.include_router(account.router)
+app.include_router(consent.router)
+app.include_router(merchant_funnel.router)
+app.include_router(merchant_arrivals.router)
+app.include_router(twilio_sms_webhook.router)
+app.include_router(client_telemetry.router)
+app.include_router(arrival_router.router)
+
+# Campaign / Incentive Layer routers
+from .routers import campaign_sessions, campaigns as campaigns_router
+app.include_router(campaign_sessions.router)  # /v1/charging-sessions/*
+app.include_router(campaigns_router.router)   # /v1/campaigns/*
+
 # Canonical v1 API routers (promoted from Domain Charge Party MVP)
 # These are the production endpoints that the PWA uses
 from .routers import (
@@ -1134,6 +1173,98 @@ async def debug_log_test():
     raise HTTPException(status_code=500, detail="Intentional test error for logging")
 
 app.include_router(debug_router)
+
+# ─── Temporary ops endpoint for merchant seeding (remove after use) ───
+import uuid as _uuid
+_OPS_KEY = "nrv-seed-8f3a2c7d9e1b"
+
+@app.get("/v1/ops/seed-stats")
+async def ops_seed_stats(key: str = ""):
+    if key != _OPS_KEY:
+        raise HTTPException(status_code=404, detail="Not found")
+    from .db import SessionLocal
+    from .models.while_you_charge import Charger, Merchant, ChargerMerchant
+    from sqlalchemy import func
+    db = SessionLocal()
+    try:
+        return {
+            "chargers": db.query(Charger).count(),
+            "merchants": db.query(Merchant).count(),
+            "charger_merchant_links": db.query(ChargerMerchant).count(),
+        }
+    finally:
+        db.close()
+
+@app.post("/v1/ops/seed-merchants")
+async def ops_seed_merchants(key: str = "", max_cells: int = 0):
+    if key != _OPS_KEY:
+        raise HTTPException(status_code=404, detail="Not found")
+    import threading
+    from datetime import datetime, timezone
+    from .routers.admin_domain import _seed_jobs, _run_seed_merchants_job
+    # Check for already running
+    for jid, job in _seed_jobs.items():
+        if job["type"] == "merchants" and job["status"] == "running":
+            return {"job_id": jid, "status": "already_running"}
+    job_id = f"merchant_seed_ops_{_uuid.uuid4().hex[:8]}"
+    _seed_jobs[job_id] = {
+        "type": "merchants",
+        "status": "starting",
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "started_by": "ops_endpoint",
+        "progress": {},
+        "result": None,
+        "error": None,
+    }
+    thread = threading.Thread(
+        target=_run_seed_merchants_job,
+        args=(job_id, max_cells if max_cells > 0 else None),
+        daemon=True,
+    )
+    thread.start()
+    return {"job_id": job_id, "status": "started"}
+
+@app.get("/v1/ops/seed-status")
+async def ops_seed_status(key: str = ""):
+    if key != _OPS_KEY:
+        raise HTTPException(status_code=404, detail="Not found")
+    from .routers.admin_domain import _seed_jobs
+    return {"jobs": _seed_jobs}
+
+@app.get("/v1/ops/seed-debug")
+async def ops_seed_debug(key: str = "", charger_id: str = ""):
+    if key != _OPS_KEY:
+        raise HTTPException(status_code=404, detail="Not found")
+    from .db import SessionLocal
+    from .models.while_you_charge import Charger, Merchant, ChargerMerchant
+    from sqlalchemy import func, text
+    db = SessionLocal()
+    try:
+        # Sample charger IDs from junction table
+        junction_charger_ids = [r[0] for r in db.query(ChargerMerchant.charger_id).distinct().limit(20).all()]
+        # Sample charger IDs from chargers table
+        charger_ids = [r[0] for r in db.query(Charger.id).limit(20).all()]
+        # Check a specific charger
+        specific_links = []
+        if charger_id:
+            links = db.query(ChargerMerchant).filter(ChargerMerchant.charger_id == charger_id).limit(5).all()
+            for l in links:
+                m = db.query(Merchant).filter(Merchant.id == l.merchant_id).first()
+                specific_links.append({"merchant_id": l.merchant_id, "name": m.name if m else "NOT FOUND", "distance_m": l.distance_m})
+        # Count chargers that have at least 1 merchant
+        chargers_with_merchants = db.execute(text("SELECT COUNT(DISTINCT charger_id) FROM charger_merchants")).scalar()
+        # Check ID format distribution
+        nrel_count = db.query(ChargerMerchant).filter(ChargerMerchant.charger_id.like("nrel_%")).count()
+        return {
+            "junction_charger_id_samples": junction_charger_ids,
+            "charger_id_samples": charger_ids,
+            "chargers_with_merchants": chargers_with_merchants,
+            "nrel_junction_count": nrel_count,
+            "specific_charger_links": specific_links,
+        }
+    finally:
+        db.close()
+# ─── End temporary ops endpoint ───
 
 # Add PWA error normalization for pilot endpoints
 from fastapi.responses import JSONResponse

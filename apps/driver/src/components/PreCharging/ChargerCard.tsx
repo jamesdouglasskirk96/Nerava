@@ -72,9 +72,8 @@ export function ChargerCard({ charger, onClick }: ChargerCardProps) {
         <div className="mt-3 flex-shrink-0">
           <Button variant="primary" className="w-full" onClick={(e) => {
             e.stopPropagation()
-            // TODO: Wire to backend navigation
-            console.log('Navigate to charger:', charger.id)
-            onClick?.()
+            const destination = encodeURIComponent(charger.name)
+            window.open(`https://www.google.com/maps/search/?api=1&query=${destination}`, '_blank')
           }}>
             Navigate to Charger
           </Button>

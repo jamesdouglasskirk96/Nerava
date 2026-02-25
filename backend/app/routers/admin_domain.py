@@ -1445,6 +1445,111 @@ def resume_merchant(
     }
 
 
+@router.post("/merchants/{merchant_id}/ban")
+def ban_merchant(
+    merchant_id: str = Path(...),
+    reason: str = Body(..., embed=True),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Ban a merchant."""
+    merchant = db.query(DomainMerchant).filter(DomainMerchant.id == merchant_id).first()
+    if not merchant:
+        raise HTTPException(status_code=404, detail="Merchant not found")
+
+    prev = merchant.status
+    merchant.status = "banned"
+    db.commit()
+
+    log_admin_action(
+        db=db,
+        actor_id=admin.id,
+        action="ban_merchant",
+        target_type="merchant",
+        target_id=merchant_id,
+        before_json={"status": prev},
+        after_json={"status": "banned", "reason": reason}
+    )
+    db.commit()
+
+    return {
+        "merchant_id": merchant_id,
+        "action": "ban",
+        "previous_status": prev,
+        "new_status": "banned",
+        "reason": reason
+    }
+
+
+@router.post("/merchants/{merchant_id}/verify")
+def verify_merchant(
+    merchant_id: str = Path(...),
+    reason: str = Body(..., embed=True),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Verify a merchant."""
+    merchant = db.query(DomainMerchant).filter(DomainMerchant.id == merchant_id).first()
+    if not merchant:
+        raise HTTPException(status_code=404, detail="Merchant not found")
+
+    prev = merchant.status
+    merchant.status = "verified"
+    db.commit()
+
+    log_admin_action(
+        db=db,
+        actor_id=admin.id,
+        action="verify_merchant",
+        target_type="merchant",
+        target_id=merchant_id,
+        before_json={"status": prev},
+        after_json={"status": "verified", "reason": reason}
+    )
+    db.commit()
+
+    return {
+        "merchant_id": merchant_id,
+        "action": "verify",
+        "previous_status": prev,
+        "new_status": "verified",
+        "reason": reason
+    }
+
+
+@router.post("/exclusives/{exclusive_id}/ban")
+def ban_exclusive(
+    exclusive_id: str = Path(...),
+    reason: str = Body(..., embed=True),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Permanently disable an exclusive."""
+    from app.models.while_you_charge import MerchantPerk
+    exclusive = db.query(MerchantPerk).filter(MerchantPerk.id == int(exclusive_id)).first()
+    if not exclusive:
+        raise HTTPException(status_code=404, detail="Exclusive not found")
+
+    exclusive.is_active = False
+    db.commit()
+
+    log_admin_action(
+        db=db,
+        actor_id=admin.id,
+        action="ban_exclusive",
+        target_type="exclusive",
+        target_id=exclusive_id,
+        after_json={"is_active": False, "reason": reason}
+    )
+    db.commit()
+
+    return {
+        "exclusive_id": exclusive_id,
+        "action": "ban",
+        "reason": reason
+    }
+
+
 @router.post("/merchants/{merchant_id}/send-portal-link")
 def send_portal_link(
     merchant_id: str = Path(...),
@@ -1666,6 +1771,176 @@ async def simulate_verified_visit(
         "session_id": str(session.id),
         "driver_id": driver.public_id if hasattr(driver, 'public_id') else str(driver.id),
         "status": "simulated",
+    }
+
+
+# ==============================================================================
+# Bulk Seed Jobs (Charger + Merchant seeding)
+# ==============================================================================
+
+import threading
+from datetime import timezone as tz
+
+_seed_jobs: dict[str, dict] = {}  # job_id -> {type, status, started_at, progress, result, error}
+
+
+def _run_seed_chargers_job(job_id: str, states: Optional[List[str]]):
+    """Background thread for charger seeding."""
+    from app.db import SessionLocal
+    from scripts.seed_chargers_bulk import seed_chargers
+    import asyncio
+
+    _seed_jobs[job_id]["status"] = "running"
+    db = SessionLocal()
+    try:
+        def on_progress(state, fetched, total):
+            _seed_jobs[job_id]["progress"] = {
+                "current_state": state,
+                "total_fetched": fetched,
+                "total_states": total,
+            }
+
+        result = asyncio.run(seed_chargers(db, states=states, progress_callback=on_progress))
+        _seed_jobs[job_id]["status"] = "completed"
+        _seed_jobs[job_id]["result"] = result
+        _seed_jobs[job_id]["completed_at"] = datetime.now(tz.utc).isoformat()
+    except Exception as e:
+        logger.error(f"Seed chargers job {job_id} failed: {e}")
+        _seed_jobs[job_id]["status"] = "failed"
+        _seed_jobs[job_id]["error"] = str(e)
+    finally:
+        db.close()
+
+
+def _run_seed_merchants_job(job_id: str, max_cells: Optional[int]):
+    """Background thread for merchant seeding."""
+    from app.db import SessionLocal
+    from scripts.seed_merchants_free import seed_merchants
+    import asyncio
+
+    _seed_jobs[job_id]["status"] = "running"
+    db = SessionLocal()
+    try:
+        def on_progress(done, total):
+            _seed_jobs[job_id]["progress"] = {
+                "cells_done": done,
+                "total_cells": total,
+            }
+
+        result = asyncio.run(seed_merchants(db, max_cells=max_cells, progress_callback=on_progress))
+        _seed_jobs[job_id]["status"] = "completed"
+        _seed_jobs[job_id]["result"] = result
+        _seed_jobs[job_id]["completed_at"] = datetime.now(tz.utc).isoformat()
+    except Exception as e:
+        logger.error(f"Seed merchants job {job_id} failed: {e}")
+        _seed_jobs[job_id]["status"] = "failed"
+        _seed_jobs[job_id]["error"] = str(e)
+    finally:
+        db.close()
+
+
+class SeedChargersRequest2(BaseModel):
+    states: Optional[List[str]] = Field(None, description="State codes to seed (default: all 50 + DC)")
+
+
+class SeedMerchantsRequest(BaseModel):
+    max_cells: Optional[int] = Field(None, description="Max grid cells to process (None = all)")
+
+
+@router.post("/seed/chargers")
+def start_charger_seed(
+    request: SeedChargersRequest2 = Body(default=SeedChargersRequest2()),
+    admin: User = Depends(require_admin),
+):
+    """Start a background job to seed chargers from NREL AFDC."""
+    # Check for already running charger seed
+    for jid, job in _seed_jobs.items():
+        if job["type"] == "chargers" and job["status"] == "running":
+            return {"job_id": jid, "status": "already_running", "message": "A charger seed job is already running"}
+
+    job_id = f"charger_seed_{uuid.uuid4().hex[:8]}"
+    _seed_jobs[job_id] = {
+        "type": "chargers",
+        "status": "starting",
+        "started_at": datetime.now(tz.utc).isoformat(),
+        "started_by": admin.id,
+        "progress": {},
+        "result": None,
+        "error": None,
+    }
+
+    thread = threading.Thread(
+        target=_run_seed_chargers_job,
+        args=(job_id, request.states),
+        daemon=True,
+    )
+    thread.start()
+
+    return {"job_id": job_id, "status": "started"}
+
+
+@router.post("/seed/merchants")
+def start_merchant_seed(
+    request: SeedMerchantsRequest = Body(default=SeedMerchantsRequest()),
+    admin: User = Depends(require_admin),
+):
+    """Start a background job to map merchants using Overpass API."""
+    for jid, job in _seed_jobs.items():
+        if job["type"] == "merchants" and job["status"] == "running":
+            return {"job_id": jid, "status": "already_running", "message": "A merchant seed job is already running"}
+
+    job_id = f"merchant_seed_{uuid.uuid4().hex[:8]}"
+    _seed_jobs[job_id] = {
+        "type": "merchants",
+        "status": "starting",
+        "started_at": datetime.now(tz.utc).isoformat(),
+        "started_by": admin.id,
+        "progress": {},
+        "result": None,
+        "error": None,
+    }
+
+    thread = threading.Thread(
+        target=_run_seed_merchants_job,
+        args=(job_id, request.max_cells),
+        daemon=True,
+    )
+    thread.start()
+
+    return {"job_id": job_id, "status": "started"}
+
+
+@router.get("/seed/status")
+def get_seed_status(
+    admin: User = Depends(require_admin),
+):
+    """Get status of all seed jobs."""
+    return {"jobs": _seed_jobs}
+
+
+@router.get("/seed/stats")
+def get_seed_stats(
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Get current charger + merchant counts."""
+    from app.models.while_you_charge import Charger, Merchant, ChargerMerchant
+    from sqlalchemy import func
+
+    charger_count = db.query(func.count(Charger.id)).scalar() or 0
+    merchant_count = db.query(func.count(Merchant.id)).scalar() or 0
+    junction_count = db.query(func.count(ChargerMerchant.id)).scalar() or 0
+
+    # Get last updated timestamps
+    last_charger = db.query(func.max(Charger.updated_at)).scalar()
+    last_merchant = db.query(func.max(Merchant.updated_at)).scalar()
+
+    return {
+        "charger_count": charger_count,
+        "merchant_count": merchant_count,
+        "junction_count": junction_count,
+        "last_charger_update": last_charger.isoformat() if last_charger else None,
+        "last_merchant_update": last_merchant.isoformat() if last_merchant else None,
     }
 
 

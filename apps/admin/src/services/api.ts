@@ -141,6 +141,27 @@ export async function resumeMerchant(merchantId: string, reason: string): Promis
   })
 }
 
+export async function banMerchant(merchantId: string, reason: string): Promise<{ merchant_id: string; action: string; previous_status: string; new_status: string; reason: string }> {
+  return fetchAPI(`/v1/admin/merchants/${merchantId}/ban`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
+}
+
+export async function verifyMerchant(merchantId: string, reason: string): Promise<{ merchant_id: string; action: string; previous_status: string; new_status: string; reason: string }> {
+  return fetchAPI(`/v1/admin/merchants/${merchantId}/verify`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
+}
+
+export async function banExclusive(exclusiveId: string, reason: string): Promise<{ exclusive_id: string; action: string; reason: string }> {
+  return fetchAPI(`/v1/admin/exclusives/${exclusiveId}/ban`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
+}
+
 export async function forceCloseSessions(locationId: string, reason: string): Promise<{ location_id: string; sessions_closed: number; closed_by: string; reason: string; timestamp: string }> {
   return fetchAPI('/v1/admin/sessions/force-close', {
     method: 'POST',
@@ -189,6 +210,35 @@ export async function sendMerchantPortalLink(merchantId: string, email: string):
     method: 'POST',
     body: JSON.stringify({ email }),
   })
+}
+
+// Seed Management
+export async function startChargerSeed(states?: string[]): Promise<{ job_id: string; status: string }> {
+  return fetchAPI('/v1/admin/seed/chargers', {
+    method: 'POST',
+    body: JSON.stringify({ states: states || null }),
+  })
+}
+
+export async function startMerchantSeed(maxCells?: number): Promise<{ job_id: string; status: string }> {
+  return fetchAPI('/v1/admin/seed/merchants', {
+    method: 'POST',
+    body: JSON.stringify({ max_cells: maxCells || null }),
+  })
+}
+
+export async function getSeedStatus(): Promise<{ jobs: Record<string, unknown> }> {
+  return fetchAPI('/v1/admin/seed/status')
+}
+
+export async function getSeedStats(): Promise<{
+  charger_count: number
+  merchant_count: number
+  junction_count: number
+  last_charger_update: string | null
+  last_merchant_update: string | null
+}> {
+  return fetchAPI('/v1/admin/seed/stats')
 }
 
 // Auth

@@ -1,0 +1,133 @@
+name: Production Validation
+
+on:
+  schedule:
+    - cron: '0 13 * * *'  # Daily at 1pm UTC / 8am ET
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Deploy to AWS Production"]
+    types: [completed]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Health endpoints
+        run: |
+          echo "=== Health Endpoints ==="
+          for endpoint in healthz readyz; do
+            status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://api.nerava.network/$endpoint")
+            if [[ "$status" == "200" ]]; then
+              echo "  /$endpoint ... OK ($status)"
+            else
+              echo "  /$endpoint ... FAIL ($status)"
+              exit 1
+            fi
+          done
+
+      - name: Chargers nearby endpoint
+        run: |
+          echo "=== Chargers Nearby ==="
+          response=$(curl -s --max-time 10 -w "\n%{http_code}" "https://api.nerava.network/v1/chargers/nearby?lat=30.26&lng=-97.74")
+          status=$(echo "$response" | tail -1)
+          body=$(echo "$response" | sed '$d')
+
+          if [[ "$status" != "200" ]]; then
+            echo "  FAIL: expected 200, got $status"
+            exit 1
+          fi
+          echo "  Status: $status OK"
+
+      - name: Merchants nearby endpoint
+        run: |
+          echo "=== Merchants Nearby ==="
+          status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://api.nerava.network/v1/merchants/nearby?lat=30.26&lng=-97.74")
+          if [[ "$status" != "200" ]]; then
+            echo "  FAIL: expected 200, got $status"
+            exit 1
+          fi
+          echo "  Status: $status OK"
+
+      - name: Error handling validation
+        run: |
+          echo "=== Error Handling ==="
+          status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+            -X POST "https://api.nerava.network/v1/auth/otp/request" \
+            -H "Content-Type: application/json" \
+            -d '{"phone": "invalid"}')
+          if [[ "$status" == "422" || "$status" == "400" ]]; then
+            echo "  Invalid phone returns $status (expected 4xx) ... OK"
+          else
+            echo "  WARN: expected 422/400, got $status"
+          fi
+
+      - name: Response time assertions
+        run: |
+          echo "=== Response Time Check (< 2s) ==="
+          FAILED=0
+
+          check_time() {
+            local name="$1" url="$2"
+            local time_total
+            time_total=$(curl -s -o /dev/null -w "%{time_total}" --max-time 10 "$url")
+            local ms=$(echo "$time_total * 1000" | bc | cut -d. -f1)
+
+            if [[ "$ms" -lt 2000 ]]; then
+              echo "  $name ... ${ms}ms OK"
+            else
+              echo "  $name ... ${ms}ms SLOW"
+              FAILED=1
+            fi
+          }
+
+          check_time "healthz"          "https://api.nerava.network/healthz"
+          check_time "chargers/nearby"   "https://api.nerava.network/v1/chargers/nearby?lat=30.26&lng=-97.74"
+          check_time "merchants/nearby"  "https://api.nerava.network/v1/merchants/nearby?lat=30.26&lng=-97.74"
+
+          if [[ "$FAILED" -eq 1 ]]; then
+            echo "::warning::Some endpoints exceeded 2s response time"
+          fi
+
+      - name: TLS certificate check
+        run: |
+          echo "=== TLS Certificate Validity ==="
+          for domain in api.nerava.network app.nerava.network nerava.network; do
+            expiry=$(echo | openssl s_client -servername "$domain" -connect "$domain:443" 2>/dev/null \
+              | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+
+            if [[ -z "$expiry" ]]; then
+              echo "  $domain ... ERROR: could not fetch certificate"
+              exit 1
+            fi
+
+            expiry_epoch=$(date -d "$expiry" +%s 2>/dev/null || date -j -f "%b %d %T %Y %Z" "$expiry" +%s 2>/dev/null)
+            now_epoch=$(date +%s)
+            days_left=$(( (expiry_epoch - now_epoch) / 86400 ))
+
+            if [[ "$days_left" -lt 14 ]]; then
+              echo "  $domain ... CRITICAL: expires in ${days_left} days ($expiry)"
+              exit 1
+            else
+              echo "  $domain ... OK (${days_left} days remaining)"
+            fi
+          done
+
+      - name: CORS headers check
+        run: |
+          echo "=== CORS Headers ==="
+          headers=$(curl -s -I --max-time 10 \
+            -H "Origin: https://app.nerava.network" \
+            "https://api.nerava.network/healthz")
+
+          if echo "$headers" | grep -qi "access-control"; then
+            echo "  CORS headers present ... OK"
+          else
+            echo "  WARN: No CORS headers found on /healthz"
+            echo "  (May be expected if CORS is only on /v1 routes)"
+          fi
+
+      - name: Summary
+        if: always()
+        run: echo "Production validation complete"

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Eye, Ban, CheckCircle, Search, Mail, ExternalLink, Pause, Play, ChevronLeft, ChevronRight } from 'lucide-react';
-import { searchMerchants, listMerchants, sendMerchantPortalLink, pauseMerchant, resumeMerchant, type Merchant } from '../services/api';
+import { searchMerchants, listMerchants, sendMerchantPortalLink, pauseMerchant, resumeMerchant, banMerchant, verifyMerchant, type Merchant } from '../services/api';
 
 export function Merchants() {
   const [merchants, setMerchants] = useState<Merchant[]>([]);
@@ -8,7 +8,7 @@ export function Merchants() {
   const [loading, setLoading] = useState(true);
   const [sendingEmail, setSendingEmail] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pauseDialog, setPauseDialog] = useState<{ merchantId: string; action: 'pause' | 'resume' } | null>(null);
+  const [pauseDialog, setPauseDialog] = useState<{ merchantId: string; action: 'pause' | 'resume' | 'ban' | 'verify' } | null>(null);
   const [reason, setReason] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [emailDialog, setEmailDialog] = useState<{ merchantId: string; email: string } | null>(null);
@@ -89,7 +89,7 @@ export function Merchants() {
     window.open(`${portalUrl}?merchant_id=${merchantId}&admin_preview=true`, '_blank');
   };
 
-  const handlePauseResume = (merchantId: string, action: 'pause' | 'resume') => {
+  const handlePauseResume = (merchantId: string, action: 'pause' | 'resume' | 'ban' | 'verify') => {
     setPauseDialog({ merchantId, action });
   };
 
@@ -103,10 +103,15 @@ export function Merchants() {
     try {
       if (pauseDialog.action === 'pause') {
         await pauseMerchant(pauseDialog.merchantId, reason);
-      } else {
+      } else if (pauseDialog.action === 'resume') {
         await resumeMerchant(pauseDialog.merchantId, reason);
+      } else if (pauseDialog.action === 'ban') {
+        await banMerchant(pauseDialog.merchantId, reason);
+      } else if (pauseDialog.action === 'verify') {
+        await verifyMerchant(pauseDialog.merchantId, reason);
       }
-      setFeedback({ type: 'success', message: `Merchant ${pauseDialog.action}d successfully` });
+      const pastTense = pauseDialog.action === 'verify' ? 'verified' : `${pauseDialog.action}ned`;
+      setFeedback({ type: 'success', message: `Merchant ${pastTense} successfully` });
       setTimeout(() => setFeedback(null), 5000);
       setPauseDialog(null);
       setReason('');
@@ -239,6 +244,24 @@ export function Merchants() {
                         title="Pause Merchant"
                       >
                         <Pause className="w-4 h-4" />
+                      </button>
+                    )}
+                    {merchant.status !== 'verified' && (
+                      <button
+                        onClick={() => handlePauseResume(merchant.id, 'verify')}
+                        className="p-1.5 hover:bg-green-50 rounded text-green-600 hover:text-green-700"
+                        title="Verify Merchant"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                      </button>
+                    )}
+                    {merchant.status !== 'banned' && (
+                      <button
+                        onClick={() => handlePauseResume(merchant.id, 'ban')}
+                        className="p-1.5 hover:bg-red-50 rounded text-red-600 hover:text-red-700"
+                        title="Ban Merchant"
+                      >
+                        <Ban className="w-4 h-4" />
                       </button>
                     )}
                   </div>

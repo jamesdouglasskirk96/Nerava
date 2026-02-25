@@ -14,6 +14,8 @@ import { PreChargingScreen } from './components/PreCharging/PreChargingScreen'
 import { EVHome } from './components/EVHome/EVHome'
 import { EVOrderFlow } from './components/EVOrder/EVOrderFlow'
 import { PhoneCheckinScreen } from './components/PhoneCheckin'
+import { TeslaCallbackScreen } from './components/TeslaLogin/TeslaCallbackScreen'
+import { VehicleSelectScreen } from './components/TeslaLogin/VehicleSelectScreen'
 
 function App() {
   useViewportHeight()
@@ -29,6 +31,9 @@ function App() {
         <BrowserRouter basename={basename}>
         <OnboardingGate>
           <Routes>
+            {/* Tesla OAuth callback and vehicle selection */}
+            <Route path="/tesla-callback" element={<TeslaCallbackScreen />} />
+            <Route path="/select-vehicle" element={<VehicleSelectScreen />} />
             {/* Phone check-in route (from SMS link) */}
             <Route path="/s/:token" element={<PhoneCheckinScreen />} />
             {/* Main driver app route */}
