@@ -2,16 +2,23 @@ import time
 from typing import Dict, Optional
 from fastapi import Request, HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
+from cachetools import TTLCache
 from app.config import settings
 from app.security.ratelimit_redis import rate_limit as redis_rate_limit, _get_redis_client
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Rate limiting middleware using token bucket algorithm with endpoint-specific limits"""
-    
+
     # Endpoint-specific rate limits (P1 security fix)
     # Format: path_prefix -> requests_per_minute
     ENDPOINT_LIMITS = {
+        "/v1/auth/otp/start": 3,  # Item 32: Tight OTP start limit (3/min)
+        "/v1/auth/otp/verify": 5,  # Item 32: Tight OTP verify limit (5/min)
+        "/v1/auth/register": 3,  # Item 32: Tight registration limit (3/min)
         "/v1/auth/magic_link/request": 3,  # P1-4: Very strict for magic link generation (3/min)
+        "/v1/auth/google": 5,  # Social auth: tight limit
+        "/v1/auth/apple": 5,  # Social auth: tight limit
+        "/v1/auth/tesla/login": 5,  # Social auth: tight limit
         "/v1/auth/": 10,  # Stricter for auth endpoints
         "/v1/otp/": 5,  # Very strict for OTP
         "/v1/nova/": 30,  # Moderate for Nova operations
@@ -19,12 +26,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         "/v1/stripe/": 30,  # Moderate for Stripe
         "/v1/smartcar/": 20,  # Moderate for Smartcar
         "/v1/square/": 20,  # Moderate for Square
+        "/v1/intent/capture": 120,  # Item 33: Previously exempted, now capped at 120/min
+        "/v1/drivers/location/check": 120,  # Item 33: Previously exempted, now capped at 120/min
+        "/v1/drivers/merchants/open": 120,  # Item 33: Previously exempted, now capped at 120/min
     }
-    
+
     def __init__(self, app, requests_per_minute: int = None):
         super().__init__(app)
         self.default_requests_per_minute = requests_per_minute or settings.rate_limit_per_minute
-        self.buckets: Dict[str, Dict] = {}
+        # Bounded TTLCache: max 50,000 buckets, auto-expire after 120s (2 min)
+        # This prevents unbounded memory growth from many unique client+path combos
+        self.buckets: TTLCache = TTLCache(maxsize=50000, ttl=120)
     
     def _get_client_id(self, request: Request) -> str:
         """Get client identifier for rate limiting"""
@@ -90,9 +102,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         """Process request with rate limiting"""
         path = request.url.path
 
-        # Skip rate limiting for health check endpoints and critical driver app endpoints
-        # Intent capture is critical for the driver app and should not be rate limited aggressively
-        if path in {"/healthz", "/health", "/readyz", "/livez", "/", "/v1/intent/capture", "/v1/drivers/location/check", "/v1/drivers/merchants/open"}:
+        # Skip rate limiting for health check endpoints only
+        if path in {"/healthz", "/health", "/readyz", "/livez", "/"}:
             return await call_next(request)
 
         client_id = self._get_client_id(request)

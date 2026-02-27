@@ -280,7 +280,9 @@ class PayoutService:
         if not eligible:
             raise ValueError(reason)
 
-        wallet = db.query(DriverWallet).filter(DriverWallet.driver_id == driver_id).first()
+        wallet = db.query(DriverWallet).filter(
+            DriverWallet.driver_id == driver_id
+        ).with_for_update().first()
 
         # Generate idempotency key
         idempotency_key = f"payout_{driver_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
@@ -451,6 +453,14 @@ class PayoutService:
 
         db.commit()
         logger.info(f"Payout {payout.id} marked as paid via webhook")
+
+        # Send push notification for payout complete (best-effort)
+        try:
+            from app.services.push_service import send_payout_complete_push
+            send_payout_complete_push(db, payout.driver_id, payout.amount_cents)
+        except Exception as push_err:
+            logger.debug("Push notification failed (non-fatal): %s", push_err)
+
         return {"status": "success", "payout_id": payout.id, "action": "marked_paid"}
 
     @staticmethod

@@ -51,8 +51,10 @@ async def main():
     print()
     
     # Check for API key in settings, environment, or use hardcoded fallback
-    HARDCODED_API_KEY = "AIzaSyAs0PVYXj3-ztRXCjdd0ztUGUSjQR73FFg"  # From google_places_client.py
-    api_key = settings.GOOGLE_PLACES_API_KEY or os.getenv("GOOGLE_PLACES_API_KEY") or HARDCODED_API_KEY
+    api_key = settings.GOOGLE_PLACES_API_KEY or os.getenv("GOOGLE_PLACES_API_KEY") or ""
+    if not api_key:
+        print("ERROR: GOOGLE_PLACES_API_KEY environment variable is required")
+        sys.exit(1)
     
     # Temporarily set it in settings
     if not settings.GOOGLE_PLACES_API_KEY:

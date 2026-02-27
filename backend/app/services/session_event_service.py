@@ -63,6 +63,7 @@ class SessionEventService:
         session_event = SessionEvent(
             id=str(uuid.uuid4()),
             driver_user_id=driver_id,
+            user_id=driver_id,
             charger_id=charger_id,
             charger_network=charger_network,
             connector_type=charge_data.get("fast_charger_type") or "Tesla",
@@ -169,11 +170,13 @@ class SessionEventService:
         return query.order_by(desc(SessionEvent.session_start)).limit(limit).all()
 
     @staticmethod
-    def poll_driver_session(
+    async def poll_driver_session(
         db: Session,
         driver_id: int,
         tesla_connection: "TeslaConnection",
         tesla_oauth_service: Any,
+        device_lat: Optional[float] = None,
+        device_lng: Optional[float] = None,
     ) -> dict:
         """
         Poll Tesla API for a single driver's charging state.
@@ -206,17 +209,45 @@ class SessionEventService:
             if not vehicle_id:
                 return {"session_active": False, "error": "no_vehicle_selected"}
 
-            vehicle_data = tesla_oauth_service.get_vehicle_data(
-                tesla_connection.access_token, vehicle_id
+            # Get a valid (refreshed if needed) access token
+            from app.services.tesla_oauth import get_valid_access_token
+            access_token = await get_valid_access_token(
+                db, tesla_connection, tesla_oauth_service
             )
-            charge_state = vehicle_data.get("response", {}).get("charge_state", {})
+            if not access_token:
+                return {"session_active": False, "error": "token_expired"}
+
+            # get_vehicle_data returns the unwrapped "response" object directly
+            vehicle_data = await tesla_oauth_service.get_vehicle_data(
+                access_token, vehicle_id
+            )
+            charge_state = vehicle_data.get("charge_state", {})
+            drive_state = vehicle_data.get("drive_state", {})
             charging_state = charge_state.get("charging_state")
             is_charging = charging_state in {"Charging", "Starting"}
+
+            # Merge location from drive_state into charge_state for downstream use
+            charge_state["lat"] = drive_state.get("latitude")
+            charge_state["lng"] = drive_state.get("longitude")
 
         except Exception as e:
             # Backoff on error — clear cache, don't crash
             logger.warning(f"Tesla poll error for driver {driver_id}: {e}")
             _charging_cache.pop(cache_key, None)
+
+            # Auto-close stale sessions on poll error (>15 min since last update)
+            stale = SessionEventService._close_stale_session(db, driver_id)
+            if stale:
+                db.commit()
+                return {
+                    "session_active": False,
+                    "session_id": stale.id,
+                    "duration_minutes": stale.duration_minutes or 0,
+                    "session_ended": True,
+                    "incentive_granted": False,
+                    "incentive_amount_cents": 0,
+                }
+
             return {"session_active": False, "error": "poll_failed"}
 
         # Update cache
@@ -228,11 +259,39 @@ class SessionEventService:
         active = SessionEventService.get_active_session(db, driver_id)
 
         if is_charging and not active:
-            # Start new session
+            # Start new session — match to nearest known charger
             vehicle_info = {"id": vehicle_id, "vin": tesla_connection.vin}
+            matched_charger_id = None
+            tesla_lat = charge_state.get("lat")
+            tesla_lng = charge_state.get("lng")
+            if tesla_lat and tesla_lng:
+                try:
+                    from app.services.intent_service import find_nearest_charger
+                    result = find_nearest_charger(db, tesla_lat, tesla_lng, radius_m=500)
+                    if result:
+                        matched_charger, distance_m = result
+                        matched_charger_id = matched_charger.id
+                        logger.info(
+                            f"Matched session to charger {matched_charger_id} "
+                            f"({matched_charger.name}) at {distance_m:.0f}m"
+                        )
+                except Exception as e:
+                    logger.warning(f"Charger matching failed: {e}")
+
+            # Store device location in metadata if provided
+            metadata = {}
+            if device_lat is not None and device_lng is not None:
+                metadata["device_lat"] = device_lat
+                metadata["device_lng"] = device_lng
+                logger.info(f"Device location: {device_lat}, {device_lng}")
+
             session = SessionEventService.create_from_tesla(
-                db, driver_id, charge_state, vehicle_info
+                db, driver_id, charge_state, vehicle_info,
+                charger_id=matched_charger_id,
             )
+            if metadata:
+                session.session_metadata = metadata
+                db.flush()
             db.commit()
             return {
                 "session_active": True,
@@ -247,6 +306,31 @@ class SessionEventService:
             active.battery_end_pct = charge_state.get("battery_level")
             active.power_kw = charge_state.get("charger_power")
             active.updated_at = datetime.utcnow()
+
+            # Backfill Tesla location if missing from session start
+            tesla_lat = charge_state.get("lat")
+            tesla_lng = charge_state.get("lng")
+            if not active.lat and tesla_lat:
+                active.lat = tesla_lat
+                active.lng = tesla_lng
+                # Also try to match charger if not already set
+                if not active.charger_id and tesla_lat and tesla_lng:
+                    try:
+                        from app.services.intent_service import find_nearest_charger
+                        result = find_nearest_charger(db, tesla_lat, tesla_lng, radius_m=500)
+                        if result:
+                            active.charger_id = result[0].id
+                            logger.info(f"Backfilled charger_id={active.charger_id} on session {active.id}")
+                    except Exception:
+                        pass
+
+            # Update device location in metadata
+            if device_lat is not None and device_lng is not None:
+                meta = active.session_metadata or {}
+                meta["device_lat"] = device_lat
+                meta["device_lng"] = device_lng
+                active.session_metadata = meta
+
             db.commit()
             return {
                 "session_active": True,
@@ -268,8 +352,34 @@ class SessionEventService:
             if session and session.duration_minutes and session.duration_minutes > 0:
                 grant = IncentiveEngine.evaluate_session(db, session)
 
+            # Award base reputation for valid sessions without incentive grants
+            if session and not grant and session.duration_minutes and session.duration_minutes > 0:
+                quality = session.quality_score or 0
+                if quality > 30:
+                    try:
+                        from app.models_domain import DriverWallet as DomainWallet
+                        wallet = db.query(DomainWallet).filter(
+                            DomainWallet.user_id == driver_id
+                        ).first()
+                        if wallet:
+                            wallet.energy_reputation_score = (wallet.energy_reputation_score or 0) + 5
+                            logger.info(
+                                "Awarded 5 base reputation points to driver %s "
+                                "(session %s, no incentive grant)", driver_id, session.id
+                            )
+                    except Exception as e:
+                        logger.debug("Base reputation award failed (non-fatal): %s", e)
+
             db.commit()
             _charging_cache.pop(cache_key, None)
+
+            # Send push notification for incentive earned (best-effort)
+            if grant and grant.amount_cents > 0:
+                try:
+                    from app.services.push_service import send_incentive_earned_push
+                    send_incentive_earned_push(db, driver_id, grant.amount_cents)
+                except Exception as push_err:
+                    logger.debug("Push notification failed (non-fatal): %s", push_err)
 
             return {
                 "session_active": False,
@@ -282,7 +392,18 @@ class SessionEventService:
             }
 
         else:
-            # Not charging and no active session
+            # Not charging and no active session — also check for stale sessions
+            stale = SessionEventService._close_stale_session(db, driver_id)
+            if stale:
+                db.commit()
+                return {
+                    "session_active": False,
+                    "session_id": stale.id,
+                    "duration_minutes": stale.duration_minutes or 0,
+                    "session_ended": True,
+                    "incentive_granted": False,
+                    "incentive_amount_cents": 0,
+                }
             return {"session_active": False}
 
     @staticmethod
@@ -318,6 +439,65 @@ class SessionEventService:
                 score += 5
 
         return max(0, min(100, score))
+
+    @staticmethod
+    def _close_stale_session(
+        db: Session,
+        driver_id: int,
+        stale_minutes: int = 15,
+    ) -> Optional[SessionEvent]:
+        """
+        Find and close any active session that hasn't been updated in
+        `stale_minutes`. Returns the closed session or None.
+        """
+        cutoff = datetime.utcnow() - timedelta(minutes=stale_minutes)
+        stale = (
+            db.query(SessionEvent)
+            .filter(
+                SessionEvent.driver_user_id == driver_id,
+                SessionEvent.session_end.is_(None),
+                SessionEvent.updated_at < cutoff,
+            )
+            .order_by(desc(SessionEvent.session_start))
+            .first()
+        )
+        if not stale:
+            return None
+
+        logger.info(
+            f"Auto-closing stale session {stale.id} for driver {driver_id} "
+            f"(last updated {stale.updated_at})"
+        )
+        return SessionEventService.end_session(
+            db, stale.id,
+            ended_reason="stale_cleanup",
+            battery_end_pct=stale.battery_end_pct,
+            kwh_delivered=stale.kwh_delivered,
+        )
+
+    @staticmethod
+    def end_session_manual(
+        db: Session,
+        session_event_id: str,
+        driver_id: int,
+    ) -> Optional[SessionEvent]:
+        """
+        Manually end a session (user-initiated). Verifies ownership.
+        Returns the ended session or None if not found / not owned / already ended.
+        """
+        session = db.query(SessionEvent).filter(
+            SessionEvent.id == session_event_id,
+            SessionEvent.driver_user_id == driver_id,
+            SessionEvent.session_end.is_(None),
+        ).first()
+        if not session:
+            return None
+
+        logger.info(f"Manual session end for {session.id} by driver {driver_id}")
+        return SessionEventService.end_session(
+            db, session.id,
+            ended_reason="manual",
+        )
 
     @staticmethod
     def count_driver_sessions(

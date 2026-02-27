@@ -12,10 +12,12 @@ from datetime import datetime
 
 from ..db import get_db
 from ..dependencies.domain import get_current_user
+from ..dependencies.driver import get_current_driver
 from ..models.user import User
 from ..models.campaign import Campaign
 from ..models.session_event import IncentiveGrant, SessionEvent
 from ..services.campaign_service import CampaignService
+from ..services.geo import haversine_m
 
 router = APIRouter(prefix="/v1/campaigns", tags=["campaigns"])
 
@@ -140,6 +142,50 @@ async def list_campaigns(
         "campaigns": [_campaign_to_dict(c) for c in campaigns],
         "count": len(campaigns),
     }
+
+
+@router.get("/driver/active")
+async def get_driver_active_campaigns(
+    lat: Optional[float] = None,
+    lng: Optional[float] = None,
+    charger_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    driver: User = Depends(get_current_driver),
+):
+    """Return active campaigns relevant to the driver's location."""
+    active = CampaignService.get_active_campaigns(db)
+    results = []
+
+    for c in active:
+        eligible = CampaignService.check_driver_caps(db, c, driver.id, charger_id)
+
+        # Geo matching: if campaign has geo rule and driver provided location
+        if c.rule_geo_center_lat and c.rule_geo_center_lng and c.rule_geo_radius_m:
+            if lat is not None and lng is not None:
+                dist = haversine_m(lat, lng, c.rule_geo_center_lat, c.rule_geo_center_lng)
+                if dist > c.rule_geo_radius_m:
+                    continue  # Outside campaign geo radius
+            else:
+                continue  # Campaign requires location but none provided
+
+        # Charger matching
+        if c.rule_charger_ids and charger_id:
+            if charger_id not in c.rule_charger_ids:
+                continue
+
+        results.append({
+            "id": c.id,
+            "name": c.name,
+            "sponsor_name": c.sponsor_name,
+            "sponsor_logo_url": c.sponsor_logo_url,
+            "description": c.description,
+            "reward_cents": c.cost_per_session_cents,
+            "campaign_type": c.campaign_type,
+            "eligible": eligible,
+            "end_date": c.end_date.isoformat() if c.end_date else None,
+        })
+
+    return {"campaigns": results}
 
 
 @router.get("/{campaign_id}")

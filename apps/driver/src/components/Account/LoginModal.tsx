@@ -20,15 +20,8 @@ export function LoginModal({ isOpen, onClose, onSuccess: _onSuccess }: LoginModa
 
     try {
       const { authorization_url } = await teslaLoginStart()
-      // In native iOS app, open Tesla auth in Safari (WKWebView can't handle it)
-      // Universal Links will bring the user back to the app after auth
-      if (window.neravaNative?.openExternalUrl) {
-        window.neravaNative.openExternalUrl(authorization_url)
-        // Reset loading after a moment since the user left the app
-        setTimeout(() => setLoading(false), 2000)
-      } else {
-        window.location.href = authorization_url
-      }
+      // Navigate in-app — the OAuth redirect chain stays within WKWebView
+      window.location.href = authorization_url
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message)

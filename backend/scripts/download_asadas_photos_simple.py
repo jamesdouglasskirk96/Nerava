@@ -8,8 +8,10 @@ import requests
 from pathlib import Path
 from typing import List, Optional
 
-# Hardcoded API key from google_places_client.py
-GOOGLE_PLACES_API_KEY = "AIzaSyAs0PVYXj3-ztRXCjdd0ztUGUSjQR73FFg"
+GOOGLE_PLACES_API_KEY = os.environ.get("GOOGLE_PLACES_API_KEY", "")
+if not GOOGLE_PLACES_API_KEY:
+    print("ERROR: GOOGLE_PLACES_API_KEY environment variable is required")
+    sys.exit(1)
 GOOGLE_PLACES_BASE_URL = "https://maps.googleapis.com/maps/api/place"
 
 # Asadas Grill location

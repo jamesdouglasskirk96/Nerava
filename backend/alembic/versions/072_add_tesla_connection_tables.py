@@ -6,7 +6,6 @@ Create Date: 2026-02-17
 """
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = '072'
@@ -17,52 +16,59 @@ depends_on = None
 
 def upgrade():
     conn = op.get_bind()
-    inspector = sa.inspect(conn)
-    existing_tables = inspector.get_table_names()
 
-    if 'tesla_connections' not in existing_tables:
-        op.create_table(
-            'tesla_connections',
-            sa.Column('id', sa.String(36), primary_key=True),
-            sa.Column('user_id', sa.Integer(), sa.ForeignKey('users.id'), nullable=False),
-            sa.Column('access_token', sa.Text(), nullable=False),
-            sa.Column('refresh_token', sa.Text(), nullable=False),
-            sa.Column('token_expires_at', sa.DateTime(), nullable=False),
-            sa.Column('tesla_user_id', sa.String(100), nullable=True),
-            sa.Column('vehicle_id', sa.String(100), nullable=True),
-            sa.Column('vin', sa.String(17), nullable=True),
-            sa.Column('vehicle_name', sa.String(100), nullable=True),
-            sa.Column('vehicle_model', sa.String(50), nullable=True),
-            sa.Column('is_active', sa.Boolean(), nullable=False, server_default='true'),
-            sa.Column('created_at', sa.DateTime(), nullable=False, server_default=sa.func.now()),
-            sa.Column('updated_at', sa.DateTime(), nullable=True),
-            sa.Column('last_used_at', sa.DateTime(), nullable=True),
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS tesla_connections (
+            id VARCHAR(36) PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            access_token TEXT NOT NULL,
+            refresh_token TEXT NOT NULL,
+            token_expires_at TIMESTAMP NOT NULL,
+            tesla_user_id VARCHAR(100),
+            vehicle_id VARCHAR(100),
+            vin VARCHAR(17),
+            vehicle_name VARCHAR(100),
+            vehicle_model VARCHAR(50),
+            is_active BOOLEAN NOT NULL DEFAULT true,
+            created_at TIMESTAMP NOT NULL DEFAULT now(),
+            updated_at TIMESTAMP,
+            last_used_at TIMESTAMP
         )
-        op.create_index('idx_tesla_connection_user', 'tesla_connections', ['user_id'])
-        op.create_index('idx_tesla_connection_vehicle', 'tesla_connections', ['vehicle_id'])
+    """))
 
-    if 'ev_verification_codes' not in existing_tables:
-        op.create_table(
-            'ev_verification_codes',
-            sa.Column('id', sa.String(36), primary_key=True),
-            sa.Column('user_id', sa.Integer(), sa.ForeignKey('users.id'), nullable=False),
-            sa.Column('tesla_connection_id', sa.String(36), sa.ForeignKey('tesla_connections.id'), nullable=True),
-            sa.Column('code', sa.String(10), unique=True, nullable=False),
-            sa.Column('charger_id', sa.String(100), nullable=True),
-            sa.Column('merchant_place_id', sa.String(255), nullable=True),
-            sa.Column('merchant_name', sa.String(255), nullable=True),
-            sa.Column('charging_verified', sa.Boolean(), nullable=False, server_default='false'),
-            sa.Column('battery_level', sa.Integer(), nullable=True),
-            sa.Column('charge_rate_kw', sa.Integer(), nullable=True),
-            sa.Column('lat', sa.String(20), nullable=True),
-            sa.Column('lng', sa.String(20), nullable=True),
-            sa.Column('status', sa.String(20), nullable=False, server_default='active'),
-            sa.Column('created_at', sa.DateTime(), nullable=False, server_default=sa.func.now()),
-            sa.Column('expires_at', sa.DateTime(), nullable=False),
-            sa.Column('redeemed_at', sa.DateTime(), nullable=True),
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS ev_verification_codes (
+            id VARCHAR(36) PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            tesla_connection_id VARCHAR(36),
+            code VARCHAR(10) UNIQUE NOT NULL,
+            charger_id VARCHAR(100),
+            merchant_place_id VARCHAR(255),
+            merchant_name VARCHAR(255),
+            charging_verified BOOLEAN NOT NULL DEFAULT false,
+            battery_level INTEGER,
+            charge_rate_kw INTEGER,
+            lat VARCHAR(20),
+            lng VARCHAR(20),
+            status VARCHAR(20) NOT NULL DEFAULT 'active',
+            created_at TIMESTAMP NOT NULL DEFAULT now(),
+            expires_at TIMESTAMP NOT NULL,
+            redeemed_at TIMESTAMP
         )
-        op.create_index('idx_ev_code', 'ev_verification_codes', ['code'])
-        op.create_index('idx_ev_code_user_status', 'ev_verification_codes', ['user_id', 'status'])
+    """))
+
+    conn.execute(sa.text(
+        "CREATE INDEX IF NOT EXISTS idx_tesla_connection_user ON tesla_connections(user_id)"
+    ))
+    conn.execute(sa.text(
+        "CREATE INDEX IF NOT EXISTS idx_tesla_connection_vehicle ON tesla_connections(vehicle_id)"
+    ))
+    conn.execute(sa.text(
+        "CREATE INDEX IF NOT EXISTS idx_ev_code ON ev_verification_codes(code)"
+    ))
+    conn.execute(sa.text(
+        "CREATE INDEX IF NOT EXISTS idx_ev_code_user_status ON ev_verification_codes(user_id, status)"
+    ))
 
 
 def downgrade():

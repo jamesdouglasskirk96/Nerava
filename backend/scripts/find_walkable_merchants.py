@@ -13,7 +13,10 @@ from urllib.parse import urlencode
 # Disable SSL verification for local testing (not recommended for production)
 ssl._create_default_https_context = ssl._create_unverified_context
 
-API_KEY = "AIzaSyAs0PVYXj3-ztRXCjdd0ztUGUSjQR73FFg"
+API_KEY = os.environ.get("GOOGLE_PLACES_API_KEY", "")
+if not API_KEY:
+    print("ERROR: GOOGLE_PLACES_API_KEY environment variable is required")
+    sys.exit(1)
 
 def geocode_address(address):
     """Geocode an address to lat/lng"""

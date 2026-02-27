@@ -14,6 +14,8 @@ class MerchantInfo(BaseModel):
     description: Optional[str] = None
     hours_today: Optional[str] = None  # e.g., "11 AM-11 PM · Open now"
     address: Optional[str] = None
+    phone: Optional[str] = None
+    website: Optional[str] = None
     rating: Optional[float] = None
     price_level: Optional[int] = None
     activations_today: Optional[int] = 0

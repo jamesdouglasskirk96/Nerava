@@ -46,21 +46,7 @@ export function DriverSessionProvider({ children }: { children: ReactNode }) {
   })
 
   const [locationFix, setLocationFix] = useState<LocationFixState>('idle')
-  const [coordinates, setCoordinates] = useState<Coordinates | null>(() => {
-    // Try to load from localStorage
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
-      try {
-        const data = JSON.parse(stored)
-        if (data.coordinates && data.coordinates.lat && data.coordinates.lng) {
-          return data.coordinates
-        }
-      } catch {
-        // Invalid JSON, ignore
-      }
-    }
-    return null
-  })
+  const [coordinates, setCoordinates] = useState<Coordinates | null>(null)
 
   const [appChargingState, setAppChargingStateState] = useState<AppChargingState>(() => {
     const stored = localStorage.getItem(STORAGE_CHARGING_STATE_KEY)
@@ -176,7 +162,12 @@ export function DriverSessionProvider({ children }: { children: ReactNode }) {
     }
   }, [locationPermission])
 
-  // Don't auto-request permission on mount - wait for onboarding to complete
+  // Auto-request location on mount - always get fresh GPS
+  useEffect(() => {
+    if (locationPermission === 'unknown') {
+      requestLocationPermission()
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const setAppChargingState = useCallback((state: AppChargingState) => {
     setAppChargingStateState(state)

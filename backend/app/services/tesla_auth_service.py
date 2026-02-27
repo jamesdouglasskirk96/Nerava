@@ -12,9 +12,9 @@ import httpx
 from ..core.config import settings
 
 # Tesla OIDC endpoints
-_tesla_jwks_url = "https://fleet-auth.tesla.com/oauth2/v3/discovery/thirdparty/keys"
-_tesla_issuer = "https://fleet-auth.tesla.com/oauth2/v3/nts"
-_tesla_userinfo_url = "https://fleet-auth.tesla.com/oauth2/v3/userinfo"
+_tesla_jwks_url = "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/discovery/thirdparty/keys"
+_tesla_issuer = "https://auth.tesla.com/oauth2/v3/nts"
+_tesla_userinfo_url = "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/userinfo"
 
 # Cache for Tesla JWKS
 _tesla_jwks_cache: Dict[str, Any] = {}

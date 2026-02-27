@@ -1,15 +1,18 @@
+import os
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models_extra import UtilityEvent, IncentiveRule
 
-router = APIRERouter = APIRouter(prefix="/v1/webhooks", tags=["utility"])
+router = APIRouter(prefix="/v1/webhooks", tags=["utility"])
 
 @router.post("/utility/austin_energy/fake_event")
 def fake_event(db: Session = Depends(get_db)):
+    if os.getenv("ENV", "dev") == "prod":
+        raise HTTPException(status_code=403, detail="Not available in production")
     """
     Simulate a utility event and temporarily boost OFF_PEAK_BASE to the next 60 minutes.
     """

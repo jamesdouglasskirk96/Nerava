@@ -20,6 +20,7 @@ import { useFavorites } from '../../contexts/FavoritesContext'
 import { MerchantCarousel } from '../MerchantCarousel/MerchantCarousel'
 import { ExclusiveActiveView } from '../ExclusiveActiveView/ExclusiveActiveView'
 import { PrimaryFilters } from '../shared/PrimaryFilters'
+import { SearchBar } from '../shared/SearchBar'
 import { MerchantDetailModal } from '../MerchantDetail/MerchantDetailModal'
 import { ActivateExclusiveModal } from '../ActivateExclusiveModal/ActivateExclusiveModal'
 import { ArrivalConfirmationModal } from '../ArrivalConfirmationModal/ArrivalConfirmationModal'
@@ -28,11 +29,11 @@ import { PreferencesModal } from '../Preferences/PreferencesModal'
 import { AnalyticsDebugPanel } from '../Debug/AnalyticsDebugPanel'
 import { AccountPage } from '../Account/AccountPage'
 import { WalletModal } from '../Wallet/WalletModal'
-import { User, Wallet, Activity } from 'lucide-react'
+import { User, Wallet, Activity, Map, LayoutGrid } from 'lucide-react'
 import { groupMerchantsIntoSets, groupChargersIntoSets } from '../../utils/dataMapping'
 import { getChargerSetsWithExperiences } from '../../mock/mockChargers'
 import { isMockMode, isDemoMode } from '../../services/api'
-import { getGuaranteedFallbackChargerSet, getGuaranteedFallbackCharger } from '../../utils/guaranteedFallback'
+// guaranteedFallback removed - app now uses real location data only
 import { preloadImage } from '../../utils/imageCache'
 import { ErrorBanner } from '../shared/ErrorBanner'
 import { InlineError } from '../shared/InlineError'
@@ -49,9 +50,10 @@ import type { MerchantSummary } from '../../types'
 import { isTeslaBrowser } from '../../utils/evBrowserDetection'
 import { EVHome } from '../EVHome/EVHome'
 import { useSessionPolling } from '../../hooks/useSessionPolling'
-import { useChargingSessions, useWalletBalance } from '../../services/api'
+import { useChargingSessions, useWalletBalance, useActiveEVCode, registerDeviceToken } from '../../services/api'
 import { ActiveSessionBanner } from '../SessionActivity/ActiveSessionBanner'
 import { SessionActivityScreen } from '../SessionActivity/SessionActivityScreen'
+import { ChargerMap } from '../ChargerMap/ChargerMap'
 
 /**
  * Main entry point that orchestrates the three states:
@@ -70,7 +72,7 @@ export function DriverHome() {
     setSessionId,
     requestLocationPermission,
   } = useDriverSessionContext()
-  const { activeExclusive, remainingMinutes, activateExclusive: activateExclusiveLocal, clearExclusive } = useExclusiveSessionState()
+  const { activeExclusive, remainingMinutes, remainingSeconds, activateExclusive: activateExclusiveLocal, clearExclusive } = useExclusiveSessionState()
   const activateExclusiveMutation = useActivateExclusive()
   const completeExclusiveMutation = useCompleteExclusive()
   const { data: activeExclusiveData } = useActiveExclusive()
@@ -103,7 +105,9 @@ export function DriverHome() {
   const [checkedInMerchantName, setCheckedInMerchantName] = useState<string | null>(null)
   const { favorites: likedMerchants, toggleFavorite, isFavorite } = useFavorites()
   const [primaryFilters, setPrimaryFilters] = useState<string[]>([])
-  
+  const [searchQuery, setSearchQuery] = useState('')
+  const [viewMode, setViewMode] = useState<'cards' | 'map'>('cards')
+
   // Wrapper to maintain compatibility with existing components
   const handleToggleLike = (merchantId: string) => {
     toggleFavorite(merchantId).catch((e) => {
@@ -161,6 +165,35 @@ export function DriverHome() {
       })
     })
   }, [primaryFilters])
+
+  // Filter merchants by search query (name, type, or category label)
+  const filterMerchantsBySearch = useCallback((merchants: MerchantSummary[]): MerchantSummary[] => {
+    if (!searchQuery.trim()) return merchants
+    const q = searchQuery.toLowerCase()
+    // Category label mappings (mirrors getCategoryLabel in dataMapping.ts)
+    const categoryLabels: Record<string, string> = {
+      cafe: 'coffee', restaurant: 'restaurant', bakery: 'bakery', bar: 'bar',
+      store: 'store', shopping_mall: 'shopping', park: 'park', gym: 'gym',
+      movie_theater: 'movies', pizza: 'pizza', pizzeria: 'pizza',
+    }
+    return merchants.filter((m) => {
+      // Match on name
+      if (m.name.toLowerCase().includes(q)) return true
+      // Match on raw types
+      const types = m.types || []
+      if (types.some((t) => t.toLowerCase().includes(q))) return true
+      // Match on resolved category labels
+      for (const t of types) {
+        const label = categoryLabels[t.toLowerCase()]
+        if (label && label.includes(q)) return true
+        // Also match the formatted fallback (e.g., "Italian Restaurant")
+        const formatted = t.replace(/_/g, ' ').toLowerCase()
+        if (formatted.includes(q)) return true
+      }
+      return false
+    })
+  }, [searchQuery])
+
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     // Check if user has access token
     return !!localStorage.getItem('access_token')
@@ -173,24 +206,27 @@ export function DriverHome() {
       const hasToken = !!localStorage.getItem('access_token')
       setIsAuthenticated(hasToken)
     }
-    
-    // Check on mount and listen for storage changes
+
+    // Check on mount and listen for cross-tab storage changes
     checkAuth()
     window.addEventListener('storage', checkAuth)
-    
-    // Also check periodically (in case tokens are set in same window)
-    const interval = setInterval(checkAuth, 1000)
-    
+
+    // Listen for same-window token changes via custom event
+    // (storage event only fires for cross-tab changes)
+    window.addEventListener('nerava:auth-changed', checkAuth)
+
     return () => {
       window.removeEventListener('storage', checkAuth)
-      clearInterval(interval)
+      window.removeEventListener('nerava:auth-changed', checkAuth)
     }
   }, [])
 
   // Refresh stale data when app returns from background
   usePageVisibility(useCallback(() => {
-    // Invalidate all React Query caches so data is re-fetched fresh
-    queryClient.invalidateQueries()
+    // Invalidate only the queries that matter for fresh data on resume
+    queryClient.invalidateQueries({ queryKey: ['active-exclusive'] })
+    queryClient.invalidateQueries({ queryKey: ['location-check'] })
+    queryClient.invalidateQueries({ queryKey: ['active-charging-session'] })
   }, [queryClient]))
 
   // Initialize browse mode if location is unavailable
@@ -226,6 +262,7 @@ export function DriverHome() {
   const [showAccountPage, setShowAccountPage] = useState(false)
   const [showWalletModal, setShowWalletModal] = useState(false)
   const [showSessionActivity, setShowSessionActivity] = useState(false)
+
   const [incentiveToast, setIncentiveToast] = useState<number | null>(null)
   const [nativeBridgeError, setNativeBridgeError] = useState<string | null>(null)
 
@@ -247,12 +284,26 @@ export function DriverHome() {
     }
   }, [])
 
-  // Active EV session state (from Tesla verify-charging)
-  const [activeEVSession, setActiveEVSession] = useState<{
-    code: string;
-    merchant_name: string | null;
-    expires_at: string;
-  } | null>(null)
+  // Listen for device token from native bridge and register with backend
+  useEffect(() => {
+    const handleNativeEvent = (event: Event) => {
+      const { action, payload } = (event as CustomEvent).detail || {}
+      if (action === 'DEVICE_TOKEN_REGISTERED' && payload?.token && isAuthenticated) {
+        registerDeviceToken(payload.token, 'ios')
+          .then(() => {
+            capture(DRIVER_EVENTS.DEVICE_TOKEN_REGISTERED, { platform: 'ios' })
+          })
+          .catch((err) => {
+            console.error('[DriverHome] Failed to register device token:', err)
+          })
+      }
+    }
+    window.addEventListener('neravaNative', handleNativeEvent)
+    return () => window.removeEventListener('neravaNative', handleNativeEvent)
+  }, [isAuthenticated])
+
+  // Active EV session state (from Tesla verify-charging) — via React Query
+  const { data: activeEVSession } = useActiveEVCode()
   const [showEVCodeOverlay, setShowEVCodeOverlay] = useState(false)
 
   // Wallet balance (React Query)
@@ -287,62 +338,22 @@ export function DriverHome() {
     }
   }, [sessionPolling.isActive, sessionPolling.sessionId])
 
-  // Fetch active EV session (Tesla verify-charging codes)
-  useEffect(() => {
-    const token = localStorage.getItem('access_token')
-    if (!token) {
-      setActiveEVSession(null)
-      return
-    }
-
-    const fetchActiveEVCodes = async () => {
-      try {
-        const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.nerava.network'
-        const response = await fetch(`${API_BASE}/v1/auth/tesla/codes`, {
-          headers: { 'Authorization': `Bearer ${token}` },
-        })
-        if (response.ok) {
-          const codes = await response.json()
-          // Find first active, non-expired code
-          // Server returns UTC datetimes without 'Z' — append it for correct parsing
-          const now = new Date()
-          const active = codes.find((c: any) => {
-            const expiresStr = c.expires_at.endsWith('Z') ? c.expires_at : c.expires_at + 'Z'
-            return c.status === 'active' && new Date(expiresStr) > now
-          })
-          setActiveEVSession(active || null)
-        }
-      } catch (err) {
-        console.error('Failed to fetch EV codes:', err)
-      }
-    }
-    fetchActiveEVCodes()
-
-    // Refresh every 60 seconds
-    const interval = setInterval(fetchActiveEVCodes, 60000)
-    return () => clearInterval(interval)
-  }, [isAuthenticated])
-
   const lastChargingStateRef = useRef(appChargingState)
 
-  // Default center for browse mode - Canyon Ridge charger location for demo
-  // This ensures Asadas Grill shows up when users open the app
-  // Use useMemo to keep stable reference and avoid re-renders
-  const DEFAULT_CENTER = useMemo(() => ({ lat: 30.3979, lng: -97.7044, accuracy_m: 10, last_fix_ts: Date.now() }), [])
-  
-  // Auto-enable browse mode when location is denied, skipped, or unknown (if no coordinates)
+  // Auto-enable browse mode when location is denied or skipped
+  // but still try to get real location via geolocation API
   useEffect(() => {
     if ((locationPermission === 'denied' || locationPermission === 'skipped') && !browseMode) {
       setBrowseMode(true)
-    } else if (locationPermission === 'unknown' && !coordinates && !browseMode) {
-      // Auto-enable browse mode immediately if location permission is unknown and no coordinates
-      // This allows the app to show content even if user hasn't granted location yet
-      setBrowseMode(true)
+      // Still try to get location - the user may have changed their mind in settings
+      if (!coordinates) {
+        requestLocationPermission()
+      }
     }
-  }, [locationPermission, browseMode, coordinates])
-  
-  // Use coordinates or default center in browse mode
-  const effectiveCoordinates = coordinates || (browseMode ? DEFAULT_CENTER : null)
+  }, [locationPermission, browseMode, coordinates, requestLocationPermission])
+
+  // Use real coordinates only - never fall back to hardcoded location
+  const effectiveCoordinates = coordinates
 
   // Intent capture request - only when location is available (or browse mode) and not in EXCLUSIVE_ACTIVE
   // Use useMemo to prevent infinite fetch loops - the request object must be stable
@@ -413,7 +424,7 @@ export function DriverHome() {
   // Real data from intent capture
   // Debug: Log intent data to console
   useEffect(() => {
-    if (intentData) {
+    if (import.meta.env.DEV && intentData) {
       console.log('[DriverHome] Intent data received:', {
         merchants_count: intentData.merchants?.length || 0,
         merchants: intentData.merchants,
@@ -430,9 +441,12 @@ export function DriverHome() {
   const hasApiError = intentError !== null && intentError !== undefined
 
   // Fix: Check for array existence AND length > 0 (empty array is truthy but has no items)
-  // Apply filters before grouping into sets
-  const filteredMerchants = intentData?.merchants && Array.isArray(intentData.merchants) && intentData.merchants.length > 0
-    ? filterMerchantsByAmenities(intentData.merchants)
+  // Apply search filter first, then amenity filter, before grouping into sets
+  const searchFilteredMerchants = intentData?.merchants && Array.isArray(intentData.merchants) && intentData.merchants.length > 0
+    ? filterMerchantsBySearch(intentData.merchants)
+    : []
+  const filteredMerchants = searchFilteredMerchants.length > 0
+    ? filterMerchantsByAmenities(searchFilteredMerchants)
     : []
   const realMerchantSets = filteredMerchants.length > 0
     ? groupMerchantsIntoSets(filteredMerchants)
@@ -444,8 +458,12 @@ export function DriverHome() {
     : intentData?.charger_summary
     ? [intentData.charger_summary]
     : []
+  // Pass filtered merchants to charger sets so search/filters affect charger experiences
+  const merchantsForExperiences = filteredMerchants.length > 0 ? filteredMerchants
+    : searchFilteredMerchants.length > 0 ? searchFilteredMerchants
+    : intentData?.merchants || []
   const realChargerSets = chargersSource.length > 0
-    ? groupChargersIntoSets(chargersSource, intentData?.merchants || [])
+    ? groupChargersIntoSets(chargersSource, merchantsForExperiences)
     : []
 
   const hasChargers = chargersSource.length > 0
@@ -462,51 +480,40 @@ export function DriverHome() {
   // CRITICAL: If chargers exist but chargerSets is empty, recreate it as a fallback
   // This ensures chargers ALWAYS display when chargers exist
   const finalChargerSets = (hasChargers && chargerSets.length === 0)
-    ? groupChargersIntoSets(chargersSource, intentData?.merchants || [])
+    ? groupChargersIntoSets(chargersSource, merchantsForExperiences)
     : chargerSets
-  
-  // CRITICAL: Only use guaranteed fallback when API returns no chargers
-  // If real chargers exist, use them directly (no mock data prepended)
-  const guaranteedFallbackSet = getGuaranteedFallbackChargerSet()
-  const guaranteedChargerSets = finalChargerSets.length > 0
-    ? finalChargerSets // Use real chargers from API
-    : guaranteedFallbackSet // Only show fallback when no real chargers exist
   
   // Charger-first design: always show charger sets in the main carousel.
   // Users access merchants by tapping a charger card.
-  const activeSets = guaranteedChargerSets
+  const activeSets = finalChargerSets
 
   // Get nearest charger for radius check (first one, since they're sorted by distance)
   const nearestCharger = chargersSource[0]
 
   // Debug: Log computed sets
   useEffect(() => {
-    console.log('[DriverHome] Computed sets:', {
-      realMerchantSets_length: realMerchantSets.length,
-      realChargerSets_length: realChargerSets.length,
-      chargerSets_length: chargerSets.length,
-      finalChargerSets_length: finalChargerSets.length,
-      guaranteedChargerSets_length: guaranteedChargerSets.length,
-      activeSets_length: activeSets.length,
-      appChargingState,
-      useMockData,
-      useDemoData,
-      hasApiError,
-      intentData_merchants_length: intentData?.merchants?.length || 0,
-      chargers_count: chargersSource.length,
-      chargers_ids: chargersSource.map(c => c.id),
-      nearest_charger_id: nearestCharger?.id,
-      nearest_charger_distance_m: nearestCharger?.distance_m,
-      using_guaranteed_fallback: guaranteedChargerSets[0]?.featured?.id === 'canyon_ridge_tesla' && finalChargerSets.length === 0,
-    })
-  }, [realMerchantSets, realChargerSets, chargerSets, finalChargerSets, guaranteedChargerSets, activeSets, appChargingState, useMockData, useDemoData, hasApiError, intentData, chargersSource, nearestCharger])
+    if (import.meta.env.DEV) {
+      console.log('[DriverHome] Computed sets:', {
+        realMerchantSets_length: realMerchantSets.length,
+        realChargerSets_length: realChargerSets.length,
+        chargerSets_length: chargerSets.length,
+        finalChargerSets_length: finalChargerSets.length,
+        activeSets_length: activeSets.length,
+        appChargingState,
+        useMockData,
+        useDemoData,
+        hasApiError,
+        intentData_merchants_length: intentData?.merchants?.length || 0,
+        chargers_count: chargersSource.length,
+        chargers_ids: chargersSource.map(c => c.id),
+        nearest_charger_id: nearestCharger?.id,
+        nearest_charger_distance_m: nearestCharger?.distance_m,
+      })
+    }
+  }, [realMerchantSets, realChargerSets, chargerSets, finalChargerSets, activeSets, appChargingState, useMockData, useDemoData, hasApiError, intentData, chargersSource, nearestCharger])
 
-  // CRITICAL: Always have a fallback set - use guaranteed fallback if nothing else available
-  // Ensure currentSet always has valid data, defaulting to guaranteed fallback charger
-  const currentSet = activeSets[currentSetIndex] || guaranteedChargerSets[0] || {
-    featured: getGuaranteedFallbackCharger(),
-    nearby: []
-  }
+  // Use current set from active data, or null if no chargers available
+  const currentSet = activeSets[currentSetIndex] || activeSets[0] || null
 
   // Preload next carousel image when index changes
   useEffect(() => {
@@ -553,7 +560,7 @@ export function DriverHome() {
     const params = new URLSearchParams()
     if (photoUrl) params.set('photo', photoUrl)
     const queryString = params.toString()
-    navigate(`/m/${merchantId}${queryString ? `?${queryString}` : ''}`)
+    navigate(`/merchant/${merchantId}${queryString ? `?${queryString}` : ''}`)
   }
 
   const handleExperienceClick = (experienceId: string, photoUrl?: string | null) => {
@@ -561,7 +568,7 @@ export function DriverHome() {
     const params = new URLSearchParams()
     if (photoUrl) params.set('photo', photoUrl)
     const queryString = params.toString()
-    navigate(`/m/${experienceId}${queryString ? `?${queryString}` : ''}`)
+    navigate(`/merchant/${experienceId}${queryString ? `?${queryString}` : ''}`)
   }
 
   const handleCloseMerchantDetails = () => {
@@ -926,33 +933,26 @@ export function DriverHome() {
     }
   }
 
-  // State-based headline - removed subtitle per Figma design
-  const headline = FEATURE_FLAGS.LIVE_COORDINATION_UI_V1
-    ? (chargingState.state === 'PRE_CHARGING'
-        ? `${guaranteedChargerSets.length} charger${guaranteedChargerSets.length !== 1 ? 's' : ''} with open stalls near you`
-        : chargingState.state === 'CHARGING_ACTIVE' || chargingState.state === 'EXCLUSIVE_ACTIVE'
-        ? 'Lock in your spot while you charge'
-        : 'Chargers near experiences')
-    : 'What to do while you charge'
-
   // Dev console logging
   useEffect(() => {
-    console.group('Nerava Integration')
-    console.log('Mock mode:', isMockMode())
-    console.log('API base URL:', import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001')
-    console.log('Location permission:', locationPermission)
-    console.log('Location fix:', locationFix)
-    console.log('Coordinates:', coordinates)
-    console.log('Browse mode:', browseMode)
-    console.log('Effective coordinates:', effectiveCoordinates)
-    console.log('Intent request:', intentRequest)
-    console.log('App charging state:', appChargingState)
-    console.log('Charging state machine:', chargingState.state)
-    console.log('Session ID:', sessionId)
-    console.log('Intent capture loading:', intentLoading)
-    console.log('Intent data:', intentData)
-    console.log('Intent error:', intentError)
-    console.groupEnd()
+    if (import.meta.env.DEV) {
+      console.group('Nerava Integration')
+      console.log('Mock mode:', isMockMode())
+      console.log('API base URL:', import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001')
+      console.log('Location permission:', locationPermission)
+      console.log('Location fix:', locationFix)
+      console.log('Coordinates:', coordinates)
+      console.log('Browse mode:', browseMode)
+      console.log('Effective coordinates:', effectiveCoordinates)
+      console.log('Intent request:', intentRequest)
+      console.log('App charging state:', appChargingState)
+      console.log('Charging state machine:', chargingState.state)
+      console.log('Session ID:', sessionId)
+      console.log('Intent capture loading:', intentLoading)
+      console.log('Intent data:', intentData)
+      console.log('Intent error:', intentError)
+      console.groupEnd()
+    }
   }, [locationPermission, locationFix, coordinates, browseMode, effectiveCoordinates, intentRequest, appChargingState, sessionId, intentLoading, intentData, intentError])
 
   // Show location denied screen if location is denied or error (and not skipped/browse mode)
@@ -983,6 +983,7 @@ export function DriverHome() {
         <ExclusiveActiveView
           merchant={activeExclusive}
           remainingMinutes={remainingMinutes}
+          remainingSeconds={remainingSeconds}
           onArrived={handleArrived}
           onCancel={handleCancelExclusive}
           onExpired={() => {
@@ -1077,18 +1078,6 @@ export function DriverHome() {
           </button>
         )}
 
-        {/* Active Charging Session Banner */}
-        {sessionPolling.isActive && (
-          <ActiveSessionBanner
-            durationMinutes={sessionPolling.durationMinutes}
-            kwhDelivered={sessionPolling.kwhDelivered}
-            onTap={() => {
-              capture(DRIVER_EVENTS.CHARGING_ACTIVITY_OPENED)
-              setShowSessionActivity(true)
-            }}
-          />
-        )}
-
         {/* Incentive Toast */}
         {incentiveToast !== null && (
           <div className="bg-green-50 border-b border-green-200 px-4 py-3 flex items-center gap-3 flex-shrink-0">
@@ -1144,12 +1133,24 @@ export function DriverHome() {
                     capture(DRIVER_EVENTS.CHARGING_ACTIVITY_OPENED)
                     setShowSessionActivity(true)
                   }}
-                  className="relative p-2 hover:bg-gray-100 rounded-full transition-all"
+                  className={`relative p-2 rounded-full transition-all ${
+                    sessionPolling.isActive
+                      ? 'bg-green-50 hover:bg-green-100'
+                      : 'hover:bg-gray-100'
+                  }`}
                   aria-label="Charging Activity"
                 >
-                  <Activity className="w-5 h-5 text-[#050505]" aria-hidden="true" />
+                  <Activity
+                    className={`w-5 h-5 ${
+                      sessionPolling.isActive ? 'text-green-600' : 'text-[#050505]'
+                    }`}
+                    aria-hidden="true"
+                  />
                   {sessionPolling.isActive && (
-                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-green-500 rounded-full" />
+                    <>
+                      <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-green-500 rounded-full animate-ping opacity-75" />
+                      <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-green-500 rounded-full" />
+                    </>
                   )}
                 </button>
               )}
@@ -1176,10 +1177,45 @@ export function DriverHome() {
           </div>
         </header>
 
-        {/* Moment Header */}
-        <div className="text-center px-6 pt-4 pb-2 flex-shrink-0">
-          <h1 className="text-2xl sm:text-3xl whitespace-nowrap">{headline}</h1>
-        </div>
+        {/* Active Charging Session Banner - below header */}
+        {sessionPolling.isActive && (
+          <ActiveSessionBanner
+            durationMinutes={sessionPolling.durationMinutes}
+            kwhDelivered={sessionPolling.kwhDelivered}
+            onTap={() => {
+              capture(DRIVER_EVENTS.CHARGING_ACTIVITY_OPENED)
+              setShowSessionActivity(true)
+            }}
+          />
+        )}
+
+        {/* Search Bar + Map Toggle */}
+        {(appChargingState === 'PRE_CHARGING' || appChargingState === 'CHARGING_ACTIVE') && (
+          <div className="pt-4 flex-shrink-0 flex items-center gap-2 pr-4">
+            <div className="flex-1">
+              <SearchBar
+                value={searchQuery}
+                onChange={(q) => {
+                  setSearchQuery(q)
+                  if (q.trim().length >= 2) {
+                    capture(DRIVER_EVENTS.SEARCH_QUERY, { query: q })
+                  }
+                }}
+              />
+            </div>
+            <button
+              onClick={() => setViewMode((m) => (m === 'cards' ? 'map' : 'cards'))}
+              className="p-2.5 rounded-full bg-[#F7F8FA] border border-[#E4E6EB] hover:bg-[#E4E6EB] active:scale-95 transition-all flex-shrink-0"
+              aria-label={viewMode === 'cards' ? 'Switch to map view' : 'Switch to card view'}
+            >
+              {viewMode === 'cards' ? (
+                <Map className="w-5 h-5 text-[#050505]" />
+              ) : (
+                <LayoutGrid className="w-5 h-5 text-[#050505]" />
+              )}
+            </button>
+          </div>
+        )}
 
         {/* Primary Filters - Show for PRE_CHARGING and CHARGING_ACTIVE states */}
         {(appChargingState === 'PRE_CHARGING' || appChargingState === 'CHARGING_ACTIVE') && (
@@ -1214,12 +1250,44 @@ export function DriverHome() {
             className="mx-4 mb-2"
           />
 
-          {intentLoading && !useMockData && locationFix === 'locating' ? (
+          {!effectiveCoordinates && !useMockData ? (
+            <div className="flex flex-col items-center justify-center py-12 px-6 h-full">
+              <div className="w-20 h-20 bg-[#F7F8FA] rounded-full flex items-center justify-center mb-4">
+                <svg className="w-10 h-10 text-[#656A6B] animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium text-[#050505] mb-1">Finding your location...</h3>
+              <p className="text-sm text-[#656A6B] text-center mb-4">
+                Enable location access to see chargers and merchants near you.
+              </p>
+              <button
+                onClick={() => requestLocationPermission()}
+                className="px-6 py-2.5 bg-[#1877F2] text-white text-sm font-medium rounded-full hover:bg-[#166FE5] active:scale-[0.98] transition-all"
+              >
+                Enable Location
+              </button>
+            </div>
+          ) : intentLoading && !useMockData && locationFix === 'locating' ? (
             <MerchantCarouselSkeleton />
           ) : intentLoading && !useMockData ? (
             <div className="grid gap-4 px-5">
               {[...Array(3)].map((_, i) => <MerchantCardSkeleton key={i} />)}
             </div>
+          ) : viewMode === 'map' && chargersSource.length > 0 ? (
+            <ChargerMap
+              chargers={chargersSource}
+              merchants={intentData?.merchants}
+              userLat={effectiveCoordinates?.lat}
+              userLng={effectiveCoordinates?.lng}
+              onChargerClick={(chargerId) => {
+                const chargerSet = finalChargerSets.find((s) => s.featured.id === chargerId)
+                if (chargerSet) {
+                  setSelectedCharger(chargerSet.featured)
+                }
+              }}
+            />
           ) : activeSets.length > 0 ? (
             <MerchantCarousel
               merchantSet={currentSet}
@@ -1239,11 +1307,11 @@ export function DriverHome() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-medium text-[#050505] mb-1">No spots found</h3>
+              <h3 className="text-lg font-medium text-[#050505] mb-1">No chargers nearby</h3>
               <p className="text-sm text-[#656A6B] text-center mb-4">
-                {intentLoading 
-                  ? 'Loading nearby spots...'
-                  : 'Try adjusting your filters or check back soon for new spots.'}
+                {intentLoading
+                  ? 'Loading nearby chargers...'
+                  : 'We didn\'t find any EV chargers near your current location. Try moving closer to a charging station.'}
               </p>
               {!intentLoading && (
                 <button
@@ -1275,12 +1343,39 @@ export function DriverHome() {
             <div className="flex-1 text-center">
               <img src="/nerava-logo.png" alt="Nerava" className="h-6 mx-auto" />
             </div>
-            <button
-              onClick={() => setShowAccountPage(true)}
-              className="p-2 -mr-2 hover:bg-gray-100 rounded-full"
-            >
-              <User className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              {isAuthenticated && (
+                <button
+                  onClick={() => setShowWalletModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 rounded-full transition-all border border-[#E4E6EB]"
+                  aria-label="Wallet"
+                >
+                  <Wallet className="w-4 h-4 text-[#1877F2]" aria-hidden="true" />
+                  <span className="text-sm font-medium text-[#050505]">${(walletBalance / 100).toFixed(2)}</span>
+                </button>
+              )}
+              {isAuthenticated && (
+                <button
+                  onClick={() => {
+                    capture(DRIVER_EVENTS.CHARGING_ACTIVITY_OPENED)
+                    setShowSessionActivity(true)
+                  }}
+                  className="relative p-2 hover:bg-gray-100 rounded-full transition-all"
+                  aria-label="Charging Activity"
+                >
+                  <Activity className="w-5 h-5 text-[#050505]" aria-hidden="true" />
+                  {sessionPolling.isActive && (
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-green-500 rounded-full" />
+                  )}
+                </button>
+              )}
+              <button
+                onClick={() => setShowAccountPage(true)}
+                className="p-2 hover:bg-gray-100 rounded-full"
+              >
+                <User className="w-5 h-5" />
+              </button>
+            </div>
           </header>
 
           {/* Moment Header */}

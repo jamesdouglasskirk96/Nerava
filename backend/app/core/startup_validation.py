@@ -256,6 +256,18 @@ def validate_merchant_auth_mock():
     logger.info("Merchant auth mock validation passed (disabled in prod)")
 
 
+def validate_stripe_config():
+    """Warn if STRIPE_SECRET_KEY is set but ENABLE_STRIPE_PAYOUTS is not enabled."""
+    stripe_key = os.getenv("STRIPE_SECRET_KEY", "")
+    enable_payouts = os.getenv("ENABLE_STRIPE_PAYOUTS", "false").lower() == "true"
+
+    if stripe_key and not enable_payouts:
+        logger.warning(
+            "STRIPE_SECRET_KEY is set but ENABLE_STRIPE_PAYOUTS != 'true'. "
+            "Payouts will run in mock mode. Set ENABLE_STRIPE_PAYOUTS=true to enable real payouts."
+        )
+
+
 def ensure_merchant_schema():
     """Ensure merchants table has short_code and region_code columns.
 

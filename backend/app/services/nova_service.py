@@ -23,6 +23,26 @@ from app.services.wallet_activity import mark_wallet_activity
 
 logger = logging.getLogger(__name__)
 
+# Module-level cached check for whether NovaTransaction has payload_hash column
+# Avoids calling inspect() on every redeem request
+_payload_hash_column_exists: Optional[bool] = None
+
+
+def _check_payload_hash_column(db: Session) -> bool:
+    """Check if payload_hash column exists, with module-level caching."""
+    global _payload_hash_column_exists
+    if _payload_hash_column_exists is not None:
+        return _payload_hash_column_exists
+    try:
+        from sqlalchemy import inspect as sa_inspect
+        inspector = sa_inspect(db.bind)
+        columns = [col['name'] for col in inspector.get_columns('nova_transactions')]
+        _payload_hash_column_exists = 'payload_hash' in columns
+    except Exception:
+        # Fallback: check the ORM model attribute
+        _payload_hash_column_exists = hasattr(NovaTransaction, 'payload_hash')
+    return _payload_hash_column_exists
+
 
 def compute_payload_hash(payload: dict) -> str:
     """
@@ -363,11 +383,8 @@ class NovaService:
         }
         payload_hash = compute_payload_hash(payload)
         
-        # Check if payload_hash column exists before attempting ORM insert
-        from sqlalchemy import inspect, text
-        inspector = inspect(db.bind)
-        columns = [col['name'] for col in inspector.get_columns('nova_transactions')]
-        has_payload_hash_column = 'payload_hash' in columns
+        # Check if payload_hash column exists (cached at module level)
+        has_payload_hash_column = _check_payload_hash_column(db)
         
         driver_txn_id = str(uuid.uuid4())
         merchant_txn_id = str(uuid.uuid4())

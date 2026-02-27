@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { X, TrendingUp, TrendingDown, Clock, Loader2, ExternalLink, CheckCircle, AlertCircle } from 'lucide-react'
 import {
   createStripeAccount,
@@ -39,6 +40,7 @@ export function WalletModal({
   onBalanceChanged,
   userEmail,
 }: WalletModalProps) {
+  const navigate = useNavigate()
   const [withdrawStep, setWithdrawStep] = useState<WithdrawStep>('idle')
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
@@ -338,6 +340,12 @@ export function WalletModal({
                   </div>
                 ))}
               </div>
+              <button
+                onClick={() => { onClose(); navigate('/earnings') }}
+                className="mt-3 text-sm text-[#1877F2] font-medium hover:underline w-full text-center"
+              >
+                View all earnings
+              </button>
             </div>
           )}
         </div>

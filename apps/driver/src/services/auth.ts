@@ -186,6 +186,8 @@ export interface TeslaVehicle {
   vin?: string
   display_name?: string
   model?: string
+  year?: number
+  color?: string
 }
 
 export interface TeslaLoginResponse extends TokenResponse {

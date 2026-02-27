@@ -15,129 +15,140 @@ depends_on = None
 
 
 def upgrade():
+    """Create tables using raw SQL with IF NOT EXISTS for maximum safety."""
     conn = op.get_bind()
-    inspector = sa.inspect(conn)
-    existing_tables = inspector.get_table_names()
 
-    if 'driver_wallets' not in existing_tables:
-        op.create_table(
-            'driver_wallets',
-            sa.Column('id', sa.String(36), primary_key=True),
-            sa.Column('driver_id', sa.Integer(), sa.ForeignKey('users.id'), nullable=False, unique=True),
-            sa.Column('balance_cents', sa.Integer(), nullable=False, server_default='0'),
-            sa.Column('pending_balance_cents', sa.Integer(), nullable=False, server_default='0'),
-            sa.Column('stripe_account_id', sa.String(255), nullable=True),
-            sa.Column('stripe_account_status', sa.String(50), nullable=True),
-            sa.Column('stripe_onboarding_complete', sa.Boolean(), nullable=False, server_default='false'),
-            sa.Column('total_earned_cents', sa.Integer(), nullable=False, server_default='0'),
-            sa.Column('total_withdrawn_cents', sa.Integer(), nullable=False, server_default='0'),
-            sa.Column('created_at', sa.DateTime(), nullable=False, server_default=sa.func.now()),
-            sa.Column('updated_at', sa.DateTime(), nullable=True),
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS driver_wallets (
+            id VARCHAR(36) PRIMARY KEY,
+            driver_id INTEGER NOT NULL REFERENCES users(id) UNIQUE,
+            balance_cents INTEGER NOT NULL DEFAULT 0,
+            pending_balance_cents INTEGER NOT NULL DEFAULT 0,
+            stripe_account_id VARCHAR(255),
+            stripe_account_status VARCHAR(50),
+            stripe_onboarding_complete BOOLEAN NOT NULL DEFAULT false,
+            total_earned_cents INTEGER NOT NULL DEFAULT 0,
+            total_withdrawn_cents INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMP NOT NULL DEFAULT now(),
+            updated_at TIMESTAMP
         )
-        op.create_index('idx_driver_wallet_driver', 'driver_wallets', ['driver_id'])
-        op.create_index('idx_driver_wallet_stripe', 'driver_wallets', ['stripe_account_id'])
+    """))
 
-    if 'payouts' not in existing_tables:
-        op.create_table(
-            'payouts',
-            sa.Column('id', sa.String(36), primary_key=True),
-            sa.Column('driver_id', sa.Integer(), sa.ForeignKey('users.id'), nullable=False),
-            sa.Column('wallet_id', sa.String(36), sa.ForeignKey('driver_wallets.id'), nullable=False),
-            sa.Column('amount_cents', sa.Integer(), nullable=False),
-            sa.Column('stripe_transfer_id', sa.String(255), nullable=True),
-            sa.Column('stripe_payout_id', sa.String(255), nullable=True),
-            sa.Column('status', sa.String(20), nullable=False, server_default='pending'),
-            sa.Column('failure_reason', sa.String(500), nullable=True),
-            sa.Column('idempotency_key', sa.String(100), unique=True, nullable=False),
-            sa.Column('created_at', sa.DateTime(), nullable=False, server_default=sa.func.now()),
-            sa.Column('updated_at', sa.DateTime(), nullable=True),
-            sa.Column('paid_at', sa.DateTime(), nullable=True),
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS payouts (
+            id VARCHAR(36) PRIMARY KEY,
+            driver_id INTEGER NOT NULL REFERENCES users(id),
+            wallet_id VARCHAR(36) NOT NULL,
+            amount_cents INTEGER NOT NULL,
+            stripe_transfer_id VARCHAR(255),
+            stripe_payout_id VARCHAR(255),
+            status VARCHAR(20) NOT NULL DEFAULT 'pending',
+            failure_reason VARCHAR(500),
+            idempotency_key VARCHAR(100) NOT NULL UNIQUE,
+            created_at TIMESTAMP NOT NULL DEFAULT now(),
+            updated_at TIMESTAMP,
+            paid_at TIMESTAMP
         )
-        op.create_index('idx_payout_driver', 'payouts', ['driver_id'])
-        op.create_index('idx_payout_status', 'payouts', ['status'])
-        op.create_index('idx_payout_stripe_transfer', 'payouts', ['stripe_transfer_id'])
+    """))
 
-    if 'cards' not in existing_tables:
-        op.create_table(
-            'cards',
-            sa.Column('id', sa.String(36), primary_key=True),
-            sa.Column('driver_id', sa.Integer(), sa.ForeignKey('users.id'), nullable=False),
-            sa.Column('fidel_card_id', sa.String(255), nullable=True),
-            sa.Column('last4', sa.String(4), nullable=False),
-            sa.Column('brand', sa.String(20), nullable=False),
-            sa.Column('fingerprint', sa.String(100), nullable=True),
-            sa.Column('is_active', sa.Boolean(), nullable=False, server_default='true'),
-            sa.Column('linked_at', sa.DateTime(), nullable=True),
-            sa.Column('created_at', sa.DateTime(), nullable=False, server_default=sa.func.now()),
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS cards (
+            id VARCHAR(36) PRIMARY KEY,
+            driver_id INTEGER NOT NULL REFERENCES users(id),
+            fidel_card_id VARCHAR(255),
+            last4 VARCHAR(4) NOT NULL,
+            brand VARCHAR(20) NOT NULL,
+            fingerprint VARCHAR(100),
+            is_active BOOLEAN NOT NULL DEFAULT true,
+            linked_at TIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT now()
         )
-        op.create_index('idx_card_driver', 'cards', ['driver_id'])
-        op.create_index('idx_card_fidel', 'cards', ['fidel_card_id'])
-        op.create_index('idx_card_fingerprint', 'cards', ['fingerprint'])
+    """))
 
-    if 'merchant_offers' not in existing_tables:
-        op.create_table(
-            'merchant_offers',
-            sa.Column('id', sa.String(36), primary_key=True),
-            sa.Column('merchant_id', sa.String(36), nullable=False),
-            sa.Column('fidel_offer_id', sa.String(255), nullable=True),
-            sa.Column('fidel_program_id', sa.String(255), nullable=True),
-            sa.Column('min_spend_cents', sa.Integer(), nullable=False, server_default='0'),
-            sa.Column('reward_cents', sa.Integer(), nullable=False),
-            sa.Column('reward_percent', sa.Integer(), nullable=True),
-            sa.Column('max_reward_cents', sa.Integer(), nullable=True),
-            sa.Column('is_active', sa.Boolean(), nullable=False, server_default='true'),
-            sa.Column('valid_from', sa.DateTime(), nullable=True),
-            sa.Column('valid_until', sa.DateTime(), nullable=True),
-            sa.Column('created_at', sa.DateTime(), nullable=False, server_default=sa.func.now()),
-            sa.Column('updated_at', sa.DateTime(), nullable=True),
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS merchant_offers (
+            id VARCHAR(36) PRIMARY KEY,
+            merchant_id VARCHAR(36) NOT NULL,
+            fidel_offer_id VARCHAR(255),
+            fidel_program_id VARCHAR(255),
+            min_spend_cents INTEGER NOT NULL DEFAULT 0,
+            reward_cents INTEGER NOT NULL,
+            reward_percent INTEGER,
+            max_reward_cents INTEGER,
+            is_active BOOLEAN NOT NULL DEFAULT true,
+            valid_from TIMESTAMP,
+            valid_until TIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT now(),
+            updated_at TIMESTAMP
         )
-        op.create_index('idx_merchant_offer_merchant', 'merchant_offers', ['merchant_id'])
-        op.create_index('idx_merchant_offer_active', 'merchant_offers', ['is_active'])
-        op.create_index('idx_merchant_offer_fidel', 'merchant_offers', ['fidel_offer_id'])
+    """))
 
-    if 'clo_transactions' not in existing_tables:
-        op.create_table(
-            'clo_transactions',
-            sa.Column('id', sa.String(36), primary_key=True),
-            sa.Column('driver_id', sa.Integer(), sa.ForeignKey('users.id'), nullable=False),
-            sa.Column('card_id', sa.String(36), sa.ForeignKey('cards.id'), nullable=False),
-            sa.Column('merchant_id', sa.String(36), nullable=False),
-            sa.Column('offer_id', sa.String(36), sa.ForeignKey('merchant_offers.id'), nullable=True),
-            sa.Column('amount_cents', sa.Integer(), nullable=False),
-            sa.Column('reward_cents', sa.Integer(), nullable=True),
-            sa.Column('status', sa.String(20), nullable=False, server_default='pending'),
-            sa.Column('external_id', sa.String(255), nullable=True),
-            sa.Column('charging_session_id', sa.String(36), nullable=True),
-            sa.Column('transaction_time', sa.DateTime(), nullable=False),
-            sa.Column('merchant_name', sa.String(255), nullable=True),
-            sa.Column('merchant_location', sa.String(500), nullable=True),
-            sa.Column('eligibility_reason', sa.String(200), nullable=True),
-            sa.Column('created_at', sa.DateTime(), nullable=False, server_default=sa.func.now()),
-            sa.Column('processed_at', sa.DateTime(), nullable=True),
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS clo_transactions (
+            id VARCHAR(36) PRIMARY KEY,
+            driver_id INTEGER NOT NULL,
+            card_id VARCHAR(36) NOT NULL,
+            merchant_id VARCHAR(36) NOT NULL,
+            offer_id VARCHAR(36),
+            amount_cents INTEGER NOT NULL,
+            reward_cents INTEGER,
+            status VARCHAR(20) NOT NULL DEFAULT 'pending',
+            external_id VARCHAR(255),
+            charging_session_id VARCHAR(36),
+            transaction_time TIMESTAMP NOT NULL,
+            merchant_name VARCHAR(255),
+            merchant_location VARCHAR(500),
+            eligibility_reason VARCHAR(200),
+            created_at TIMESTAMP NOT NULL DEFAULT now(),
+            processed_at TIMESTAMP
         )
-        op.create_index('idx_clo_txn_driver', 'clo_transactions', ['driver_id'])
-        op.create_index('idx_clo_txn_card', 'clo_transactions', ['card_id'])
-        op.create_index('idx_clo_txn_status', 'clo_transactions', ['status'])
-        op.create_index('idx_clo_txn_external', 'clo_transactions', ['external_id'])
-        op.create_index('idx_clo_txn_session', 'clo_transactions', ['charging_session_id'])
+    """))
 
-    if 'wallet_ledger' not in existing_tables:
-        op.create_table(
-            'wallet_ledger',
-            sa.Column('id', sa.String(36), primary_key=True),
-            sa.Column('wallet_id', sa.String(36), sa.ForeignKey('driver_wallets.id'), nullable=False),
-            sa.Column('driver_id', sa.Integer(), sa.ForeignKey('users.id'), nullable=False),
-            sa.Column('amount_cents', sa.Integer(), nullable=False),
-            sa.Column('balance_after_cents', sa.Integer(), nullable=False),
-            sa.Column('transaction_type', sa.String(30), nullable=False),
-            sa.Column('reference_type', sa.String(30), nullable=True),
-            sa.Column('reference_id', sa.String(36), nullable=True),
-            sa.Column('description', sa.String(500), nullable=True),
-            sa.Column('created_at', sa.DateTime(), nullable=False, server_default=sa.func.now()),
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS wallet_ledger (
+            id VARCHAR(36) PRIMARY KEY,
+            wallet_id VARCHAR(36) NOT NULL,
+            driver_id INTEGER NOT NULL,
+            amount_cents INTEGER NOT NULL,
+            balance_after_cents INTEGER NOT NULL,
+            transaction_type VARCHAR(30) NOT NULL,
+            reference_type VARCHAR(30),
+            reference_id VARCHAR(36),
+            description VARCHAR(500),
+            created_at TIMESTAMP NOT NULL DEFAULT now()
         )
-        op.create_index('idx_wallet_ledger_wallet', 'wallet_ledger', ['wallet_id'])
-        op.create_index('idx_wallet_ledger_driver', 'wallet_ledger', ['driver_id'])
-        op.create_index('idx_wallet_ledger_reference', 'wallet_ledger', ['reference_type', 'reference_id'])
+    """))
+
+    # Create indexes safely (ignore if they already exist)
+    indexes = [
+        ("idx_driver_wallet_driver", "driver_wallets", "driver_id"),
+        ("idx_driver_wallet_stripe", "driver_wallets", "stripe_account_id"),
+        ("idx_payout_driver", "payouts", "driver_id"),
+        ("idx_payout_status", "payouts", "status"),
+        ("idx_payout_stripe_transfer", "payouts", "stripe_transfer_id"),
+        ("idx_card_driver", "cards", "driver_id"),
+        ("idx_card_fidel", "cards", "fidel_card_id"),
+        ("idx_card_fingerprint", "cards", "fingerprint"),
+        ("idx_merchant_offer_merchant", "merchant_offers", "merchant_id"),
+        ("idx_merchant_offer_active", "merchant_offers", "is_active"),
+        ("idx_merchant_offer_fidel", "merchant_offers", "fidel_offer_id"),
+        ("idx_clo_txn_driver", "clo_transactions", "driver_id"),
+        ("idx_clo_txn_card", "clo_transactions", "card_id"),
+        ("idx_clo_txn_status", "clo_transactions", "status"),
+        ("idx_clo_txn_external", "clo_transactions", "external_id"),
+        ("idx_clo_txn_session", "clo_transactions", "charging_session_id"),
+        ("idx_wallet_ledger_wallet", "wallet_ledger", "wallet_id"),
+        ("idx_wallet_ledger_driver", "wallet_ledger", "driver_id"),
+    ]
+    for idx_name, table, column in indexes:
+        conn.execute(sa.text(
+            f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table} ({column})"
+        ))
+
+    # Composite index
+    conn.execute(sa.text(
+        "CREATE INDEX IF NOT EXISTS idx_wallet_ledger_reference ON wallet_ledger (reference_type, reference_id)"
+    ))
 
 
 def downgrade():

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MerchantDetailsScreen } from '../../src/components/MerchantDetails/MerchantDetailsScreen'
+import { FavoritesProvider } from '../../src/contexts/FavoritesContext'
 
 // Mock fetch
 global.fetch = vi.fn()
@@ -95,26 +96,43 @@ describe('MerchantDetailsScreen', () => {
       },
     }
 
-    // @ts-ignore — first call returns merchant details, second returns activation
-    global.fetch
-      .mockResolvedValueOnce({
+    // @ts-ignore — route-based mock: return appropriate data based on URL
+    ;(global.fetch as any).mockImplementation((url: string, options?: any) => {
+      const urlStr = typeof url === 'string' ? url : url.toString()
+
+      if (urlStr.includes('/v1/merchants/favorites')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => [],
+        })
+      }
+
+      if (urlStr.includes('/v1/exclusive/activate')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => mockActivateResponse,
+        })
+      }
+
+      // Default: merchant details
+      return Promise.resolve({
         ok: true,
         status: 200,
         json: async () => mockMerchantDetails,
       })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => mockActivateResponse,
-      })
+    })
 
     render(
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={['/m/mock_asadas_grill?session_id=test-session']}>
-          <Routes>
-            <Route path="/m/:merchantId" element={<MerchantDetailsScreen />} />
-          </Routes>
-        </MemoryRouter>
+        <FavoritesProvider>
+          <MemoryRouter initialEntries={['/m/mock_asadas_grill?session_id=test-session']}>
+            <Routes>
+              <Route path="/m/:merchantId" element={<MerchantDetailsScreen />} />
+            </Routes>
+          </MemoryRouter>
+        </FavoritesProvider>
       </QueryClientProvider>
     )
 

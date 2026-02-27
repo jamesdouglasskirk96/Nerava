@@ -7,6 +7,7 @@ import { ChargerCardSkeleton } from '../shared/Skeleton'
 import { FEATURE_FLAGS } from '../../config/featureFlags'
 import { useMerchantsForCharger, isDemoMode, isMockMode } from '../../services/api'
 import { useDriverSessionContext } from '../../contexts/DriverSessionContext'
+import { openExternalUrl } from '../../utils/openExternal'
 
 function PreChargingPill() {
   return (
@@ -78,7 +79,7 @@ export function PreChargingScreen() {
 
   const handleChargerClick = (_chargerId: string) => {
     const destination = encodeURIComponent(canyonRidgeCharger.name)
-    window.open(`https://www.google.com/maps/search/?api=1&query=${destination}`, '_blank')
+    openExternalUrl(`https://www.google.com/maps/search/?api=1&query=${destination}`)
   }
 
   const handleToggleToCharging = () => {

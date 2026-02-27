@@ -1,6 +1,7 @@
 import { Zap } from 'lucide-react'
-import { useChargingSessions, useTeslaStatus } from '../../services/api'
+import { useChargingSessions, useTeslaStatus, useEnergyReputation } from '../../services/api'
 import { SessionCard } from './SessionCard'
+import { EnergyReputationCard } from './EnergyReputationCard'
 
 interface SessionActivityScreenProps {
   onClose: () => void
@@ -17,6 +18,7 @@ export function SessionActivityScreen({
 }: SessionActivityScreenProps) {
   const { data: teslaStatus, isLoading: teslaLoading } = useTeslaStatus()
   const { data: sessionsData, isLoading: sessionsLoading, error: sessionsError, refetch } = useChargingSessions(50)
+  const { data: reputation } = useEnergyReputation()
 
   const sessions = sessionsData?.sessions || []
   const isTeslaConnected = teslaStatus?.connected === true
@@ -80,6 +82,11 @@ export function SessionActivityScreen({
               <p className="text-xs text-[#656A6B]">Earned</p>
             </div>
           </div>
+        )}
+
+        {/* Energy Reputation Card — between stats and session list */}
+        {!isLoading && isTeslaConnected && sessions.length > 0 && reputation && (
+          <EnergyReputationCard reputation={reputation} />
         )}
 
         {/* Content */}

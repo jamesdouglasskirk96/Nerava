@@ -31,7 +31,11 @@ def get_current_user_role(request: Request) -> str:
     token = auth_header[7:]  # Remove "Bearer " prefix
     
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM],
+            audience="nerava-api", issuer="nerava",
+            options={"verify_aud": True, "verify_iss": True},
+        )
         role = payload.get("role")
         
         if not role:

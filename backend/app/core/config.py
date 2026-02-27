@@ -9,7 +9,7 @@ class Settings(BaseModel):
     JWT_SECRET: str = os.getenv("JWT_SECRET", os.getenv("NERAVA_SECRET_KEY", "dev-secret-change-me"))
     # SECRET_KEY is an alias for JWT_SECRET (used by JWT encoding code)
     SECRET_KEY: str = os.getenv("JWT_SECRET", os.getenv("NERAVA_SECRET_KEY", "dev-secret-change-me"))
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "10080"))  # 7 days default for mobile app
     ALGORITHM: str = "HS256"
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./nerava.db")
     

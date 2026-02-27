@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { ArrowLeft, MapPin, Clock, Activity, Heart, Share2, Check } from 'lucide-react'
 import { ImageWithFallback } from '../shared/ImageWithFallback'
 import { capture, DRIVER_EVENTS } from '../../analytics'
+import { openExternalUrl } from '../../utils/openExternal'
 import type { MockMerchant } from '../../mock/mockMerchants'
 
 interface MerchantDetailModalProps {
@@ -240,7 +241,7 @@ export function MerchantDetailModal({
 
                 // Open Google Maps with directions
                 const merchantAddress = encodeURIComponent(merchant.name)
-                window.open(`https://www.google.com/maps/dir/?api=1&destination=${merchantAddress}`, '_blank')
+                openExternalUrl(`https://www.google.com/maps/dir/?api=1&destination=${merchantAddress}`)
               }}
               className="w-full py-3.5 bg-white border-2 border-[#1877F2] text-[#1877F2] rounded-2xl font-medium hover:bg-[#F7F8FA] active:scale-98 transition-all"
             >

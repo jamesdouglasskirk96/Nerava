@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from fastapi.testclient import TestClient
 
 from app.models import User, Charger, Merchant, ExclusiveSession, ExclusiveSessionStatus
-from app.main import app
+from app.main_simple import app
 from app.db import get_db
 
 
@@ -94,11 +94,11 @@ class TestActivateExclusive:
         # Mock get_current_driver to return test_user
         from app.dependencies.driver import get_current_driver
         app.dependency_overrides[get_current_driver] = lambda: test_user
-        
+
         # Location far from charger (500m away)
         far_lat = 30.2720  # ~500m north
         far_lng = -97.7431
-        
+
         response = client.post(
             "/v1/exclusive/activate",
             json={
@@ -108,10 +108,31 @@ class TestActivateExclusive:
                 "lng": far_lng,
             }
         )
-        
+
         assert response.status_code == 403
-        assert "must be at the charger" in response.json()["detail"].lower()
-        
+        detail = response.json()["detail"]
+        assert detail["error"] == "outside_charger_radius"
+        assert "distance_m" in detail
+        assert "radius_m" in detail
+
+        app.dependency_overrides.clear()
+
+    def test_activate_missing_location_returns_422(self, client, db, test_user, test_charger, test_merchant):
+        """Test activation returns 422 when lat/lng missing (now required fields)"""
+        from app.dependencies.driver import get_current_driver
+        app.dependency_overrides[get_current_driver] = lambda: test_user
+
+        response = client.post(
+            "/v1/exclusive/activate",
+            json={
+                "merchant_id": test_merchant.id,
+                "charger_id": test_charger.id,
+                # lat and lng omitted — should fail validation
+            }
+        )
+
+        assert response.status_code == 422  # Pydantic validation error
+
         app.dependency_overrides.clear()
     
     def test_activate_success_creates_active_session(

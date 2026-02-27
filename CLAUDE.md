@@ -239,6 +239,27 @@ curl https://api.nerava.network/healthz
 
 **Important:** When updating App Runner, only the `ImageIdentifier` needs to change. All environment variables are preserved from the existing service configuration — do NOT pass `RuntimeEnvironmentVariables` in the update or you risk wiping them.
 
+### Rollback Procedure
+
+To roll back the backend to a previous image tag:
+
+```bash
+# 1. Find the previous image tag (check ECR or deploy logs)
+aws ecr describe-images --repository-name nerava-backend --region us-east-1 \
+  --query 'sort_by(imageDetails,&imagePushedAt)[-5:].imageTags' --output text
+
+# 2. Update App Runner to the previous tag
+aws apprunner update-service \
+  --service-arn "arn:aws:apprunner:us-east-1:566287346479:service/nerava-backend/88e85a3063c14ea9a1e39f8fdf3c35e3" \
+  --source-configuration '{"ImageRepository":{"ImageIdentifier":"566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-backend:<PREVIOUS_TAG>","ImageConfiguration":{"Port":"8000"},"ImageRepositoryType":"ECR"},"AutoDeploymentsEnabled":false,"AuthenticationConfiguration":{"AccessRoleArn":"arn:aws:iam::566287346479:role/nerava-apprunner-ecr-access"}}' \
+  --region us-east-1
+
+# 3. Verify health after ~3 min
+curl https://api.nerava.network/healthz
+```
+
+For frontend rollback, redeploy the previous git commit's build to S3.
+
 ### Deploying Frontend Apps (S3 + CloudFront)
 
 Frontend apps are static builds deployed to S3 with CloudFront cache invalidation:

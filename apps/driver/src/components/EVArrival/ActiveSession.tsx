@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { capture } from '../../analytics'
 import { DRIVER_EVENTS } from '../../analytics/events'
+import { openExternalUrl } from '../../utils/openExternal'
 
 interface QueuedOrder {
   id: string
@@ -150,7 +151,7 @@ export function ActiveSession({
                 if (onQueueOrder) {
                   await onQueueOrder()
                 }
-                window.open(orderingUrl, '_blank')
+                openExternalUrl(orderingUrl)
               }}
               disabled={isQueueingOrder}
               className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold disabled:opacity-50 flex items-center justify-center gap-2"

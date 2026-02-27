@@ -23,6 +23,63 @@ import {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.nerava.network'
 
+// Proactive token refresh — refresh before expiry when app resumes from background
+const TOKEN_REFRESH_THRESHOLD_MS = 10 * 60 * 1000 // Refresh if token is within 10 min of expiry
+
+function getTokenExpiry(): number | null {
+  const token = localStorage.getItem('access_token')
+  if (!token) return null
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    return payload.exp ? payload.exp * 1000 : null // Convert to ms
+  } catch {
+    return null
+  }
+}
+
+async function proactiveTokenRefresh(): Promise<void> {
+  const expiry = getTokenExpiry()
+  if (!expiry) return
+
+  const timeLeft = expiry - Date.now()
+  if (timeLeft > TOKEN_REFRESH_THRESHOLD_MS) return // Token still fresh
+
+  const refreshToken = localStorage.getItem('refresh_token')
+  if (!refreshToken) return
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/v1/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    })
+
+    if (response.ok) {
+      const data = await response.json()
+      localStorage.setItem('access_token', data.access_token)
+      if (data.refresh_token) {
+        localStorage.setItem('refresh_token', data.refresh_token)
+      }
+      console.log('[API] Proactive token refresh succeeded')
+    }
+  } catch {
+    // Silent fail — reactive refresh on 401 will handle it
+  }
+}
+
+// Refresh token when app becomes visible (user returns from background)
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      proactiveTokenRefresh()
+    }
+  })
+  // Also refresh on app focus (covers WKWebView resume)
+  window.addEventListener('focus', () => {
+    proactiveTokenRefresh()
+  })
+}
+
 // Check if mock mode is enabled - default to backend mode unless explicitly set
 export function isMockMode(): boolean {
   return import.meta.env.VITE_MOCK_MODE === 'true'
@@ -120,8 +177,10 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit, retryOn401 =
           localStorage.removeItem('access_token')
           localStorage.removeItem('refresh_token')
           if (refreshError instanceof ApiError) {
+            window.dispatchEvent(new CustomEvent('nerava:session-expired'))
             throw refreshError
           }
+          window.dispatchEvent(new CustomEvent('nerava:session-expired'))
           throw new ApiError(401, 'refresh_error', 'Failed to refresh token')
         }
       } else {
@@ -194,8 +253,8 @@ let pendingIntentRequest: Promise<CaptureIntentResponse> | null = null
 let pendingIntentKey: string | null = null
 const INTENT_CACHE_TTL_MS = 60000 // 60 seconds cache TTL
 
-// AGGRESSIVE: Global flag to completely stop fetches after first success
-let hasSuccessfullyFetched = false
+// Rate limiting to prevent rapid re-fetches (but allow location-based re-fetches)
+let lastSuccessfulCacheKey: string | null = null
 let lastFetchTimestamp = 0
 const MIN_FETCH_INTERVAL_MS = 5000 // Minimum 5 seconds between fetches
 
@@ -214,14 +273,12 @@ export function useIntentCapture(request: CaptureIntentRequest | null) {
     queryFn: async () => {
       const now = Date.now()
 
-      // AGGRESSIVE: Rate limit - prevent fetches within 5 seconds of last fetch
-      if (hasSuccessfullyFetched && (now - lastFetchTimestamp) < MIN_FETCH_INTERVAL_MS) {
-        console.log('[API] Intent capture rate limited (too soon after last fetch)')
-        if (intentCache) {
+      // Rate limit - prevent fetches within 5 seconds ONLY for the same location
+      if (lastSuccessfulCacheKey === cacheKey && (now - lastFetchTimestamp) < MIN_FETCH_INTERVAL_MS) {
+        console.log('[API] Intent capture rate limited (same location, too soon)')
+        if (intentCache && intentCache.key === cacheKey) {
           return intentCache.data
         }
-        // If no cache but rate limited, throw to prevent infinite loops
-        throw new Error('Rate limited - please wait before retrying')
       }
 
       // Check module-level cache first - prevents unnecessary API calls
@@ -278,7 +335,7 @@ export function useIntentCapture(request: CaptureIntentRequest | null) {
       pendingIntentRequest = doFetch().then(validated => {
         // Store in module-level cache on success
         intentCache = { key: cacheKey, data: validated, timestamp: now }
-        hasSuccessfullyFetched = true // Mark as successfully fetched
+        lastSuccessfulCacheKey = cacheKey // Track which location was fetched
         lastFetchTimestamp = Date.now() // Update to completion time
         return validated
       }).finally(() => {
@@ -320,6 +377,7 @@ export function useMerchantDetails(
       return validateResponse(MerchantDetailsResponseSchema, data, `/v1/merchants/${merchantId}`) as unknown as MerchantDetailsResponse
     },
     enabled: merchantId !== null,
+    staleTime: 120_000, // 2 min — merchant details rarely change
   })
 }
 
@@ -460,6 +518,7 @@ export function useActiveExclusive() {
   return useQuery<ActiveExclusiveResponse | null>({
     queryKey: ['active-exclusive'],
     queryFn: getActiveExclusive,
+    staleTime: 15_000, // 15 sec — active sessions need reasonably fresh data
     retry: false, // Don't retry on error (401 is expected for anonymous users)
     refetchOnWindowFocus: true, // Refetch when app returns from background
     refetchInterval: () => {
@@ -477,6 +536,7 @@ export function useLocationCheck(lat: number | null, lng: number | null) {
     queryKey: ['location-check', lat, lng],
     queryFn: () => lat !== null && lng !== null ? checkLocation(lat, lng) : null,
     enabled: lat !== null && lng !== null,
+    staleTime: 5_000, // 5 sec — location check needs near-realtime data
     refetchOnWindowFocus: true, // Refetch when app returns from background
     refetchInterval: () => {
       // Only poll when page is visible
@@ -536,6 +596,7 @@ export function useMerchantsForCharger(
     queryKey: ['merchants-for-charger', chargerId, options?.state, options?.open_only],
     queryFn: () => chargerId ? apiGetMerchantsForCharger(chargerId, options) : [],
     enabled: chargerId !== null,
+    staleTime: 60_000, // 1 min — merchant list for a charger changes infrequently
   })
 }
 
@@ -666,8 +727,18 @@ export async function fetchActiveSession(): Promise<ActiveSessionResponse> {
   return fetchAPI<ActiveSessionResponse>('/v1/charging-sessions/active')
 }
 
-export async function pollChargingSession(): Promise<PollSessionResponse> {
-  return fetchAPI<PollSessionResponse>('/v1/charging-sessions/poll', { method: 'POST' })
+export async function endChargingSession(sessionId: string): Promise<{ session: ChargingSession; ended: boolean }> {
+  return fetchAPI(`/v1/charging-sessions/${sessionId}/end`, { method: 'POST' })
+}
+
+export async function pollChargingSession(deviceLat?: number, deviceLng?: number): Promise<PollSessionResponse> {
+  const body = deviceLat != null && deviceLng != null
+    ? JSON.stringify({ lat: deviceLat, lng: deviceLng })
+    : undefined
+  return fetchAPI<PollSessionResponse>('/v1/charging-sessions/poll', {
+    method: 'POST',
+    body,
+  })
 }
 
 export async function fetchTeslaStatus(): Promise<TeslaConnectionStatus> {
@@ -700,6 +771,44 @@ export function useTeslaStatus() {
     queryFn: fetchTeslaStatus,
     enabled: !!localStorage.getItem('access_token'),
     staleTime: 300000, // 5 min
+    retry: false,
+  })
+}
+
+// ===================== EV Codes (Tesla verify-charging) =====================
+
+export interface EVCode {
+  code: string
+  merchant_name: string | null
+  expires_at: string
+  status: string
+}
+
+export async function fetchActiveEVCodes(): Promise<EVCode[]> {
+  return fetchAPI<EVCode[]>('/v1/auth/tesla/codes')
+}
+
+/**
+ * Returns the first active, non-expired EV code (or null).
+ * Uses React Query with a 60-second refetchInterval instead of raw setInterval.
+ */
+export function useActiveEVCode() {
+  return useQuery<EVCode | null>({
+    queryKey: ['ev-codes', 'active'],
+    queryFn: async () => {
+      const codes = await fetchActiveEVCodes()
+      const now = new Date()
+      const active = codes.find((c) => {
+        // Server returns UTC datetimes without 'Z' -- append it for correct parsing
+        const expiresStr = c.expires_at.endsWith('Z') ? c.expires_at : c.expires_at + 'Z'
+        return c.status === 'active' && new Date(expiresStr) > now
+      })
+      return active || null
+    },
+    enabled: !!localStorage.getItem('access_token'),
+    staleTime: 30_000, // 30 sec
+    refetchInterval: 60_000, // Poll every 60 seconds
+    refetchOnWindowFocus: true,
     retry: false,
   })
 }
@@ -789,6 +898,98 @@ export function usePayoutHistory(limit = 20) {
     queryFn: () => fetchPayoutHistory(limit),
     enabled: !!localStorage.getItem('access_token'),
     staleTime: 30000,
+  })
+}
+
+// ===================== Driver Campaigns =====================
+
+export interface DriverCampaign {
+  id: string
+  name: string
+  sponsor_name: string
+  sponsor_logo_url: string | null
+  description: string | null
+  reward_cents: number
+  campaign_type: string
+  eligible: boolean
+  end_date: string | null
+}
+
+export async function fetchDriverCampaigns(lat?: number, lng?: number, chargerId?: string): Promise<{ campaigns: DriverCampaign[] }> {
+  const params = new URLSearchParams()
+  if (lat !== undefined) params.append('lat', String(lat))
+  if (lng !== undefined) params.append('lng', String(lng))
+  if (chargerId) params.append('charger_id', chargerId)
+  return fetchAPI<{ campaigns: DriverCampaign[] }>(`/v1/campaigns/driver/active?${params.toString()}`)
+}
+
+export function useDriverCampaigns(lat?: number, lng?: number, chargerId?: string) {
+  return useQuery({
+    queryKey: ['driver-campaigns', lat, lng, chargerId],
+    queryFn: () => fetchDriverCampaigns(lat, lng, chargerId),
+    enabled: !!localStorage.getItem('access_token'),
+    staleTime: 60000,
+  })
+}
+
+// ===================== Wallet Ledger =====================
+
+export interface WalletLedgerEntry {
+  id: string
+  amount_cents: number
+  balance_after_cents: number
+  transaction_type: string
+  description: string | null
+  created_at: string | null
+  campaign_name: string | null
+  sponsor_name: string | null
+}
+
+export async function fetchWalletLedger(limit = 50, offset = 0): Promise<{ entries: WalletLedgerEntry[]; count: number }> {
+  return fetchAPI<{ entries: WalletLedgerEntry[]; count: number }>(`/v1/wallet/ledger?limit=${limit}&offset=${offset}`)
+}
+
+export function useWalletLedger(limit = 50) {
+  return useQuery({
+    queryKey: ['wallet', 'ledger', limit],
+    queryFn: () => fetchWalletLedger(limit),
+    enabled: !!localStorage.getItem('access_token'),
+    staleTime: 30000,
+  })
+}
+
+// ===================== Energy Reputation =====================
+
+export interface EnergyReputation {
+  points: number
+  tier: string
+  tier_color: string
+  next_tier: string | null
+  points_to_next: number | null
+  progress_to_next: number
+  streak_days: number
+}
+
+export async function fetchEnergyReputation(): Promise<EnergyReputation> {
+  return fetchAPI<EnergyReputation>('/v1/charging-sessions/reputation')
+}
+
+export function useEnergyReputation() {
+  return useQuery({
+    queryKey: ['energy-reputation'],
+    queryFn: fetchEnergyReputation,
+    enabled: !!localStorage.getItem('access_token'),
+    staleTime: 60000, // 1 minute
+    retry: false,
+  })
+}
+
+// ===================== Device Token Registration =====================
+
+export async function registerDeviceToken(token: string, platform: 'ios' | 'android'): Promise<{ ok: boolean }> {
+  return fetchAPI<{ ok: boolean }>('/v1/notifications/register-device', {
+    method: 'POST',
+    body: JSON.stringify({ fcm_token: token, platform }),
   })
 }
 

@@ -18,6 +18,7 @@ export interface MockCharger {
   lat: number
   lng: number
   distance_m: number
+  campaign_reward_cents?: number
   experiences?: Array<{
     id: string
     name: string

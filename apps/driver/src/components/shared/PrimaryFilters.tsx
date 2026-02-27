@@ -1,4 +1,4 @@
-import { UtensilsCrossed, Wifi, Music, Bath, PawPrint, Armchair } from 'lucide-react'
+import { UtensilsCrossed, Wifi, Music, Bath, PawPrint } from 'lucide-react'
 
 interface PrimaryFiltersProps {
   selectedFilters: string[]
@@ -12,12 +12,11 @@ export function PrimaryFilters({ selectedFilters, onFilterToggle }: PrimaryFilte
     { id: 'wifi', label: 'WiFi', icon: Wifi },
     { id: 'pets', label: 'Pets', icon: PawPrint },
     { id: 'music', label: 'Music', icon: Music },
-    { id: 'patio', label: 'Patio', icon: Armchair },
   ]
 
   return (
     <div className="flex-shrink-0 px-4 pb-2">
-      <div className="flex gap-2 justify-between">
+      <div className="flex gap-4 justify-center">
         {filters.map((filter) => {
           const Icon = filter.icon
           const isSelected = selectedFilters.includes(filter.id)

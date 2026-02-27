@@ -149,3 +149,37 @@ def register_device(
     logger.info("Device token registered for user %s (%s)", current_user.id, payload.platform)
     return RegisterDeviceResponse(ok=True)
 
+
+# ---------------------------------------------------------------------------
+# Test push notification endpoint (admin/debug)
+# ---------------------------------------------------------------------------
+
+class SendTestPushResponse(BaseModel):
+    sent: int
+    message: str
+
+
+@router.post("/send-test", response_model=SendTestPushResponse)
+def send_test_push(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Send a test push notification to the current user's registered devices.
+    Useful for verifying push notification setup end-to-end.
+    """
+    from app.services.push_service import send_push_notification
+
+    sent = send_push_notification(
+        db,
+        user_id=current_user.id,
+        title="Test notification",
+        body="Push notifications are working!",
+        data={"type": "test"},
+    )
+
+    return SendTestPushResponse(
+        sent=sent,
+        message=f"Sent to {sent} device(s)" if sent > 0 else "No active devices found (or APNs not configured)",
+    )
+

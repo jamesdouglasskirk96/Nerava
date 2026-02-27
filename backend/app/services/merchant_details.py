@@ -212,9 +212,9 @@ async def get_merchant_details(
     perk_info = None
     if perk:
         perk_info = PerkInfo(
-            title=perk.title,
-            badge="Exclusive",  # Badge for exclusive offers
-            description=perk.description or f"Show your pass to access {perk.title}."
+            title=perk.title or "EV Rewards",
+            badge="Exclusive",
+            description=perk.description or "Show your Nerava app to redeem your reward while you charge."
         )
     
     # Calculate distance and walk time from ChargerMerchant link
@@ -319,6 +319,8 @@ async def get_merchant_details(
         description=getattr(merchant, 'description', None),  # Add: description
         hours_today=_get_hours_display(merchant),  # Add: hours
         address=getattr(merchant, 'address', None),
+        phone=getattr(merchant, 'phone', None),
+        website=getattr(merchant, 'website', None),
         rating=getattr(merchant, 'rating', None),
         price_level=_convert_price_level(getattr(merchant, 'price_level', None)),
         activations_today=counts["activations_today"],
@@ -361,10 +363,19 @@ async def get_merchant_details(
         active_copy="Active while charging" if wallet_state == "ACTIVE" else None
     )
     
-    # Build actions info
+    # Build actions info — use merchant name + address for better Google Maps pin accuracy
     directions_url = None
     if merchant.lat and merchant.lng:
-        directions_url = f"https://maps.google.com/?q={merchant.lat},{merchant.lng}"
+        import urllib.parse
+        address = getattr(merchant, 'formatted_address', None) or getattr(merchant, 'address', None)
+        if merchant.name and address:
+            query = urllib.parse.quote(f"{merchant.name}, {address}")
+            directions_url = f"https://maps.google.com/maps/search/?api=1&query={query}"
+        elif merchant.name:
+            query = urllib.parse.quote(merchant.name)
+            directions_url = f"https://maps.google.com/maps/search/?api=1&query={query}"
+        else:
+            directions_url = f"https://maps.google.com/?q={merchant.lat},{merchant.lng}"
     
     actions_info = ActionsInfo(
         add_to_wallet=True,

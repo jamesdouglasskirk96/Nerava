@@ -37,6 +37,8 @@ class SessionEvent(Base):
 
     id = Column(UUIDType(), primary_key=True)
     driver_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    # Legacy column from original create_all() — kept in sync with driver_user_id
+    user_id = Column(Integer, nullable=True)
 
     # --- Charger info ---
     charger_id = Column(String, ForeignKey("chargers.id"), nullable=True, index=True)

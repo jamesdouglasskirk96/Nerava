@@ -58,27 +58,30 @@ export function useExclusiveSessionState() {
     return null
   })
 
-  const [remainingMinutes, setRemainingMinutes] = useState<number>(() => {
+  const [remainingSeconds, setRemainingSeconds] = useState<number>(() => {
     const startTime = localStorage.getItem(STORAGE_START_TIME_KEY)
     const expiresAt = localStorage.getItem('nerava_exclusive_expires_at')
-    
+
     if (startTime && activeExclusive) {
       if (expiresAt) {
         // Use backend expires_at
         const expiresDate = new Date(expiresAt).getTime()
         const now = Date.now()
         const remainingMs = Math.max(0, expiresDate - now)
-        return Math.floor(remainingMs / 60000)
+        return Math.floor(remainingMs / 1000)
       } else {
         // Use default 60 minutes
         const start = parseInt(startTime, 10)
         const elapsed = Date.now() - start
-        const elapsedMinutes = Math.floor(elapsed / 60000)
-        return Math.max(0, EXCLUSIVE_DURATION_MINUTES - elapsedMinutes)
+        const elapsedSeconds = Math.floor(elapsed / 1000)
+        return Math.max(0, EXCLUSIVE_DURATION_MINUTES * 60 - elapsedSeconds)
       }
     }
     return 0
   })
+
+  // Backward-compatible remainingMinutes derived from remainingSeconds
+  const remainingMinutes = Math.floor(remainingSeconds / 60)
 
   // Define callbacks before effects that use them
   const activateExclusive = useCallback((merchant: ExclusiveMerchant, expiresAt?: string) => {
@@ -98,8 +101,8 @@ export function useExclusiveSessionState() {
     }
 
     const remainingMs = Math.max(0, expirationTime - now)
-    const remainingMins = Math.floor(remainingMs / 60000)
-    setRemainingMinutes(remainingMins)
+    const remainingSecs = Math.floor(remainingMs / 1000)
+    setRemainingSeconds(remainingSecs)
 
     // Persist to localStorage
     localStorage.setItem(STORAGE_KEY, JSON.stringify(merchant))
@@ -108,16 +111,16 @@ export function useExclusiveSessionState() {
 
   const clearExclusive = useCallback(() => {
     setActiveExclusive(null)
-    setRemainingMinutes(0)
+    setRemainingSeconds(0)
     localStorage.removeItem(STORAGE_KEY)
     localStorage.removeItem(STORAGE_START_TIME_KEY)
     localStorage.removeItem('nerava_exclusive_expires_at')
   }, [])
 
-  // Timer countdown - updates every minute
+  // Timer countdown - updates every second for MM:SS display
   useEffect(() => {
     if (!activeExclusive) {
-      // Remaining minutes is already 0 from initial state or clearExclusive
+      // Remaining seconds is already 0 from initial state or clearExclusive
       return
     }
 
@@ -127,22 +130,22 @@ export function useExclusiveSessionState() {
 
     const updateTimer = () => {
       let remaining: number
-      
+
       if (expiresAt) {
         // Use backend expires_at
         const expiresDate = new Date(expiresAt).getTime()
         const now = Date.now()
         const remainingMs = Math.max(0, expiresDate - now)
-        remaining = Math.floor(remainingMs / 60000)
+        remaining = Math.floor(remainingMs / 1000)
       } else {
         // Use default 60 minutes
         const start = parseInt(startTime, 10)
         const elapsed = Date.now() - start
-        const elapsedMinutes = Math.floor(elapsed / 60000)
-        remaining = Math.max(0, EXCLUSIVE_DURATION_MINUTES - elapsedMinutes)
+        const elapsedSeconds = Math.floor(elapsed / 1000)
+        remaining = Math.max(0, EXCLUSIVE_DURATION_MINUTES * 60 - elapsedSeconds)
       }
 
-      setRemainingMinutes(remaining)
+      setRemainingSeconds(remaining)
 
       // If expired, clear exclusive
       if (remaining === 0) {
@@ -153,8 +156,8 @@ export function useExclusiveSessionState() {
     // Update immediately
     updateTimer()
 
-    // Then update every minute
-    const interval = setInterval(updateTimer, 60000)
+    // Then update every second
+    const interval = setInterval(updateTimer, 1000)
 
     return () => clearInterval(interval)
   }, [activeExclusive, clearExclusive])
@@ -162,6 +165,7 @@ export function useExclusiveSessionState() {
   return {
     activeExclusive,
     remainingMinutes,
+    remainingSeconds,
     activateExclusive,
     clearExclusive,
   }

@@ -14,8 +14,6 @@ print(f"[STARTUP] DATABASE_URL set: {bool(os.getenv('DATABASE_URL'))}", flush=Tr
 print("[STARTUP] Importing FastAPI...", flush=True)
 
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import FileResponse
-from fastapi.middleware.cors import CORSMiddleware
 import logging
 import asyncio
 from dotenv import load_dotenv
@@ -113,6 +111,7 @@ from .core.startup_validation import (
     validate_public_urls,
     validate_demo_mode,
     validate_merchant_auth_mock,
+    validate_stripe_config,
     check_schema_payload_hash,
     ensure_merchant_schema,
     ensure_verified_visits_table,
@@ -178,6 +177,8 @@ else:
         print("[STARTUP] Demo mode validation passed", flush=True)
         validate_merchant_auth_mock()
         print("[STARTUP] Merchant auth mock validation passed", flush=True)
+        validate_stripe_config()
+        print("[STARTUP] Stripe config validation passed", flush=True)
         from .core.config import validate_config
         validate_config()
         print("[STARTUP] Config validation passed", flush=True)
@@ -293,9 +294,11 @@ from .middleware.ratelimit import RateLimitMiddleware
 from .middleware.region import RegionMiddleware, ReadWriteRoutingMiddleware, CanaryRoutingMiddleware
 from .middleware.demo_banner import DemoBannerMiddleware
 from .middleware.request_id import RequestIDMiddleware
+from .middleware.audit import AuditMiddleware
+from .middleware.security_headers import SecurityHeadersMiddleware
+from .middleware.request_size import RequestSizeLimitMiddleware
 
 from fastapi.staticfiles import StaticFiles
-import os
 from pathlib import Path
 
 # Domain routers (imported AFTER migrations to avoid model registration conflicts)
@@ -330,29 +333,6 @@ from .routers import (
     payouts,
     profile,
     square,
-    # 20 Feature Scaffold Routers
-    merchant_intel,
-    behavior_cloud,
-    reward_routing,
-    city_marketplace,
-    multimodal,
-    merchant_credits,
-    verify_api,
-    wallet_interop,
-    coop_pools,
-    sdk,
-    energy_rep,
-    offsets,
-    fleet,
-    iot,
-    deals,
-    events,
-    tenant,
-    ai_rewards,
-    finance,
-    ai_growth,
-    demo,
-    dual_zone,
 )
 from .routers import gpt, meta, sessions, stripe_api, purchase_webhooks, dev_tools, merchant_api, merchant_ui
 from .routers import events_api, pool_api, offers_api
@@ -360,7 +340,7 @@ from .routers import sessions_verify
 from .routers import debug_verify
 from .routers import debug_pool
 from .routers import discover_api, affiliate_api, insights_api
-from .routers import while_you_charge, pilot, pilot_debug, merchant_reports, merchant_balance, pilot_redeem, bootstrap, pilot_party
+from .routers import while_you_charge, merchant_reports, merchant_balance, bootstrap
 from .routers import ev_smartcar, checkout, wallet_pass, demo_qr, demo_charging, demo_square, virtual_cards
 from .routers import intent, vehicle_onboarding, perks, merchant_onboarding, merchant_claim, merchants, exclusive, native_events
 from .services.nova_accrual import nova_accrual_service
@@ -675,126 +655,6 @@ paths:
 """
     return Response(content=fallback_spec, media_type="text/yaml")
 
-# Mount UI AFTER all middleware to ensure it's processed last
-# StaticFiles should handle its own errors (404 for missing files)
-# Use Path(__file__) to resolve relative to this file's location
-UI_DIR = Path(__file__).parent.parent.parent / "ui-mobile"
-index_html = None
-if UI_DIR.exists() and UI_DIR.is_dir():
-    index_html = UI_DIR / "index.html"
-    
-    # Register direct route handlers BEFORE mount so they take precedence
-    # Handler for /app (without trailing slash) - redirect to /app/
-    @app.get("/app")
-    async def serve_app_root():
-        """Redirect /app to /app/ to ensure index.html is served"""
-        from fastapi.responses import RedirectResponse
-        return RedirectResponse(url="/app/", status_code=301)
-    
-    # Handler for /app/ - serve index.html directly
-    if index_html and index_html.exists():
-        @app.get("/app/")
-        async def serve_app_index():
-            """Direct route handler for /app/ to serve index.html"""
-            try:
-                with open(index_html, 'rb') as f:
-                    content = f.read()
-                from fastapi.responses import Response
-                return Response(content=content, media_type="text/html")
-            except Exception as e:
-                logger.error(f"Error serving index.html: {e}", exc_info=True)
-                raise HTTPException(status_code=500, detail=f"Error serving index.html: {str(e)}")
-        logger.info("Added direct route handler for /app/")
-    
-    # Handler for avatar-default.png
-    avatar_png_path = UI_DIR / "img" / "avatar-default.png"
-    if avatar_png_path.exists():
-        @app.get("/app/img/avatar-default.png")
-        async def serve_avatar_default():
-            """Direct route handler for avatar-default.png"""
-            try:
-                with open(avatar_png_path, 'rb') as f:
-                    content = f.read()
-                from fastapi.responses import Response
-                return Response(
-                    content=content,
-                    media_type="image/png",
-                    headers={"Cache-Control": "public, max-age=31536000"}
-                )
-            except Exception as e:
-                logger.error(f"Error serving avatar: {e}", exc_info=True)
-                from fastapi.responses import Response
-                return Response(content=f"Error: {str(e)}", status_code=500, media_type="text/plain")
-        logger.info("Added route handler for /app/img/avatar-default.png")
-    
-    # Handler for favicon.ico
-    favicon_path = UI_DIR / "assets" / "favicon.ico"
-    if favicon_path.exists():
-        @app.get("/app/assets/favicon.ico")
-        async def serve_favicon():
-            """Direct route handler for favicon.ico"""
-            try:
-                with open(favicon_path, 'rb') as f:
-                    content = f.read()
-                from fastapi.responses import Response
-                return Response(
-                    content=content,
-                    media_type="image/x-icon",
-                    headers={"Cache-Control": "public, max-age=31536000"}
-                )
-            except Exception as e:
-                logger.error(f"Error serving favicon: {e}", exc_info=True)
-                from fastapi.responses import Response
-                return Response(content=f"Error: {str(e)}", status_code=500, media_type="text/plain")
-        logger.info("Added route handler for /app/assets/favicon.ico")
-    
-    # Handler for icon-192.png
-    icon192_path = UI_DIR / "assets" / "icon-192.png"
-    if icon192_path.exists():
-        @app.get("/app/assets/icon-192.png")
-        async def serve_icon192():
-            """Direct route handler for icon-192.png"""
-            try:
-                with open(icon192_path, 'rb') as f:
-                    content = f.read()
-                from fastapi.responses import Response
-                return Response(
-                    content=content,
-                    media_type="image/png",
-                    headers={"Cache-Control": "public, max-age=31536000"}
-                )
-            except Exception as e:
-                logger.error(f"Error serving icon-192: {e}", exc_info=True)
-                from fastapi.responses import Response
-                return Response(content=f"Error: {str(e)}", status_code=500, media_type="text/plain")
-        logger.info("Added route handler for /app/assets/icon-192.png")
-    
-    # Now mount StaticFiles - routes registered above will take precedence
-    try:
-        # Use check_dir=False to prevent crashes if directory structure is unexpected
-        # Mount AFTER middleware but AFTER route handlers to ensure routes take precedence
-        app.mount("/app", StaticFiles(directory=str(UI_DIR), html=True, check_dir=False), name="ui")
-        logger.info("Mounted UI at /app from directory: %s", str(UI_DIR))
-        # Verify key files exist
-        me_js = UI_DIR / "js" / "pages" / "me.js"
-        if me_js.exists():
-            logger.info("Verified: me.js exists at %s", str(me_js))
-        else:
-            logger.warning("me.js not found at %s", str(me_js))
-        if avatar_png_path.exists():
-            logger.info("Verified: avatar-default.png exists at %s", str(avatar_png_path))
-        else:
-            logger.warning("avatar-default.png not found at %s", str(avatar_png_path))
-    except Exception as e:
-        logger.exception("Failed to mount UI directory: %s", str(e))
-        # Don't raise - allow app to start even if UI mount fails
-        logger.error("UI mount failed, but continuing startup")
-else:
-    logger.warning("UI directory not found at: %s", str(UI_DIR))
-
-# Route handlers are now registered BEFORE the mount (see above)
-# This ensures they take precedence over StaticFiles
-
 # Migrations already run at the top of this file (before router imports)
 # This prevents model registration conflicts when routers import models_extra
 
@@ -806,11 +666,14 @@ else:
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(MetricsMiddleware)
+app.add_middleware(AuditMiddleware)
+app.add_middleware(RequestSizeLimitMiddleware)
 app.add_middleware(RateLimitMiddleware, requests_per_minute=settings.rate_limit_per_minute)
 app.add_middleware(RegionMiddleware)
 app.add_middleware(ReadWriteRoutingMiddleware)
 app.add_middleware(CanaryRoutingMiddleware, canary_percentage=0.0)  # Disabled by default
 app.add_middleware(DemoBannerMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Production security middleware
 if settings.ENV == "prod":
@@ -841,125 +704,13 @@ if settings.ENV == "prod":
     else:
         logger.info("HTTPSRedirectMiddleware skipped (SKIP_HTTPS_REDIRECT=true, likely behind ALB)")
 
-# CORS validation (P1 security fix)
-# Validate CORS origins in non-local environments
-# CRITICAL: Make this non-fatal to allow /healthz to serve even if CORS config is wrong
-# P0 Security: Only check ENV, never REGION (REGION can be spoofed)
-# Note: env and is_local are already defined earlier (before Sentry initialization)
+# CORS validation and middleware setup (extracted to cors_config module)
+from .cors_config import validate_cors, configure_cors
 
-cors_validation_failed = False
-try:
-    if not is_local and settings.cors_allow_origins == "*":
-        error_msg = (
-            "CRITICAL SECURITY ERROR: CORS wildcard (*) is not allowed in non-local environment. "
-            f"ENV={env}. Set ALLOWED_ORIGINS environment variable to explicit origins."
-        )
-        logger.error(error_msg)
-        _startup_validation_failed = True
-        _startup_validation_errors.append(error_msg)
-        cors_validation_failed = True
-        # Don't raise - log and use safe defaults
-        print(f"[STARTUP] WARNING: {error_msg}", flush=True)
-        print("[STARTUP] Using safe CORS origins list as default", flush=True)
-except Exception as e:
-    logger.error(f"CORS validation error: {e}", exc_info=True)
-    _startup_validation_failed = True
-    _startup_validation_errors.append(f"CORS validation error: {e}")
-    cors_validation_failed = True
-    # Use safe defaults
-    print(f"[STARTUP] WARNING: CORS validation failed: {e}", flush=True)
-
-# CORS (tighten in prod)
-# Parse ALLOWED_ORIGINS from env or use defaults
-# If CORS validation failed, use safe defaults (empty list for non-local, localhost for local)
-if cors_validation_failed:
-    # Use safe defaults when validation failed
-    if is_local:
-        allowed_origins = ["http://localhost:8001", "http://127.0.0.1:8001"]
-    else:
-        # Empty list for non-local (will reject all origins, but app will start)
-        allowed_origins = []
-else:
-    allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "*")
-    if allowed_origins_str == "*":
-        # When using credentials, cannot use "*" - allow localhost/127.0.0.1 explicitly for dev
-        # Base list of allowed origins
-        # CRITICAL: Include localhost:8001 for local UI testing against production backend
-        allowed_origins = [
-            "http://localhost:8001",  # Local dev UI
-            "http://127.0.0.1:8001",  # Local dev UI (alternative)
-            "http://localhost",  # Docker Compose proxy (port 80)
-            "http://localhost:80",  # Docker Compose proxy (explicit port 80)
-            "http://localhost:3000",
-            "http://localhost:8080",
-            "http://localhost:5173",  # Vite default
-            "http://localhost:5174",  # Vite alternate port
-            "http://localhost:5176",  # Campaign console
-            "https://app.nerava.app",  # Production frontend
-            "https://www.nerava.app",  # Production frontend (www)
-        ]
-        
-        # CRITICAL: If FRONTEND_URL is set with a path (e.g., "http://localhost:8001/app"),
-        # extract just the origin (scheme://host:port) for CORS
-        # CORS origins must be exactly scheme://host[:port] - NO PATH
-        if hasattr(settings, 'FRONTEND_URL') and settings.FRONTEND_URL:
-            from urllib.parse import urlparse
-            parsed = urlparse(settings.FRONTEND_URL)
-            frontend_origin = f"{parsed.scheme}://{parsed.netloc}"
-            if frontend_origin not in allowed_origins:
-                allowed_origins.append(frontend_origin)
-                logger.info("Added FRONTEND_URL origin to CORS: %s (extracted from %s)", frontend_origin, settings.FRONTEND_URL)
-        
-        # Note: Vercel domains will be handled by custom CORS middleware below
-    else:
-        # Split by comma and strip whitespace
-        allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",")]
-
-# CRITICAL: CORS must be on the real app
-# Log the exact origins we're allowing for debugging
-# Explicitly add all production subdomains and S3 website origins
-final_origins = allowed_origins + [
-    "https://www.nerava.network",
-    "https://nerava.network",
-    "https://app.nerava.network",
-    "https://link.nerava.network",
-    "https://merchant.nerava.network",
-    "https://admin.nerava.network",
-    "https://console.nerava.network",
-    # S3 website origins (HTTP, not HTTPS)
-    "http://app.nerava.network.s3-website-us-east-1.amazonaws.com",
-    "http://link.nerava.network.s3-website-us-east-1.amazonaws.com",
-    "http://merchant.nerava.network.s3-website-us-east-1.amazonaws.com",
-    "http://admin.nerava.network.s3-website-us-east-1.amazonaws.com",
-    "http://nerava.network.s3-website-us-east-1.amazonaws.com",
-]
-print(f">>>> CORS allowed origins: {final_origins} <<<<", flush=True)
-logger.info(">>>> CORS allowed origins: %s <<<<", final_origins)
-
-# CORS configuration with explicit methods and headers (no wildcards in prod)
-# In production, ensure no wildcard origins with credentials
-cors_methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
-cors_headers = ["Content-Type", "Authorization", "X-Requested-With"]
-
-# Ensure credentials are only allowed with explicit origins (not wildcard)
-cors_allow_credentials = True
-if "*" in final_origins and not is_local:
-    # This should never happen due to validation, but be defensive
-    logger.warning("CORS: Wildcard origin detected in non-local env, disabling credentials")
-    cors_allow_credentials = False
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origin_regex=r"https://.*\.vercel\.app|https://web-production-.*\.up\.railway\.app|https://.*\.nerava\.network",
-    allow_origins=final_origins,
-    allow_credentials=cors_allow_credentials,
-    allow_methods=cors_methods,
-    allow_headers=cors_headers,
-    max_age=3600,
+cors_validation_failed, _startup_validation_failed, _startup_validation_errors = validate_cors(
+    settings, is_local, env, _startup_validation_failed, _startup_validation_errors
 )
-
-print(">>>> CORSMiddleware added successfully <<<<", flush=True)
-logger.info(">>>> CORSMiddleware added successfully <<<<")
+configure_cors(app, settings, is_local, cors_validation_failed)
 
 # Mount static files - MORE SPECIFIC PATHS FIRST (order matters!)
 # Mount demo charger photos (backend/static/demo_chargers) - MUST be before /static
@@ -1024,7 +775,6 @@ app.include_router(merchants_router.router)
 app.include_router(demo_qr.router)
 app.include_router(checkout.router)
 app.include_router(bootstrap.router)  # /v1/bootstrap/*
-app.include_router(pilot_party.router)  # /v1/pilot/party/*
 app.include_router(demo_square.router)
 app.include_router(hubs.router, prefix="/v1/hubs", tags=["hubs"])
 app.include_router(places.router)
@@ -1069,8 +819,9 @@ app.include_router(events_api.router)
 app.include_router(pool_api.router)
 app.include_router(offers_api.router)
 app.include_router(sessions_verify.router)
-app.include_router(debug_verify.router)
-app.include_router(debug_pool.router)
+if os.getenv("ENV", "dev") != "prod":
+    app.include_router(debug_verify.router)
+    app.include_router(debug_pool.router)
 
 # vNext routers
 app.include_router(discover_api.router)
@@ -1082,11 +833,8 @@ app.include_router(while_you_charge.router)
 from .routers import arrival_v2
 app.include_router(arrival_v2.router)  # /v1/arrival/*
 
-app.include_router(pilot.router)
-app.include_router(pilot_debug.router)
 app.include_router(merchant_reports.router)
 app.include_router(merchant_balance.router)
-app.include_router(pilot_redeem.router)
 
 # 14 previously missing routers (hardening fix)
 from .routers import (
@@ -1176,12 +924,12 @@ app.include_router(debug_router)
 
 # ─── Temporary ops endpoint for merchant seeding (remove after use) ───
 import uuid as _uuid
-_OPS_KEY = "nrv-seed-8f3a2c7d9e1b"
+_OPS_KEY = os.environ.get("OPS_API_KEY", "")
 
 @app.get("/v1/ops/seed-stats")
 async def ops_seed_stats(key: str = ""):
-    if key != _OPS_KEY:
-        raise HTTPException(status_code=404, detail="Not found")
+    if not _OPS_KEY or key != _OPS_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden")
     from .db import SessionLocal
     from .models.while_you_charge import Charger, Merchant, ChargerMerchant
     from sqlalchemy import func
@@ -1197,8 +945,8 @@ async def ops_seed_stats(key: str = ""):
 
 @app.post("/v1/ops/seed-merchants")
 async def ops_seed_merchants(key: str = "", max_cells: int = 0):
-    if key != _OPS_KEY:
-        raise HTTPException(status_code=404, detail="Not found")
+    if not _OPS_KEY or key != _OPS_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden")
     import threading
     from datetime import datetime, timezone
     from .routers.admin_domain import _seed_jobs, _run_seed_merchants_job
@@ -1226,15 +974,15 @@ async def ops_seed_merchants(key: str = "", max_cells: int = 0):
 
 @app.get("/v1/ops/seed-status")
 async def ops_seed_status(key: str = ""):
-    if key != _OPS_KEY:
-        raise HTTPException(status_code=404, detail="Not found")
+    if not _OPS_KEY or key != _OPS_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden")
     from .routers.admin_domain import _seed_jobs
     return {"jobs": _seed_jobs}
 
 @app.get("/v1/ops/seed-debug")
 async def ops_seed_debug(key: str = "", charger_id: str = ""):
-    if key != _OPS_KEY:
-        raise HTTPException(status_code=404, detail="Not found")
+    if not _OPS_KEY or key != _OPS_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden")
     from .db import SessionLocal
     from .models.while_you_charge import Charger, Merchant, ChargerMerchant
     from sqlalchemy import func, text
@@ -1266,145 +1014,10 @@ async def ops_seed_debug(key: str = "", charger_id: str = ""):
         db.close()
 # ─── End temporary ops endpoint ───
 
-# Add PWA error normalization for pilot endpoints
-from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
-from app.utils.pwa_responses import shape_error
 
-@app.exception_handler(HTTPException)
-async def pilot_error_handler(request: Request, exc: HTTPException):
-    """Normalize errors for pilot/PWA endpoints."""
-    # Only apply to pilot endpoints
-    if request.url.path.startswith("/v1/pilot/"):
-        status_code_map = {
-            400: "BadRequest",
-            401: "Unauthorized",
-            403: "Unauthorized",
-            404: "NotFound",
-            500: "Internal"
-        }
-        error_type = status_code_map.get(exc.status_code, "Internal")
-        detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
-        return JSONResponse(
-            status_code=exc.status_code,
-            content=shape_error(error_type, detail)
-        )
-    # For non-pilot endpoints, return proper JSON response with the exception detail
-    from fastapi.responses import JSONResponse
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"detail": exc.detail},
-        headers={
-            "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
-            "Access-Control-Allow-Credentials": "true",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Api-Key, X-Merchant-Key",
-        }
-    )
-
-@app.exception_handler(RequestValidationError)
-async def validation_error_handler(request: Request, exc: RequestValidationError):
-    """Normalize validation errors for pilot/PWA endpoints."""
-    if request.url.path.startswith("/v1/pilot/"):
-        return JSONResponse(
-            status_code=400,
-            content=shape_error("BadRequest", "Invalid request data")
-        )
-    raise exc
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    """Global exception handler for unhandled errors"""
-    # Skip exception handling for static file paths - let FastAPI/Starlette handle them
-    # IMPORTANT: StaticFiles should handle its own errors (404 for missing files, etc.)
-    path = request.url.path
-    if path.startswith("/app/") or path.startswith("/static/"):
-        # For static files, allow HTTPException (both FastAPI and Starlette) to pass through
-        # StaticFiles raises HTTPException for missing files (404), which should be returned properly
-        from starlette.exceptions import HTTPException as StarletteHTTPException
-        from fastapi.exceptions import HTTPException as FastAPIHTTPException
-        
-        if isinstance(exc, (StarletteHTTPException, FastAPIHTTPException)):
-            # This is a normal HTTP exception from StaticFiles - let it through
-            logger.debug(f"StaticFiles HTTPException for {path}: {exc.status_code}")
-            raise exc
-        
-        # For other exceptions on static paths, re-raise immediately without processing
-        # Let Starlette's default handler deal with it - don't log or wrap
-        raise exc
-    
-    # Handle HTTPException with CORS headers (critical for browser requests)
-    # Check both FastAPI and Starlette HTTPException
-    from fastapi.exceptions import HTTPException as FastAPIHTTPException
-    from starlette.exceptions import HTTPException as StarletteHTTPException
-    from fastapi.responses import JSONResponse
-    if isinstance(exc, (FastAPIHTTPException, StarletteHTTPException)):
-        # Return HTTPException as JSON with CORS headers to prevent CORS errors in browser
-        origin = request.headers.get("origin", "https://app.nerava.network")
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={"detail": exc.detail if hasattr(exc, 'detail') else str(exc)},
-            headers={
-                "Access-Control-Allow-Origin": origin,
-                "Access-Control-Allow-Credentials": "true",
-                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Api-Key",
-            }
-        )
-    
-    # Log unhandled exceptions (full traceback in logs)
-    import traceback
-    error_detail = str(exc)
-    error_traceback = traceback.format_exc()
-    logger.error(f"Unhandled exception: {error_detail}\n{error_traceback}", exc_info=True)
-    
-    # For other exceptions, return a 500 with proper CORS headers
-    # In production, don't leak internal error details to clients
-    from fastapi.responses import JSONResponse
-    from app.core.env import is_local_env
-    
-    if is_local_env():
-        # In local/dev, return detailed error for debugging
-        error_message = str(exc) if exc else "Internal server error"
-        error_response = {"detail": f"Internal server error: {error_message}"}
-    else:
-        # In production, return generic error message (details are in logs)
-        error_response = {"detail": "Internal server error"}
-    
-    return JSONResponse(
-        status_code=500,
-        content=error_response,
-        headers={
-            "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
-            "Access-Control-Allow-Credentials": "true",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Api-Key, X-Merchant-Key",
-        }
-    )
-
-# 20 Feature Scaffold Routers (all behind flags)
-app.include_router(merchant_intel.router)
-app.include_router(behavior_cloud.router)
-app.include_router(reward_routing.router)
-app.include_router(city_marketplace.router)
-app.include_router(multimodal.router)
-app.include_router(merchant_credits.router)
-app.include_router(verify_api.router)
-app.include_router(wallet_interop.router)
-app.include_router(coop_pools.router)
-app.include_router(sdk.router)
-app.include_router(energy_rep.router)
-app.include_router(offsets.router)
-app.include_router(fleet.router)
-app.include_router(iot.router)
-app.include_router(deals.router)
-app.include_router(events.router)
-app.include_router(tenant.router)
-app.include_router(ai_rewards.router)
-app.include_router(finance.router)
-app.include_router(ai_growth.router)
-app.include_router(demo.router)
-app.include_router(dual_zone.router)
+# Exception handlers (extracted to exception_handlers module)
+from .exception_handlers import register_exception_handlers
+register_exception_handlers(app)
 
 # Start Nova accrual service on startup (demo mode only)
 @app.on_event("startup")

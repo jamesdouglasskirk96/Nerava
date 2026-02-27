@@ -39,8 +39,8 @@ class ActivateExclusiveRequest(BaseModel):
     charger_id: str
     charger_place_id: Optional[str] = None
     intent_session_id: Optional[str] = None
-    lat: Optional[float] = None  # V3: Optional, null when location unavailable
-    lng: Optional[float] = None  # V3: Optional, null when location unavailable
+    lat: float  # Required: driver must provide location for radius validation
+    lng: float  # Required: driver must provide location for radius validation
     accuracy_m: Optional[float] = None
     # V3: Intent capture fields
     intent: Optional[str] = None  # "eat" | "work" | "quick-stop"
@@ -238,61 +238,33 @@ async def activate_exclusive(
                 }
             )
         
-        # TEMPORARY: Location is optional - just log if provided, don't block activation
-        # TODO: Re-enable location validation after demo period
-        distance_m = None
-        if request.lat is not None and request.lng is not None:
-            # Log the provided coordinates
-            logger.info(
-                f"Exclusive activation with location: lat={request.lat}, lng={request.lng}",
+        # Location validation: lat/lng are required, enforce charger radius
+        distance_m, is_within_radius = validate_charger_radius(
+            db, request.charger_id, request.lat, request.lng
+        )
+        if not is_within_radius:
+            logger.warning(
+                f"Activation rejected: outside charger radius distance={distance_m:.0f}m, required={CHARGER_RADIUS_M}m",
                 extra={
                     "driver_id": driver.id,
                     "charger_id": request.charger_id,
-                    "merchant_id": request.merchant_id,
-                    "lat": request.lat,
-                    "lng": request.lng
+                    "distance_m": distance_m,
+                    "radius_m": CHARGER_RADIUS_M,
                 }
             )
-
-            # Try to calculate distance for logging purposes only
-            try:
-                distance_m, is_within_radius = validate_charger_radius(
-                    db, request.charger_id, request.lat, request.lng
-                )
-                if not is_within_radius:
-                    # Just log, don't block
-                    logger.warning(
-                        f"Activation outside charger radius (allowed for demo): distance={distance_m:.0f}m, required={CHARGER_RADIUS_M}m",
-                        extra={
-                            "driver_id": driver.id,
-                            "charger_id": request.charger_id,
-                            "distance_m": distance_m,
-                            "radius_m": CHARGER_RADIUS_M,
-                        }
-                    )
-                    log_event("exclusive_activation_outside_radius_allowed", {
-                        "driver_id": driver.id,
-                        "charger_id": request.charger_id,
-                        "distance_m": distance_m,
-                        "radius_m": CHARGER_RADIUS_M,
-                    })
-            except Exception as e:
-                # Log but don't block if charger lookup fails
-                logger.warning(
-                    f"Could not validate charger radius (proceeding anyway): {e}",
-                    extra={
-                        "charger_id": request.charger_id,
-                        "error": str(e)
-                    }
-                )
-        else:
-            # No location provided - log and proceed
-            logger.info(
-                f"Exclusive activation without location (allowed for demo)",
-                extra={
-                    "driver_id": driver.id,
-                    "charger_id": request.charger_id,
-                    "merchant_id": request.merchant_id,
+            log_event("exclusive_activation_outside_radius_rejected", {
+                "driver_id": driver.id,
+                "charger_id": request.charger_id,
+                "distance_m": distance_m,
+                "radius_m": CHARGER_RADIUS_M,
+            })
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "outside_charger_radius",
+                    "message": f"You are {distance_m:.0f}m from the charger. Must be within {CHARGER_RADIUS_M}m.",
+                    "distance_m": round(distance_m, 1),
+                    "radius_m": CHARGER_RADIUS_M,
                 }
             )
         
@@ -428,7 +400,21 @@ async def activate_exclusive(
         )
         
         remaining_seconds = int((expires_at - now).total_seconds())
-        
+
+        # Send push notification for exclusive confirmation (best-effort)
+        try:
+            from app.services.push_service import send_exclusive_confirmed_push
+            merchant_name = request.merchant_id or "a nearby merchant"
+            # Try to resolve merchant name from DB
+            if request.merchant_id:
+                from app.models.while_you_charge import Merchant as WYCMerchant
+                m = db.query(WYCMerchant).filter(WYCMerchant.id == request.merchant_id).first()
+                if m:
+                    merchant_name = m.name
+            send_exclusive_confirmed_push(db, driver.id, merchant_name)
+        except Exception as push_err:
+            logger.debug("Push notification failed (non-fatal): %s", push_err)
+
         return ActivateExclusiveResponse(
             status="ACTIVE",
             exclusive_session=ExclusiveSessionResponse(
@@ -744,7 +730,7 @@ async def get_exclusive_session(
         exclusive_session=ExclusiveSessionResponse(
             id=str(session.id),
             merchant_id=session.merchant_id,
-            charger_id=session.charger_id,
+            charger_id=None,  # Redacted: unauthenticated endpoint, staff only needs merchant info
             expires_at=session.expires_at.isoformat(),
             activated_at=session.activated_at.isoformat(),
             remaining_seconds=remaining_seconds,

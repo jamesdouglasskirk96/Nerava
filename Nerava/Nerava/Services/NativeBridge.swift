@@ -15,6 +15,7 @@ enum NativeBridgeMessage {
     case eventEmissionFailed(event: String, reason: String)
     case authRequired
     case authTokenResponse(requestId: String, token: String?)
+    case deviceTokenRegistered(token: String)
     case ready
 
     var action: String {
@@ -27,6 +28,7 @@ enum NativeBridgeMessage {
         case .eventEmissionFailed: return "EVENT_EMISSION_FAILED"
         case .authRequired: return "AUTH_REQUIRED"
         case .authTokenResponse: return "AUTH_TOKEN_RESPONSE"
+        case .deviceTokenRegistered: return "DEVICE_TOKEN_REGISTERED"
         case .ready: return "NATIVE_READY"
         }
     }
@@ -55,6 +57,8 @@ enum NativeBridgeMessage {
                 payload["token"] = token
             }
             return payload
+        case .deviceTokenRegistered(let token):
+            return ["token": token]
         case .ready:
             return [:]
         }
@@ -67,6 +71,7 @@ final class NativeBridge: NSObject {
     weak var webView: WKWebView?
     weak var sessionEngine: SessionEngine?
     private let locationService: LocationService
+    private var apnsTokenObserver: NSObjectProtocol?
 
     // Exact origin matching (NOT substring)
     // Uses Environment configuration for allowed origins
@@ -80,6 +85,12 @@ final class NativeBridge: NSObject {
     init(locationService: LocationService) {
         self.locationService = locationService
         super.init()
+    }
+
+    deinit {
+        if let observer = apnsTokenObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
 
     var injectionScript: String {
@@ -209,6 +220,24 @@ final class NativeBridge: NSObject {
         // Send native → web ready message after setup (redundant signal for reliability)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             self?.sendToWeb(.ready)
+        }
+
+        // Listen for APNs device token and forward to web app
+        apnsTokenObserver = NotificationCenter.default.addObserver(
+            forName: .didReceiveAPNsToken,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            if let token = notification.userInfo?["token"] as? String {
+                self?.sendToWeb(.deviceTokenRegistered(token: token))
+            }
+        }
+
+        // If token was already received before bridge setup, forward it now
+        if let existingToken = NotificationService.shared.apnsDeviceToken {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.sendToWeb(.deviceTokenRegistered(token: existingToken))
+            }
         }
     }
 

@@ -13,13 +13,16 @@ from urllib.parse import urlencode
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.token_encryption import encrypt_token, decrypt_token
 from app.models.tesla_connection import TeslaConnection
 
 logger = logging.getLogger(__name__)
 
-# Tesla OAuth endpoints (fleet-auth.tesla.com is the canonical OIDC provider)
-TESLA_AUTH_URL = "https://fleet-auth.tesla.com/oauth2/v3/authorize"
-TESLA_TOKEN_URL = "https://fleet-auth.tesla.com/oauth2/v3/token"
+# Tesla OAuth endpoints
+# Authorization: auth.tesla.com (user-facing consent screen)
+# Token exchange: fleet-auth.prd.vn.cloud.tesla.com (server-to-server)
+TESLA_AUTH_URL = "https://auth.tesla.com/oauth2/v3/authorize"
+TESLA_TOKEN_URL = "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token"
 TESLA_FLEET_API_URL = "https://fleet-api.prd.na.vn.cloud.tesla.com"
 
 # OAuth scopes for charging verification
@@ -345,22 +348,36 @@ async def get_valid_access_token(
     """
     # Check if token is still valid (with 5 min buffer)
     if connection.token_expires_at > datetime.utcnow() + timedelta(minutes=5):
-        return connection.access_token
+        return decrypt_token(connection.access_token)
 
     # Token expired, refresh it
     try:
-        token_response = await oauth_service.refresh_access_token(connection.refresh_token)
+        raw_refresh = decrypt_token(connection.refresh_token)
+        token_response = await oauth_service.refresh_access_token(raw_refresh)
 
-        connection.access_token = token_response["access_token"]
-        connection.refresh_token = token_response.get("refresh_token", connection.refresh_token)
+        connection.access_token = encrypt_token(token_response["access_token"])
+        new_refresh = token_response.get("refresh_token")
+        if new_refresh:
+            connection.refresh_token = encrypt_token(new_refresh)
         connection.token_expires_at = datetime.utcnow() + timedelta(
             seconds=token_response.get("expires_in", 3600)
         )
         connection.updated_at = datetime.utcnow()
         db.commit()
 
-        return connection.access_token
+        return decrypt_token(connection.access_token)
 
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code in (401, 403):
+            # Token revoked — mark connection inactive
+            logger.warning(f"Tesla token revoked for user (HTTP {e.response.status_code})")
+            connection.is_active = False
+            connection.updated_at = datetime.utcnow()
+            db.commit()
+            return None
+        # Transient error (5xx, timeout) — raise so caller can return 502
+        logger.error(f"Tesla API temporarily unavailable: {e}")
+        raise
     except Exception as e:
         logger.error(f"Failed to refresh Tesla token: {e}")
         return None

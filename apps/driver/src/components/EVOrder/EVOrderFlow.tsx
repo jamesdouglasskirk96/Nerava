@@ -14,6 +14,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { capture, DRIVER_EVENTS } from '../../analytics';
 import { useArrivalPolling } from '../../hooks/useArrivalPolling';
+import { openExternalUrl } from '../../utils/openExternal';
 
 type FulfillmentType = 'ev_dine_in' | 'ev_curbside';
 type Step = 'confirm' | 'ordering' | 'order_number' | 'queued' | 'released' | 'ready';
@@ -85,7 +86,7 @@ export function EVOrderFlow() {
 
       // Open merchant's ordering URL
       if (response.data.ordering_url) {
-        window.open(response.data.ordering_url, '_blank');
+        openExternalUrl(response.data.ordering_url);
       }
 
       setStep('order_number');
@@ -195,7 +196,7 @@ export function EVOrderFlow() {
           </button>
 
           <button
-            onClick={() => session?.ordering_url && window.open(session.ordering_url, '_blank')}
+            onClick={() => session?.ordering_url && openExternalUrl(session.ordering_url)}
             className="w-full py-3 text-blue-600 mt-4"
           >
             Open menu again

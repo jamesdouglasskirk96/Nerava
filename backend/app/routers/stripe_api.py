@@ -18,6 +18,7 @@ from app.clients.stripe_client import get_stripe, create_transfer, create_expres
 from app.utils.log import get_logger, log_reward_event
 from app.services.nova_service import compute_payload_hash
 from app.dependencies.feature_flags import require_stripe
+from app.dependencies.domain import get_current_user
 
 router = APIRouter(prefix="/v1", tags=["stripe"])
 
@@ -34,13 +35,19 @@ class PayoutRequest(BaseModel):
 @router.post("/payouts/create", dependencies=[Depends(require_stripe)])
 async def create_payout(
     request: PayoutRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     """
     Create a payout by debiting user wallet and initiating Stripe transfer.
-    
+
     Rate limit: 5/min per user (enforced by middleware if configured)
     """
+    # Verify the caller owns this wallet or is admin
+    is_admin = getattr(current_user, 'role_flags', '') and 'admin' in (current_user.role_flags or '')
+    if request.user_id != current_user.id and not is_admin:
+        raise HTTPException(status_code=403, detail="Cannot create payout for another user")
+
     now = datetime.utcnow()
     
     # Validate method

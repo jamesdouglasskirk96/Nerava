@@ -34,7 +34,9 @@ def create_access_token(subject: str, expires_delta: Optional[timedelta] = None,
     payload: Dict[str, Any] = {
         "sub": subject,  # public_id (UUID string)
         "exp": expire,
-        "iat": datetime.utcnow()
+        "iat": datetime.utcnow(),
+        "iss": "nerava",
+        "aud": "nerava-api",
     }
     if auth_provider:
         payload["auth_provider"] = auth_provider

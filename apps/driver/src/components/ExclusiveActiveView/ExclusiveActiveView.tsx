@@ -6,12 +6,14 @@ import { ImageWithFallback } from '../shared/ImageWithFallback'
 import { FullScreenTicket } from '../shared/FullScreenTicket'
 import { FEATURE_FLAGS } from '../../config/featureFlags'
 import { capture, DRIVER_EVENTS } from '../../analytics'
+import { openExternalUrl } from '../../utils/openExternal'
 import type { ExclusiveMerchant } from '../../hooks/useExclusiveSessionState'
 import type { RefuelDetails } from '../RefuelIntentModal'
 
 interface ExclusiveActiveViewProps {
   merchant: ExclusiveMerchant
   remainingMinutes: number
+  remainingSeconds?: number
   onArrived: () => void
   onCancel?: () => void
   onExpired?: () => void
@@ -35,6 +37,7 @@ interface ExclusiveActiveViewProps {
 export function ExclusiveActiveView({
   merchant,
   remainingMinutes,
+  remainingSeconds: remainingSecondsProp,
   onArrived,
   onCancel,
   onExpired,
@@ -47,6 +50,12 @@ export function ExclusiveActiveView({
   const navigate = useNavigate()
   const minutes = remainingMinutes
   const isExpired = minutes <= 0
+
+  // MM:SS display from remainingSeconds (falls back to remainingMinutes * 60 if not provided)
+  const totalSeconds = remainingSecondsProp ?? remainingMinutes * 60
+  const mm = Math.floor(totalSeconds / 60)
+  const ss = totalSeconds % 60
+  const timerDisplay = `${mm}:${ss.toString().padStart(2, '0')}`
   const [showFullscreenTicket, setShowFullscreenTicket] = useState(false)
 
   return (
@@ -123,7 +132,7 @@ export function ExclusiveActiveView({
               aria-label={
                 minutes <= 0
                   ? 'Session expired'
-                  : `${minutes} ${minutes === 1 ? 'minute' : 'minutes'} remaining`
+                  : `${timerDisplay} remaining`
               }
             >
               <span className={`text-sm font-medium ${
@@ -137,7 +146,7 @@ export function ExclusiveActiveView({
               }`}>
                 {minutes <= 0
                   ? 'Expired'
-                  : `${minutes} ${minutes === 1 ? 'minute' : 'minutes'} remaining`
+                  : `${timerDisplay} remaining`
                 }
               </span>
             </div>
@@ -224,7 +233,7 @@ export function ExclusiveActiveView({
                 // Open Google Maps with directions to merchant
                 // In production, use actual merchant coordinates
                 const merchantAddress = encodeURIComponent(merchant.name)
-                window.open(`https://www.google.com/maps/dir/?api=1&destination=${merchantAddress}`, '_blank')
+                openExternalUrl(`https://www.google.com/maps/dir/?api=1&destination=${merchantAddress}`)
               }}
               className="w-full py-4 bg-white border-2 border-[#1877F2] text-[#1877F2] rounded-2xl font-medium hover:bg-[#F7F8FA] active:scale-98 transition-all flex items-center justify-center gap-2"
             >

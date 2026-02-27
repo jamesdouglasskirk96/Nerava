@@ -9,6 +9,7 @@ Core business logic for:
 - Redemption and merchant confirmation
 """
 import logging
+import math
 import secrets
 import hashlib
 import uuid
@@ -167,19 +168,39 @@ class CheckinService:
         return session, pairing_required, pairing_url, nearby
 
     def _find_nearest_charger(self, db: Session, lat: float, lng: float) -> Optional[Charger]:
-        """Find the nearest charger within radius."""
-        chargers = db.query(Charger).all()
-        nearest = None
-        min_distance = float('inf')
+        """Find the nearest charger within radius using SQL spatial query.
 
-        for charger in chargers:
-            if charger.lat and charger.lng:
-                distance = haversine_m(lat, lng, charger.lat, charger.lng)
-                if distance < min_distance and distance <= CHARGER_RADIUS_M:
-                    min_distance = distance
-                    nearest = charger
+        Uses a bounding-box pre-filter followed by the Haversine formula in SQL
+        so that only a handful of rows are examined instead of the full table.
+        """
+        radius_m = CHARGER_RADIUS_M
 
-        return nearest
+        # Bounding box pre-filter (approx 1 degree latitude = 111 km)
+        lat_delta = radius_m / 111000
+        lng_delta = radius_m / (111000 * math.cos(math.radians(lat)))
+
+        # SQL Haversine distance expression
+        distance_expr = (
+            6371000 * func.acos(
+                func.cos(func.radians(lat)) * func.cos(func.radians(Charger.lat)) *
+                func.cos(func.radians(Charger.lng) - func.radians(lng)) +
+                func.sin(func.radians(lat)) * func.sin(func.radians(Charger.lat))
+            )
+        ).label("distance_m")
+
+        result = db.query(Charger, distance_expr).filter(
+            Charger.lat.isnot(None),
+            Charger.lng.isnot(None),
+            Charger.lat.between(lat - lat_delta, lat + lat_delta),
+            Charger.lng.between(lng - lng_delta, lng + lng_delta),
+        ).order_by("distance_m").limit(1).first()
+
+        if result:
+            charger, distance_m = result
+            if distance_m <= radius_m:
+                return charger
+
+        return None
 
     def _get_nearby_merchants(
         self,
@@ -188,50 +209,74 @@ class CheckinService:
         lat: float,
         lng: float,
     ) -> List[Dict]:
-        """Get nearby merchants for display."""
+        """Get nearby merchants for display.
+
+        Uses a single JOIN query (when charger_id is provided) or a SQL spatial
+        query (fallback) to avoid N+1 individual merchant lookups.
+        """
         merchants = []
 
         if charger_id:
-            # Get merchants associated with this charger
-            associations = db.query(ChargerMerchant).filter(
-                ChargerMerchant.charger_id == charger_id
-            ).all()
+            # Single JOIN query: ChargerMerchant + Merchant in one round-trip
+            rows = (
+                db.query(ChargerMerchant, Merchant)
+                .join(Merchant, ChargerMerchant.merchant_id == Merchant.id)
+                .filter(ChargerMerchant.charger_id == charger_id)
+                .limit(5)
+                .all()
+            )
 
-            for assoc in associations[:5]:  # Limit to 5
-                merchant = db.query(Merchant).filter(Merchant.id == assoc.merchant_id).first()
-                if merchant:
-                    distance = haversine_m(lat, lng, merchant.lat, merchant.lng) if merchant.lat else None
-                    walk_time = max(1, int(distance / 80)) if distance else None  # ~80m/min
+            for assoc, merchant in rows:
+                distance = haversine_m(lat, lng, merchant.lat, merchant.lng) if merchant.lat else None
+                walk_time = max(1, int(distance / 80)) if distance else None  # ~80m/min
+                merchants.append({
+                    "id": merchant.id,
+                    "name": merchant.name,
+                    "category": getattr(merchant, 'category', None),
+                    "distance_m": int(distance) if distance else None,
+                    "walk_time_minutes": walk_time,
+                    "ordering_url": getattr(merchant, 'ordering_url', None),
+                    "image_url": getattr(merchant, 'image_url', None),
+                })
+        else:
+            # SQL spatial query: bounding box + Haversine instead of loading all merchants
+            radius_m = 1000  # 1km
+            lat_delta = radius_m / 111000
+            lng_delta = radius_m / (111000 * math.cos(math.radians(lat)))
+
+            distance_expr = (
+                6371000 * func.acos(
+                    func.cos(func.radians(lat)) * func.cos(func.radians(Merchant.lat)) *
+                    func.cos(func.radians(Merchant.lng) - func.radians(lng)) +
+                    func.sin(func.radians(lat)) * func.sin(func.radians(Merchant.lat))
+                )
+            ).label("distance_m")
+
+            rows = (
+                db.query(Merchant, distance_expr)
+                .filter(
+                    Merchant.lat.isnot(None),
+                    Merchant.lng.isnot(None),
+                    Merchant.lat.between(lat - lat_delta, lat + lat_delta),
+                    Merchant.lng.between(lng - lng_delta, lng + lng_delta),
+                )
+                .order_by("distance_m")
+                .limit(5)
+                .all()
+            )
+
+            for merchant, distance in rows:
+                if distance <= radius_m:
+                    walk_time = max(1, int(distance / 80))
                     merchants.append({
                         "id": merchant.id,
                         "name": merchant.name,
                         "category": getattr(merchant, 'category', None),
-                        "distance_m": int(distance) if distance else None,
+                        "distance_m": int(distance),
                         "walk_time_minutes": walk_time,
                         "ordering_url": getattr(merchant, 'ordering_url', None),
                         "image_url": getattr(merchant, 'image_url', None),
                     })
-        else:
-            # Get merchants near the location
-            all_merchants = db.query(Merchant).limit(100).all()
-            for merchant in all_merchants:
-                if merchant.lat and merchant.lng:
-                    distance = haversine_m(lat, lng, merchant.lat, merchant.lng)
-                    if distance <= 1000:  # 1km radius
-                        walk_time = max(1, int(distance / 80))
-                        merchants.append({
-                            "id": merchant.id,
-                            "name": merchant.name,
-                            "category": getattr(merchant, 'category', None),
-                            "distance_m": int(distance),
-                            "walk_time_minutes": walk_time,
-                            "ordering_url": getattr(merchant, 'ordering_url', None),
-                            "image_url": getattr(merchant, 'image_url', None),
-                        })
-
-            # Sort by distance and limit
-            merchants.sort(key=lambda m: m.get('distance_m', float('inf')))
-            merchants = merchants[:5]
 
         return merchants
 

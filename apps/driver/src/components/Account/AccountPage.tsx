@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Heart, LogOut, ChevronRight, X, Settings, User, Mail, Car, LogIn } from 'lucide-react'
+import { ArrowLeft, Heart, LogOut, ChevronRight, X, User, Mail, Car, LogIn, Bell, BellOff, Ruler, ExternalLink, HelpCircle, Zap } from 'lucide-react'
 import { useFavorites } from '../../contexts/FavoritesContext'
 import { ShareNerava } from './ShareNerava'
 import { LoginModal } from './LoginModal'
+import { useTeslaStatus } from '../../services/api'
 
 interface UserProfile {
   name?: string
@@ -13,14 +14,28 @@ interface UserProfile {
   memberSince?: string
 }
 
+const NOTIFICATIONS_KEY = 'nerava_notifications_enabled'
+const DISTANCE_UNIT_KEY = 'nerava_distance_unit'
+
 export function AccountPage({ onClose }: { onClose: () => void }) {
-  const { favorites, toggleFavorite } = useFavorites()
+  const { favorites, favoriteDetails, toggleFavorite, getMerchantName } = useFavorites()
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [showFavoritesList, setShowFavoritesList] = useState(false)
   const [showShareNerava, setShowShareNerava] = useState(false)
   const [showLoginModal, setShowLoginModal] = useState(false)
   const navigate = useNavigate()
+
+  // Preferences state
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
+    return localStorage.getItem(NOTIFICATIONS_KEY) !== 'false'
+  })
+  const [distanceUnit, setDistanceUnit] = useState<'miles' | 'km'>(() => {
+    return (localStorage.getItem(DISTANCE_UNIT_KEY) as 'miles' | 'km') || 'miles'
+  })
+
+  // Tesla connection status
+  const { data: teslaStatus, isLoading: teslaLoading } = useTeslaStatus()
 
   const checkAuth = () => {
     const token = localStorage.getItem('access_token')
@@ -59,7 +74,7 @@ export function AccountPage({ onClose }: { onClose: () => void }) {
 
   const handleViewMerchant = (merchantId: string) => {
     onClose()
-    navigate(`/m/${merchantId}`)
+    navigate(`/merchant/${merchantId}`)
   }
 
   const handleRemoveFavorite = async (e: React.MouseEvent, merchantId: string) => {
@@ -67,10 +82,8 @@ export function AccountPage({ onClose }: { onClose: () => void }) {
     await toggleFavorite(merchantId)
   }
 
-  // Format merchant ID for display (remove prefix if present)
-  const formatMerchantId = (id: string) => {
-    return id.replace(/^m_/, '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-  }
+  // Get display name from favorites context (with fallback formatting)
+  const formatMerchantId = (id: string) => getMerchantName(id)
 
   // Generate referral code from user profile
   const referralCode = `NERAVA-EV-${new Date().getFullYear()}`
@@ -78,6 +91,28 @@ export function AccountPage({ onClose }: { onClose: () => void }) {
   const handleLoginSuccess = () => {
     checkAuth()
     setShowLoginModal(false)
+  }
+
+  const handleToggleNotifications = () => {
+    const newValue = !notificationsEnabled
+    setNotificationsEnabled(newValue)
+    localStorage.setItem(NOTIFICATIONS_KEY, String(newValue))
+  }
+
+  const handleToggleDistanceUnit = () => {
+    const newValue = distanceUnit === 'miles' ? 'km' : 'miles'
+    setDistanceUnit(newValue)
+    localStorage.setItem(DISTANCE_UNIT_KEY, newValue)
+  }
+
+  const handleConnectTesla = async () => {
+    try {
+      const { api } = await import('../../services/api')
+      const response = await api.get<{ authorization_url: string }>('/v1/auth/tesla/connect')
+      window.location.href = response.authorization_url
+    } catch (e) {
+      console.error('Failed to start Tesla connection:', e)
+    }
   }
 
   if (showShareNerava) {
@@ -112,28 +147,39 @@ export function AccountPage({ onClose }: { onClose: () => void }) {
             </div>
           ) : (
             <div className="divide-y">
-              {Array.from(favorites).map((merchantId) => (
-                <div
-                  key={merchantId}
-                  onClick={() => handleViewMerchant(merchantId)}
-                  className="flex items-center p-4 hover:bg-gray-50 active:bg-gray-100 cursor-pointer"
-                >
-                  <div className="w-10 h-10 bg-[#1877F2]/10 rounded-full flex items-center justify-center mr-3">
-                    <Heart className="w-5 h-5 text-[#1877F2] fill-current" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{formatMerchantId(merchantId)}</p>
-                    <p className="text-sm text-gray-500">Tap to view details</p>
-                  </div>
-                  <button
-                    onClick={(e) => handleRemoveFavorite(e, merchantId)}
-                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+              {Array.from(favorites).map((merchantId) => {
+                const details = favoriteDetails.get(merchantId)
+                return (
+                  <div
+                    key={merchantId}
+                    onClick={() => handleViewMerchant(merchantId)}
+                    className="flex items-center p-4 hover:bg-gray-50 active:bg-gray-100 cursor-pointer"
                   >
-                    <X className="w-5 h-5" />
-                  </button>
-                  <ChevronRight className="w-5 h-5 text-gray-400 ml-1" />
-                </div>
-              ))}
+                    {details?.photo_url ? (
+                      <img
+                        src={details.photo_url}
+                        alt={details.name}
+                        className="w-10 h-10 rounded-full object-cover mr-3"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 bg-[#1877F2]/10 rounded-full flex items-center justify-center mr-3">
+                        <Heart className="w-5 h-5 text-[#1877F2] fill-current" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{formatMerchantId(merchantId)}</p>
+                      <p className="text-sm text-gray-500">{details?.category || 'Tap to view details'}</p>
+                    </div>
+                    <button
+                      onClick={(e) => handleRemoveFavorite(e, merchantId)}
+                      className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                    <ChevronRight className="w-5 h-5 text-gray-400 ml-1" />
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
@@ -209,6 +255,58 @@ export function AccountPage({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
+          {/* Connected Vehicles */}
+          {isAuthenticated && (
+            <div className="bg-gray-50 rounded-2xl border border-[#E4E6EB] overflow-hidden">
+              <div className="p-4 border-b border-[#E4E6EB]">
+                <h3 className="font-semibold text-sm text-[#65676B] uppercase tracking-wide">Connected Vehicles</h3>
+              </div>
+              <div className="p-4">
+                {teslaLoading ? (
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gray-200 rounded-full animate-pulse" />
+                    <div className="flex-1">
+                      <div className="h-4 bg-gray-200 rounded w-32 animate-pulse mb-1" />
+                      <div className="h-3 bg-gray-200 rounded w-24 animate-pulse" />
+                    </div>
+                  </div>
+                ) : teslaStatus?.connected ? (
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-green-50 rounded-full flex items-center justify-center">
+                      <Zap className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-[#050505]">
+                        {teslaStatus.vehicle_name || 'Tesla'}
+                      </p>
+                      <p className="text-sm text-[#65676B]">
+                        {teslaStatus.vehicle_model || 'Connected'}
+                        {teslaStatus.vin ? ` \u00B7 \u2022\u2022\u2022\u2022${teslaStatus.vin.slice(-4)}` : ''}
+                      </p>
+                    </div>
+                    <div className="px-2.5 py-1 bg-green-100 rounded-full">
+                      <span className="text-xs font-medium text-green-700">Connected</span>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleConnectTesla}
+                    className="w-full flex items-center gap-3 p-1 hover:bg-gray-100 rounded-xl transition-colors"
+                  >
+                    <div className="w-10 h-10 bg-red-50 rounded-full flex items-center justify-center">
+                      <Zap className="w-5 h-5 text-red-500" />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <p className="font-medium text-[#050505]">Connect Tesla</p>
+                      <p className="text-sm text-[#65676B]">Verify charging and earn rewards</p>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-gray-400" />
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Favorites */}
           <button
             onClick={() => setShowFavoritesList(true)}
@@ -241,18 +339,76 @@ export function AccountPage({ onClose }: { onClose: () => void }) {
             <ChevronRight className="w-5 h-5 text-[#1877F2]" />
           </button>
 
-          {/* Settings */}
-          <button
+          {/* Preferences */}
+          <div className="bg-gray-50 rounded-2xl border border-[#E4E6EB] overflow-hidden">
+            <div className="p-4 border-b border-[#E4E6EB]">
+              <h3 className="font-semibold text-sm text-[#65676B] uppercase tracking-wide">Preferences</h3>
+            </div>
+            {/* Notifications toggle */}
+            <div className="flex items-center justify-between p-4 border-b border-[#E4E6EB]">
+              <div className="flex items-center gap-3">
+                {notificationsEnabled ? (
+                  <Bell className="w-5 h-5 text-[#65676B]" />
+                ) : (
+                  <BellOff className="w-5 h-5 text-[#65676B]" />
+                )}
+                <div>
+                  <p className="font-medium text-[#050505]">Notifications</p>
+                  <p className="text-sm text-[#65676B]">Charging alerts and offers</p>
+                </div>
+              </div>
+              <button
+                onClick={handleToggleNotifications}
+                className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+                  notificationsEnabled ? 'bg-[#1877F2]' : 'bg-gray-300'
+                }`}
+                role="switch"
+                aria-checked={notificationsEnabled}
+                aria-label="Toggle notifications"
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
+                    notificationsEnabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+            {/* Distance unit toggle */}
+            <div className="flex items-center justify-between p-4">
+              <div className="flex items-center gap-3">
+                <Ruler className="w-5 h-5 text-[#65676B]" />
+                <div>
+                  <p className="font-medium text-[#050505]">Distance Unit</p>
+                  <p className="text-sm text-[#65676B]">
+                    {distanceUnit === 'miles' ? 'Miles' : 'Kilometers'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleToggleDistanceUnit}
+                className="px-3 py-1.5 bg-white border border-[#E4E6EB] rounded-full text-sm font-medium text-[#050505] hover:bg-gray-100 active:bg-gray-200 transition-colors"
+              >
+                {distanceUnit === 'miles' ? 'mi' : 'km'}
+              </button>
+            </div>
+          </div>
+
+          {/* Support */}
+          <a
+            href="https://nerava.network/support"
+            target="_blank"
+            rel="noopener noreferrer"
             className="w-full p-4 bg-gray-50 rounded-2xl flex items-center gap-3 hover:bg-gray-100 active:bg-gray-200 transition-colors border border-[#E4E6EB]"
           >
             <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
-              <Settings className="w-5 h-5 text-[#65676B]" />
+              <HelpCircle className="w-5 h-5 text-[#65676B]" />
             </div>
             <div className="flex-1 text-left">
-              <p className="font-medium">Settings</p>
+              <p className="font-medium">Help & Support</p>
+              <p className="text-sm text-[#65676B]">FAQ, contact, and feedback</p>
             </div>
-            <ChevronRight className="w-5 h-5 text-gray-400" />
-          </button>
+            <ExternalLink className="w-4 h-4 text-gray-400" />
+          </a>
 
           {/* Logout - only show when authenticated */}
           {isAuthenticated && (

@@ -126,42 +126,9 @@ class DomainMerchant(Base):
     )
 
 
-class DriverWallet(Base):
-    """Driver wallet - Nova balance and energy reputation"""
-    __tablename__ = "driver_wallets"
-    
-    user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
-    nova_balance = Column(Integer, nullable=False, default=0)  # in smallest unit
-    energy_reputation_score = Column(Integer, nullable=False, default=0)
-    
-    # Encrypted Apple Wallet authentication token for PassKit web service
-    # Stored encrypted-at-rest using token_encryption service helpers
-    apple_authentication_token = Column(Text, nullable=True)
-    
-    # Apple Wallet pass fields
-    wallet_pass_token = Column(String, unique=True, nullable=True, index=True)  # Opaque token for barcode
-    wallet_activity_updated_at = Column(DateTime, nullable=True)  # Bumped on any earn/spend
-    wallet_pass_last_generated_at = Column(DateTime, nullable=True)  # Set when pkpass created/refreshed
-    
-    # Demo charging detection fields (sandbox/demo only)
-    charging_detected = Column(Boolean, nullable=False, default=False)  # Demo: charging state indicator
-    charging_detected_at = Column(DateTime, nullable=True)  # When charging was last detected (demo)
-    
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=True)
-    
-    # Relationships
-    user = relationship("User", foreign_keys=[user_id])
-    # Note: transactions relationship removed - query NovaTransaction directly via driver_user_id
-    # transactions = relationship("NovaTransaction", back_populates="driver")  # BROKEN: no direct FK
-    
-    # P0-D Security: CheckConstraint enforced at DB level via migration
-    # For SQLite: Uses triggers (see migration 040)
-    # For PostgreSQL: Uses CHECK constraint
-    __table_args__ = (
-        # Note: CheckConstraint is added via migration for cross-DB compatibility
-        # SQLite doesn't support ALTER TABLE ADD CONSTRAINT, so migration uses triggers
-    )
+# DriverWallet is defined in driver_wallet.py (matching production schema from migration 073)
+# Re-exported here for backward compatibility with existing imports
+from .driver_wallet import DriverWallet  # noqa: F401
 
 
 class ApplePassRegistration(Base):
@@ -169,7 +136,7 @@ class ApplePassRegistration(Base):
     __tablename__ = "apple_pass_registrations"
 
     id = Column(UUIDType(), primary_key=True)
-    driver_wallet_id = Column(Integer, ForeignKey("driver_wallets.user_id"), nullable=False, index=True)
+    driver_wallet_id = Column(Integer, ForeignKey("driver_wallets.driver_id"), nullable=False, index=True)
 
     # Device + PassKit identifiers
     device_library_identifier = Column(String, nullable=False, index=True)
@@ -196,7 +163,7 @@ class GoogleWalletLink(Base):
     __tablename__ = "google_wallet_links"
 
     id = Column(UUIDType(), primary_key=True)
-    driver_wallet_id = Column(Integer, ForeignKey("driver_wallets.user_id"), nullable=False, index=True)
+    driver_wallet_id = Column(Integer, ForeignKey("driver_wallets.driver_id"), nullable=False, index=True)
 
     issuer_id = Column(String, nullable=False)
     class_id = Column(String, nullable=False)

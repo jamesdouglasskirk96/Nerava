@@ -19,7 +19,10 @@ import { ExclusiveCompletedModal } from '../ExclusiveCompleted/ExclusiveComplete
 import { Button } from '../shared/Button'
 import { InlineError } from '../shared/InlineError'
 import { MerchantDetailsSkeleton } from '../shared/Skeleton'
-import { ThumbsUp, ThumbsDown } from 'lucide-react'
+import { ThumbsUp, ThumbsDown, MapPin, Phone, Globe } from 'lucide-react'
+import { openExternalUrl } from '../../utils/openExternal'
+import { useFavorites } from '../../contexts/FavoritesContext'
+import { capture, DRIVER_EVENTS } from '../../analytics'
 
 // Flow states
 type FlowState =
@@ -58,7 +61,55 @@ export function MerchantDetailsScreen() {
   const [remainingSeconds, setRemainingSeconds] = useState(3600) // 60 minutes default
   const [verificationCode, setVerificationCode] = useState<string | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(() => !!localStorage.getItem('access_token'))
-  
+  const [showShareToast, setShowShareToast] = useState(false)
+
+  // Favorites context
+  const { toggleFavorite, isFavorite } = useFavorites()
+
+  const handleFavorite = useCallback(async () => {
+    if (!merchantId) return
+    capture(DRIVER_EVENTS.MERCHANT_FAVORITED, {
+      merchant_id: merchantId,
+      action: isFavorite(merchantId) ? 'unfavorite' : 'favorite',
+    })
+    await toggleFavorite(merchantId, merchantData?.merchant?.name)
+  }, [merchantId, toggleFavorite, isFavorite, merchantData])
+
+  const handleShare = useCallback(async () => {
+    if (!merchantId || !merchantData) return
+    const url = `https://app.nerava.network/merchant/${merchantId}`
+    const shareData = {
+      title: merchantData.merchant.name,
+      text: `Check out ${merchantData.merchant.name} on Nerava!`,
+      url,
+    }
+
+    if (navigator.share && navigator.canShare?.(shareData)) {
+      try {
+        await navigator.share(shareData)
+        capture(DRIVER_EVENTS.MERCHANT_SHARED, {
+          merchant_id: merchantId,
+          method: 'native',
+        })
+        return
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(url)
+      capture(DRIVER_EVENTS.MERCHANT_SHARED, {
+        merchant_id: merchantId,
+        method: 'clipboard',
+      })
+      setShowShareToast(true)
+      setTimeout(() => setShowShareToast(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err)
+    }
+  }, [merchantId, merchantData])
+
   // V3: Intent capture state (only used when SECURE_A_SPOT_V3 is enabled)
   const [showRefuelIntentModal, setShowRefuelIntentModal] = useState(false)
   const [showSpotSecuredModal, setShowSpotSecuredModal] = useState(false)
@@ -429,7 +480,7 @@ export function MerchantDetailsScreen() {
 
   const handleGetDirections = () => {
     if (merchantData?.actions.get_directions_url) {
-      window.open(merchantData.actions.get_directions_url, '_blank')
+      openExternalUrl(merchantData.actions.get_directions_url)
     }
   }
 
@@ -537,9 +588,10 @@ export function MerchantDetailsScreen() {
         walkTime={isActiveState ? `${remainingMinutes} minutes remaining` : walkTime}
         isExclusive={isExclusive}
         isExclusiveActive={isActiveState}
+        isFavorited={merchantId ? isFavorite(merchantId) : false}
         onClose={() => navigate(-1)}
-        onFavorite={() => {}}
-        onShare={() => {}}
+        onFavorite={handleFavorite}
+        onShare={handleShare}
       />
 
       {/* Content */}
@@ -548,6 +600,45 @@ export function MerchantDetailsScreen() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900 leading-tight mb-2">{merchantData.merchant.name}</h1>
           <p className="text-base text-gray-600">{merchantData.merchant.category}</p>
+
+          {/* Contact info: address, phone, website */}
+          <div className="mt-3 space-y-2">
+            {merchantData.merchant.address && (
+              <div className="flex items-start gap-2 text-sm text-gray-600">
+                <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0 text-[#65676B]" />
+                <span>{merchantData.merchant.address}</span>
+              </div>
+            )}
+            {(merchantData.merchant as any).phone && (
+              <div className="flex items-center gap-2 text-sm">
+                <Phone className="w-4 h-4 flex-shrink-0 text-[#65676B]" />
+                <a
+                  href={`tel:${(merchantData.merchant as any).phone}`}
+                  className="text-[#1877F2] hover:underline"
+                >
+                  {(merchantData.merchant as any).phone}
+                </a>
+              </div>
+            )}
+            {(merchantData.merchant as any).website && (
+              <div className="flex items-center gap-2 text-sm">
+                <Globe className="w-4 h-4 flex-shrink-0 text-[#65676B]" />
+                <button
+                  onClick={() => openExternalUrl((merchantData.merchant as any).website)}
+                  className="text-[#1877F2] hover:underline truncate text-left"
+                >
+                  {(() => {
+                    try {
+                      return new URL((merchantData.merchant as any).website).hostname.replace('www.', '')
+                    } catch {
+                      return (merchantData.merchant as any).website
+                    }
+                  })()}
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Social Proof Badge and Amenity Votes */}
           <div className="mt-3 flex items-start justify-between gap-3">
             <SocialProofBadge
@@ -588,17 +679,18 @@ export function MerchantDetailsScreen() {
         <DistanceCard
           distanceMiles={merchantData.moment.distance_miles}
           walkTimeLabel={walkTime}
+          momentCopy={merchantData.moment.moment_copy}
         />
 
         {/* Hours card */}
-        <HoursCard />
+        <HoursCard hoursText={merchantData.merchant.hours_today ?? undefined} />
 
         {/* Description */}
-        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200">
-          <p className="text-sm text-gray-700 leading-relaxed">
-            {merchantData.perk?.description ?? merchantData.merchant.description ?? ''}
-          </p>
-        </div>
+        {merchantData.merchant.description && (
+          <div className="text-sm text-gray-700 leading-relaxed">
+            {merchantData.merchant.description}
+          </div>
+        )}
 
         {/* Get Directions button */}
         <Button
@@ -794,6 +886,13 @@ export function MerchantDetailsScreen() {
               Cancel
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Share Toast */}
+      {showShareToast && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-[#050505] text-white px-4 py-2 rounded-full flex items-center gap-2 shadow-lg z-50">
+          <span className="text-sm font-medium">Link copied!</span>
         </div>
       )}
     </div>

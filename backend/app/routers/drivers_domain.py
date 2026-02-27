@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 import uuid
 import math
 
+from cachetools import TTLCache
 from app.db import get_db
 from app.models import User
 from app.models_domain import DomainMerchant, DomainChargingSession, NovaTransaction
@@ -22,6 +23,11 @@ from app.services.auth_service import AuthService
 from app.services.incentives import get_offpeak_state
 from app.core.config import settings
 from app.models.domain import DriverWallet
+
+# Location check response cache — keyed by rounded coordinates
+# Reduces DB load for repeated location checks from the same area
+# Bounded TTLCache: max 2,000 entries, auto-expire after 10 seconds
+_location_check_cache: TTLCache = TTLCache(maxsize=2000, ttl=10.0)
 
 router = APIRouter(prefix="/v1/drivers", tags=["drivers"])
 
@@ -1179,10 +1185,10 @@ def check_location(
     """
     import os
     from app.models_while_you_charge import Charger
-    
+
     import logging
     logger = logging.getLogger(__name__)
-    
+
     # Check for demo static driver mode
     demo_enabled = os.getenv("DEMO_STATIC_DRIVER_ENABLED", "false").lower() == "true"
     if demo_enabled:
@@ -1195,37 +1201,52 @@ def check_location(
             nearest_charger_id=demo_charger_id,
             distance_m=0.0
         )
-    
+
+    # Check TTLCache — round to 4 decimal places (~11m) for cache key
+    rounded_lat = round(lat, 4)
+    rounded_lng = round(lng, 4)
+    cache_key = f"{rounded_lat},{rounded_lng}"
+
+    cached = _location_check_cache.get(cache_key)
+    if cached is not None:
+        logger.debug(f"[Driver][Location] Cache hit for {cache_key}")
+        return cached
+
     # Find nearest charger
     CHARGER_RADIUS_M = 150  # Same as exclusive activation radius
-    
+
     # Import haversine function
     from app.services.verify_dwell import haversine_m
-    
+
     # Query chargers and calculate distance
     chargers = db.query(Charger).all()
-    
+
     nearest_charger = None
     min_distance = float('inf')
-    
+
     for charger in chargers:
         if charger.lat and charger.lng:
             distance = haversine_m(lat, lng, charger.lat, charger.lng)
             if distance < min_distance:
                 min_distance = distance
                 nearest_charger = charger
-    
+
     in_radius = nearest_charger is not None and min_distance <= CHARGER_RADIUS_M
-    
+
     logger.info(
         f"[Driver][Location] Check: lat={lat}, lng={lng}, "
         f"in_radius={in_radius}, distance={min_distance:.1f}m, "
         f"charger_id={nearest_charger.id if nearest_charger else None}"
     )
-    
-    return LocationCheckResponse(
+
+    response = LocationCheckResponse(
         in_charger_radius=in_radius,
         nearest_charger_id=str(nearest_charger.id) if nearest_charger else None,
         distance_m=min_distance if nearest_charger else None
     )
+
+    # Store in cache
+    _location_check_cache[cache_key] = response
+
+    return response
 

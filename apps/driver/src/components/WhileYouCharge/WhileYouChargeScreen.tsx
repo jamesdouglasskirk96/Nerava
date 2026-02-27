@@ -58,7 +58,7 @@ export function WhileYouChargeScreen() {
   }, [fetchedMerchants])
 
   const handleMerchantClick = (placeId: string) => {
-    navigate(`/m/${placeId}`)
+    navigate(`/merchant/${placeId}`)
   }
 
   const handleToggleToPreCharging = () => {

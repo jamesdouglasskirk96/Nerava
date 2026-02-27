@@ -270,10 +270,6 @@ async def get_merchants_for_intent(
     Returns:
         List of merchant dictionaries with placement rules applied
     """
-    # Only search for merchants if Tier A or B
-    if confidence_tier == "C":
-        return []
-
     merchants = []
 
     # First, try to get merchants from ChargerMerchant database if charger_id provided
@@ -320,26 +316,41 @@ async def get_merchants_for_intent(
             max_results=20,
         )
     
-    # Cache merchants in database
+    # Cache merchants in database — batch query to reduce DB round trips
     geo_cell_lat, geo_cell_lng = _get_geo_cell(lat, lng)
     expires_at = datetime.utcnow() + timedelta(seconds=settings.MERCHANT_CACHE_TTL_SECONDS)
-    
-    for merchant in merchants:
-        place_id = merchant.get("place_id")
-        if place_id:
-            # Check if already cached
-            cached = (
-                db.query(MerchantCache)
-                .filter(
-                    MerchantCache.place_id == place_id,
-                    MerchantCache.geo_cell_lat == geo_cell_lat,
-                    MerchantCache.geo_cell_lng == geo_cell_lng,
-                )
-                .first()
+
+    # Collect all place_ids in a single pass
+    place_ids_to_cache = [m.get("place_id") for m in merchants if m.get("place_id")]
+
+    if place_ids_to_cache:
+        # Single IN query to fetch all existing cache entries at once
+        existing_entries = (
+            db.query(MerchantCache)
+            .filter(
+                MerchantCache.place_id.in_(place_ids_to_cache),
+                MerchantCache.geo_cell_lat == geo_cell_lat,
+                MerchantCache.geo_cell_lng == geo_cell_lng,
             )
-            
-            if not cached:
-                # Create cache entry
+            .all()
+        )
+        existing_by_place_id = {entry.place_id: entry for entry in existing_entries}
+
+        # Bulk upsert: update existing, insert new
+        for merchant in merchants:
+            place_id = merchant.get("place_id")
+            if not place_id:
+                continue
+
+            cached = existing_by_place_id.get(place_id)
+            if cached:
+                # Update existing cache entry
+                cached.merchant_data = merchant
+                cached.photo_url = merchant.get("photo_url")
+                cached.expires_at = expires_at
+                cached.updated_at = datetime.utcnow()
+            else:
+                # Create new cache entry
                 cache_entry = MerchantCache(
                     place_id=place_id,
                     geo_cell_lat=geo_cell_lat,
@@ -349,14 +360,8 @@ async def get_merchants_for_intent(
                     expires_at=expires_at,
                 )
                 db.add(cache_entry)
-            else:
-                # Update existing cache
-                cached.merchant_data = merchant
-                cached.photo_url = merchant.get("photo_url")
-                cached.expires_at = expires_at
-                cached.updated_at = datetime.utcnow()
-    
-    db.commit()
+
+        db.commit()
     
     # Query placement rules for all merchants
     from app.models import MerchantPlacementRule

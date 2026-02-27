@@ -724,7 +724,8 @@ async def get_domain_hub_view_async(db: Session) -> Dict:
                 # MerchantPerk is imported at module level (line 11)
                 default_perk = MerchantPerk(
                     merchant_id=merchant.id,
-                    nova_reward=10,  # Default 10 Nova
+                    title="EV Rewards",
+                    nova_reward=10,
                     is_active=True
                 )
                 db.add(default_perk)

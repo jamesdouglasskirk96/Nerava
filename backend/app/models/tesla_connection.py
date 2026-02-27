@@ -3,10 +3,13 @@ Tesla Connection model for OAuth tokens and vehicle data.
 
 Stores user's Tesla OAuth credentials and linked vehicle information.
 """
+from __future__ import annotations
+
+import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, Boolean, Index
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, Session
 from ..db import Base
 
 
@@ -92,3 +95,48 @@ class EVVerificationCode(Base):
     __table_args__ = (
         Index("idx_ev_code_user_status", "user_id", "status"),
     )
+
+
+class TeslaOAuthState(Base):
+    """Persisted OAuth state for Tesla CSRF protection (survives deploys)."""
+    __tablename__ = "tesla_oauth_states"
+
+    state = Column(String(64), primary_key=True)
+    data_json = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+
+    __table_args__ = (
+        Index("idx_tesla_oauth_states_expires", "expires_at"),
+    )
+
+    @classmethod
+    def store(cls, db: Session, state: str, data: dict, ttl_minutes: int = 10):
+        now = datetime.utcnow()
+        row = cls(
+            state=state,
+            data_json=json.dumps(data, default=str),
+            created_at=now,
+            expires_at=now + timedelta(minutes=ttl_minutes),
+        )
+        db.merge(row)
+        db.commit()
+
+    @classmethod
+    def pop(cls, db: Session, state: str) -> dict | None:
+        row = db.query(cls).filter(cls.state == state).first()
+        if not row:
+            return None
+        if row.expires_at < datetime.utcnow():
+            db.delete(row)
+            db.commit()
+            return None
+        data = json.loads(row.data_json)
+        db.delete(row)
+        db.commit()
+        return data
+
+    @classmethod
+    def cleanup_expired(cls, db: Session):
+        db.query(cls).filter(cls.expires_at < datetime.utcnow()).delete()
+        db.commit()

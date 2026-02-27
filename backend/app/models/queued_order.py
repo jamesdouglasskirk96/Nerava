@@ -16,8 +16,13 @@ from sqlalchemy import (
     Column, String, DateTime, Text, Index, ForeignKey,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.sqlite import JSON as SQLITE_JSON
 from sqlalchemy.orm import relationship
+
+try:
+    from sqlalchemy import JSON
+except Exception:
+    JSON = SQLITE_JSON
 from ..db import Base
 from ..core.uuid_type import UUIDType
 
@@ -65,7 +70,7 @@ class QueuedOrder(Base):
 
     # Optional order metadata
     order_number = Column(String(100), nullable=True)  # Driver may paste order/receipt ID
-    payload_json = Column(JSONB, nullable=True)        # Placeholder for future order data
+    payload_json = Column(JSON, nullable=True)        # Placeholder for future order data
 
     # Timestamps
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)

@@ -77,7 +77,7 @@ export function MerchantCarousel({
                 <img
                   src={featured.imageUrl}
                   alt={featured.name}
-                  className="w-16 h-16 object-contain"
+                  className="w-10 h-10 object-contain"
                 />
               </div>
             ) : (
@@ -120,6 +120,13 @@ export function MerchantCarousel({
                 )}
               </div>
               <div className="flex items-center gap-1.5">
+                {'campaign_reward_cents' in featured && (featured as any).campaign_reward_cents > 0 && (
+                  <div className="px-2.5 py-1 bg-gradient-to-r from-green-500/15 to-emerald-500/15 rounded-full border border-green-600/30 flex-shrink-0">
+                    <span className="text-xs font-medium text-green-700">
+                      Earn ${((featured as any).campaign_reward_cents / 100).toFixed(2)}
+                    </span>
+                  </div>
+                )}
                 {'badges' in featured && featured.badges && featured.badges.length > 0 && (
                   <div className="px-2.5 py-1 bg-gradient-to-r from-yellow-500/15 to-amber-500/15 rounded-full border border-yellow-600/30 flex-shrink-0">
                     <span className="text-xs font-medium text-yellow-700">

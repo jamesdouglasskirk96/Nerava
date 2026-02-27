@@ -4,6 +4,7 @@ import { Badge } from '../shared/Badge'
 import { LiveStallIndicator } from '../shared/LiveStallIndicator'
 import { NearbyExperiences } from './NearbyExperiences'
 import { Button } from '../shared/Button'
+import { openExternalUrl } from '../../utils/openExternal'
 
 interface ChargerCardProps {
   charger: ChargerWithExperiences
@@ -73,7 +74,7 @@ export function ChargerCard({ charger, onClick }: ChargerCardProps) {
           <Button variant="primary" className="w-full" onClick={(e) => {
             e.stopPropagation()
             const destination = encodeURIComponent(charger.name)
-            window.open(`https://www.google.com/maps/search/?api=1&query=${destination}`, '_blank')
+            openExternalUrl(`https://www.google.com/maps/search/?api=1&query=${destination}`)
           }}>
             Navigate to Charger
           </Button>

@@ -27,9 +27,30 @@ export function useSessionPolling() {
   })
 
   const wasActiveRef = useRef(false)
+  const deviceCoordsRef = useRef<{ lat: number; lng: number } | null>(null)
+
+  // Continuously track device GPS for inclusion in poll requests
+  const watchIdRef = useRef<number | null>(null)
+  if (watchIdRef.current === null && typeof navigator !== 'undefined' && navigator.geolocation) {
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        deviceCoordsRef.current = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        }
+      },
+      () => {
+        // Location unavailable — polls will proceed without device coords
+      },
+      { enableHighAccuracy: true, maximumAge: 30000 }
+    )
+  }
 
   const pollMutation = useMutation({
-    mutationFn: pollChargingSession,
+    mutationFn: () => {
+      const coords = deviceCoordsRef.current
+      return pollChargingSession(coords?.lat, coords?.lng)
+    },
     onSuccess: (result: PollSessionResponse) => {
       if (result.error) {
         // Tesla not connected or poll failed — stay idle

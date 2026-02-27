@@ -1,7 +1,6 @@
 import { X, Heart, Share2 } from 'lucide-react'
 import { PhotoPlaceholder, normalizeCategory } from '../../ui/categoryLogos'
 import { Badge } from '../shared/Badge'
-import { ExclusiveInfoTooltip } from '../shared/ExclusiveInfoTooltip'
 import { FEATURE_FLAGS } from '../../config/featureFlags'
 
 interface HeroImageHeaderProps {
@@ -12,6 +11,7 @@ interface HeroImageHeaderProps {
   walkTime?: string  // e.g., "3 min walk" or "60 minutes remaining"
   isExclusive?: boolean
   isExclusiveActive?: boolean  // When active, show "Exclusive Active" badge
+  isFavorited?: boolean
   onClose?: () => void
   onFavorite?: () => void
   onShare?: () => void
@@ -25,6 +25,7 @@ export function HeroImageHeader({
   walkTime,
   isExclusive = false,
   isExclusiveActive = false,
+  isFavorited = false,
   onClose,
   onFavorite,
   onShare
@@ -59,10 +60,12 @@ export function HeroImageHeader({
       <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
         <button
           onClick={onFavorite}
-          className="w-11 h-11 rounded-full bg-white/95 backdrop-blur-sm flex items-center justify-center shadow-md hover:bg-white active:scale-95 transition-all"
-          aria-label="Add to favorites"
+          className={`w-11 h-11 rounded-full backdrop-blur-sm flex items-center justify-center shadow-md hover:bg-white active:scale-95 transition-all ${
+            isFavorited ? 'bg-[#1877F2] text-white' : 'bg-white/95 text-gray-900'
+          }`}
+          aria-label={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
         >
-          <Heart className="w-5 h-5 text-gray-900" aria-hidden="true" />
+          <Heart className={`w-5 h-5 ${isFavorited ? 'fill-current' : ''}`} aria-hidden="true" />
         </button>
         <button
           onClick={onShare}
@@ -82,9 +85,9 @@ export function HeroImageHeader({
         </div>
       )}
 
-      {/* Walk time / remaining time badge - bottom-center */}
+      {/* Walk time badge - bottom-left */}
       {walkTime && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
+        <div className="absolute bottom-4 left-4 z-10">
           <Badge variant={isExclusiveActive ? "default" : "walk-time"}>{walkTime}</Badge>
         </div>
       )}
@@ -92,8 +95,7 @@ export function HeroImageHeader({
       {/* Exclusive badge - bottom-right (only when NOT active) */}
       {isExclusive && !isExclusiveActive && (
         <div className="absolute bottom-4 right-4 z-10 flex items-center gap-2">
-          <Badge variant="exclusive">⭐ Exclusive</Badge>
-          <ExclusiveInfoTooltip />
+          <Badge variant="exclusive">Exclusive</Badge>
         </div>
       )}
     </div>

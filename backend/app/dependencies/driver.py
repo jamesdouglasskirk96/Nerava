@@ -56,7 +56,11 @@ def get_current_driver_id(
     # 3. If we have a token, decode it and extract public_id (UUID string)
     if token:
         try:
-            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+            payload = jwt.decode(
+                token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM],
+                audience="nerava-api", issuer="nerava",
+                options={"verify_aud": True, "verify_iss": True},
+            )
             public_id = payload.get("sub")
             if public_id:
                 # public_id is a UUID string, not an integer

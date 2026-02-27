@@ -1,7 +1,7 @@
 """Driver Wallet and Payout Models for Stripe Express Payouts"""
 from datetime import datetime
 import uuid
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, CheckConstraint
 from sqlalchemy.orm import relationship
 from ..db import Base
 
@@ -27,9 +27,13 @@ class DriverWallet(Base):
     updated_at = Column(DateTime, nullable=True, onupdate=datetime.utcnow)
 
     # Relationships
-    driver = relationship("User", backref="driver_wallet")
+    driver = relationship("User", foreign_keys=[driver_id], backref="driver_wallet")
     payouts = relationship("Payout", back_populates="wallet")
     ledger_entries = relationship("WalletLedger", back_populates="wallet")
+
+    __table_args__ = (
+        CheckConstraint('balance_cents >= 0', name='ck_wallet_balance_non_negative'),
+    )
 
 
 class Payout(Base):

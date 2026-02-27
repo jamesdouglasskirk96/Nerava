@@ -47,7 +47,11 @@ def get_current_user_public_id(
     # If we have a token, decode it and extract public_id
     if token:
         try:
-            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+            payload = jwt.decode(
+                token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM],
+                audience="nerava-api", issuer="nerava",
+                options={"verify_aud": True, "verify_iss": True},
+            )
             public_id = payload.get("sub")
             if public_id:
                 # public_id is now a UUID string, not an integer
@@ -58,7 +62,7 @@ def get_current_user_public_id(
         except Exception:
             # Invalid token - fall through to dev fallback or raise
             pass
-    
+
     # Dev fallback: if NERAVA_DEV_ALLOW_ANON_USER=true AND in local env, use default user
     if DEV_ALLOW_ANON_USER_ENABLED:
         print("[AUTH][DEV] NERAVA_DEV_ALLOW_ANON_USER=true -> using default user")
@@ -163,7 +167,11 @@ def get_current_user_optional(
 
     # Try to decode token and get user
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM],
+            audience="nerava-api", issuer="nerava",
+            options={"verify_aud": True, "verify_iss": True},
+        )
         public_id = payload.get("sub")
         if public_id:
             user = AuthService.get_user_by_public_id(db, public_id)

@@ -1,5 +1,6 @@
 import Foundation
 import UserNotifications
+import UIKit
 
 final class NotificationService {
     static let shared = NotificationService()
@@ -7,6 +8,9 @@ final class NotificationService {
 
     private let permissionRequestedKey = "notification_permission_requested"
     private let rationaleShownKey = "notification_permission_rationale_shown"
+
+    /// Stored APNs device token (hex string), set by AppDelegate
+    var apnsDeviceToken: String?
 
     func shouldShowRationale(completion: @escaping (Bool) -> Void) {
         let defaults = UserDefaults.standard
@@ -39,6 +43,12 @@ final class NotificationService {
 
             defaults.set(true, forKey: self.permissionRequestedKey)
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+                if granted {
+                    // Register for remote notifications after permission granted
+                    DispatchQueue.main.async {
+                        UIApplication.shared.registerForRemoteNotifications()
+                    }
+                }
                 completion?(granted)
             }
         }

@@ -4,8 +4,13 @@ Tracks driver exclusive activation sessions for web-only flow
 """
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum as SQLEnum
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.sqlite import JSON as SQLITE_JSON
 from sqlalchemy.orm import relationship
+
+try:
+    from sqlalchemy import JSON
+except Exception:
+    JSON = SQLITE_JSON
 from ..db import Base
 from ..core.uuid_type import UUIDType
 import enum
@@ -56,7 +61,7 @@ class ExclusiveSession(Base):
     
     # V3: Intent capture fields
     intent = Column(String(50), nullable=True)  # "eat" | "work" | "quick-stop"
-    intent_metadata = Column(JSONB, nullable=True)  # {party_size, needs_power_outlet, is_to_go}
+    intent_metadata = Column(JSON, nullable=True)  # {party_size, needs_power_outlet, is_to_go}
     
     # Idempotency key for deduplication (P0 race condition fix)
     idempotency_key = Column(String, nullable=True, unique=True, index=True)

@@ -44,6 +44,10 @@ else
     echo ""
 fi
 
+# Seed chargers/merchants in background if DB is sparse (won't block app startup)
+echo "=== Checking if bulk seeding needed (background) ==="
+python /app/scripts/seed_if_needed.py &
+
 # Start the application
 echo "=== Starting FastAPI application ==="
 echo "Binding to: 0.0.0.0:${PORT:-8000}"

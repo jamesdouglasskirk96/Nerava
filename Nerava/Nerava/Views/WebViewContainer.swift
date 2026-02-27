@@ -331,7 +331,15 @@ struct WebViewRepresentable: UIViewRepresentable {
                      for navigationAction: WKNavigationAction,
                      windowFeatures: WKWindowFeatures) -> WKWebView? {
             if navigationAction.targetFrame == nil {
-                webView.load(navigationAction.request)
+                if let url = navigationAction.request.url,
+                   let host = url.host,
+                   host.contains("nerava.network") || host.contains("localhost") {
+                    // Internal link - load in same WebView
+                    webView.load(navigationAction.request)
+                } else if let url = navigationAction.request.url {
+                    // External link - open in Safari
+                    UIApplication.shared.open(url)
+                }
             }
             return nil
         }

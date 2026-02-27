@@ -20,7 +20,10 @@ class ChargerSummary(BaseModel):
     name: str
     distance_m: float
     network_name: Optional[str] = None
-    
+    campaign_reward_cents: Optional[int] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+
     class Config:
         from_attributes = True
 

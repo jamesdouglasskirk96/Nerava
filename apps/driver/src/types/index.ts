@@ -12,6 +12,9 @@ export interface ChargerSummary {
   name: string
   distance_m: number
   network_name?: string
+  campaign_reward_cents?: number
+  lat?: number
+  lng?: number
 }
 
 export interface MerchantSummary {
@@ -58,8 +61,11 @@ export interface MerchantInfo {
   description?: string
   photo_url?: string
   address?: string
+  phone?: string | null
+  website?: string | null
   rating?: number
   price_level?: number
+  hours_today?: string | null
   amenities?: {
     bathroom: { upvotes: number; downvotes: number }
     wifi: { upvotes: number; downvotes: number }

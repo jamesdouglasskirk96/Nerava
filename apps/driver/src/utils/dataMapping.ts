@@ -99,9 +99,10 @@ export function chargerSummaryToMockCharger(
     stalls: 0, // Backend doesn't provide stall count in summary
     plug_types: plugTypes,
     network_name: charger.network_name,
-    lat: 0, // Backend doesn't provide lat/lng in summary
-    lng: 0,
+    lat: charger.lat ?? 0,
+    lng: charger.lng ?? 0,
     distance_m: charger.distance_m,
+    campaign_reward_cents: charger.campaign_reward_cents,
     experiences: nearbyMerchants.slice(0, 5).map((m) => ({
       id: m.place_id,
       name: m.name,
@@ -150,8 +151,19 @@ export function groupChargersIntoSets(
     return []
   }
 
-  // Create a set for each charger (featured charger + empty nearby for now)
-  return chargers.map((charger) => ({
+  // Deduplicate chargers by name (case-insensitive), keeping the closest one
+  const seen = new Map<string, ChargerSummary>()
+  for (const charger of chargers) {
+    const key = charger.name.toLowerCase().trim()
+    const existing = seen.get(key)
+    if (!existing || charger.distance_m < existing.distance_m) {
+      seen.set(key, charger)
+    }
+  }
+  const uniqueChargers = Array.from(seen.values())
+
+  // Create a set for each unique charger (featured charger + empty nearby for now)
+  return uniqueChargers.map((charger) => ({
     featured: chargerSummaryToMockCharger(charger, nearbyMerchants),
     nearby: [],
   }))

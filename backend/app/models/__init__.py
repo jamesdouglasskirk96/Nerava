@@ -77,6 +77,7 @@ from .tesla_connection import TeslaConnection, EVVerificationCode
 from .device_token import DeviceToken
 from .campaign import Campaign
 from .session_event import SessionEvent, IncentiveGrant
+from .driver_wallet import Payout, WalletLedger
 from .extra import (
     CreditLedger,
     IncentiveRule,
@@ -88,26 +89,6 @@ from .extra import (
     Challenge,
     Participation,
     FeatureFlag,
-    MerchantIntelForecast,
-    UtilityBehaviorSnapshot,
-    RewardRoutingRun,
-    CityImpactSnapshot,
-    MobilityDevice,
-    MerchantCreditLedger,
-    ChargeVerificationLog,
-    WalletInteropPartner,
-    CoopPool,
-    SdkTenantConfig,
-    EnergyRepSnapshot,
-    EnergyRepBackfill,
-    OffsetBatch,
-    FleetOrg,
-    IotLink,
-    GreenHourDeal,
-    TenantModule,
-    AiRewardSuggestion,
-    FinanceOffer,
-    GrowthCampaign,
     DualZoneSession,
 )
 
@@ -197,26 +178,6 @@ __all__ = [
     "Challenge",
     "Participation",
     "FeatureFlag",
-    "MerchantIntelForecast",
-    "UtilityBehaviorSnapshot",
-    "RewardRoutingRun",
-    "CityImpactSnapshot",
-    "MobilityDevice",
-    "MerchantCreditLedger",
-    "ChargeVerificationLog",
-    "WalletInteropPartner",
-    "CoopPool",
-    "SdkTenantConfig",
-    "EnergyRepSnapshot",
-    "EnergyRepBackfill",
-    "OffsetBatch",
-    "FleetOrg",
-    "IotLink",
-    "GreenHourDeal",
-    "TenantModule",
-    "AiRewardSuggestion",
-    "FinanceOffer",
-    "GrowthCampaign",
     "DualZoneSession",
 ]
 

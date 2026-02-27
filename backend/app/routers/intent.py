@@ -4,11 +4,11 @@ Handles POST /v1/intent/capture endpoint
 """
 import logging
 import time
-from collections import defaultdict
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from cachetools import TTLCache
 
 from app.db import get_db
 from app.models import User, Charger
@@ -33,13 +33,15 @@ logger = logging.getLogger(__name__)
 
 # Simple in-memory rate limiter for intent capture endpoint
 # Key: client IP, Value: (last_request_time, request_count_in_window)
-_intent_rate_limit: dict[str, tuple[float, int]] = defaultdict(lambda: (0.0, 0))
+# Bounded TTLCache: max 10,000 IPs, entries expire after 10 seconds
+_intent_rate_limit: TTLCache = TTLCache(maxsize=10000, ttl=10.0)
 RATE_LIMIT_WINDOW_SEC = 5.0  # Window in seconds
 RATE_LIMIT_MAX_REQUESTS = 2  # Max requests per window per IP
 
 # Response cache - cache responses by rounded coordinates
 # This reduces load when clients repeatedly request the same location
-_response_cache: dict[str, tuple[float, dict]] = {}  # Key: "lat,lng", Value: (timestamp, response)
+# Bounded TTLCache: max 1,000 entries, auto-expire after 60 seconds
+_response_cache: TTLCache = TTLCache(maxsize=1000, ttl=60.0)
 RESPONSE_CACHE_TTL_SEC = 60.0  # Cache responses for 60 seconds
 
 router = APIRouter(prefix="/v1/intent", tags=["intent"])
@@ -56,12 +58,12 @@ router = APIRouter(prefix="/v1/intent", tags=["intent"])
     It validates location accuracy, finds the nearest public charger, assigns a confidence tier,
     and returns nearby walkable merchants or a fallback message.
     
-    Confidence Tiers:
+    Confidence Tiers (metadata only — merchants always returned):
     - Tier A: Charger within ~120m (high confidence)
     - Tier B: Charger within ~400m (medium confidence)
-    - Tier C: No charger nearby (returns fallback message)
-    
-    If Tier A or B, searches Google Places API for nearby merchants within 800m radius.
+    - Tier C: No charger nearby (includes fallback message alongside merchants)
+
+    Always searches for nearby merchants within 800m radius regardless of tier.
     """
 )
 async def capture_intent(
@@ -85,10 +87,9 @@ async def capture_intent(
     cache_key = f"{rounded_lat},{rounded_lng}"
 
     if cache_key in _response_cache:
-        cache_time, cached_response = _response_cache[cache_key]
-        if now - cache_time < RESPONSE_CACHE_TTL_SEC:
-            logger.debug(f"Intent capture cache hit for {cache_key}")
-            return CaptureIntentResponse(**cached_response)
+        cached_response = _response_cache[cache_key]
+        logger.debug(f"Intent capture cache hit for {cache_key}")
+        return CaptureIntentResponse(**cached_response)
 
     # Rate limiting check - protect against infinite fetch loops from buggy clients
     # Uses sliding window: max 2 requests per 5 seconds per IP
@@ -146,6 +147,39 @@ async def capture_intent(
                 network_name=charger.network_name,
             ))
 
+        # Enrich chargers with campaign reward info
+        try:
+            from app.services.campaign_service import CampaignService
+            from app.services.geo import haversine_m as campaign_haversine
+            active_campaigns = CampaignService.get_active_campaigns(db)
+            for cs in chargers_list:
+                best_reward = 0
+                for camp in active_campaigns:
+                    # Check charger_id targeting
+                    if camp.rule_charger_ids and cs.id not in camp.rule_charger_ids:
+                        continue
+                    # Check geo targeting
+                    if camp.rule_geo_center_lat and camp.rule_geo_center_lng and camp.rule_geo_radius_m:
+                        # Use charger's actual location from results
+                        charger_obj = next((c for c, _ in charger_results if c.id == cs.id), None)
+                        if charger_obj:
+                            dist = campaign_haversine(
+                                charger_obj.lat, charger_obj.lng,
+                                camp.rule_geo_center_lat, camp.rule_geo_center_lng
+                            )
+                            if dist > camp.rule_geo_radius_m:
+                                continue
+                    if camp.cost_per_session_cents > best_reward:
+                        best_reward = camp.cost_per_session_cents
+                if best_reward > 0:
+                    cs.campaign_reward_cents = best_reward
+        except Exception as e:
+            logger.warning(f"Failed to enrich chargers with campaign rewards: {e}")
+            try:
+                db.rollback()
+            except Exception:
+                pass
+
         # Use the nearest charger for backward compatibility and confidence tier
         if charger_results:
             charger, distance = charger_results[0]
@@ -169,38 +203,36 @@ async def capture_intent(
             )
             confidence_tier = session.confidence_tier
 
-        # Get merchants based on confidence tier
-        merchants = []
+        # Always search for merchants regardless of confidence tier
         fallback_message = None
 
-        if confidence_tier in ["A", "B"]:
-            # Search for merchants (prefer database-linked merchants, fall back to Google Places)
-            merchants_data = await get_merchants_for_intent(
-                db=db,
-                lat=request.lat,
-                lng=request.lng,
-                confidence_tier=confidence_tier,
-                charger_id=charger_id,  # Pass charger_id to use ChargerMerchant links
+        merchants_data = await get_merchants_for_intent(
+            db=db,
+            lat=request.lat,
+            lng=request.lng,
+            confidence_tier=confidence_tier,
+            charger_id=charger_id,  # Pass charger_id to use ChargerMerchant links
+        )
+
+        # Transform to MerchantSummary
+        merchants = [
+            MerchantSummary(
+                place_id=m.get("place_id", ""),
+                name=m.get("name", ""),
+                lat=m.get("lat", 0),
+                lng=m.get("lng", 0),
+                distance_m=m.get("distance_m", 0),
+                types=m.get("types", []),
+                photo_url=m.get("photo_url"),
+                icon_url=m.get("icon_url"),
+                badges=m.get("badges"),
+                daily_cap_cents=m.get("daily_cap_cents"),
             )
-            
-            # Transform to MerchantSummary
-            merchants = [
-                MerchantSummary(
-                    place_id=m.get("place_id", ""),
-                    name=m.get("name", ""),
-                    lat=m.get("lat", 0),
-                    lng=m.get("lng", 0),
-                    distance_m=m.get("distance_m", 0),
-                    types=m.get("types", []),
-                    photo_url=m.get("photo_url"),
-                    icon_url=m.get("icon_url"),
-                    badges=m.get("badges"),
-                    daily_cap_cents=m.get("daily_cap_cents"),
-                )
-                for m in merchants_data
-            ]
-        else:
-            # Tier C: Return fallback message
+            for m in merchants_data
+        ]
+
+        # Tier C: include fallback message as additional info alongside merchants
+        if confidence_tier == "C":
             from app.core.copy import TIER_C_FALLBACK_COPY
             fallback_message = TIER_C_FALLBACK_COPY
 
@@ -258,7 +290,7 @@ async def capture_intent(
         # Cache the response for future requests with same coordinates
         # Only cache anonymous responses (session_id is None)
         if session_id is None:
-            _response_cache[cache_key] = (time.time(), response.model_dump())
+            _response_cache[cache_key] = response.model_dump()
 
         return response
         

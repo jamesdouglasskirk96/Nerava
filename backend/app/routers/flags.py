@@ -1,11 +1,18 @@
 """
 Feature flags and configuration management
 """
+import os
 import logging
 from typing import Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, status, Depends
 from app.middleware.auth import get_current_user, get_current_user_role
 from app.security.rbac import Role, rbac_manager, Permission
+
+def _get_environment() -> str:
+    """Get environment name from settings, mapping to flag environment keys."""
+    env = os.getenv("ENV", "dev").lower()
+    env_map = {"prod": "production", "staging": "staging", "production": "production"}
+    return env_map.get(env, "development")
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +105,7 @@ async def get_feature_flags(
         rbac_manager.require_permission(user_role, Permission.VIEW_ANALYTICS)
         
         # Get environment (in production, this would come from config)
-        environment = "development"  # This should come from settings
+        environment = _get_environment()
         
         # Build flags response
         flags = {}
@@ -140,7 +147,7 @@ async def get_feature_flag(
             )
         
         flag_config = FEATURE_FLAGS[flag_name]
-        environment = "development"  # This should come from settings
+        environment = _get_environment()
         
         return {
             "flag_name": flag_name,
@@ -196,18 +203,22 @@ async def toggle_feature_flag(
             detail="Failed to toggle feature flag"
         )
 
-def is_feature_enabled(flag_name: str, environment: str = "development") -> bool:
+def is_feature_enabled(flag_name: str, environment: Optional[str] = None) -> bool:
     """Check if a feature flag is enabled"""
+    if environment is None:
+        environment = _get_environment()
     if flag_name not in FEATURE_FLAGS:
         return False
-    
+
     flag_config = FEATURE_FLAGS[flag_name]
     return flag_config["environments"].get(environment, flag_config["default"])
 
-def get_feature_flag_value(flag_name: str, environment: str = "development") -> Optional[Any]:
+def get_feature_flag_value(flag_name: str, environment: Optional[str] = None) -> Optional[Any]:
     """Get the value of a feature flag"""
+    if environment is None:
+        environment = _get_environment()
     if flag_name not in FEATURE_FLAGS:
         return None
-    
+
     flag_config = FEATURE_FLAGS[flag_name]
     return flag_config["environments"].get(environment, flag_config["default"])

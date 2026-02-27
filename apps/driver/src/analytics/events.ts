@@ -46,6 +46,9 @@ export const DRIVER_EVENTS = {
   GET_DIRECTIONS_CLICKED: 'driver_get_directions_clicked',
   IM_AT_MERCHANT_CLICKED: 'driver_im_at_merchant_clicked',
 
+  // Favorites
+  MERCHANT_FAVORITED: 'driver.merchant.favorited',
+
   // Share
   MERCHANT_SHARED: 'driver.merchant.shared',
   
@@ -108,11 +111,20 @@ export const DRIVER_EVENTS = {
   // Exclusive Active View
   SHOW_HOST_CLICKED: 'driver.exclusive.show_host_clicked',
 
+  // Home
+  HOME_REFRESHED: 'driver.home.refreshed',
+
   // Charging Sessions
   CHARGING_SESSION_DETECTED: 'charging.session_detected',
   CHARGING_SESSION_ENDED: 'charging.session_ended',
   CHARGING_INCENTIVE_EARNED: 'charging.incentive_earned',
   CHARGING_ACTIVITY_OPENED: 'charging.activity_opened',
+
+  // Search
+  SEARCH_QUERY: 'driver.search.query',
+
+  // Push Notifications
+  DEVICE_TOKEN_REGISTERED: 'driver.device_token.registered',
 } as const
 
 export type DriverEventName = typeof DRIVER_EVENTS[keyof typeof DRIVER_EVENTS]

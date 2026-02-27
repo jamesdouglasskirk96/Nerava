@@ -4,7 +4,7 @@ Extends existing auth with role-based access and session management
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from datetime import timedelta, datetime
@@ -28,6 +28,15 @@ from app.dependencies.feature_flags import require_google_oauth
 import os
 
 logger = logging.getLogger(__name__)
+
+
+def _mask_email(email: str) -> str:
+    """Mask email for logging: j***@example.com"""
+    try:
+        local, domain = email.split("@", 1)
+        return f"{local[0]}***@{domain}" if local else f"***@{domain}"
+    except (ValueError, IndexError):
+        return "***"
 
 
 def _should_use_secure_cookie() -> bool:
@@ -97,9 +106,8 @@ def create_magic_link_token(user_id: int, email: str) -> str:
 # Request/Response Models
 class RegisterRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=8)
     display_name: Optional[str] = None
-    role: Optional[str] = "driver"  # driver, merchant_admin, admin
 
 
 class LoginRequest(BaseModel):
@@ -132,7 +140,7 @@ class MagicLinkVerify(BaseModel):
 def register(request: RegisterRequest, db: Session = Depends(get_db)):
     """Register a new user (driver or merchant_admin)"""
     try:
-        roles = [request.role] if request.role else ["driver"]
+        roles = ["driver"]
         user = AuthService.register_user(
             db=db,
             email=request.email,
@@ -175,7 +183,7 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
         # Include more detail in response for debugging
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Registration failed: {error_detail}. Check server logs for full traceback."
+            detail="Registration failed. Please try again."
         )
 
 
@@ -217,7 +225,7 @@ def login(
         logger.error(f"Login failed: {error_detail}\n{error_traceback}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Login failed: {error_detail}"
+            detail="Login failed. Please try again."
         )
 
 
@@ -269,7 +277,7 @@ async def request_magic_link(
     try:
         email = payload.email.lower().strip()
         
-        logger.info(f"[Auth][MagicLink] Request for {email}")
+        logger.info(f"[Auth][MagicLink] Request for {_mask_email(email)}")
         
         # Lookup or create user (without password requirement)
         user = db.query(User).filter(User.email == email).first()
@@ -290,13 +298,13 @@ async def request_magic_link(
                 db.add(UserPreferences(user_id=user.id))
                 db.commit()
                 db.refresh(user)
-                logger.info(f"[Auth][MagicLink] Created new user {user.id} for {email}")
+                logger.info(f"[Auth][MagicLink] Created new user_id={user.id}")
             except Exception as e:
                 db.rollback()
                 logger.error(f"[Auth][MagicLink] Failed to create user: {e}", exc_info=True)
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Failed to create user: {str(e)}"
+                    detail="Failed to create user. Please try again."
                 )
         
         # Generate magic link token
@@ -355,7 +363,7 @@ async def request_magic_link(
         logger.error(f"[Auth][MagicLink] Request failed: {error_detail}\n{error_traceback}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to send magic link: {error_detail}"
+            detail="Failed to send magic link. Please try again."
         )
 
 
@@ -449,7 +457,7 @@ async def verify_magic_link(
         logger.error(f"[Auth][MagicLink] Verify failed: {error_detail}\n{error_traceback}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Magic link verification failed: {error_detail}",
+            detail="Magic link verification failed. Please try again.",
         )
 
 
@@ -555,7 +563,7 @@ async def merchant_google_auth(
             db.commit()
             db.refresh(user)
             is_new_user = True
-            logger.info(f"[Auth][Merchant] Created new merchant user: {email}")
+            logger.info(f"[Auth][Merchant] Created new merchant user_id={user.public_id}")
         else:
             # Update provider_sub if changed
             if user.provider_sub != provider_sub:
@@ -596,7 +604,7 @@ async def merchant_google_auth(
             }
         )
         
-        logger.info(f"[Auth][Merchant] Google auth success for merchant: {email}")
+        logger.info(f"[Auth][Merchant] Google auth success for merchant user_id={user.public_id}")
         return TokenResponse(access_token=access_token)
         
     except HTTPException:
@@ -648,7 +656,7 @@ async def merchant_google_auth(
         
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Merchant Google authentication failed: {str(e)}"
+            detail="Merchant Google authentication failed. Please try again."
         )
 
 
@@ -671,7 +679,7 @@ async def admin_login(
     user = db.query(User).filter(User.email == payload.email).first()
     
     if not user:
-        logger.warning(f"[Auth][Admin] Login failed: User not found ({payload.email})")
+        logger.warning(f"[Auth][Admin] Login failed: User not found ({_mask_email(payload.email)})")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"
@@ -679,7 +687,7 @@ async def admin_login(
     
     # Check password
     if not user.password_hash or not verify_password(payload.password, user.password_hash):
-        logger.warning(f"[Auth][Admin] Login failed: Invalid password ({payload.email})")
+        logger.warning(f"[Auth][Admin] Login failed: Invalid password ({_mask_email(payload.email)})")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"
@@ -687,7 +695,7 @@ async def admin_login(
     
     # Check admin role
     if not user.role_flags or "admin" not in user.role_flags:
-        logger.warning(f"[Auth][Admin] Login failed: Not an admin ({payload.email})")
+        logger.warning(f"[Auth][Admin] Login failed: Not an admin ({_mask_email(payload.email)})")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required"
@@ -696,7 +704,7 @@ async def admin_login(
     # Create access token
     access_token = AuthService.create_session_token(user)
     
-    logger.info(f"[Auth][Admin] Login success for admin: {payload.email}")
+    logger.info(f"[Auth][Admin] Login success for admin user_id={user.id}")
     return TokenResponse(access_token=access_token)
 
 
@@ -745,7 +753,7 @@ async def admin_google_auth(
         # Create access token
         access_token = AuthService.create_session_token(user)
         
-        logger.info(f"[Auth][Admin] Google auth success for admin: {email}")
+        logger.info(f"[Auth][Admin] Google auth success for admin user_id={user.id}")
         return TokenResponse(access_token=access_token)
         
     except HTTPException:
@@ -754,6 +762,6 @@ async def admin_google_auth(
         logger.error(f"[Auth][Admin] Google auth failed: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Admin Google authentication failed: {str(e)}"
+            detail="Admin Google authentication failed. Please try again."
         )
 
