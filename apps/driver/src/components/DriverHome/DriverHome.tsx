@@ -1180,6 +1180,7 @@ export function DriverHome() {
         {/* Active Charging Session Banner - below header */}
         {sessionPolling.isActive && (
           <ActiveSessionBanner
+            sessionId={sessionPolling.sessionId}
             durationMinutes={sessionPolling.durationMinutes}
             kwhDelivered={sessionPolling.kwhDelivered}
             onTap={() => {

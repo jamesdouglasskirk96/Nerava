@@ -10,6 +10,7 @@ interface SessionPollingState {
   durationMinutes: number
   kwhDelivered: number | null
   lastIncentive: { amountCents: number } | null
+  pollError: string | null
 }
 
 export function useSessionPolling() {
@@ -24,9 +25,11 @@ export function useSessionPolling() {
     durationMinutes: 0,
     kwhDelivered: null,
     lastIncentive: null,
+    pollError: null,
   })
 
   const wasActiveRef = useRef(false)
+  const consecutiveErrorsRef = useRef(0)
   const deviceCoordsRef = useRef<{ lat: number; lng: number } | null>(null)
 
   // Continuously track device GPS for inclusion in poll requests
@@ -53,10 +56,24 @@ export function useSessionPolling() {
     },
     onSuccess: (result: PollSessionResponse) => {
       if (result.error) {
-        // Tesla not connected or poll failed — stay idle
+        consecutiveErrorsRef.current += 1
+
+        // If we thought a session was active but polls are failing,
+        // keep showing active but track the error so the user can manually end
+        if (wasActiveRef.current) {
+          setState((prev) => ({
+            ...prev,
+            pollError: result.error || 'poll_failed',
+          }))
+          return
+        }
+
+        // Not tracking an active session — ignore poll errors (e.g. no_tesla_connection)
         return
       }
 
+      // Successful poll — clear error state
+      consecutiveErrorsRef.current = 0
       const wasActive = wasActiveRef.current
 
       if (result.session_active) {
@@ -67,6 +84,7 @@ export function useSessionPolling() {
           durationMinutes: result.duration_minutes || 0,
           kwhDelivered: result.kwh_delivered ?? null,
           lastIncentive: null,
+          pollError: null,
         })
       } else {
         wasActiveRef.current = false
@@ -85,6 +103,7 @@ export function useSessionPolling() {
             lastIncentive: result.incentive_granted
               ? { amountCents: result.incentive_amount_cents || 0 }
               : null,
+            pollError: null,
           })
         } else {
           setState((prev) => ({
@@ -93,6 +112,7 @@ export function useSessionPolling() {
             sessionId: null,
             durationMinutes: 0,
             kwhDelivered: null,
+            pollError: null,
           }))
         }
       }
@@ -105,7 +125,8 @@ export function useSessionPolling() {
     }
   }, [pollMutation])
 
-  useVisibilityAwareInterval(poll, 60_000, isAuthenticated && isTeslaConnected)
+  // Poll every 30s (was 60s) for faster detection
+  useVisibilityAwareInterval(poll, 30_000, isAuthenticated && isTeslaConnected)
 
   const clearIncentive = useCallback(() => {
     setState((prev) => ({ ...prev, lastIncentive: null }))

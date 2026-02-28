@@ -187,12 +187,12 @@ class SessionEventService:
         """
         from app.services.incentive_engine import IncentiveEngine
 
-        # Check cache: skip if polled within 30s and still charging
+        # Check cache: skip if polled within 15s and still charging
         cache_key = driver_id
         cached = _charging_cache.get(cache_key)
         if cached and cached.get("still_charging"):
             last_poll = cached.get("last_poll", datetime.min)
-            if (datetime.utcnow() - last_poll).total_seconds() < 30:
+            if (datetime.utcnow() - last_poll).total_seconds() < 15:
                 active = SessionEventService.get_active_session(db, driver_id)
                 if active:
                     return {
@@ -204,6 +204,7 @@ class SessionEventService:
                     }
 
         # Poll Tesla API — ONE vehicle only (per review)
+        # Includes wake-up + retry for sleeping vehicles
         try:
             vehicle_id = tesla_connection.vehicle_id
             if not vehicle_id:
@@ -217,10 +218,36 @@ class SessionEventService:
             if not access_token:
                 return {"session_active": False, "error": "token_expired"}
 
-            # get_vehicle_data returns the unwrapped "response" object directly
-            vehicle_data = await tesla_oauth_service.get_vehicle_data(
-                access_token, vehicle_id
-            )
+            # get_vehicle_data with wake-up and retry on 408/sleeping
+            import asyncio
+            import httpx
+            vehicle_data = None
+            for attempt in range(3):
+                try:
+                    # Wake vehicle before data request (best-effort)
+                    if attempt > 0:
+                        try:
+                            await tesla_oauth_service.wake_vehicle(access_token, vehicle_id)
+                        except Exception:
+                            pass
+                        await asyncio.sleep(3)
+
+                    vehicle_data = await tesla_oauth_service.get_vehicle_data(
+                        access_token, vehicle_id
+                    )
+                    break  # Success
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 408 and attempt < 2:
+                        logger.info(
+                            "Vehicle %s returned 408 (attempt %d/3), waking and retrying",
+                            vehicle_id, attempt + 1
+                        )
+                        continue
+                    raise  # Non-408 or final attempt — propagate
+
+            if vehicle_data is None:
+                return {"session_active": False, "error": "vehicle_unavailable"}
+
             charge_state = vehicle_data.get("charge_state", {})
             drive_state = vehicle_data.get("drive_state", {})
             charging_state = charge_state.get("charging_state")
@@ -444,7 +471,7 @@ class SessionEventService:
     def _close_stale_session(
         db: Session,
         driver_id: int,
-        stale_minutes: int = 15,
+        stale_minutes: int = 5,
     ) -> Optional[SessionEvent]:
         """
         Find and close any active session that hasn't been updated in
