@@ -44,10 +44,6 @@ class SessionEventService:
         vehicle_id = str(vehicle_info.get("id", ""))
         vin = vehicle_info.get("vin")
 
-        # Build a source_session_id for dedup
-        # Tesla doesn't give a unique session ID, so use vehicle_id + approximate start time
-        source_session_id = f"tesla_{vehicle_id}_{charge_data.get('timestamp', '')}"
-
         # Check for existing active session for this driver+vehicle
         active = SessionEventService.get_active_session(db, driver_id, vehicle_id=vehicle_id)
         if active:
@@ -59,6 +55,12 @@ class SessionEventService:
             db.flush()
             return active
 
+        # Build a stable source_session_id for dedup
+        # Use vehicle_id + current date to avoid duplicates within same day
+        # (Tesla doesn't provide a unique charge session ID)
+        now = datetime.utcnow()
+        source_session_id = f"tesla_{vehicle_id}_{now.strftime('%Y%m%d_%H%M')}"
+
         # Create new session event
         session_event = SessionEvent(
             id=str(uuid.uuid4()),
@@ -68,7 +70,7 @@ class SessionEventService:
             charger_network=charger_network,
             connector_type=charge_data.get("fast_charger_type") or "Tesla",
             power_kw=charge_data.get("charger_power"),
-            session_start=datetime.utcnow(),
+            session_start=now,
             source="tesla_api",
             source_session_id=source_session_id,
             verified=True,
@@ -305,11 +307,16 @@ class SessionEventService:
                 except Exception as e:
                     logger.warning(f"Charger matching failed: {e}")
 
-            # Store device location in metadata if provided
+            # Store device location in metadata (start of trail)
             metadata = {}
             if device_lat is not None and device_lng is not None:
                 metadata["device_lat"] = device_lat
                 metadata["device_lng"] = device_lng
+                metadata["location_trail"] = [{
+                    "lat": device_lat,
+                    "lng": device_lng,
+                    "ts": datetime.utcnow().isoformat(),
+                }]
                 logger.info(f"Device location: {device_lat}, {device_lng}")
 
             session = SessionEventService.create_from_tesla(
@@ -351,11 +358,21 @@ class SessionEventService:
                     except Exception:
                         pass
 
-            # Update device location in metadata
+            # Append device location to location trail in metadata
             if device_lat is not None and device_lng is not None:
                 meta = active.session_metadata or {}
                 meta["device_lat"] = device_lat
                 meta["device_lng"] = device_lng
+                trail = meta.get("location_trail", [])
+                trail.append({
+                    "lat": device_lat,
+                    "lng": device_lng,
+                    "ts": datetime.utcnow().isoformat(),
+                })
+                # Keep last 120 points (~60 min at 30s intervals)
+                if len(trail) > 120:
+                    trail = trail[-120:]
+                meta["location_trail"] = trail
                 active.session_metadata = meta
 
             db.commit()
