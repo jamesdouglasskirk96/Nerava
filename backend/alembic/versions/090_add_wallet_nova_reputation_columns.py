@@ -4,15 +4,15 @@ These columns existed in the original migration 018 schema but were lost when
 migration 073 recreated the table with CREATE TABLE IF NOT EXISTS using a
 different schema. Production driver_wallets is missing these columns.
 
-Revision ID: 090
-Revises: 089
+Revision ID: 090_add_wallet_nova_reputation_columns
+Revises: 089_close_duplicate_sessions_feb28
 Create Date: 2026-03-01
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = '090'
-down_revision = '089'
+revision = '090_add_wallet_nova_reputation_columns'
+down_revision = '089_close_duplicate_sessions_feb28'
 branch_labels = None
 depends_on = None
 
