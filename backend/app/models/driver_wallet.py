@@ -15,8 +15,7 @@ class DriverWallet(Base):
     __tablename__ = "driver_wallets"
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
-    # Maps Python attr 'driver_id' to DB column 'user_id' (production schema from migration 018)
-    driver_id = Column("user_id", Integer, ForeignKey("users.id"), nullable=False, unique=True)
+    driver_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
     # Alias so that DriverWallet.user_id works (40+ references across codebase + raw SQL)
     user_id = synonym('driver_id')
     balance_cents = Column(Integer, nullable=False, default=0)

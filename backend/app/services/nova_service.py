@@ -354,7 +354,7 @@ class NovaService:
             UPDATE driver_wallets
             SET nova_balance = nova_balance - :amount,
                 updated_at = :updated_at
-            WHERE user_id = :driver_id
+            WHERE driver_id = :driver_id
             AND nova_balance >= :amount
         """), {
             "amount": amount,
