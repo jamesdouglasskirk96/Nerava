@@ -23,12 +23,14 @@ class UUIDType(TypeDecorator):
     cache_ok = True
     
     def load_dialect_impl(self, dialect):
-        """Return the appropriate type for the database dialect."""
-        if dialect.name == 'postgresql':
-            return dialect.type_descriptor(postgresql.UUID(as_uuid=False))
-        else:
-            # SQLite and other databases use CHAR(36)
-            return dialect.type_descriptor(String(36))
+        """Return the appropriate type for the database dialect.
+
+        Always uses String(36) because production PostgreSQL columns were
+        created as character varying, not native UUID.  Using
+        postgresql.UUID here causes 'operator does not exist: character
+        varying = uuid' errors on WHERE clauses.
+        """
+        return dialect.type_descriptor(String(36))
     
     def process_bind_param(self, value, dialect):
         """Convert Python value to database value."""

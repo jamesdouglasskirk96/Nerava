@@ -2,7 +2,7 @@
 from datetime import datetime
 import uuid
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, CheckConstraint
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, synonym
 from ..db import Base
 
 
@@ -15,7 +15,10 @@ class DriverWallet(Base):
     __tablename__ = "driver_wallets"
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
-    driver_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
+    # Maps Python attr 'driver_id' to DB column 'user_id' (production schema from migration 018)
+    driver_id = Column("user_id", Integer, ForeignKey("users.id"), nullable=False, unique=True)
+    # Alias so that DriverWallet.user_id works (40+ references across codebase + raw SQL)
+    user_id = synonym('driver_id')
     balance_cents = Column(Integer, nullable=False, default=0)
     pending_balance_cents = Column(Integer, nullable=False, default=0)
     stripe_account_id = Column(String(255), nullable=True)
@@ -23,6 +26,8 @@ class DriverWallet(Base):
     stripe_onboarding_complete = Column(Boolean, nullable=False, default=False)
     total_earned_cents = Column(Integer, nullable=False, default=0)
     total_withdrawn_cents = Column(Integer, nullable=False, default=0)
+    nova_balance = Column(Integer, nullable=False, default=0)
+    energy_reputation_score = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=True, onupdate=datetime.utcnow)
 

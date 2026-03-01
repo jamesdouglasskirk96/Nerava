@@ -136,7 +136,7 @@ class ApplePassRegistration(Base):
     __tablename__ = "apple_pass_registrations"
 
     id = Column(UUIDType(), primary_key=True)
-    driver_wallet_id = Column(Integer, ForeignKey("driver_wallets.driver_id"), nullable=False, index=True)
+    driver_wallet_id = Column(Integer, ForeignKey("driver_wallets.user_id"), nullable=False, index=True)
 
     # Device + PassKit identifiers
     device_library_identifier = Column(String, nullable=False, index=True)
@@ -163,7 +163,7 @@ class GoogleWalletLink(Base):
     __tablename__ = "google_wallet_links"
 
     id = Column(UUIDType(), primary_key=True)
-    driver_wallet_id = Column(Integer, ForeignKey("driver_wallets.driver_id"), nullable=False, index=True)
+    driver_wallet_id = Column(Integer, ForeignKey("driver_wallets.user_id"), nullable=False, index=True)
 
     issuer_id = Column(String, nullable=False)
     class_id = Column(String, nullable=False)
