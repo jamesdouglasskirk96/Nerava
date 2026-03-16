@@ -854,6 +854,8 @@ def update_exclusive(
     # Handle charger_merchant-based exclusives (cm_ prefix)
     if exclusive_id.startswith("cm_"):
         from app.models.while_you_charge import ChargerMerchant
+        import logging as _logging
+        _logger = _logging.getLogger(__name__)
         cm_pk = exclusive_id[3:]  # strip "cm_" prefix to get integer PK
         try:
             link = db.query(ChargerMerchant).filter(
@@ -868,9 +870,23 @@ def update_exclusive(
         is_active = True
         if request.is_active is not None and not request.is_active:
             is_active = False
-        # Sync to ALL charger-merchant links + WYC merchant + DomainMerchant
-        _sync_exclusive_to_driver_app(db, merchant, new_title or "", new_desc, is_active)
+        # Update ALL charger-merchant links for the same WYC merchant directly
+        # (bypasses DomainMerchant→WYC matching which can miss merchants)
+        wyc_merchant_id = link.merchant_id
+        all_links = db.query(ChargerMerchant).filter(
+            ChargerMerchant.merchant_id == wyc_merchant_id,
+        ).all()
+        for cm_link in all_links:
+            cm_link.exclusive_title = new_title if is_active else None
+            cm_link.exclusive_description = new_desc if is_active else None
+        # Also update WYC merchant perk_label
+        wyc = db.query(WYCMerchant).filter(WYCMerchant.id == wyc_merchant_id).first()
+        if wyc:
+            wyc.perk_label = new_title if is_active else None
+        # Also update DomainMerchant perk_label
+        merchant.perk_label = new_title if is_active else None
         db.commit()
+        _logger.info(f"Updated {len(all_links)} charger-merchant links for WYC {wyc_merchant_id}: title={new_title!r}, active={is_active}")
         now_str = datetime.utcnow().isoformat()
         return ExclusiveResponse(
             id=exclusive_id,
@@ -1026,6 +1042,8 @@ def toggle_exclusive(
     # Handle charger_merchant-based exclusives (cm_ prefix)
     if exclusive_id.startswith("cm_"):
         from app.models.while_you_charge import ChargerMerchant
+        import logging as _logging
+        _logger = _logging.getLogger(__name__)
         cm_pk = exclusive_id[3:]
         try:
             link = db.query(ChargerMerchant).filter(
@@ -1036,9 +1054,20 @@ def toggle_exclusive(
         if not link:
             raise HTTPException(status_code=404, detail="Exclusive not found")
         title = link.exclusive_title or "Exclusive Offer"
-        # Sync to ALL charger-merchant links + WYC merchant + DomainMerchant
-        _sync_exclusive_to_driver_app(db, merchant, title, "", enabled)
+        # Update ALL charger-merchant links for the same WYC merchant directly
+        wyc_merchant_id = link.merchant_id
+        all_links = db.query(ChargerMerchant).filter(
+            ChargerMerchant.merchant_id == wyc_merchant_id,
+        ).all()
+        for cm_link in all_links:
+            cm_link.exclusive_title = title if enabled else None
+            cm_link.exclusive_description = None if not enabled else cm_link.exclusive_description
+        wyc = db.query(WYCMerchant).filter(WYCMerchant.id == wyc_merchant_id).first()
+        if wyc:
+            wyc.perk_label = title if enabled else None
+        merchant.perk_label = title if enabled else None
         db.commit()
+        _logger.info(f"Toggled {len(all_links)} charger-merchant links for WYC {wyc_merchant_id}: enabled={enabled}")
         return {"ok": True, "is_active": enabled}
 
     from app.models.while_you_charge import MerchantPerk
