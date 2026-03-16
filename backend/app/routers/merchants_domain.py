@@ -863,7 +863,7 @@ def create_exclusive(
         eligibility=request.eligibility,
         is_active=True,
         created_at=now_str,
-        updated_at=perk.updated_at.isoformat()
+        updated_at=now_str,
     )
 
 
