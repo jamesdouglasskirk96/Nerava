@@ -570,6 +570,45 @@ class ExclusiveResponse(BaseModel):
     updated_at: str
 
 
+def _find_all_charger_merchant_links(db: Session, merchant: DomainMerchant):
+    """
+    Find ALL ChargerMerchant links for a DomainMerchant using the same
+    place_id + name matching as list_exclusives. Returns a flat list.
+    """
+    from app.models.while_you_charge import ChargerMerchant
+    from sqlalchemy import func as sqlfunc
+
+    wyc_ids = set()
+    if merchant.google_place_id:
+        wyc_by_place = db.query(WYCMerchant).filter(
+            WYCMerchant.place_id == merchant.google_place_id
+        ).all()
+        for w in wyc_by_place:
+            wyc_ids.add(w.id)
+
+    merchant_name = merchant.name or ""
+    if not merchant_name and merchant.google_place_id:
+        wyc = db.query(WYCMerchant).filter(
+            WYCMerchant.place_id == merchant.google_place_id
+        ).first()
+        if wyc:
+            merchant_name = wyc.name or ""
+
+    if merchant_name:
+        wyc_by_name = db.query(WYCMerchant).filter(
+            sqlfunc.lower(WYCMerchant.name) == merchant_name.lower()
+        ).all()
+        for w in wyc_by_name:
+            wyc_ids.add(w.id)
+
+    if not wyc_ids:
+        return []
+
+    return db.query(ChargerMerchant).filter(
+        ChargerMerchant.merchant_id.in_(list(wyc_ids)),
+    ).all()
+
+
 def _sync_exclusive_to_driver_app(db: Session, merchant: DomainMerchant, title: str, description: str = "", is_active: bool = True):
     """
     Sync an exclusive offer to the driver-facing tables so it shows in the driver app.
@@ -870,23 +909,20 @@ def update_exclusive(
         is_active = True
         if request.is_active is not None and not request.is_active:
             is_active = False
-        # Update ALL charger-merchant links for the same WYC merchant directly
-        # (bypasses DomainMerchant→WYC matching which can miss merchants)
-        wyc_merchant_id = link.merchant_id
-        all_links = db.query(ChargerMerchant).filter(
-            ChargerMerchant.merchant_id == wyc_merchant_id,
-        ).all()
+        # Update ALL charger-merchant links across ALL matching WYC merchants
+        all_links = _find_all_charger_merchant_links(db, merchant)
         for cm_link in all_links:
             cm_link.exclusive_title = new_title if is_active else None
             cm_link.exclusive_description = new_desc if is_active else None
-        # Also update WYC merchant perk_label
-        wyc = db.query(WYCMerchant).filter(WYCMerchant.id == wyc_merchant_id).first()
-        if wyc:
-            wyc.perk_label = new_title if is_active else None
-        # Also update DomainMerchant perk_label
+        # Update ALL WYC merchants' perk_labels
+        wyc_ids = {cm_link.merchant_id for cm_link in all_links}
+        for wyc_id in wyc_ids:
+            wyc = db.query(WYCMerchant).filter(WYCMerchant.id == wyc_id).first()
+            if wyc:
+                wyc.perk_label = new_title if is_active else None
         merchant.perk_label = new_title if is_active else None
         db.commit()
-        _logger.info(f"Updated {len(all_links)} charger-merchant links for WYC {wyc_merchant_id}: title={new_title!r}, active={is_active}")
+        _logger.info(f"Updated {len(all_links)} charger-merchant links across {len(wyc_ids)} WYC merchants: title={new_title!r}, active={is_active}")
         now_str = datetime.utcnow().isoformat()
         return ExclusiveResponse(
             id=exclusive_id,
@@ -1054,20 +1090,19 @@ def toggle_exclusive(
         if not link:
             raise HTTPException(status_code=404, detail="Exclusive not found")
         title = link.exclusive_title or "Exclusive Offer"
-        # Update ALL charger-merchant links for the same WYC merchant directly
-        wyc_merchant_id = link.merchant_id
-        all_links = db.query(ChargerMerchant).filter(
-            ChargerMerchant.merchant_id == wyc_merchant_id,
-        ).all()
+        # Update ALL charger-merchant links across ALL matching WYC merchants
+        all_links = _find_all_charger_merchant_links(db, merchant)
         for cm_link in all_links:
             cm_link.exclusive_title = title if enabled else None
             cm_link.exclusive_description = None if not enabled else cm_link.exclusive_description
-        wyc = db.query(WYCMerchant).filter(WYCMerchant.id == wyc_merchant_id).first()
-        if wyc:
-            wyc.perk_label = title if enabled else None
+        wyc_ids = {cm_link.merchant_id for cm_link in all_links}
+        for wyc_id in wyc_ids:
+            wyc = db.query(WYCMerchant).filter(WYCMerchant.id == wyc_id).first()
+            if wyc:
+                wyc.perk_label = title if enabled else None
         merchant.perk_label = title if enabled else None
         db.commit()
-        _logger.info(f"Toggled {len(all_links)} charger-merchant links for WYC {wyc_merchant_id}: enabled={enabled}")
+        _logger.info(f"Toggled {len(all_links)} charger-merchant links across {len(wyc_ids)} WYC merchants: enabled={enabled}")
         return {"ok": True, "is_active": enabled}
 
     from app.models.while_you_charge import MerchantPerk
