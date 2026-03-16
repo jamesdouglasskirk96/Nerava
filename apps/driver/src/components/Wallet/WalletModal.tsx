@@ -1,11 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { X, TrendingUp, TrendingDown, Clock, Loader2, ExternalLink, CheckCircle, AlertCircle } from 'lucide-react'
 import {
   createStripeAccount,
   createStripeAccountLink,
   requestWithdrawal,
+  checkStripeStatus,
 } from '../../services/api'
+import { BankLinkFlow } from './BankLinkFlow'
 
 export interface Transaction {
   id: string
@@ -24,9 +26,20 @@ interface WalletModalProps {
   recentTransactions: Transaction[]
   onBalanceChanged: () => void
   userEmail?: string
+  payoutProvider?: string  // "stripe" or "dwolla"
+  bankVerified?: boolean
+  asPage?: boolean  // Render as full page instead of modal overlay
 }
 
-const MINIMUM_WITHDRAWAL_CENTS = 2000 // $20 — must match backend
+const MINIMUM_WITHDRAWAL_CENTS = 100 // $1 minimum
+const FEE_THRESHOLD_CENTS = 2000 // $20 — withdrawals below this incur a processing fee
+const STRIPE_FIXED_FEE_CENTS = 25 // $0.25
+const STRIPE_PERCENT_FEE = 0.0025 // 0.25%
+
+function calcWithdrawalFee(amountCents: number): number {
+  if (amountCents >= FEE_THRESHOLD_CENTS) return 0
+  return STRIPE_FIXED_FEE_CENTS + Math.round(amountCents * STRIPE_PERCENT_FEE)
+}
 
 type WithdrawStep = 'idle' | 'amount' | 'confirming' | 'processing' | 'success' | 'error'
 
@@ -35,16 +48,53 @@ export function WalletModal({
   onClose,
   balance,
   pendingBalance,
-  stripeOnboardingComplete,
+  stripeOnboardingComplete: initialStripeComplete,
   recentTransactions,
   onBalanceChanged,
   userEmail,
+  payoutProvider = 'stripe',
+  bankVerified = false,
+  asPage = false,
 }: WalletModalProps) {
   const navigate = useNavigate()
   const [withdrawStep, setWithdrawStep] = useState<WithdrawStep>('idle')
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [connectingBank, setConnectingBank] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [stripeOnboardingComplete, setStripeOnboardingComplete] = useState(initialStripeComplete)
+  const [checkingStripeStatus, setCheckingStripeStatus] = useState(false)
+  const openedStripeRef = useRef(false)
+
+  // Sync prop changes
+  useEffect(() => {
+    setStripeOnboardingComplete(initialStripeComplete)
+  }, [initialStripeComplete])
+
+  // When the app comes back to foreground after opening Stripe in Safari,
+  // check if onboarding is now complete
+  useEffect(() => {
+    if (!isOpen) return
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && openedStripeRef.current) {
+        openedStripeRef.current = false
+        setCheckingStripeStatus(true)
+        checkStripeStatus()
+          .then((status) => {
+            if (status.onboarding_complete) {
+              setStripeOnboardingComplete(true)
+              onBalanceChanged() // Refresh wallet data
+            }
+          })
+          .catch(() => {})
+          .finally(() => setCheckingStripeStatus(false))
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [isOpen, onBalanceChanged])
 
   if (!isOpen) return null
 
@@ -75,7 +125,14 @@ export function WalletModal({
         `${appUrl}/?stripe_return=true`,
         `${appUrl}/?stripe_refresh=true`,
       )
-      window.location.href = url
+      // Open in Safari via native bridge — Google blocks OAuth in WKWebView
+      if ((window as any).neravaNative?.openExternalUrl) {
+        openedStripeRef.current = true
+        ;(window as any).neravaNative.openExternalUrl(url)
+        setConnectingBank(false)
+      } else {
+        window.location.href = url
+      }
     } catch (e: any) {
       setErrorMessage(e?.message || 'Failed to start bank setup')
       setConnectingBank(false)
@@ -89,10 +146,13 @@ export function WalletModal({
   }
 
   const parsedAmountCents = Math.round(parseFloat(withdrawAmount || '0') * 100)
-  const amountValid = parsedAmountCents >= MINIMUM_WITHDRAWAL_CENTS && parsedAmountCents <= balance
+  const feeCents = calcWithdrawalFee(parsedAmountCents)
+  const totalDebit = parsedAmountCents + feeCents
+  const amountValid = parsedAmountCents >= MINIMUM_WITHDRAWAL_CENTS && totalDebit <= balance
 
   const handleConfirmWithdraw = async () => {
     if (!amountValid) return
+    setSubmitting(true)
     setWithdrawStep('processing')
     setErrorMessage('')
     try {
@@ -109,6 +169,8 @@ export function WalletModal({
       }
       setErrorMessage(msg)
       setWithdrawStep('error')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -118,11 +180,18 @@ export function WalletModal({
     setErrorMessage('')
   }
 
+  const outerClass = asPage
+    ? "flex flex-col h-full bg-white"
+    : "fixed inset-0 z-[3000] bg-black/50 flex items-end justify-center sm:items-center"
+  const innerClass = asPage
+    ? "flex-1 flex flex-col overflow-hidden"
+    : "bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl max-h-[90vh] overflow-hidden flex flex-col"
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-end justify-center sm:items-center">
+    <div className={outerClass}>
       <div
-        className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl max-h-[90vh] overflow-hidden flex flex-col"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        className={innerClass}
+        style={asPage ? undefined : { paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-[#E4E6EB]">
@@ -133,12 +202,14 @@ export function WalletModal({
             </svg>
             <span className="text-lg font-semibold">My Wallet</span>
           </div>
-          <button
-            onClick={() => { resetWithdraw(); onClose() }}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          {!asPage && (
+            <button
+              onClick={() => { resetWithdraw(); onClose() }}
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         {/* Content */}
@@ -154,29 +225,49 @@ export function WalletModal({
             {/* Withdraw / Connect Bank Flow */}
             {withdrawStep === 'idle' && (
               <>
-                {stripeOnboardingComplete ? (
-                  <button
-                    onClick={handleStartWithdraw}
-                    disabled={!canWithdraw}
-                    className="w-full mt-4 py-3 bg-white text-[#1877F2] font-semibold rounded-xl hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Withdraw to Bank
-                  </button>
+                {payoutProvider === 'dwolla' ? (
+                  /* Dwolla: bank linked via Plaid */
+                  bankVerified ? (
+                    <button
+                      onClick={handleStartWithdraw}
+                      disabled={!canWithdraw}
+                      className="w-full mt-4 py-3 bg-white text-[#1877F2] font-semibold rounded-xl hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                    >
+                      Withdraw to Bank
+                    </button>
+                  ) : (
+                    <div className="mt-4 bg-white/10 rounded-xl p-3">
+                      <BankLinkFlow onLinkComplete={onBalanceChanged} />
+                    </div>
+                  )
                 ) : (
-                  <button
-                    onClick={handleConnectBank}
-                    disabled={connectingBank}
-                    className="w-full mt-4 py-3 bg-white text-[#1877F2] font-semibold rounded-xl hover:bg-gray-50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-                  >
-                    {connectingBank ? (
-                      <><Loader2 className="w-4 h-4 animate-spin" /> Setting up...</>
-                    ) : (
-                      <><ExternalLink className="w-4 h-4" /> Connect Your Bank</>
-                    )}
-                  </button>
+                  /* Stripe: existing flow */
+                  stripeOnboardingComplete ? (
+                    <button
+                      onClick={handleStartWithdraw}
+                      disabled={!canWithdraw}
+                      className="w-full mt-4 py-3 bg-white text-[#1877F2] font-semibold rounded-xl hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                    >
+                      Withdraw to Bank
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleConnectBank}
+                      disabled={connectingBank || checkingStripeStatus}
+                      className="w-full mt-4 py-3 bg-white text-[#1877F2] font-semibold rounded-xl hover:bg-gray-50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                    >
+                      {connectingBank || checkingStripeStatus ? (
+                        <><Loader2 className="w-4 h-4 animate-spin" /> {checkingStripeStatus ? 'Checking...' : 'Setting up...'}</>
+                      ) : (
+                        <><ExternalLink className="w-4 h-4" /> Connect Your Bank</>
+                      )}
+                    </button>
+                  )
                 )}
                 <p className="text-center text-sm opacity-80 mt-2">
-                  {stripeOnboardingComplete ? `Minimum ${formatCurrency(MINIMUM_WITHDRAWAL_CENTS)}` : 'Required for withdrawals'}
+                  {(payoutProvider === 'dwolla' ? bankVerified : stripeOnboardingComplete)
+                    ? `Minimum ${formatCurrency(MINIMUM_WITHDRAWAL_CENTS)}`
+                    : 'Required for withdrawals'}
                 </p>
               </>
             )}
@@ -206,17 +297,25 @@ export function WalletModal({
                   </button>
                   <button
                     onClick={handleConfirmWithdraw}
-                    disabled={!amountValid}
-                    className="flex-1 py-2.5 bg-white text-[#1877F2] font-semibold rounded-xl hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    disabled={!amountValid || submitting}
+                    className="flex-1 py-2.5 bg-white text-[#1877F2] font-semibold rounded-xl hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1"
                   >
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                     Confirm
                   </button>
                 </div>
+                {feeCents > 0 && parsedAmountCents >= MINIMUM_WITHDRAWAL_CENTS && (
+                  <p className="text-center text-sm opacity-90">
+                    {formatCurrency(feeCents)} processing fee &middot; {formatCurrency(totalDebit)} total from balance
+                  </p>
+                )}
                 {!amountValid && withdrawAmount && (
                   <p className="text-center text-sm opacity-80">
                     {parsedAmountCents < MINIMUM_WITHDRAWAL_CENTS
                       ? `Minimum ${formatCurrency(MINIMUM_WITHDRAWAL_CENTS)}`
-                      : `Maximum ${formatCurrency(balance)}`}
+                      : totalDebit > balance
+                        ? `Insufficient balance (need ${formatCurrency(totalDebit)} incl. fee)`
+                        : `Maximum ${formatCurrency(balance)}`}
                   </p>
                 )}
               </div>
@@ -236,7 +335,10 @@ export function WalletModal({
                 <div className="flex flex-col items-center gap-2 py-2">
                   <CheckCircle className="w-8 h-8" />
                   <p className="font-semibold">Withdrawal submitted</p>
-                  <p className="text-sm opacity-80">{formatCurrency(parsedAmountCents)} is on its way to your bank</p>
+                  <p className="text-sm opacity-80">
+                    {formatCurrency(parsedAmountCents)} is on its way to your bank
+                    {feeCents > 0 && ` (${formatCurrency(feeCents)} fee applied)`}
+                  </p>
                 </div>
                 <button
                   onClick={resetWithdraw}

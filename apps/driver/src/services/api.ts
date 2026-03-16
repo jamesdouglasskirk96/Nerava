@@ -5,6 +5,10 @@ import type {
   MerchantDetailsResponse,
   WalletActivateRequest,
   WalletActivateResponse,
+  RequestToJoinResponse,
+  ClaimRewardResponse,
+  ClaimDetailResponse,
+  ReceiptUploadResponse,
 } from '../types'
 import {
   captureIntentMock,
@@ -21,7 +25,7 @@ import {
   MerchantDetailsResponseSchema,
 } from './schemas'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.nerava.network'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
 // Proactive token refresh — refresh before expiry when app resumes from background
 const TOKEN_REFRESH_THRESHOLD_MS = 10 * 60 * 1000 // Refresh if token is within 10 min of expiry
@@ -60,6 +64,7 @@ async function proactiveTokenRefresh(): Promise<void> {
       if (data.refresh_token) {
         localStorage.setItem('refresh_token', data.refresh_token)
       }
+      try { window.neravaNative?.setAuthToken(data.access_token) } catch {}
       console.log('[API] Proactive token refresh succeeded')
     }
   } catch {
@@ -145,6 +150,7 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit, retryOn401 =
             if (refreshData.refresh_token) {
               localStorage.setItem('refresh_token', refreshData.refresh_token)
             }
+            try { window.neravaNative?.setAuthToken(refreshData.access_token) } catch {}
             console.log('[API] Token refreshed, retrying original request')
             
             // Retry original request with new token
@@ -499,6 +505,17 @@ export async function checkLocation(lat: number, lng: number): Promise<LocationC
   return validateResponse(LocationCheckResponseSchema, data, '/v1/drivers/location/check') as unknown as LocationCheckResponse
 }
 
+// Ad impression tracking
+export async function trackAdImpressions(
+  impressions: Array<{ merchant_id: string; impression_type: string }>
+): Promise<{ recorded: number }> {
+  if (!impressions.length) return { recorded: 0 }
+  return fetchAPI<{ recorded: number }>('/v1/ads/impressions', {
+    method: 'POST',
+    body: JSON.stringify({ impressions }),
+  })
+}
+
 // React Query Hooks for Exclusive Sessions
 export function useActivateExclusive() {
   return useMutation({
@@ -660,6 +677,66 @@ export function useVoteAmenity() {
   })
 }
 
+// ===================== Charger Detail =====================
+
+export interface ChargerDetailNearbyMerchant {
+  place_id: string
+  name: string
+  photo_url: string
+  distance_m: number
+  walk_time_min: number
+  has_exclusive: boolean
+  phone?: string | null
+  website?: string | null
+  category?: string | null
+  lat?: number | null
+  lng?: number | null
+  exclusive_title?: string | null
+}
+
+export interface ChargerDetail {
+  id: string
+  name: string
+  address: string | null
+  city: string | null
+  state: string | null
+  lat: number
+  lng: number
+  network_name: string | null
+  connector_types: string[]
+  power_kw: number | null
+  num_evse: number | null
+  status: string
+  distance_m: number
+  drive_time_min: number
+  total_sessions_30d: number
+  unique_drivers_30d: number
+  avg_duration_min: number
+  active_reward_cents: number | null
+  nearby_merchants: ChargerDetailNearbyMerchant[]
+  pricing_per_kwh: number | null
+  pricing_source: string | null
+  nerava_score: number | null
+  drivers_charging_now: number
+}
+
+export async function fetchChargerDetail(chargerId: string, lat?: number, lng?: number): Promise<ChargerDetail> {
+  const params = new URLSearchParams()
+  if (lat !== undefined) params.append('lat', String(lat))
+  if (lng !== undefined) params.append('lng', String(lng))
+  const qs = params.toString()
+  return fetchAPI<ChargerDetail>(`/v1/chargers/${chargerId}/detail${qs ? `?${qs}` : ''}`, undefined, false)
+}
+
+export function useChargerDetail(chargerId: string | null, lat?: number, lng?: number) {
+  return useQuery({
+    queryKey: ['charger-detail', chargerId, lat, lng],
+    queryFn: () => chargerId ? fetchChargerDetail(chargerId, lat, lng) : null,
+    enabled: chargerId !== null,
+    staleTime: 60_000,
+  })
+}
+
 // ===================== Charging Sessions =====================
 
 export interface ChargingSessionIncentive {
@@ -688,6 +765,7 @@ export interface ChargingSession {
   quality_score: number | null
   ended_reason: string | null
   incentive: ChargingSessionIncentive | null
+  location_trail: { lat: number; lng: number; ts: string }[] | null
 }
 
 export interface ChargingSessionsResponse {
@@ -698,6 +776,7 @@ export interface ChargingSessionsResponse {
 export interface ActiveSessionResponse {
   session: ChargingSession | null
   active: boolean
+  last_ended_session?: ChargingSession | null
 }
 
 export interface PollSessionResponse {
@@ -709,14 +788,23 @@ export interface PollSessionResponse {
   session_ended?: boolean
   incentive_granted?: boolean
   incentive_amount_cents?: number
+  telemetry_mode?: boolean
   error?: string
+  vehicle_asleep?: boolean
+  recommended_interval_s?: number
+  minutes_to_full?: number | null
+  battery_level?: number | null
+  charger_power_kw?: number | null
 }
 
 export interface TeslaConnectionStatus {
   connected: boolean
   vehicle_name?: string | null
   vehicle_model?: string | null
+  vehicle_year?: number | null
+  exterior_color?: string | null
   vin?: string | null
+  battery_level?: number | null
 }
 
 export async function fetchChargingSessions(limit = 50, offset = 0): Promise<ChargingSessionsResponse> {
@@ -823,6 +911,8 @@ export interface WalletBalance {
   can_withdraw: boolean
   minimum_withdrawal_cents: number
   stripe_onboarding_complete: boolean
+  payout_provider?: string  // "stripe" or "dwolla"
+  bank_verified?: boolean
 }
 
 export interface StripeAccountResult {
@@ -869,6 +959,10 @@ export async function createStripeAccountLink(returnUrl: string, refreshUrl: str
     method: 'POST',
     body: JSON.stringify({ return_url: returnUrl, refresh_url: refreshUrl }),
   })
+}
+
+export async function checkStripeStatus(): Promise<{ onboarding_complete: boolean; has_account: boolean; details_submitted?: boolean }> {
+  return fetchAPI('/v1/wallet/stripe/status')
 }
 
 export async function requestWithdrawal(amountCents: number): Promise<WithdrawResult> {
@@ -984,6 +1078,296 @@ export function useEnergyReputation() {
   })
 }
 
+// ===================== Account Stats =====================
+
+export interface AccountStats {
+  total_sessions: number
+  total_kwh: number
+  total_earned_cents: number
+  total_nova: number
+  favorite_charger: { name: string; sessions: number } | null
+  member_since: string | null
+  current_streak: number
+  co2_avoided_kg: number
+}
+
+export async function fetchAccountStats(): Promise<AccountStats> {
+  return fetchAPI<AccountStats>('/v1/account/stats')
+}
+
+export function useAccountStats() {
+  return useQuery({
+    queryKey: ['account-stats'],
+    queryFn: fetchAccountStats,
+    enabled: !!localStorage.getItem('access_token'),
+    staleTime: 60000,
+  })
+}
+
+// ===================== Profile =====================
+
+export async function updateProfile(data: { email?: string; display_name?: string }) {
+  return fetchAPI('/v1/account/profile', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+// ===================== Charger Favorites =====================
+
+export async function toggleChargerFavorite(chargerId: string, isFavorite: boolean) {
+  return fetchAPI(`/v1/chargers/${chargerId}/favorite`, {
+    method: isFavorite ? 'DELETE' : 'POST',
+  })
+}
+
+export async function fetchChargerFavorites(): Promise<{ favorites: string[] }> {
+  return fetchAPI<{ favorites: string[] }>('/v1/chargers/favorites')
+}
+
+export function useChargerFavorites() {
+  return useQuery({
+    queryKey: ['charger-favorites'],
+    queryFn: fetchChargerFavorites,
+    enabled: !!localStorage.getItem('access_token'),
+    staleTime: 30000,
+  })
+}
+
+// ===================== Plaid / Funding Sources =====================
+
+export interface PlaidLinkToken {
+  link_token: string
+  expiration: string
+}
+
+export interface FundingSourceData {
+  id: string
+  institution_name: string | null
+  account_mask: string | null
+  account_type: string | null
+  is_default: boolean
+  created_at: string
+}
+
+export async function createPlaidLinkToken(): Promise<PlaidLinkToken> {
+  return fetchAPI<PlaidLinkToken>('/v1/wallet/plaid/link-token', { method: 'POST' })
+}
+
+export async function exchangePlaidToken(publicToken: string, accountId: string): Promise<{ ok: boolean }> {
+  return fetchAPI<{ ok: boolean }>('/v1/wallet/plaid/exchange', {
+    method: 'POST',
+    body: JSON.stringify({ public_token: publicToken, account_id: accountId }),
+  })
+}
+
+export async function fetchFundingSources(): Promise<{ funding_sources: FundingSourceData[] }> {
+  return fetchAPI<{ funding_sources: FundingSourceData[] }>('/v1/wallet/funding-sources')
+}
+
+export async function removeFundingSource(id: string): Promise<{ ok: boolean }> {
+  return fetchAPI<{ ok: boolean }>(`/v1/wallet/funding-sources/${id}`, { method: 'DELETE' })
+}
+
+// ===================== Merchant Rewards (Request-to-Join, Claims, Receipts) =====================
+
+export async function requestMerchantJoin(
+  placeId: string,
+  merchantName: string,
+  interestTags?: string[],
+): Promise<RequestToJoinResponse> {
+  return fetchAPI<RequestToJoinResponse>(`/v1/merchants/${placeId}/request-join`, {
+    method: 'POST',
+    body: JSON.stringify({
+      place_id: placeId,
+      merchant_name: merchantName,
+      interest_tags: interestTags,
+    }),
+  })
+}
+
+export function useRequestToJoin() {
+  return useMutation({
+    mutationFn: ({ placeId, merchantName, interestTags }: { placeId: string; merchantName: string; interestTags?: string[] }) =>
+      requestMerchantJoin(placeId, merchantName, interestTags),
+  })
+}
+
+export async function claimReward(
+  merchantName: string,
+  placeId?: string,
+  merchantId?: string,
+  rewardDescription?: string,
+): Promise<ClaimRewardResponse> {
+  return fetchAPI<ClaimRewardResponse>('/v1/rewards/claim', {
+    method: 'POST',
+    body: JSON.stringify({
+      merchant_name: merchantName,
+      place_id: placeId,
+      merchant_id: merchantId,
+      reward_description: rewardDescription,
+    }),
+  })
+}
+
+export function useClaimReward() {
+  return useMutation({
+    mutationFn: ({ merchantName, placeId, merchantId, rewardDescription }: {
+      merchantName: string; placeId?: string; merchantId?: string; rewardDescription?: string
+    }) => claimReward(merchantName, placeId, merchantId, rewardDescription),
+  })
+}
+
+export function useActiveClaims() {
+  return useQuery({
+    queryKey: ['reward-claims', 'active'],
+    queryFn: () => fetchAPI<{ claims: ClaimRewardResponse[] }>('/v1/rewards/claims/active'),
+    enabled: !!localStorage.getItem('access_token'),
+    staleTime: 30000,
+  })
+}
+
+export function useClaimDetail(claimId: string | null) {
+  return useQuery({
+    queryKey: ['reward-claims', claimId],
+    queryFn: () => fetchAPI<ClaimDetailResponse>(`/v1/rewards/claims/${claimId}`),
+    enabled: !!claimId && !!localStorage.getItem('access_token'),
+    staleTime: 10000,
+  })
+}
+
+export async function uploadReceipt(claimId: string, imageBase64: string): Promise<ReceiptUploadResponse> {
+  const url = `${API_BASE_URL}/v1/rewards/claims/${claimId}/receipt`
+  const token = localStorage.getItem('access_token')
+
+  const formData = new FormData()
+  formData.append('image_base64', imageBase64)
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  })
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}))
+    throw new ApiError(response.status, undefined, errData.detail || 'Failed to upload receipt')
+  }
+  return response.json()
+}
+
+export function useUploadReceipt() {
+  return useMutation({
+    mutationFn: ({ claimId, imageBase64 }: { claimId: string; imageBase64: string }) =>
+      uploadReceipt(claimId, imageBase64),
+  })
+}
+
+export function usePlaidLinkToken() {
+  return useQuery({
+    queryKey: ['plaid-link-token'],
+    queryFn: createPlaidLinkToken,
+    enabled: !!localStorage.getItem('access_token'),
+    staleTime: 1800000, // 30 minutes
+  })
+}
+
+export function useFundingSources() {
+  return useQuery({
+    queryKey: ['funding-sources'],
+    queryFn: fetchFundingSources,
+    enabled: !!localStorage.getItem('access_token'),
+    staleTime: 30000,
+  })
+}
+
+// ===================== Referrals =====================
+
+export interface ReferralCodeData {
+  code: string
+  referral_link: string
+}
+
+export interface ReferralStats {
+  total_referrals: number
+  total_earned_cents: number
+  pending_count: number
+}
+
+export async function fetchReferralCode(): Promise<ReferralCodeData> {
+  return fetchAPI<ReferralCodeData>('/v1/referrals/code')
+}
+
+export async function fetchReferralStats(): Promise<ReferralStats> {
+  return fetchAPI<ReferralStats>('/v1/referrals/stats')
+}
+
+export async function redeemReferralCode(code: string): Promise<{ ok: boolean; message: string }> {
+  return fetchAPI<{ ok: boolean; message: string }>('/v1/referrals/redeem', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  })
+}
+
+export function useReferralCode() {
+  return useQuery({
+    queryKey: ['referral-code'],
+    queryFn: fetchReferralCode,
+    enabled: !!localStorage.getItem('access_token'),
+    staleTime: 300000, // 5 minutes
+  })
+}
+
+export function useReferralStats() {
+  return useQuery({
+    queryKey: ['referral-stats'],
+    queryFn: fetchReferralStats,
+    enabled: !!localStorage.getItem('access_token'),
+    staleTime: 60000,
+  })
+}
+
+// ===================== Charger Search (Geocoded) =====================
+
+export interface SearchChargerResult {
+  id: string
+  name: string
+  lat: number
+  lng: number
+  distance_m: number
+  network_name: string | null
+  power_kw: number | null
+  num_evse: number | null
+  connector_types: string[]
+  pricing_per_kwh: number | null
+  has_merchant_perk?: boolean
+  merchant_perk_title?: string
+}
+
+export interface GeocodedSearchResult {
+  chargers: SearchChargerResult[]
+  location: { lat: number; lng: number; name: string } | null
+}
+
+export async function searchChargers(query: string, lat?: number, lng?: number): Promise<GeocodedSearchResult> {
+  const params = new URLSearchParams({ q: query })
+  if (lat !== undefined) params.append('lat', String(lat))
+  if (lng !== undefined) params.append('lng', String(lng))
+  return fetchAPI<GeocodedSearchResult>(`/v1/chargers/search?${params.toString()}`, undefined, false)
+}
+
+// ===================== Street View Proxy =====================
+
+export function getStreetViewUrl(chargerId: string): string {
+  return `${API_BASE_URL}/v1/chargers/${chargerId}/streetview`
+}
+
+// ===================== Tesla Fleet Telemetry Configuration =====================
+
+export async function configureTelemetry(): Promise<{ status: string; vin: string; telemetry_enabled: boolean }> {
+  return fetchAPI('/v1/tesla/configure-telemetry', { method: 'POST' })
+}
+
 // ===================== Device Token Registration =====================
 
 export async function registerDeviceToken(token: string, platform: 'ios' | 'android'): Promise<{ ok: boolean }> {
@@ -1013,4 +1397,37 @@ export const api = {
   delete: <T>(endpoint: string, retryOn401 = true): Promise<T> => {
     return fetchAPI<T>(endpoint, { method: 'DELETE' }, retryOn401)
   },
+}
+
+// ---------------------------------------------------------------------------
+// Loyalty
+// ---------------------------------------------------------------------------
+
+export interface LoyaltyProgressItem {
+  card_id: string
+  program_name: string
+  visits_required: number
+  reward_cents: number
+  reward_description: string | null
+  visit_count: number
+  reward_unlocked: boolean
+  reward_claimed: boolean
+  last_visit_at: string | null
+}
+
+export async function fetchLoyaltyProgress(merchantId: string): Promise<LoyaltyProgressItem[]> {
+  return fetchAPI<LoyaltyProgressItem[]>(`/v1/loyalty/progress?merchant_id=${merchantId}`)
+}
+
+export async function claimLoyaltyReward(cardId: string): Promise<{ ok: boolean; card_id: string; reward_claimed: boolean }> {
+  return fetchAPI(`/v1/loyalty/rewards/${cardId}/claim`, { method: 'POST' })
+}
+
+export function useLoyaltyProgress(merchantId: string | null) {
+  return useQuery({
+    queryKey: ['loyalty-progress', merchantId],
+    queryFn: () => fetchLoyaltyProgress(merchantId!),
+    enabled: !!merchantId,
+    staleTime: 30_000,
+  })
 }

@@ -10,18 +10,15 @@ interface ExclusiveActivatedModalProps {
 }
 
 export function ExclusiveActivatedModal({
-  merchantName: _merchantName,
-  perkTitle: _perkTitle,
+  merchantName,
+  perkTitle,
   remainingMinutes,
   onStartWalking,
   onViewDetails,
 }: ExclusiveActivatedModalProps) {
-  // Note: merchantName and perkTitle available for future enhancement
-  void _merchantName
-  void _perkTitle
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[3000] flex items-center justify-center p-4"
     >
       {/* Backdrop */}
       <div
@@ -54,9 +51,12 @@ export function ExclusiveActivatedModal({
         </div>
 
         {/* Title */}
-        <h2 className="text-2xl font-bold text-gray-900 text-center mb-3">
+        <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">
           Exclusive Activated
         </h2>
+        <p className="text-gray-600 text-center mb-3">
+          {perkTitle ? `${perkTitle} at ${merchantName}` : `Your exclusive at ${merchantName} is active`}
+        </p>
 
         {/* Status badges */}
         <div className="flex flex-col items-center gap-2 mb-6">

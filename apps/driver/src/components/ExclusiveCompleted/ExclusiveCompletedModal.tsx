@@ -3,10 +3,14 @@ import { Button } from '../shared/Button'
 import { modalBackdropOpacity } from '../../ui/tokens'
 
 interface ExclusiveCompletedModalProps {
+  merchantName?: string
+  rewardAmount?: string
   onContinue: (feedback?: { thumbsUp: boolean }) => void
 }
 
 export function ExclusiveCompletedModal({
+  merchantName,
+  rewardAmount,
   onContinue,
 }: ExclusiveCompletedModalProps) {
   const [selectedFeedback, setSelectedFeedback] = useState<'up' | 'down' | null>(null)
@@ -21,7 +25,7 @@ export function ExclusiveCompletedModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[3000] flex items-center justify-center p-4"
     >
       {/* Backdrop */}
       <div
@@ -60,7 +64,9 @@ export function ExclusiveCompletedModal({
 
         {/* Subtitle */}
         <p className="text-gray-600 text-center mb-6">
-          Thanks for charging with Nerava
+          {rewardAmount
+            ? `You earned ${rewardAmount}${merchantName ? ` at ${merchantName}` : ''}`
+            : `Thanks for charging with Nerava${merchantName ? ` at ${merchantName}` : ''}`}
         </p>
 
         {/* Feedback question */}

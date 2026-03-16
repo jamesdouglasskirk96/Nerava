@@ -1,7 +1,8 @@
 @import "tailwindcss";
 
-body {
+html, body {
   margin: 0;
+  background: #ffffff;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
@@ -22,7 +23,6 @@ body {
   overflow: hidden;
   height: 100vh;
   height: 100dvh;
-  padding-bottom: env(safe-area-inset-bottom, 0);
 }
 
 /* CSS variable for dynamic height */

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ArrowLeft, Copy, Share2, Gift, Check } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 
 interface ShareNeravaProps {
   onClose: () => void
@@ -38,7 +39,7 @@ export function ShareNerava({ onClose, referralCode }: ShareNeravaProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-white z-50 flex flex-col">
+    <div className="fixed inset-0 bg-white z-[3000] flex flex-col">
       {/* Header */}
       <header className="flex items-center p-4 border-b border-[#E4E6EB]">
         <button onClick={onClose} className="p-2 -ml-2 hover:bg-gray-100 rounded-full">
@@ -64,13 +65,17 @@ export function ShareNerava({ onClose, referralCode }: ShareNeravaProps) {
 
         {/* QR Code Card */}
         <div className="bg-gray-50 rounded-2xl p-6 mb-4">
-          {/* QR Code Placeholder */}
-          <div className="w-48 h-48 bg-white rounded-xl mx-auto mb-4 flex items-center justify-center border border-[#E4E6EB]">
-            <svg className="w-32 h-32 text-gray-300" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M3 3h6v6H3V3zm2 2v2h2V5H5zm8-2h6v6h-6V3zm2 2v2h2V5h-2zM3 13h6v6H3v-6zm2 2v2h2v-2H5zm8-2h2v2h-2v-2zm2 0h2v2h-2v-2zm2 0h2v2h-2v-2zm-4 4h2v2h-2v-2zm2 0h2v2h-2v-2zm2 0h2v2h-2v-2zm-4 2h2v2h-2v-2zm2 0h2v2h-2v-2zm2 0h2v2h-2v-2z"/>
-            </svg>
+          {/* Real QR Code */}
+          <div className="w-48 h-48 bg-white rounded-xl mx-auto mb-4 flex items-center justify-center border border-[#E4E6EB] p-3">
+            <QRCodeSVG
+              value={referralLink}
+              size={168}
+              bgColor="#ffffff"
+              fgColor="#1877F2"
+              level="M"
+            />
           </div>
-          <p className="text-center text-sm text-[#65676B]">QR Code</p>
+          <p className="text-center text-sm text-[#65676B]">Scan to join Nerava</p>
 
           {/* Referral Code */}
           <div className="mt-4 bg-white rounded-xl p-4 border border-[#E4E6EB]">

@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Heart, LogOut, ChevronRight, X, User, Mail, Car, LogIn, Bell, BellOff, Ruler, ExternalLink, HelpCircle, Zap } from 'lucide-react'
+import { ArrowLeft, Heart, LogOut, ChevronRight, X, User, Mail, Car, LogIn, Bell, BellOff, Ruler, ExternalLink, HelpCircle, Zap, Trash2, AlertTriangle, MessageSquare, Loader2, Send, Activity, Pencil, Phone, Check } from 'lucide-react'
 import { useFavorites } from '../../contexts/FavoritesContext'
 import { ShareNerava } from './ShareNerava'
 import { LoginModal } from './LoginModal'
-import { useTeslaStatus } from '../../services/api'
+import { useTeslaStatus, useReferralCode, useChargerFavorites, api } from '../../services/api'
+import { ProfileCompletionCard } from './ProfileCompletionCard'
+import { AccountStatsCard } from './AccountStatsCard'
 
 interface UserProfile {
   name?: string
@@ -17,13 +19,34 @@ interface UserProfile {
 const NOTIFICATIONS_KEY = 'nerava_notifications_enabled'
 const DISTANCE_UNIT_KEY = 'nerava_distance_unit'
 
-export function AccountPage({ onClose }: { onClose: () => void }) {
+interface AccountPageProps {
+  onClose: () => void
+  onViewActivity?: () => void
+  onViewVehicle?: () => void
+  onChargerSelect?: (chargerId: string) => void
+}
+
+export function AccountPage({ onClose, onViewActivity, onViewVehicle, onChargerSelect }: AccountPageProps) {
   const { favorites, favoriteDetails, toggleFavorite, getMerchantName } = useFavorites()
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [showFavoritesList, setShowFavoritesList] = useState(false)
+  const [favoritesTab, setFavoritesTab] = useState<'merchants' | 'chargers'>('merchants')
   const [showShareNerava, setShowShareNerava] = useState(false)
   const [showLoginModal, setShowLoginModal] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [showFeedback, setShowFeedback] = useState(false)
+  const [feedbackText, setFeedbackText] = useState('')
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false)
+  const [feedbackSent, setFeedbackSent] = useState(false)
+  const [pushTestState, setPushTestState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+  const [pushDiagnostic, setPushDiagnostic] = useState<string | null>(null)
+  const [editingProfile, setEditingProfile] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editEmail, setEditEmail] = useState('')
+  const [profileSaving, setProfileSaving] = useState(false)
   const navigate = useNavigate()
 
   // Preferences state
@@ -36,6 +59,9 @@ export function AccountPage({ onClose }: { onClose: () => void }) {
 
   // Tesla connection status
   const { data: teslaStatus, isLoading: teslaLoading } = useTeslaStatus()
+
+  // Charger favorites
+  const { data: chargerFavData } = useChargerFavorites()
 
   const checkAuth = () => {
     const token = localStorage.getItem('access_token')
@@ -85,19 +111,64 @@ export function AccountPage({ onClose }: { onClose: () => void }) {
   // Get display name from favorites context (with fallback formatting)
   const formatMerchantId = (id: string) => getMerchantName(id)
 
-  // Generate referral code from user profile
-  const referralCode = `NERAVA-EV-${new Date().getFullYear()}`
+  // Fetch unique referral code from backend
+  const { data: referralData } = useReferralCode()
+  const referralCode = referralData?.code || `NERAVA-${new Date().getFullYear()}`
 
   const handleLoginSuccess = () => {
     checkAuth()
     setShowLoginModal(false)
   }
 
-  const handleToggleNotifications = () => {
+  const handleStartEditProfile = () => {
+    setEditName(userProfile?.name === 'EV Driver' ? '' : userProfile?.name || '')
+    setEditEmail(userProfile?.email || '')
+    setEditingProfile(true)
+  }
+
+  const handleSaveProfile = async () => {
+    setProfileSaving(true)
+    try {
+      const updates: { email?: string; display_name?: string } = {}
+      if (editName.trim()) updates.display_name = editName.trim()
+      if (editEmail.trim()) updates.email = editEmail.trim()
+
+      if (Object.keys(updates).length > 0) {
+        await api.put('/v1/account/profile', updates)
+        const stored = localStorage.getItem('nerava_user')
+        if (stored) {
+          const user = JSON.parse(stored)
+          if (updates.display_name) user.name = updates.display_name
+          if (updates.email) user.email = updates.email
+          localStorage.setItem('nerava_user', JSON.stringify(user))
+        }
+        setUserProfile(prev => prev ? {
+          ...prev,
+          name: updates.display_name || prev.name,
+          email: updates.email || prev.email,
+        } : prev)
+      }
+      setEditingProfile(false)
+    } catch (e) {
+      console.error('Failed to update profile:', e)
+    } finally {
+      setProfileSaving(false)
+    }
+  }
+
+  const handleToggleNotifications = useCallback(async () => {
     const newValue = !notificationsEnabled
     setNotificationsEnabled(newValue)
     localStorage.setItem(NOTIFICATIONS_KEY, String(newValue))
-  }
+    // Sync to backend
+    try {
+      await api.put('/v1/account/preferences', { notifications_enabled: newValue })
+    } catch {
+      // Revert on failure
+      setNotificationsEnabled(!newValue)
+      localStorage.setItem(NOTIFICATIONS_KEY, String(!newValue))
+    }
+  }, [notificationsEnabled])
 
   const handleToggleDistanceUnit = () => {
     const newValue = distanceUnit === 'miles' ? 'km' : 'miles'
@@ -115,6 +186,56 @@ export function AccountPage({ onClose }: { onClose: () => void }) {
     }
   }
 
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== 'DELETE') return
+    setDeleteLoading(true)
+    try {
+      await api.post('/v1/account/delete', { confirmation: 'DELETE' })
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('refresh_token')
+      localStorage.removeItem('nerava_user')
+      window.location.reload()
+    } catch {
+      setDeleteLoading(false)
+    }
+  }
+
+  const handleSubmitFeedback = async () => {
+    if (!feedbackText.trim()) return
+    setFeedbackSubmitting(true)
+    try {
+      await api.post('/v1/account/feedback', { message: feedbackText.trim() })
+      setFeedbackSent(true)
+      setTimeout(() => {
+        setShowFeedback(false)
+        setFeedbackText('')
+        setFeedbackSent(false)
+      }, 2000)
+    } catch {
+      // Silent fail
+    } finally {
+      setFeedbackSubmitting(false)
+    }
+  }
+
+  const handleTestPush = async () => {
+    setPushTestState('sending')
+    setPushDiagnostic(null)
+    try {
+      const result = await api.post<{ sent: number; message: string; device_count: number; apns_configured: boolean }>('/v1/notifications/send-test', {})
+      const hasLocalToken = !!localStorage.getItem('nerava_device_token')
+      setPushDiagnostic(
+        `${result.message} | Devices in DB: ${result.device_count} | APNs: ${result.apns_configured ? 'yes' : 'no'} | Local token: ${hasLocalToken ? 'yes' : 'no'}`
+      )
+      setPushTestState(result.sent > 0 ? 'sent' : 'error')
+      setTimeout(() => setPushTestState('idle'), 8000)
+    } catch {
+      setPushDiagnostic('API call failed')
+      setPushTestState('error')
+      setTimeout(() => setPushTestState('idle'), 5000)
+    }
+  }
+
   if (showShareNerava) {
     return <ShareNerava onClose={() => setShowShareNerava(false)} referralCode={referralCode} />
   }
@@ -126,11 +247,15 @@ export function AccountPage({ onClose }: { onClose: () => void }) {
         onClose={() => setShowLoginModal(false)}
         onSuccess={handleLoginSuccess}
       />
-    <div className="fixed inset-0 bg-white z-50 flex flex-col">
+    <div className="flex-1 flex flex-col bg-white min-h-0">
       <header className="flex items-center p-4 border-b border-[#E4E6EB]">
-        <button onClick={showFavoritesList ? () => setShowFavoritesList(false) : onClose} className="p-2 -ml-2 hover:bg-gray-100 rounded-full">
-          <ArrowLeft className="w-6 h-6" />
-        </button>
+        {showFavoritesList ? (
+          <button onClick={() => setShowFavoritesList(false)} className="p-2 -ml-2 hover:bg-gray-100 rounded-full">
+            <ArrowLeft className="w-6 h-6" />
+          </button>
+        ) : (
+          <div className="w-10" />
+        )}
         <h1 className="flex-1 text-center font-semibold text-lg">
           {showFavoritesList ? 'Favorites' : 'Account'}
         </h1>
@@ -138,78 +263,196 @@ export function AccountPage({ onClose }: { onClose: () => void }) {
       </header>
 
       {showFavoritesList ? (
-        <div className="flex-1 overflow-y-auto">
-          {favorites.size === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-gray-500 p-8">
-              <Heart className="w-12 h-12 mb-4 text-gray-300" />
-              <p className="text-center">No favorites yet</p>
-              <p className="text-sm text-center mt-2">Tap the heart icon on any merchant to save it here</p>
-            </div>
+        <div className="flex-1 overflow-y-auto flex flex-col">
+          {/* Tabs */}
+          <div className="flex border-b border-[#E4E6EB]">
+            <button
+              onClick={() => setFavoritesTab('merchants')}
+              className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${
+                favoritesTab === 'merchants'
+                  ? 'text-[#1877F2] border-b-2 border-[#1877F2]'
+                  : 'text-[#65676B]'
+              }`}
+            >
+              Merchants ({favorites.size})
+            </button>
+            <button
+              onClick={() => setFavoritesTab('chargers')}
+              className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${
+                favoritesTab === 'chargers'
+                  ? 'text-[#1877F2] border-b-2 border-[#1877F2]'
+                  : 'text-[#65676B]'
+              }`}
+            >
+              Chargers ({chargerFavData?.favorites?.length || 0})
+            </button>
+          </div>
+
+          {favoritesTab === 'merchants' ? (
+            favorites.size === 0 ? (
+              <div className="flex flex-col items-center justify-center flex-1 text-gray-500 p-8">
+                <Heart className="w-12 h-12 mb-4 text-gray-300" />
+                <p className="text-center">No favorite merchants yet</p>
+                <p className="text-sm text-center mt-2">Tap the heart icon on any merchant to save it here</p>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {Array.from(favorites).map((merchantId) => {
+                  const details = favoriteDetails.get(merchantId)
+                  return (
+                    <div
+                      key={merchantId}
+                      onClick={() => handleViewMerchant(merchantId)}
+                      className="flex items-center p-4 hover:bg-gray-50 active:bg-gray-100 cursor-pointer"
+                    >
+                      {details?.photo_url ? (
+                        <img
+                          src={details.photo_url}
+                          alt={details.name}
+                          className="w-10 h-10 rounded-full object-cover mr-3"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 bg-[#1877F2]/10 rounded-full flex items-center justify-center mr-3">
+                          <Heart className="w-5 h-5 text-[#1877F2] fill-current" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{formatMerchantId(merchantId)}</p>
+                        <p className="text-sm text-gray-500">{details?.category || 'Tap to view details'}</p>
+                      </div>
+                      <button
+                        onClick={(e) => handleRemoveFavorite(e, merchantId)}
+                        className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                      <ChevronRight className="w-5 h-5 text-gray-400 ml-1" />
+                    </div>
+                  )
+                })}
+              </div>
+            )
           ) : (
-            <div className="divide-y">
-              {Array.from(favorites).map((merchantId) => {
-                const details = favoriteDetails.get(merchantId)
-                return (
+            !chargerFavData?.favorites?.length ? (
+              <div className="flex flex-col items-center justify-center flex-1 text-gray-500 p-8">
+                <Zap className="w-12 h-12 mb-4 text-gray-300" />
+                <p className="text-center">No favorite chargers yet</p>
+                <p className="text-sm text-center mt-2">Tap the heart icon on any charger to save it here</p>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {chargerFavData.favorites.map((chargerId) => (
                   <div
-                    key={merchantId}
-                    onClick={() => handleViewMerchant(merchantId)}
+                    key={chargerId}
+                    onClick={() => { onClose(); onChargerSelect?.(chargerId) }}
                     className="flex items-center p-4 hover:bg-gray-50 active:bg-gray-100 cursor-pointer"
                   >
-                    {details?.photo_url ? (
-                      <img
-                        src={details.photo_url}
-                        alt={details.name}
-                        className="w-10 h-10 rounded-full object-cover mr-3"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 bg-[#1877F2]/10 rounded-full flex items-center justify-center mr-3">
-                        <Heart className="w-5 h-5 text-[#1877F2] fill-current" />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{formatMerchantId(merchantId)}</p>
-                      <p className="text-sm text-gray-500">{details?.category || 'Tap to view details'}</p>
+                    <div className="w-10 h-10 bg-green-50 rounded-full flex items-center justify-center mr-3">
+                      <Zap className="w-5 h-5 text-green-600" />
                     </div>
-                    <button
-                      onClick={(e) => handleRemoveFavorite(e, merchantId)}
-                      className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                    <ChevronRight className="w-5 h-5 text-gray-400 ml-1" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">Charger</p>
+                      <p className="text-sm text-gray-500">Tap to view details</p>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-gray-400" />
                   </div>
-                )
-              })}
-            </div>
+                ))}
+              </div>
+            )
           )}
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 pb-8 space-y-4">
           {/* Profile Card or Sign In */}
           {isAuthenticated && userProfile ? (
             <div className="bg-blue-50 rounded-2xl p-5 border border-blue-100">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-16 h-16 bg-[#1877F2] rounded-full flex items-center justify-center">
-                  <User className="w-8 h-8 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold">{userProfile.name}</h2>
-                  <p className="text-sm text-[#65676B]">Member since {userProfile.memberSince}</p>
-                </div>
-              </div>
+              {editingProfile ? (
+                <>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold text-[#050505]">Edit Profile</h3>
+                    <button onClick={() => setEditingProfile(false)} className="p-1 hover:bg-blue-100 rounded-full">
+                      <X className="w-5 h-5 text-[#65676B]" />
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium text-[#65676B] mb-1 block">Display Name</label>
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={e => setEditName(e.target.value)}
+                        placeholder="Your name"
+                        className="w-full px-3 py-2.5 text-sm border border-blue-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#1877F2]"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-[#65676B] mb-1 block">Email</label>
+                      <input
+                        type="email"
+                        value={editEmail}
+                        onChange={e => setEditEmail(e.target.value)}
+                        placeholder="Email address"
+                        className="w-full px-3 py-2.5 text-sm border border-blue-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#1877F2]"
+                      />
+                    </div>
+                    {userProfile.phone && (
+                      <div>
+                        <label className="text-xs font-medium text-[#65676B] mb-1 block">Phone</label>
+                        <div className="px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl text-[#65676B]">
+                          {userProfile.phone}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleSaveProfile}
+                    disabled={profileSaving}
+                    className="mt-4 w-full py-2.5 bg-[#1877F2] text-white text-sm font-semibold rounded-xl hover:bg-[#166FE5] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                  >
+                    {profileSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    Save Changes
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="w-16 h-16 bg-[#1877F2] rounded-full flex items-center justify-center">
+                      <User className="w-8 h-8 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <h2 className="text-xl font-bold">{userProfile.name}</h2>
+                      <p className="text-sm text-[#65676B]">Member since {userProfile.memberSince}</p>
+                    </div>
+                    <button
+                      onClick={handleStartEditProfile}
+                      className="p-2 hover:bg-blue-100 rounded-full transition-colors"
+                      aria-label="Edit profile"
+                    >
+                      <Pencil className="w-5 h-5 text-[#1877F2]" />
+                    </button>
+                  </div>
 
-              {userProfile.email && (
-                <div className="flex items-center gap-3 mb-2">
-                  <Mail className="w-4 h-4 text-[#65676B]" />
-                  <span className="text-sm text-[#050505]">{userProfile.email}</span>
-                </div>
-              )}
+                  {userProfile.phone && (
+                    <div className="flex items-center gap-3 mb-2">
+                      <Phone className="w-4 h-4 text-[#65676B]" />
+                      <span className="text-sm text-[#050505]">{userProfile.phone}</span>
+                    </div>
+                  )}
 
-              {userProfile.vehicle && (
-                <div className="flex items-center gap-3">
-                  <Car className="w-4 h-4 text-[#65676B]" />
-                  <span className="text-sm text-[#050505]">{userProfile.vehicle}</span>
-                </div>
+                  {userProfile.email && (
+                    <div className="flex items-center gap-3 mb-2">
+                      <Mail className="w-4 h-4 text-[#65676B]" />
+                      <span className="text-sm text-[#050505]">{userProfile.email}</span>
+                    </div>
+                  )}
+
+                  {userProfile.vehicle && (
+                    <div className="flex items-center gap-3">
+                      <Car className="w-4 h-4 text-[#65676B]" />
+                      <span className="text-sm text-[#050505]">{userProfile.vehicle}</span>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           ) : (
@@ -255,6 +498,24 @@ export function AccountPage({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
+          {/* Profile Completion */}
+          {isAuthenticated && (
+            <ProfileCompletionCard
+              currentEmail={userProfile?.email}
+              currentName={userProfile?.name === 'EV Driver' ? null : userProfile?.name}
+              onProfileUpdated={(updates) => {
+                setUserProfile(prev => prev ? {
+                  ...prev,
+                  name: updates.display_name || prev.name,
+                  email: updates.email || prev.email,
+                } : prev)
+              }}
+            />
+          )}
+
+          {/* Account Stats */}
+          {isAuthenticated && <AccountStatsCard />}
+
           {/* Connected Vehicles */}
           {isAuthenticated && (
             <div className="bg-gray-50 rounded-2xl border border-[#E4E6EB] overflow-hidden">
@@ -271,23 +532,26 @@ export function AccountPage({ onClose }: { onClose: () => void }) {
                     </div>
                   </div>
                 ) : teslaStatus?.connected ? (
-                  <div className="flex items-center gap-3">
+                  <button
+                    onClick={onViewVehicle}
+                    className="w-full flex items-center gap-3 text-left active:bg-gray-50 rounded-xl transition-colors"
+                  >
                     <div className="w-10 h-10 bg-green-50 rounded-full flex items-center justify-center">
                       <Zap className="w-5 h-5 text-green-600" />
                     </div>
                     <div className="flex-1">
                       <p className="font-medium text-[#050505]">
-                        {teslaStatus.vehicle_name || 'Tesla'}
+                        {teslaStatus.vehicle_name || teslaStatus.vehicle_model || 'Tesla'}
                       </p>
                       <p className="text-sm text-[#65676B]">
-                        {teslaStatus.vehicle_model || 'Connected'}
-                        {teslaStatus.vin ? ` \u00B7 \u2022\u2022\u2022\u2022${teslaStatus.vin.slice(-4)}` : ''}
+                        {teslaStatus.vehicle_name && teslaStatus.vehicle_model && teslaStatus.vehicle_model !== teslaStatus.vehicle_name
+                          ? teslaStatus.vehicle_model
+                          : 'Connected'}
+                        {teslaStatus.vin ? ` \u00B7 VIN \u2022\u2022\u2022${teslaStatus.vin.slice(-4)}` : ''}
                       </p>
                     </div>
-                    <div className="px-2.5 py-1 bg-green-100 rounded-full">
-                      <span className="text-xs font-medium text-green-700">Connected</span>
-                    </div>
-                  </div>
+                    <ChevronRight className="w-5 h-5 text-gray-400" />
+                  </button>
                 ) : (
                   <button
                     onClick={handleConnectTesla}
@@ -305,6 +569,23 @@ export function AccountPage({ onClose }: { onClose: () => void }) {
                 )}
               </div>
             </div>
+          )}
+
+          {/* Charging Activity */}
+          {isAuthenticated && onViewActivity && (
+            <button
+              onClick={onViewActivity}
+              className="w-full p-4 bg-gray-50 rounded-2xl flex items-center gap-3 hover:bg-gray-100 active:bg-gray-200 transition-colors border border-[#E4E6EB]"
+            >
+              <div className="w-10 h-10 bg-green-50 rounded-full flex items-center justify-center">
+                <Activity className="w-5 h-5 text-green-600" />
+              </div>
+              <div className="flex-1 text-left">
+                <p className="font-medium">Charging Activity</p>
+                <p className="text-sm text-[#65676B]">Sessions, stats & rewards</p>
+              </div>
+              <ChevronRight className="w-5 h-5 text-gray-400" />
+            </button>
           )}
 
           {/* Favorites */}
@@ -393,6 +674,37 @@ export function AccountPage({ onClose }: { onClose: () => void }) {
             </div>
           </div>
 
+          {/* Test Push Notification — TEMPORARY */}
+          {isAuthenticated && (
+            <button
+              onClick={handleTestPush}
+              disabled={pushTestState === 'sending'}
+              className={`w-full p-4 rounded-2xl flex items-center gap-3 transition-colors border ${
+                pushTestState === 'sent'
+                  ? 'bg-green-50 border-green-200'
+                  : pushTestState === 'error'
+                  ? 'bg-red-50 border-red-200'
+                  : 'bg-orange-50 border-orange-200 hover:bg-orange-100 active:bg-orange-200'
+              }`}
+            >
+              <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                {pushTestState === 'sending' ? (
+                  <Loader2 className="w-5 h-5 text-orange-600 animate-spin" />
+                ) : (
+                  <Send className="w-5 h-5 text-orange-600" />
+                )}
+              </div>
+              <div className="flex-1 text-left">
+                <p className="font-medium text-orange-800">Test Push Notification</p>
+                <p className="text-sm text-orange-600">
+                  {pushTestState === 'sending' ? 'Sending...' :
+                   pushDiagnostic ? pushDiagnostic :
+                   'Tap to send a test notification'}
+                </p>
+              </div>
+            </button>
+          )}
+
           {/* Support */}
           <a
             href="https://nerava.network/support"
@@ -410,6 +722,21 @@ export function AccountPage({ onClose }: { onClose: () => void }) {
             <ExternalLink className="w-4 h-4 text-gray-400" />
           </a>
 
+          {/* Send Feedback */}
+          <button
+            onClick={() => setShowFeedback(true)}
+            className="w-full p-4 bg-gray-50 rounded-2xl flex items-center gap-3 hover:bg-gray-100 active:bg-gray-200 transition-colors border border-[#E4E6EB]"
+          >
+            <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+              <MessageSquare className="w-5 h-5 text-[#65676B]" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-medium">Send Feedback</p>
+              <p className="text-sm text-[#65676B]">Help us improve Nerava</p>
+            </div>
+            <ChevronRight className="w-5 h-5 text-gray-400" />
+          </button>
+
           {/* Logout - only show when authenticated */}
           {isAuthenticated && (
             <button
@@ -422,9 +749,99 @@ export function AccountPage({ onClose }: { onClose: () => void }) {
               <span className="text-red-600 font-medium">Log out</span>
             </button>
           )}
+
+          {/* Delete Account - danger zone */}
+          {isAuthenticated && (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="w-full p-4 bg-white rounded-2xl flex items-center gap-3 hover:bg-red-50 transition-colors border border-gray-200"
+            >
+              <div className="w-10 h-10 bg-red-50 rounded-full flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-red-500" />
+              </div>
+              <span className="text-red-500 font-medium text-sm">Delete Account</span>
+            </button>
+          )}
         </div>
       )}
     </div>
+
+    {/* Delete Account Confirmation Modal */}
+    {showDeleteConfirm && (
+      <div className="fixed inset-0 z-[4000] bg-black/50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl max-w-sm w-full p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+              <AlertTriangle className="w-5 h-5 text-red-600" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900">Delete Account</h3>
+          </div>
+          <p className="text-sm text-gray-600 mb-4">
+            This action is permanent. All your data, rewards, and history will be deleted. Type <strong>DELETE</strong> to confirm.
+          </p>
+          <input
+            type="text"
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.target.value)}
+            placeholder="Type DELETE"
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl mb-4 text-sm focus:outline-none focus:ring-2 focus:ring-red-300"
+          />
+          <div className="flex gap-3">
+            <button
+              onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText('') }}
+              className="flex-1 py-3 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDeleteAccount}
+              disabled={deleteConfirmText !== 'DELETE' || deleteLoading}
+              className="flex-1 py-3 bg-red-600 text-white font-medium rounded-xl hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+            >
+              {deleteLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Feedback Modal */}
+    {showFeedback && (
+      <div className="fixed inset-0 z-[4000] bg-black/50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl max-w-sm w-full p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-gray-900">Send Feedback</h3>
+            <button onClick={() => { setShowFeedback(false); setFeedbackText('') }} className="p-1 hover:bg-gray-100 rounded-full">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          {feedbackSent ? (
+            <div className="text-center py-6">
+              <p className="text-green-600 font-medium">Thank you for your feedback!</p>
+            </div>
+          ) : (
+            <>
+              <textarea
+                value={feedbackText}
+                onChange={(e) => setFeedbackText(e.target.value)}
+                placeholder="Tell us what you think..."
+                rows={4}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl mb-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"
+              />
+              <button
+                onClick={handleSubmitFeedback}
+                disabled={!feedbackText.trim() || feedbackSubmitting}
+                className="w-full py-3 bg-[#1877F2] text-white font-semibold rounded-xl hover:bg-[#166FE5] disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+              >
+                {feedbackSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                Submit
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    )}
     </>
   )
 }

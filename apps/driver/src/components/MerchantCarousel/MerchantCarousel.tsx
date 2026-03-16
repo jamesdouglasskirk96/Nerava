@@ -1,7 +1,9 @@
 // Merchant Carousel component matching Figma reference
+import { useEffect, useRef, useCallback } from 'react'
 import { ChevronLeft, ChevronRight, Heart } from 'lucide-react'
 import { ImageWithFallback } from '../shared/ImageWithFallback'
 import { capture, DRIVER_EVENTS } from '../../analytics'
+import { trackAdImpressions } from '../../services/api'
 import type { MockMerchant } from '../../mock/mockMerchants'
 import type { MockCharger } from '../../mock/mockChargers'
 
@@ -41,6 +43,48 @@ export function MerchantCarousel({
   likedMerchants,
 }: MerchantCarouselProps) {
   const { featured, nearby } = merchantSet
+
+  // Impression tracking: batch visible merchant IDs every 5s
+  const impressionBuffer = useRef<Map<string, string>>(new Map())
+  const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const flushImpressions = useCallback(() => {
+    if (impressionBuffer.current.size === 0) return
+    const impressions = Array.from(impressionBuffer.current.entries()).map(([merchant_id, impression_type]) => ({
+      merchant_id,
+      impression_type,
+    }))
+    impressionBuffer.current.clear()
+    trackAdImpressions(impressions).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    // Record featured merchant impression
+    if (featured?.id) {
+      impressionBuffer.current.set(featured.id, 'featured')
+    }
+    // Record nearby merchant impressions
+    if (nearby) {
+      for (const m of nearby) {
+        if (m?.id) {
+          impressionBuffer.current.set(m.id, 'carousel')
+        }
+      }
+    }
+
+    // Debounce flush to 5 seconds
+    if (flushTimer.current) clearTimeout(flushTimer.current)
+    flushTimer.current = setTimeout(flushImpressions, 5000)
+
+    return () => {
+      if (flushTimer.current) clearTimeout(flushTimer.current)
+    }
+  }, [featured, nearby, flushImpressions])
+
+  // Flush on unmount
+  useEffect(() => {
+    return () => { flushImpressions() }
+  }, [flushImpressions])
 
   // Dynamic font size for merchant/charger titles to ensure single line
   const getTitleFontSize = (name: string) => {

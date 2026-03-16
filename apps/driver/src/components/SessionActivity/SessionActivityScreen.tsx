@@ -31,7 +31,7 @@ export function SessionActivityScreen({
   const isLoading = teslaLoading || sessionsLoading
 
   return (
-    <div className="fixed inset-0 bg-white z-50 flex flex-col" style={{ height: 'var(--app-height, 100dvh)' }}>
+    <div className="fixed inset-0 bg-white z-[3000] flex flex-col" style={{ height: 'var(--app-height, 100dvh)' }}>
       {/* Header */}
       <header className="bg-white border-b border-[#E4E6EB] flex-shrink-0 px-4 py-3 flex items-center">
         <button

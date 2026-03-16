@@ -1,0 +1,662 @@
+import { useState, useRef, useCallback, useEffect } from 'react'
+import { X, Navigation, Zap, MapPin, Shield, Users, DollarSign, Phone, Globe, Coffee, ShoppingBag, Utensils, Dumbbell, TreePine, Popcorn, CircleDollarSign } from 'lucide-react'
+import { useChargerDetail, useDriverCampaigns } from '../../services/api'
+import type { ChargerDetailNearbyMerchant, DriverCampaign } from '../../services/api'
+import { capture, DRIVER_EVENTS } from '../../analytics'
+import { openExternalUrl } from '../../utils/openExternal'
+
+type SheetState = 'peek' | 'expanded' | 'dismissed'
+type Tab = 'overview' | 'rewards' | 'amenities'
+
+interface ChargerDetailSheetProps {
+  chargerId: string
+  chargerName: string
+  networkName?: string
+  lat?: number
+  lng?: number
+  userLat?: number
+  userLng?: number
+  onClose: () => void
+  isCharging: boolean
+  onViewSession?: () => void
+}
+
+const NETWORK_COLORS: Record<string, string> = {
+  Tesla: '#E31937',
+  ChargePoint: '#10B981',
+  'Electrify America': '#2563EB',
+  EVgo: '#1877F2',
+  Blink: '#14B8A6',
+}
+
+function getNetworkColor(network?: string | null): string {
+  if (network && NETWORK_COLORS[network]) return NETWORK_COLORS[network]
+  return '#1877F2'
+}
+
+function formatDistance(meters: number): string {
+  if (meters < 1000) return `${Math.round(meters)}m`
+  return `${(meters / 1609.34).toFixed(1)} mi`
+}
+
+function getScoreLabel(score: number): { label: string; color: string; bg: string } {
+  if (score >= 80) return { label: 'Excellent', color: 'text-green-700', bg: 'bg-green-50' }
+  if (score >= 60) return { label: 'Good', color: 'text-yellow-700', bg: 'bg-yellow-50' }
+  if (score >= 40) return { label: 'Fair', color: 'text-orange-700', bg: 'bg-orange-50' }
+  return { label: 'Poor', color: 'text-red-700', bg: 'bg-red-50' }
+}
+
+const CATEGORY_ICONS: Record<string, typeof Coffee> = {
+  cafe: Coffee,
+  coffee_shop: Coffee,
+  restaurant: Utensils,
+  food: Utensils,
+  bakery: Utensils,
+  store: ShoppingBag,
+  shopping: ShoppingBag,
+  shopping_mall: ShoppingBag,
+  gym: Dumbbell,
+  fitness: Dumbbell,
+  park: TreePine,
+  movie_theater: Popcorn,
+}
+
+function getCategoryIcon(category?: string | null): typeof Coffee {
+  if (!category) return ShoppingBag
+  const key = category.toLowerCase().replace(/\s+/g, '_')
+  for (const [k, icon] of Object.entries(CATEGORY_ICONS)) {
+    if (key.includes(k)) return icon
+  }
+  return ShoppingBag
+}
+
+export function ChargerDetailSheet({
+  chargerId,
+  chargerName,
+  networkName,
+  lat,
+  lng,
+  userLat,
+  userLng,
+  onClose,
+  isCharging,
+  onViewSession,
+}: ChargerDetailSheetProps) {
+  const { data: detail, isLoading } = useChargerDetail(chargerId, userLat, userLng)
+  const { data: campaignsData } = useDriverCampaigns(userLat, userLng, chargerId)
+  const campaigns = campaignsData?.campaigns ?? []
+  const [sheetState, setSheetState] = useState<SheetState>('peek')
+  const [activeTab, setActiveTab] = useState<Tab>('overview')
+  const [actionMerchant, setActionMerchant] = useState<ChargerDetailNearbyMerchant | null>(null)
+  const sheetRef = useRef<HTMLDivElement>(null)
+  const dragStartY = useRef(0)
+  const dragStartTranslate = useRef(0)
+  const isDragging = useRef(false)
+
+  useEffect(() => {
+    capture(DRIVER_EVENTS.CHARGER_DETAIL_VIEWED, {
+      charger_id: chargerId,
+      charger_name: chargerName,
+      network: networkName,
+    })
+  }, [chargerId, chargerName, networkName])
+
+  // Auto-expand after a short delay
+  useEffect(() => {
+    const timer = setTimeout(() => setSheetState('expanded'), 300)
+    return () => clearTimeout(timer)
+  }, [])
+
+  const networkColor = getNetworkColor(detail?.network_name ?? networkName)
+  const connectors = detail?.connector_types ?? []
+  const rewardCents = detail?.active_reward_cents ?? 0
+
+  // Sheet height percentages
+  const getTranslateY = useCallback((state: SheetState) => {
+    switch (state) {
+      case 'peek': return 60 // 60% from top = 40% visible
+      case 'expanded': return 8 // 8% from top = 92% visible
+      case 'dismissed': return 100
+    }
+  }, [])
+
+  // Drag handlers — only on the drag handle
+  const handleDragStart = useCallback((e: React.TouchEvent | React.MouseEvent) => {
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY
+    dragStartY.current = clientY
+    dragStartTranslate.current = getTranslateY(sheetState)
+    isDragging.current = true
+  }, [sheetState, getTranslateY])
+
+  const handleDragMove = useCallback((e: React.TouchEvent | React.MouseEvent) => {
+    if (!isDragging.current || !sheetRef.current) return
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY
+    const deltaPercent = ((clientY - dragStartY.current) / window.innerHeight) * 100
+    const newTranslate = Math.max(8, Math.min(100, dragStartTranslate.current + deltaPercent))
+    sheetRef.current.style.transition = 'none'
+    sheetRef.current.style.transform = `translateY(${newTranslate}%)`
+  }, [])
+
+  const handleDragEnd = useCallback((e: React.TouchEvent | React.MouseEvent) => {
+    if (!isDragging.current || !sheetRef.current) return
+    isDragging.current = false
+    const clientY = 'changedTouches' in e ? e.changedTouches[0].clientY : e.clientY
+    const deltaPercent = ((clientY - dragStartY.current) / window.innerHeight) * 100
+
+    sheetRef.current.style.transition = ''
+
+    if (deltaPercent > 30) {
+      // Dragged down significantly
+      if (sheetState === 'expanded') {
+        setSheetState('peek')
+      } else {
+        setSheetState('dismissed')
+        setTimeout(onClose, 300)
+      }
+    } else if (deltaPercent < -20) {
+      // Dragged up
+      setSheetState('expanded')
+    } else {
+      // Snap back
+      sheetRef.current.style.transform = `translateY(${getTranslateY(sheetState)}%)`
+    }
+  }, [sheetState, onClose, getTranslateY])
+
+  const handleGetDirections = () => {
+    const destLat = detail?.lat ?? lat
+    const destLng = detail?.lng ?? lng
+    capture(DRIVER_EVENTS.CHARGER_DIRECTIONS_CLICKED, {
+      charger_id: chargerId,
+      charger_name: chargerName,
+    })
+    if (destLat && destLng) {
+      openExternalUrl(`https://www.google.com/maps/dir/?api=1&destination=${destLat},${destLng}`)
+    }
+  }
+
+  // Merchant action sheet handlers
+  const handleMerchantCall = (m: ChargerDetailNearbyMerchant) => {
+    if (m.phone) openExternalUrl(`tel:${m.phone}`)
+    setActionMerchant(null)
+  }
+
+  const handleMerchantWebsite = (m: ChargerDetailNearbyMerchant) => {
+    if (m.website) openExternalUrl(m.website)
+    setActionMerchant(null)
+  }
+
+  const handleMerchantDirections = (m: ChargerDetailNearbyMerchant) => {
+    if (m.lat && m.lng) {
+      openExternalUrl(`https://www.google.com/maps/dir/?api=1&destination=${m.lat},${m.lng}`)
+    }
+    setActionMerchant(null)
+  }
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 z-[2999]"
+        onClick={() => {
+          if (sheetState === 'expanded') {
+            setSheetState('peek')
+          } else {
+            setSheetState('dismissed')
+            setTimeout(onClose, 300)
+          }
+        }}
+      />
+
+      {/* Sheet */}
+      <div
+        ref={sheetRef}
+        className="fixed inset-x-0 bottom-0 z-[3000] bg-white rounded-t-3xl shadow-2xl flex flex-col"
+        style={{
+          height: '92vh',
+          transform: `translateY(${getTranslateY(sheetState)}%)`,
+          transition: 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
+        }}
+      >
+        {/* Drag handle */}
+        <div
+          className="flex-shrink-0 pt-3 pb-2 cursor-grab active:cursor-grabbing touch-none"
+          onTouchStart={handleDragStart}
+          onTouchMove={handleDragMove}
+          onTouchEnd={handleDragEnd}
+          onMouseDown={handleDragStart}
+          onMouseMove={handleDragMove}
+          onMouseUp={handleDragEnd}
+        >
+          <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto" />
+        </div>
+
+        {/* Header */}
+        <div className="flex-shrink-0 px-5 pb-3">
+          <div className="flex items-start justify-between">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: networkColor }} />
+                <h2 className="text-lg font-semibold text-[#050505] truncate">{detail?.name ?? chargerName}</h2>
+              </div>
+              <p className="text-sm text-[#65676B]">
+                {detail?.network_name ?? networkName ?? 'Charging Station'}
+                {detail?.distance_m != null && ` · ${formatDistance(detail.distance_m)}`}
+                {detail?.drive_time_min != null && ` · ${detail.drive_time_min} min`}
+              </p>
+
+              {/* Live drivers */}
+              {detail && detail.drivers_charging_now > 0 && (
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                  </span>
+                  <span className="text-xs font-medium text-green-700">
+                    {detail.drivers_charging_now} charging now
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => {
+                setSheetState('dismissed')
+                setTimeout(onClose, 300)
+              }}
+              className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 ml-3 flex-shrink-0"
+            >
+              <X className="w-4 h-4 text-gray-500" />
+            </button>
+          </div>
+
+          {/* Quick action row */}
+          <div className="flex gap-2 mt-3">
+            <button
+              onClick={handleGetDirections}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#1877F2] text-white rounded-xl text-sm font-medium active:scale-[0.98] transition-transform"
+            >
+              <Navigation className="w-3.5 h-3.5" />
+              Directions
+            </button>
+            {isCharging && onViewSession && (
+              <button
+                onClick={onViewSession}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-green-500 text-white rounded-xl text-sm font-medium active:scale-[0.98] transition-transform"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                View Session
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex-shrink-0 flex border-b border-gray-100 px-5">
+          {(['overview', 'rewards', 'amenities'] as Tab[]).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`flex-1 py-2.5 text-sm font-medium capitalize transition-colors relative ${
+                activeTab === tab ? 'text-[#1877F2]' : 'text-[#65676B]'
+              }`}
+            >
+              {tab}
+              {activeTab === tab && (
+                <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-[#1877F2] rounded-full" />
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab content */}
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          {isLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="bg-gray-50 rounded-2xl p-4 animate-pulse h-16" />
+              ))}
+            </div>
+          ) : activeTab === 'overview' ? (
+            <OverviewTab detail={detail} connectors={connectors} rewardCents={rewardCents} />
+          ) : activeTab === 'rewards' ? (
+            <RewardsTab rewardCents={rewardCents} detail={detail} campaigns={campaigns} />
+          ) : (
+            <AmenitiesTab
+              merchants={detail?.nearby_merchants ?? []}
+              onMerchantTap={setActionMerchant}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Merchant Action Sheet */}
+      {actionMerchant && (
+        <MerchantActionSheet
+          merchant={actionMerchant}
+          onCall={() => handleMerchantCall(actionMerchant)}
+          onWebsite={() => handleMerchantWebsite(actionMerchant)}
+          onDirections={() => handleMerchantDirections(actionMerchant)}
+          onClose={() => setActionMerchant(null)}
+        />
+      )}
+    </>
+  )
+}
+
+// ─── Overview Tab ────────────────────────────────────────────────────────────
+
+function OverviewTab({ detail, connectors, rewardCents }: { detail: ReturnType<typeof useChargerDetail>['data']; connectors: string[]; rewardCents: number }) {
+  if (!detail) return null
+
+  return (
+    <div className="space-y-3">
+      {/* Network & Power */}
+      <InfoRow
+        icon={<Zap className="w-4 h-4 text-[#1877F2]" />}
+        iconBg="bg-[#1877F2]/10"
+        title="Power"
+        value={[
+          detail.num_evse ? `${detail.num_evse} stalls` : null,
+          detail.power_kw ? `${detail.power_kw} kW` : null,
+        ].filter(Boolean).join(' · ') || 'Check station'}
+      />
+
+      {/* Pricing with reward badge */}
+      {detail.pricing_per_kwh != null && (
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+            <DollarSign className="w-4 h-4 text-green-600" />
+          </div>
+          <div className="flex-1 min-w-0 py-0.5">
+            <p className="text-xs text-[#65676B]">Pricing</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-[#050505]">
+                ${detail.pricing_per_kwh.toFixed(2)}/kWh{detail.pricing_source === 'network_average' ? ' (avg)' : ''}
+              </p>
+              {rewardCents > 0 && (
+                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-[#1877F2] text-white text-xs font-bold rounded-full">
+                  <CircleDollarSign className="w-3 h-3" />
+                  {(rewardCents / 100).toFixed(0)} reward
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Address */}
+      {detail.address && (
+        <InfoRow
+          icon={<MapPin className="w-4 h-4 text-[#1877F2]" />}
+          iconBg="bg-[#1877F2]/10"
+          title="Address"
+          value={[detail.address, detail.city, detail.state].filter(Boolean).join(', ')}
+        />
+      )}
+
+      {/* Connectors */}
+      {connectors.length > 0 && (
+        <div className="flex flex-wrap gap-2 pt-1">
+          {connectors.map((c) => (
+            <span key={c} className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-full text-xs font-medium text-[#050505]">
+              {c}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Nerava Score */}
+      {detail.nerava_score != null && (
+        <InfoRow
+          icon={<Shield className="w-4 h-4 text-purple-600" />}
+          iconBg="bg-purple-100"
+          title="Nerava Score"
+          value={`${getScoreLabel(detail.nerava_score).label} (${Math.round(detail.nerava_score)})`}
+        />
+      )}
+
+      {/* Community */}
+      {detail.total_sessions_30d > 0 && (
+        <InfoRow
+          icon={<Users className="w-4 h-4 text-purple-600" />}
+          iconBg="bg-purple-100"
+          title="Community"
+          value={`${detail.total_sessions_30d} sessions · ${detail.unique_drivers_30d} drivers this month${detail.avg_duration_min > 0 ? ` · avg ${detail.avg_duration_min} min` : ''}`}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── Rewards Tab ─────────────────────────────────────────────────────────────
+
+function RewardsTab({ rewardCents, detail, campaigns }: { rewardCents: number; detail: ReturnType<typeof useChargerDetail>['data']; campaigns: DriverCampaign[] }) {
+  const hasCampaigns = campaigns.length > 0
+
+  if (!hasCampaigns && rewardCents === 0) {
+    return (
+      <div className="text-center py-8">
+        <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+          <DollarSign className="w-7 h-7 text-gray-400" />
+        </div>
+        <p className="text-sm font-medium text-[#050505]">No active rewards</p>
+        <p className="text-xs text-[#65676B] mt-1">Check back later — campaigns are added regularly</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Campaign cards */}
+      {campaigns.map((c) => (
+        <div
+          key={c.id}
+          className="bg-white border border-[#E4E6EB] rounded-2xl p-4 relative overflow-hidden"
+        >
+          {/* Blue accent bar */}
+          <div className="absolute top-0 left-0 w-1 h-full bg-[#1877F2]" />
+
+          <div className="flex items-start justify-between">
+            <div className="flex-1 min-w-0 ml-2">
+              <div className="flex items-center gap-2 mb-1">
+                {c.sponsor_logo_url ? (
+                  <img src={c.sponsor_logo_url} alt="" className="w-6 h-6 rounded-full object-cover" />
+                ) : (
+                  <div className="w-6 h-6 bg-[#1877F2]/10 rounded-full flex items-center justify-center">
+                    <Zap className="w-3.5 h-3.5 text-[#1877F2]" />
+                  </div>
+                )}
+                <span className="text-xs font-medium text-[#65676B]">{c.sponsor_name}</span>
+              </div>
+              <p className="text-sm font-semibold text-[#050505]">{c.name}</p>
+              {c.description && (
+                <p className="text-xs text-[#65676B] mt-0.5 line-clamp-2">{c.description}</p>
+              )}
+              {c.end_date && (
+                <p className="text-xs text-[#65676B] mt-1">
+                  Ends {new Date(c.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                </p>
+              )}
+            </div>
+
+            {/* Reward amount */}
+            <div className="flex-shrink-0 ml-3 text-right">
+              <div className="inline-flex items-center gap-1 px-3 py-1.5 bg-[#1877F2] rounded-xl">
+                <CircleDollarSign className="w-4 h-4 text-white" />
+                <span className="text-lg font-bold text-white">
+                  {(c.reward_cents / 100).toFixed(c.reward_cents % 100 === 0 ? 0 : 2)}
+                </span>
+              </div>
+              <p className="text-[10px] text-[#65676B] mt-1">per session</p>
+            </div>
+          </div>
+
+          {/* Eligibility badge */}
+          {!c.eligible && (
+            <div className="mt-2 ml-2 inline-flex items-center px-2 py-0.5 bg-orange-50 border border-orange-200 rounded-full text-xs text-orange-700">
+              Not eligible yet
+            </div>
+          )}
+        </div>
+      ))}
+
+      {/* Fallback: show generic reward if campaigns didn't load but active_reward_cents exists */}
+      {!hasCampaigns && rewardCents > 0 && (
+        <div className="bg-gradient-to-br from-[#1877F2] to-[#0D5BC6] rounded-2xl p-5 text-white">
+          <div className="flex items-center gap-2 mb-2">
+            <CircleDollarSign className="w-5 h-5" />
+            <span className="text-sm font-medium opacity-90">Active Reward</span>
+          </div>
+          <p className="text-3xl font-bold">${(rewardCents / 100).toFixed(2)}</p>
+          <p className="text-sm opacity-80 mt-1">per qualifying session at this charger</p>
+        </div>
+      )}
+
+      {/* Earning potential */}
+      {(hasCampaigns || rewardCents > 0) && detail?.pricing_per_kwh != null && (
+        <div className="bg-green-50 rounded-2xl p-4">
+          <p className="text-sm font-medium text-green-800">Charge here to earn</p>
+          <p className="text-xs text-green-700 mt-1">
+            Complete a qualifying charging session to receive the reward directly in your Nerava wallet.
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Amenities Tab ───────────────────────────────────────────────────────────
+
+function AmenitiesTab({
+  merchants,
+  onMerchantTap,
+}: {
+  merchants: ChargerDetailNearbyMerchant[]
+  onMerchantTap: (m: ChargerDetailNearbyMerchant) => void
+}) {
+  if (merchants.length === 0) {
+    return (
+      <div className="text-center py-8">
+        <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+          <MapPin className="w-7 h-7 text-gray-400" />
+        </div>
+        <p className="text-sm font-medium text-[#050505]">No nearby amenities</p>
+        <p className="text-xs text-[#65676B] mt-1">We haven't found merchants near this charger yet</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-1">
+      {merchants.map((m) => {
+        const Icon = getCategoryIcon(m.category)
+        return (
+          <button
+            key={m.place_id}
+            onClick={() => onMerchantTap(m)}
+            className="w-full flex items-center gap-3 py-3 px-1 active:bg-gray-50 rounded-xl transition-colors text-left"
+          >
+            <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <Icon className="w-5 h-5 text-gray-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-[#050505] truncate">{m.name}</p>
+              <p className="text-xs text-[#65676B]">
+                {m.walk_time_min} min walk
+                {m.category && ` · ${m.category}`}
+              </p>
+            </div>
+            {m.has_exclusive && m.exclusive_title && (
+              <span className="flex-shrink-0 px-2 py-1 bg-amber-50 border border-amber-200 rounded-full text-xs font-medium text-amber-700">
+                {m.exclusive_title}
+              </span>
+            )}
+            {m.has_exclusive && !m.exclusive_title && (
+              <span className="flex-shrink-0 px-2 py-1 bg-amber-50 border border-amber-200 rounded-full text-xs font-medium text-amber-700">
+                Deal
+              </span>
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── Shared Components ───────────────────────────────────────────────────────
+
+function InfoRow({ icon, iconBg, title, value }: { icon: React.ReactNode; iconBg: string; title: string; value: string }) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className={`w-9 h-9 ${iconBg} rounded-full flex items-center justify-center flex-shrink-0`}>
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0 py-0.5">
+        <p className="text-xs text-[#65676B]">{title}</p>
+        <p className="text-sm font-medium text-[#050505]">{value}</p>
+      </div>
+    </div>
+  )
+}
+
+function MerchantActionSheet({
+  merchant,
+  onCall,
+  onWebsite,
+  onDirections,
+  onClose,
+}: {
+  merchant: ChargerDetailNearbyMerchant
+  onCall: () => void
+  onWebsite: () => void
+  onDirections: () => void
+  onClose: () => void
+}) {
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/40 z-[3100]" onClick={onClose} />
+      <div className="fixed bottom-0 inset-x-0 z-[3101] bg-white rounded-t-2xl animate-slide-up">
+        <div className="pt-3 pb-2">
+          <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto" />
+        </div>
+        <div className="px-5 pb-2">
+          <p className="text-base font-semibold text-[#050505]">{merchant.name}</p>
+          <p className="text-xs text-[#65676B]">{merchant.walk_time_min} min walk</p>
+        </div>
+        <div className="px-5 pb-6 space-y-1" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1.5rem)' }}>
+          {merchant.phone && (
+            <button
+              onClick={onCall}
+              className="w-full flex items-center gap-3 py-3 px-3 rounded-xl active:bg-gray-50 transition-colors"
+            >
+              <Phone className="w-5 h-5 text-[#1877F2]" />
+              <span className="text-sm font-medium">Call</span>
+            </button>
+          )}
+          {merchant.website && (
+            <button
+              onClick={onWebsite}
+              className="w-full flex items-center gap-3 py-3 px-3 rounded-xl active:bg-gray-50 transition-colors"
+            >
+              <Globe className="w-5 h-5 text-[#1877F2]" />
+              <span className="text-sm font-medium">Visit Website</span>
+            </button>
+          )}
+          <button
+            onClick={onDirections}
+            className="w-full flex items-center gap-3 py-3 px-3 rounded-xl active:bg-gray-50 transition-colors"
+          >
+            <Navigation className="w-5 h-5 text-[#1877F2]" />
+            <span className="text-sm font-medium">Get Directions</span>
+          </button>
+          <button
+            onClick={onClose}
+            className="w-full py-3 text-sm font-medium text-[#65676B] rounded-xl active:bg-gray-50 transition-colors mt-1"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}

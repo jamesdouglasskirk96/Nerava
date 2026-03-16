@@ -20,6 +20,12 @@ export function TeslaCallbackScreen() {
 
     teslaLoginCallback(code, state)
       .then((data) => {
+        // Notify native bridge of auth token so it can trigger notification permission
+        const token = localStorage.getItem('access_token')
+        if (token && (window as any).neravaNative?.setAuthToken) {
+          (window as any).neravaNative.setAuthToken(token)
+        }
+
         const vehicles: TeslaVehicle[] = data.vehicles || []
 
         if (vehicles.length === 1) {

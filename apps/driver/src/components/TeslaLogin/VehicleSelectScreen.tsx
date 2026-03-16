@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { teslaSelectVehicle, ApiError } from '../../services/auth'
 import type { TeslaVehicle } from '../../services/auth'
+import { configureTelemetry } from '../../services/api'
+import { capture } from '../../analytics'
+import { DRIVER_EVENTS } from '../../analytics/events'
 
 export function VehicleSelectScreen() {
   const location = useLocation()
@@ -16,10 +19,11 @@ export function VehicleSelectScreen() {
 
     try {
       await teslaSelectVehicle(vehicle.id)
-      // Request always-on location via native bridge if available
-      if (window.neravaNative?.requestAlwaysLocation) {
-        window.neravaNative.requestAlwaysLocation()
-      }
+      // Location permissions already handled by iOS native layer — don't re-request here
+      // Configure Fleet Telemetry for real-time charging detection (non-blocking)
+      configureTelemetry()
+        .then(() => capture(DRIVER_EVENTS.TELEMETRY_CONFIGURED))
+        .catch(() => capture(DRIVER_EVENTS.TELEMETRY_CONFIG_FAILED))
       navigate('/', { replace: true })
     } catch (err) {
       if (err instanceof ApiError) {

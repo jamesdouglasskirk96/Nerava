@@ -3,7 +3,19 @@ import { ApiError } from './api'
 
 export { ApiError }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.nerava.network'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
+
+/**
+ * Persist token to native Keychain (iOS) or SecureTokenStore (Android)
+ * so the session survives app restarts.
+ */
+function syncTokenToNative(token: string) {
+  try {
+    window.neravaNative?.setAuthToken(token)
+  } catch {
+    // Bridge not available (running in regular browser)
+  }
+}
 
 export interface OTPStartRequest {
   phone: string
@@ -119,17 +131,21 @@ export async function otpVerify(phone: string, code: string): Promise<TokenRespo
   }
 
   const data = await response.json()
-  
+
   // Store tokens
   localStorage.setItem('access_token', data.access_token)
   if (data.refresh_token) {
     localStorage.setItem('refresh_token', data.refresh_token)
   }
-  
+  syncTokenToNative(data.access_token)
+
   // Store user info for account page
   if (data.user) {
     localStorage.setItem('nerava_user', JSON.stringify(data.user))
   }
+
+  // Notify same-window listeners (storage event only fires cross-tab)
+  window.dispatchEvent(new Event('nerava:auth-changed'))
 
   return data
 }
@@ -164,9 +180,12 @@ export async function googleAuth(idToken: string): Promise<TokenResponse> {
   if (data.refresh_token) {
     localStorage.setItem('refresh_token', data.refresh_token)
   }
+  syncTokenToNative(data.access_token)
   if (data.user) {
     localStorage.setItem('nerava_user', JSON.stringify(data.user))
   }
+
+  window.dispatchEvent(new Event('nerava:auth-changed'))
 
   return data
 }
@@ -231,9 +250,12 @@ export async function teslaLoginCallback(code: string, state: string): Promise<T
   if (data.refresh_token) {
     localStorage.setItem('refresh_token', data.refresh_token)
   }
+  syncTokenToNative(data.access_token)
   if (data.user) {
     localStorage.setItem('nerava_user', JSON.stringify(data.user))
   }
+
+  window.dispatchEvent(new Event('nerava:auth-changed'))
 
   return data
 }
@@ -288,9 +310,12 @@ export async function appleAuth(idToken: string): Promise<TokenResponse> {
   if (data.refresh_token) {
     localStorage.setItem('refresh_token', data.refresh_token)
   }
+  syncTokenToNative(data.access_token)
   if (data.user) {
     localStorage.setItem('nerava_user', JSON.stringify(data.user))
   }
+
+  window.dispatchEvent(new Event('nerava:auth-changed'))
 
   return data
 }

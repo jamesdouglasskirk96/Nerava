@@ -20,7 +20,7 @@ export function SessionExpiredModal() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6">
+    <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/50 p-6">
       <div className="bg-white rounded-2xl p-6 max-w-sm w-full text-center shadow-xl">
         <h2 className="text-lg font-semibold text-gray-900 mb-2">
           Session Expired

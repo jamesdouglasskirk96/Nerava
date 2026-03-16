@@ -1,12 +1,13 @@
-// Gate component that shows onboarding if not completed, otherwise shows children
+// Gate component — onboarding is now handled by iOS native layer
+// (location permission via ContentView.swift, notification via SessionEngine)
+// This gate auto-completes onboarding so the web app goes straight to DriverHome.
 import { useOnboarding } from '../../hooks/useOnboarding'
-import { OnboardingFlow } from './OnboardingFlow'
-import { useDriverSessionContext } from '../../contexts/DriverSessionContext'
 import { useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 
 // Routes that must bypass onboarding (e.g. OAuth callbacks)
-const BYPASS_PATHS = ['/tesla-callback', '/select-vehicle']
+const BYPASS_PATHS = ['/tesla-callback', '/tesla-connected', '/select-vehicle']
 
 interface OnboardingGateProps {
   children: ReactNode
@@ -14,33 +15,19 @@ interface OnboardingGateProps {
 
 export function OnboardingGate({ children }: OnboardingGateProps) {
   const { hasSeenOnboarding, completeOnboarding } = useOnboarding()
-  const { requestLocationPermission, setLocationPermission } = useDriverSessionContext()
   const location = useLocation()
 
-  const handleRequestLocation = () => {
-    requestLocationPermission()
-  }
+  // Auto-complete onboarding — native iOS handles permissions
+  useEffect(() => {
+    if (!hasSeenOnboarding) {
+      completeOnboarding()
+    }
+  }, [hasSeenOnboarding, completeOnboarding])
 
-  const handleSkipLocation = () => {
-    // Set location permission to 'skipped' state
-    setLocationPermission('skipped')
-  }
-
-  // Always let OAuth callbacks through, even if onboarding is incomplete
+  // Always let OAuth callbacks through
   if (BYPASS_PATHS.some(p => location.pathname.startsWith(p))) {
     return <>{children}</>
   }
 
-  if (!hasSeenOnboarding) {
-    return (
-      <OnboardingFlow
-        onComplete={completeOnboarding}
-        onRequestLocation={handleRequestLocation}
-        onSkipLocation={handleSkipLocation}
-      />
-    )
-  }
-
   return <>{children}</>
 }
-

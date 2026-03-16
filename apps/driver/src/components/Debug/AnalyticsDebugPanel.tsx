@@ -49,7 +49,7 @@ export function AnalyticsDebugPanel() {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 bg-white border-2 border-gray-300 rounded-lg shadow-lg p-4 max-w-md z-50">
+    <div className="fixed bottom-4 right-4 bg-white border-2 border-gray-300 rounded-lg shadow-lg p-4 max-w-md z-[3000]">
       <h3 className="text-lg font-bold mb-2">Analytics Debug Panel</h3>
       
       <div className="space-y-2 mb-4">

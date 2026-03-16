@@ -15,6 +15,13 @@ export interface ChargerSummary {
   campaign_reward_cents?: number
   lat?: number
   lng?: number
+  num_evse?: number
+  power_kw?: number
+  connector_types?: string[]
+  pricing_per_kwh?: number | null
+  active_drivers?: number
+  has_merchant_perk?: boolean
+  merchant_perk_title?: string
 }
 
 export interface MerchantSummary {
@@ -95,12 +102,65 @@ export interface ActionsInfo {
   get_directions_url?: string
 }
 
+export interface MerchantRewardState {
+  has_active_reward: boolean
+  reward_description?: string | null
+  reward_amount_cents?: number | null
+  active_claim_id?: string | null
+  active_claim_status?: string | null  // claimed | receipt_uploaded | approved | rejected | expired
+  active_claim_expires_at?: string | null
+  join_request_count: number
+  user_has_requested: boolean
+}
+
 export interface MerchantDetailsResponse {
   merchant: MerchantInfo
   moment: MomentInfo
   perk: PerkInfo
   wallet: WalletInfo
   actions: ActionsInfo
+  reward_state?: MerchantRewardState | null
+}
+
+export interface RequestToJoinResponse {
+  id: string
+  place_id: string
+  merchant_name: string
+  status: string
+  request_count: number
+  created_at: string
+}
+
+export interface ClaimRewardResponse {
+  id: string
+  merchant_name: string
+  reward_description?: string | null
+  status: string
+  claimed_at: string
+  expires_at: string
+  remaining_seconds: number
+}
+
+export interface ReceiptUploadResponse {
+  id: string
+  reward_claim_id: string
+  status: string
+  ocr_merchant_name?: string | null
+  ocr_total_cents?: number | null
+  ocr_confidence?: number | null
+  approved_reward_cents?: number | null
+  rejection_reason?: string | null
+}
+
+export interface ClaimDetailResponse {
+  id: string
+  merchant_name: string
+  reward_description?: string | null
+  status: string
+  claimed_at: string
+  expires_at: string
+  remaining_seconds: number
+  receipt?: ReceiptUploadResponse | null
 }
 
 export interface WalletActivateRequest {

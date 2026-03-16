@@ -121,6 +121,13 @@ export function useNativeBridge() {
         console.error('[NativeBridge] Event emission failed:', payload.event, payload.reason);
         // Optional: Send to analytics/error tracking service
       }
+
+      if (action === 'PUSH_DEEP_LINK') {
+        // Forward push notification deep link to the web app
+        window.dispatchEvent(new CustomEvent('nerava:push-deep-link', {
+          detail: { type: payload.type, deep_link: payload.deep_link, data: payload },
+        }));
+      }
     };
 
     window.addEventListener('neravaNative', handleNativeEvent as EventListener);

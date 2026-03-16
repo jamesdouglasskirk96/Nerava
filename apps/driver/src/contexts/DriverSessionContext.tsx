@@ -1,5 +1,5 @@
 // Driver Session Context - Source of truth for location and app state
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import type { ReactNode } from 'react'
 
 export type LocationPermissionState = 'unknown' | 'granted' | 'denied' | 'skipped'
@@ -36,17 +36,32 @@ const DriverSessionContext = createContext<DriverSessionContextValue | undefined
 
 const STORAGE_KEY = 'nerava_driver_session'
 const STORAGE_CHARGING_STATE_KEY = 'nerava_app_charging_state'
+const STORAGE_LOCATION_PERMISSION_KEY = 'nerava_location_permission'
 
 export function DriverSessionProvider({ children }: { children: ReactNode }) {
-  const [locationPermission, setLocationPermission] = useState<LocationPermissionState>(() => {
+  const [locationPermission, setLocationPermissionRaw] = useState<LocationPermissionState>(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       return 'denied'
+    }
+    // Restore last known permission state to avoid re-prompting on every app open
+    const stored = localStorage.getItem(STORAGE_LOCATION_PERMISSION_KEY)
+    if (stored === 'granted' || stored === 'denied' || stored === 'skipped') {
+      return stored
     }
     return 'unknown'
   })
 
+  // Wrap setLocationPermission to persist to localStorage
+  const setLocationPermission = useCallback((state: LocationPermissionState) => {
+    setLocationPermissionRaw(state)
+    if (state !== 'unknown') {
+      localStorage.setItem(STORAGE_LOCATION_PERMISSION_KEY, state)
+    }
+  }, [])
+
   const [locationFix, setLocationFix] = useState<LocationFixState>('idle')
   const [coordinates, setCoordinates] = useState<Coordinates | null>(null)
+  const lastCoordsRef = useRef<Coordinates | null>(null)
 
   const [appChargingState, setAppChargingStateState] = useState<AppChargingState>(() => {
     const stored = localStorage.getItem(STORAGE_CHARGING_STATE_KEY)
@@ -126,6 +141,32 @@ export function DriverSessionProvider({ children }: { children: ReactNode }) {
     )
   }, [])
 
+  // Auto-check location permission on mount — if the OS already granted
+  // permission, getCurrentPosition succeeds silently without prompting.
+  // This prevents showing the "enable location" screen on every app open.
+  useEffect(() => {
+    if (locationPermission !== 'unknown') return
+
+    // Use the Permissions API if available for an instant check
+    if (navigator.permissions) {
+      navigator.permissions.query({ name: 'geolocation' }).then((result) => {
+        if (result.state === 'granted') {
+          requestLocationPermission()
+        } else if (result.state === 'denied') {
+          setLocationPermission('denied')
+          setLocationFix('error')
+        }
+        // 'prompt' → leave as 'unknown', user must click the button
+      }).catch(() => {
+        // Permissions API not supported (some WKWebView versions), try directly
+        requestLocationPermission()
+      })
+    } else {
+      // No Permissions API — just try to get location (works if already authorized)
+      requestLocationPermission()
+    }
+  }, [locationPermission, requestLocationPermission])
+
   // Watch location changes
   useEffect(() => {
     if (locationPermission !== 'granted' || locationFix === 'error') {
@@ -137,12 +178,25 @@ export function DriverSessionProvider({ children }: { children: ReactNode }) {
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
         setLocationFix('located')
-        setCoordinates({
+        const newCoords: Coordinates = {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
           accuracy_m: position.coords.accuracy || 0,
           last_fix_ts: Date.now(),
-        })
+        }
+
+        // Skip state update if user hasn't moved >50m — prevents GPS jitter
+        // from cascading re-renders and intent capture refetches
+        const prev = lastCoordsRef.current
+        if (prev) {
+          const dlat = newCoords.lat - prev.lat
+          const dlng = newCoords.lng - prev.lng
+          const approxDistM = Math.sqrt(dlat * dlat + dlng * dlng) * 111320
+          if (approxDistM < 50) return
+        }
+
+        lastCoordsRef.current = newCoords
+        setCoordinates(newCoords)
       },
       (error) => {
         setLocationFix('error')
@@ -162,12 +216,8 @@ export function DriverSessionProvider({ children }: { children: ReactNode }) {
     }
   }, [locationPermission])
 
-  // Auto-request location on mount - always get fresh GPS
-  useEffect(() => {
-    if (locationPermission === 'unknown') {
-      requestLocationPermission()
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Location permission is handled by the iOS native layer (ContentView.swift)
+  // Do NOT auto-request here — it causes duplicate prompts in the WKWebView
 
   const setAppChargingState = useCallback((state: AppChargingState) => {
     setAppChargingStateState(state)

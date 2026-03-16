@@ -1,17 +1,17 @@
-import { lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { lazy, Suspense, useEffect } from 'react'
+import { BrowserRouter, Routes, Route, useNavigate, useSearchParams } from 'react-router-dom'
 import { DriverSessionProvider } from './contexts/DriverSessionContext'
 import { FavoritesProvider } from './contexts/FavoritesContext'
 import { DriverHome } from './components/DriverHome/DriverHome'
 import { OnboardingGate } from './components/Onboarding/OnboardingGate'
 import { OfflineBanner } from './components/shared/OfflineBanner'
-import { ConsentBanner } from './components/ConsentBanner'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { SessionExpiredModal } from './components/SessionExpiredModal'
 import { useViewportHeight } from './hooks/useViewportHeight'
 
 // Lazy-loaded route components for code splitting
 const TeslaCallbackScreen = lazy(() => import('./components/TeslaLogin/TeslaCallbackScreen').then(m => ({ default: m.TeslaCallbackScreen })))
+const TeslaConnectedScreen = lazy(() => import('./components/TeslaLogin/TeslaConnectedScreen').then(m => ({ default: m.TeslaConnectedScreen })))
 const VehicleSelectScreen = lazy(() => import('./components/TeslaLogin/VehicleSelectScreen').then(m => ({ default: m.VehicleSelectScreen })))
 const EVHome = lazy(() => import('./components/EVHome/EVHome').then(m => ({ default: m.EVHome })))
 const EVOrderFlow = lazy(() => import('./components/EVOrder/EVOrderFlow').then(m => ({ default: m.EVOrderFlow })))
@@ -21,6 +21,40 @@ const MerchantDetailsScreen = lazy(() => import('./components/MerchantDetails/Me
 const EarningsScreen = lazy(() => import('./components/Earnings/EarningsScreen').then(m => ({ default: m.EarningsScreen })))
 const MerchantArrivalScreen = lazy(() => import('./components/EVArrival/MerchantArrivalScreen').then(m => ({ default: m.MerchantArrivalScreen })))
 const PreChargingScreen = lazy(() => import('./components/PreCharging/PreChargingScreen').then(m => ({ default: m.PreChargingScreen })))
+
+function NotFoundScreen() {
+  const navigate = useNavigate()
+  return (
+    <div className="flex flex-col items-center justify-center h-screen bg-white px-6 text-center">
+      <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-6">
+        <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
+      <h1 className="text-2xl font-bold text-gray-900 mb-2">Page not found</h1>
+      <p className="text-gray-500 mb-8">The page you're looking for doesn't exist or has been moved.</p>
+      <button
+        onClick={() => navigate('/')}
+        className="px-6 py-3 bg-[#1877F2] text-white font-semibold rounded-xl hover:bg-[#166FE5] transition-colors"
+      >
+        Go Home
+      </button>
+    </div>
+  )
+}
+
+function JoinReferral() {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  useEffect(() => {
+    const ref = searchParams.get('ref')
+    if (ref) {
+      sessionStorage.setItem('nerava_referral_code', ref)
+    }
+    navigate('/', { replace: true })
+  }, [searchParams, navigate])
+  return null
+}
 
 function App() {
   useViewportHeight()
@@ -40,6 +74,7 @@ function App() {
           <Routes>
             {/* Tesla OAuth callback and vehicle selection */}
             <Route path="/tesla-callback" element={<TeslaCallbackScreen />} />
+            <Route path="/tesla-connected" element={<TeslaConnectedScreen />} />
             <Route path="/select-vehicle" element={<VehicleSelectScreen />} />
             {/* Phone check-in route (from SMS link) */}
             <Route path="/s/:token" element={<PhoneCheckinScreen />} />
@@ -58,11 +93,14 @@ function App() {
             <Route path="/earnings" element={<EarningsScreen />} />
             {/* Merchant details route */}
             <Route path="/merchant/:merchantId" element={<MerchantDetailsScreen />} />
+            {/* Referral join route */}
+            <Route path="/join" element={<JoinReferral />} />
+            {/* 404 catch-all */}
+            <Route path="*" element={<NotFoundScreen />} />
           </Routes>
           </Suspense>
         </OnboardingGate>
       </BrowserRouter>
-      <ConsentBanner />
       <SessionExpiredModal />
     </DriverSessionProvider>
     </FavoritesProvider>

@@ -25,7 +25,7 @@ export function StateTransitionToast({ show, onHide }: StateTransitionToastProps
 
   return (
     <div
-      className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 transition-all duration-300 ${
+      className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-[3000] transition-all duration-300 ${
         isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'
       }`}
     >

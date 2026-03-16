@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, lazy, Suspense } from 'react'
 import { Zap, Clock, Battery, ChevronDown, ChevronUp, MapPin, Plug, Gauge, ShieldCheck, StopCircle } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { endChargingSession } from '../../services/api'
 import type { ChargingSession } from '../../services/api'
+
+const SessionTrailMap = lazy(() => import('./SessionTrailMap').then(m => ({ default: m.SessionTrailMap })))
 
 interface SessionCardProps {
   session: ChargingSession
@@ -140,8 +142,22 @@ export function SessionCard({ session }: SessionCardProps) {
             </div>
           )}
 
-          {/* Location */}
-          {session.lat != null && session.lng != null && (
+          {/* Location trail map or static link */}
+          {session.location_trail && session.location_trail.length >= 2 ? (
+            <div onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-2 text-xs text-[#656A6B] mb-1.5">
+                <MapPin className="w-3.5 h-3.5" />
+                <span>Your route during this session</span>
+              </div>
+              <Suspense fallback={<div className="h-[200px] rounded-lg bg-[#F7F8FA] animate-pulse" />}>
+                <SessionTrailMap
+                  trail={session.location_trail}
+                  chargerLat={session.lat}
+                  chargerLng={session.lng}
+                />
+              </Suspense>
+            </div>
+          ) : session.lat != null && session.lng != null ? (
             <div className="flex items-center gap-2 text-xs text-[#656A6B]">
               <MapPin className="w-3.5 h-3.5" />
               <a
@@ -154,7 +170,7 @@ export function SessionCard({ session }: SessionCardProps) {
                 View on map
               </a>
             </div>
-          )}
+          ) : null}
 
           {/* Verified status */}
           {session.verified && (

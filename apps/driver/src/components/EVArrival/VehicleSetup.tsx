@@ -34,7 +34,7 @@ export function VehicleSetup({ onSave, onCancel, isLoading }: VehicleSetupProps)
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40">
+    <div className="fixed inset-0 z-[3000] flex items-end justify-center bg-black/40">
       <div
         className="w-full max-w-md bg-white rounded-t-2xl p-6 pb-8 animate-slide-up"
         role="dialog"

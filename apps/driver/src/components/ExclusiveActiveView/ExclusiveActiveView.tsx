@@ -59,8 +59,8 @@ export function ExclusiveActiveView({
   const [showFullscreenTicket, setShowFullscreenTicket] = useState(false)
 
   return (
-    <div className="fixed inset-0 bg-white z-50">
-      <div className="h-[100vh] h-[100dvh] max-h-[100dvh] max-w-md mx-auto bg-white flex flex-col overflow-hidden">
+    <div className="fixed inset-0 bg-white z-[3000]">
+      <div className="h-[100vh] h-[100dvh] max-h-[100dvh] w-full bg-white flex flex-col overflow-hidden">
         {/* Hero Image */}
         <div className="relative h-64 flex-shrink-0">
           <ImageWithFallback
@@ -230,10 +230,12 @@ export function ExclusiveActiveView({
                   path: window.location.pathname,
                 })
                 
-                // Open Google Maps with directions to merchant
-                // In production, use actual merchant coordinates
-                const merchantAddress = encodeURIComponent(merchant.name)
-                openExternalUrl(`https://www.google.com/maps/dir/?api=1&destination=${merchantAddress}`)
+                // Open Google Maps with directions using coordinates when available
+                if (merchant.lat && merchant.lng) {
+                  openExternalUrl(`https://www.google.com/maps/dir/?api=1&destination=${merchant.lat},${merchant.lng}`)
+                } else {
+                  openExternalUrl(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(merchant.name)}`)
+                }
               }}
               className="w-full py-4 bg-white border-2 border-[#1877F2] text-[#1877F2] rounded-2xl font-medium hover:bg-[#F7F8FA] active:scale-98 transition-all flex items-center justify-center gap-2"
             >

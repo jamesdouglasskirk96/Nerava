@@ -10,7 +10,7 @@ interface LocationDeniedScreenProps {
 
 export function LocationDeniedScreen({ onTryAgain, onBrowseChargers }: LocationDeniedScreenProps) {
   return (
-    <div className="bg-white text-[#050505] max-w-md mx-auto flex flex-col" style={{ height: 'var(--app-height, 100dvh)' }}>
+    <div className="bg-white text-[#050505] w-full flex flex-col" style={{ height: 'var(--app-height, 100dvh)' }}>
       {/* Header */}
       <header className="bg-white border-b border-[#E4E6EB] flex-shrink-0 px-5 py-3">
         <div className="flex items-center gap-1.5">
@@ -36,6 +36,15 @@ export function LocationDeniedScreen({ onTryAgain, onBrowseChargers }: LocationD
           <p className="text-base text-[#65676B] leading-relaxed">
             Location is required to detect chargers near you. We use your location to show places within walking distance.
           </p>
+
+          {/* iOS Settings instructions */}
+          <div className="bg-gray-50 rounded-xl p-4 text-left text-sm text-[#65676B] space-y-1">
+            <p className="font-medium text-[#050505]">To enable location on iOS:</p>
+            <p>1. Open <strong>Settings</strong> on your iPhone</p>
+            <p>2. Scroll down and tap <strong>Nerava</strong></p>
+            <p>3. Tap <strong>Location</strong></p>
+            <p>4. Select <strong>While Using the App</strong></p>
+          </div>
 
           {/* Action Buttons */}
           <div className="pt-4 space-y-3">

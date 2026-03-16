@@ -46,7 +46,7 @@ export function ConfirmationSheet({
 
   if (verifying) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/40">
         <div className="bg-white rounded-2xl p-8 text-center max-w-sm mx-4">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-blue-50 flex items-center justify-center animate-pulse">
             <svg className="w-8 h-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -61,7 +61,7 @@ export function ConfirmationSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40">
+    <div className="fixed inset-0 z-[3000] flex items-end justify-center bg-black/40">
       <div
         className="w-full max-w-md bg-white rounded-t-2xl p-6 pb-8 animate-slide-up"
         role="dialog"

@@ -93,8 +93,8 @@ export function MerchantDetailModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-[#242526] z-50">
-      <div className="h-screen max-w-md mx-auto bg-white flex flex-col overflow-hidden">
+    <div className="fixed inset-0 bg-[#242526] z-[3000]">
+      <div className="h-screen w-full bg-white flex flex-col overflow-hidden">
         {/* Hero Image */}
         <div className="relative h-56 flex-shrink-0">
           <ImageWithFallback
@@ -239,9 +239,12 @@ export function MerchantDetailModal({
                   path: window.location.pathname,
                 })
 
-                // Open Google Maps with directions
-                const merchantAddress = encodeURIComponent(merchant.name)
-                openExternalUrl(`https://www.google.com/maps/dir/?api=1&destination=${merchantAddress}`)
+                // Open Google Maps with directions using coordinates when available
+                if (merchant.lat && merchant.lng) {
+                  openExternalUrl(`https://www.google.com/maps/dir/?api=1&destination=${merchant.lat},${merchant.lng}`)
+                } else {
+                  openExternalUrl(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(merchant.name)}`)
+                }
               }}
               className="w-full py-3.5 bg-white border-2 border-[#1877F2] text-[#1877F2] rounded-2xl font-medium hover:bg-[#F7F8FA] active:scale-98 transition-all"
             >

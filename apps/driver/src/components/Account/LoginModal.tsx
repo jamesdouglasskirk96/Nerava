@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { X } from 'lucide-react'
-import { teslaLoginStart, ApiError } from '../../services/auth'
+import { otpStart, otpVerify, ApiError } from '../../services/auth'
 
 interface LoginModalProps {
   isOpen: boolean
@@ -8,41 +8,143 @@ interface LoginModalProps {
   onSuccess: () => void
 }
 
-export function LoginModal({ isOpen, onClose, onSuccess: _onSuccess }: LoginModalProps) {
+export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
+  const [step, setStep] = useState<'phone' | 'code'>('phone')
+  const [phone, setPhone] = useState('')
+  const [code, setCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [countdown, setCountdown] = useState(0)
+
+  const codeInputRef = useRef<HTMLInputElement>(null)
+  const phoneInputRef = useRef<HTMLInputElement>(null)
+
+  // Countdown timer for resend
+  useEffect(() => {
+    if (countdown <= 0) return
+    const timer = setTimeout(() => setCountdown(c => c - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [countdown])
+
+  // Auto-focus inputs
+  useEffect(() => {
+    if (!isOpen) return
+    if (step === 'phone') phoneInputRef.current?.focus()
+    if (step === 'code') codeInputRef.current?.focus()
+  }, [isOpen, step])
 
   if (!isOpen) return null
 
-  const handleTeslaSignIn = async () => {
+  const formatPhone = (value: string) => {
+    const digits = value.replace(/\D/g, '')
+    if (digits.length <= 3) return digits
+    if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`
+  }
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/\D/g, '').slice(0, 10)
+    setPhone(raw)
+    setError(null)
+  }
+
+  const handleSendCode = async () => {
+    if (phone.length < 10) {
+      setError('Please enter a valid 10-digit phone number.')
+      return
+    }
     setLoading(true)
     setError(null)
-
     try {
-      const { authorization_url } = await teslaLoginStart()
-      // Navigate in-app — the OAuth redirect chain stays within WKWebView
-      window.location.href = authorization_url
+      await otpStart(phone)
+      setStep('code')
+      setCountdown(60)
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message)
       } else {
-        setError('Failed to start Tesla sign-in. Please try again.')
+        setError('Failed to send code. Please try again.')
       }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleVerifyCode = async () => {
+    if (code.length < 6) {
+      setError('Please enter the 6-digit code.')
+      return
+    }
+    setLoading(true)
+    setError(null)
+    try {
+      await otpVerify(phone, code)
+      onSuccess()
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message)
+      } else {
+        setError('Verification failed. Please try again.')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleResend = async () => {
+    if (countdown > 0) return
+    setLoading(true)
+    setError(null)
+    try {
+      await otpStart(phone)
+      setCountdown(60)
+      setCode('')
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message)
+      } else {
+        setError('Failed to resend code.')
+      }
+    } finally {
       setLoading(false)
     }
   }
 
   const handleClose = () => {
+    setStep('phone')
+    setPhone('')
+    setCode('')
     setError(null)
+    setCountdown(0)
     onClose()
   }
 
+  const handleBack = () => {
+    setStep('phone')
+    setCode('')
+    setError(null)
+  }
+
   return (
-    <div className="fixed inset-0 bg-black/50 z-[60] flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 bg-black/50 z-[3100] flex items-end sm:items-center justify-center">
       <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl p-6 animate-slide-up">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold">Sign in</h2>
+          <div className="flex items-center gap-2">
+            {step === 'code' && (
+              <button
+                onClick={handleBack}
+                className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+            )}
+            <h2 className="text-xl font-bold">
+              {step === 'phone' ? 'Sign in' : 'Enter code'}
+            </h2>
+          </div>
           <button
             onClick={handleClose}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
@@ -51,35 +153,93 @@ export function LoginModal({ isOpen, onClose, onSuccess: _onSuccess }: LoginModa
           </button>
         </div>
 
-        {/* Tesla Sign-In */}
-        <div className="text-center mb-6">
-          <p className="text-[#65676B] text-sm">
-            Sign in with your Tesla account to unlock charging rewards.
-          </p>
-        </div>
-
         {error && (
           <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg">
             {error}
           </div>
         )}
 
-        <button
-          onClick={handleTeslaSignIn}
-          disabled={loading}
-          className="w-full py-3 bg-[#171A20] text-white font-semibold rounded-xl hover:bg-[#393C41] disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-3"
-        >
-          {loading ? (
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <>
-              <svg className="w-5 h-5" viewBox="0 0 278.7 36.3" fill="currentColor">
-                <path d="M238.1 14.4v21.9h7V21.7h25.6v-7.3h-32.6zm-29.5 0v21.9h7v-21.9h-7zm-17.8 0L178 30.2 165.2 14.4h-9.1v21.9h7V22.5l10.9 13.8h8.2l10.9-13.8v13.8h7V14.4h-9.3zM89.5 14.4v21.9h33.2v-7.3H96.5v-2h26.2v-6H96.5v-1.3h26.2v-5.3H89.5zm-15.7 0v21.9h7V14.4h-7zM42.5 21.4h16.1l-8-7-8.1 7zm-12.3 0L47 5.8l-3.6-3.1L17 25.1l3.6 3.1 3.1-2.7v10.8h7V21.4h-.5zm34.6 0l-3.1 2.7V13.3h-7v22.9h.5L72.5 52.8l3.6-3.1-6.5-5.6 16.7-14.4v-8.3h-.5z"/>
-              </svg>
-              Sign in with Tesla
-            </>
-          )}
-        </button>
+        {step === 'phone' ? (
+          <>
+            <p className="text-[#65676B] text-sm mb-4">
+              Enter your phone number to sign in or create an account.
+            </p>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Phone number
+              </label>
+              <div className="flex items-center border border-gray-300 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-[#1877F2] focus-within:border-transparent">
+                <span className="pl-4 pr-2 text-gray-500 text-sm">+1</span>
+                <input
+                  ref={phoneInputRef}
+                  type="tel"
+                  value={formatPhone(phone)}
+                  onChange={handlePhoneChange}
+                  placeholder="(555) 123-4567"
+                  className="flex-1 py-3 pr-4 text-base outline-none"
+                  onKeyDown={e => e.key === 'Enter' && handleSendCode()}
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={handleSendCode}
+              disabled={loading || phone.length < 10}
+              className="w-full py-3 bg-[#1877F2] text-white font-semibold rounded-xl hover:bg-[#166FE5] disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+            >
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                'Send Code'
+              )}
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="text-[#65676B] text-sm mb-4">
+              We sent a 6-digit code to <span className="font-medium text-gray-900">+1 {formatPhone(phone)}</span>
+            </p>
+
+            <div className="mb-4">
+              <input
+                ref={codeInputRef}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                value={code}
+                onChange={e => {
+                  setCode(e.target.value.replace(/\D/g, '').slice(0, 6))
+                  setError(null)
+                }}
+                placeholder="000000"
+                className="w-full py-3 px-4 text-center text-2xl font-mono tracking-[0.5em] border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-[#1877F2] focus:border-transparent"
+                onKeyDown={e => e.key === 'Enter' && handleVerifyCode()}
+              />
+            </div>
+
+            <button
+              onClick={handleVerifyCode}
+              disabled={loading || code.length < 6}
+              className="w-full py-3 bg-[#1877F2] text-white font-semibold rounded-xl hover:bg-[#166FE5] disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center mb-3"
+            >
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                'Verify'
+              )}
+            </button>
+
+            <button
+              onClick={handleResend}
+              disabled={countdown > 0 || loading}
+              className="w-full text-sm text-[#1877F2] font-medium disabled:text-gray-400"
+            >
+              {countdown > 0 ? `Resend code in ${countdown}s` : 'Resend code'}
+            </button>
+          </>
+        )}
 
         <p className="text-xs text-[#65676B] text-center mt-4">
           By continuing, you agree to our Terms of Service and Privacy Policy

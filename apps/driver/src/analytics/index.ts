@@ -105,7 +105,7 @@ async function hasAnalyticsConsent(): Promise<boolean> {
 
   // If not in localStorage, check API
   try {
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.nerava.network'
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
     const token = localStorage.getItem('access_token')
 
     if (!token) {

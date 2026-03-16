@@ -14,6 +14,10 @@ interface FavoritesContextType {
   isFavorite: (merchantId: string) => boolean
   getMerchantName: (merchantId: string) => string
   isLoading: boolean
+  // Charger favorites
+  chargerFavorites: Set<string>
+  toggleChargerFavorite: (chargerId: string) => Promise<void>
+  isChargerFavorite: (chargerId: string) => boolean
 }
 
 const FavoritesContext = createContext<FavoritesContextType | null>(null)
@@ -27,8 +31,10 @@ function formatMerchantIdFallback(id: string): string {
 
 export function FavoritesProvider({ children }: { children: ReactNode }) {
   const [favorites, setFavorites] = useState<Set<string>>(() => {
-    const stored = localStorage.getItem('neravaLikes')
-    return stored ? new Set(JSON.parse(stored)) : new Set()
+    try {
+      const stored = localStorage.getItem('neravaLikes')
+      return stored ? new Set(JSON.parse(stored)) : new Set()
+    } catch { return new Set() }
   })
   const [favoriteDetails, setFavoriteDetails] = useState<Map<string, FavoriteMerchantInfo>>(() => {
     const stored = localStorage.getItem('neravaLikeDetails')
@@ -40,6 +46,18 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
     return new Map()
   })
   const [isLoading, setIsLoading] = useState(false)
+
+  // Charger favorites
+  const [chargerFavorites, setChargerFavorites] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem('neravaChargerLikes')
+      return stored ? new Set(JSON.parse(stored)) : new Set()
+    } catch { return new Set() }
+  })
+
+  useEffect(() => {
+    localStorage.setItem('neravaChargerLikes', JSON.stringify(Array.from(chargerFavorites)))
+  }, [chargerFavorites])
 
   // Sync with localStorage
   useEffect(() => {
@@ -61,7 +79,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   const fetchFavorites = async (token: string) => {
     try {
       setIsLoading(true)
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.nerava.network'
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || ''
       const res = await fetch(`${apiBaseUrl}/v1/merchants/favorites`, {
         headers: { Authorization: `Bearer ${token}` }
       })
@@ -117,7 +135,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
     // Sync with backend if authenticated
     if (token) {
       try {
-        const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.nerava.network'
+        const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || ''
         await fetch(`${apiBaseUrl}/v1/merchants/${merchantId}/favorite`, {
           method: isFav ? 'DELETE' : 'POST',
           headers: { Authorization: `Bearer ${token}` }
@@ -141,8 +159,42 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
     return details?.name || formatMerchantIdFallback(merchantId)
   }, [favoriteDetails])
 
+  const toggleChargerFavorite = useCallback(async (chargerId: string) => {
+    const token = localStorage.getItem('access_token')
+    const isFav = chargerFavorites.has(chargerId)
+
+    // Optimistic update
+    setChargerFavorites(prev => {
+      const next = new Set(prev)
+      isFav ? next.delete(chargerId) : next.add(chargerId)
+      return next
+    })
+
+    if (token) {
+      try {
+        const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || ''
+        await fetch(`${apiBaseUrl}/v1/chargers/${chargerId}/favorite`, {
+          method: isFav ? 'DELETE' : 'POST',
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      } catch (e) {
+        setChargerFavorites(prev => {
+          const next = new Set(prev)
+          isFav ? next.add(chargerId) : next.delete(chargerId)
+          return next
+        })
+        console.error('Failed to toggle charger favorite', e)
+      }
+    }
+  }, [chargerFavorites])
+
+  const isChargerFavorite = useCallback((chargerId: string) => chargerFavorites.has(chargerId), [chargerFavorites])
+
   return (
-    <FavoritesContext.Provider value={{ favorites, favoriteDetails, toggleFavorite, isFavorite, getMerchantName, isLoading }}>
+    <FavoritesContext.Provider value={{
+      favorites, favoriteDetails, toggleFavorite, isFavorite, getMerchantName, isLoading,
+      chargerFavorites, toggleChargerFavorite, isChargerFavorite,
+    }}>
       {children}
     </FavoritesContext.Provider>
   )

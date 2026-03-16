@@ -32,6 +32,13 @@ export default defineConfig(({ mode }) => {
     server: {
       host: '0.0.0.0', // Allow access from network (for phone testing)
       port: 5173,
+      proxy: env !== 'prod' && env !== 'production' ? {
+        '/v1': {
+          target: 'https://api.nerava.network',
+          changeOrigin: true,
+          secure: true,
+        },
+      } : undefined,
     },
     test: {
       globals: true,

@@ -120,11 +120,21 @@ export const DRIVER_EVENTS = {
   CHARGING_INCENTIVE_EARNED: 'charging.incentive_earned',
   CHARGING_ACTIVITY_OPENED: 'charging.activity_opened',
 
+  // Charger Detail
+  CHARGER_DETAIL_VIEWED: 'driver.charger.detail_viewed',
+  CHARGER_DIRECTIONS_CLICKED: 'driver.charger.directions_clicked',
+  CHARGER_MERCHANT_CLICKED: 'driver.charger.merchant_clicked',
+
   // Search
   SEARCH_QUERY: 'driver.search.query',
 
   // Push Notifications
   DEVICE_TOKEN_REGISTERED: 'driver.device_token.registered',
+  PUSH_NOTIFICATION_TAPPED: 'push_notification.tapped',
+
+  // Fleet Telemetry
+  TELEMETRY_CONFIGURED: 'telemetry.configured',
+  TELEMETRY_CONFIG_FAILED: 'telemetry.config_failed',
 } as const
 
 export type DriverEventName = typeof DRIVER_EVENTS[keyof typeof DRIVER_EVENTS]

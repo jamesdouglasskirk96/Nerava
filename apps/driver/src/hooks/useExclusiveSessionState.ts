@@ -14,6 +14,8 @@ export interface ExclusiveMerchant {
   description?: string
   exclusiveOffer?: string // The exclusive offer description
   expiresAt?: string // ISO 8601 expiration timestamp from backend
+  lat?: number
+  lng?: number
 }
 
 const STORAGE_KEY = 'nerava_active_exclusive'

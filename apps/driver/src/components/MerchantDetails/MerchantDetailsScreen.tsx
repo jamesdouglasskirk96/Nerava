@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
-import { useMerchantDetails, useActivateExclusive, useVerifyVisit, useCompleteExclusive, useVoteAmenity, ApiError } from '../../services/api'
+import { useMerchantDetails, useActivateExclusive, useVerifyVisit, useCompleteExclusive, useVoteAmenity, useRequestToJoin, useClaimReward, useUploadReceipt, useLoyaltyProgress, claimLoyaltyReward, ApiError } from '../../services/api'
+import type { LoyaltyProgressItem } from '../../services/api'
 import { FEATURE_FLAGS } from '../../config/featureFlags'
 import { RefuelIntentModal, type RefuelDetails } from '../RefuelIntentModal'
 import { SpotSecuredModal } from '../SpotSecuredModal'
@@ -9,6 +10,10 @@ import { HeroImageHeader } from './HeroImageHeader'
 import { DistanceCard } from './DistanceCard'
 import { HoursCard } from './HoursCard'
 import { ExclusiveOfferCard } from './ExclusiveOfferCard'
+import { RequestToJoinSheet } from './RequestToJoinSheet'
+import { ClaimRewardSheet } from './ClaimRewardSheet'
+import { ReceiptUploadModal } from './ReceiptUploadModal'
+import { ReceiptResultModal } from './ReceiptResultModal'
 import { SocialProofBadge } from '../shared/SocialProofBadge'
 import { AmenityVotes } from '../shared/AmenityVotes'
 import { PreferencesModal } from '../Preferences/PreferencesModal'
@@ -19,10 +24,11 @@ import { ExclusiveCompletedModal } from '../ExclusiveCompleted/ExclusiveComplete
 import { Button } from '../shared/Button'
 import { InlineError } from '../shared/InlineError'
 import { MerchantDetailsSkeleton } from '../shared/Skeleton'
-import { ThumbsUp, ThumbsDown, MapPin, Phone, Globe } from 'lucide-react'
+import { ThumbsUp, ThumbsDown, MapPin, Phone, Globe, Store } from 'lucide-react'
 import { openExternalUrl } from '../../utils/openExternal'
 import { useFavorites } from '../../contexts/FavoritesContext'
 import { capture, DRIVER_EVENTS } from '../../analytics'
+import type { ReceiptUploadResponse } from '../../types'
 
 // Flow states
 type FlowState =
@@ -46,6 +52,22 @@ export function MerchantDetailsScreen() {
   const verifyVisit = useVerifyVisit()
   const completeExclusive = useCompleteExclusive()
   const voteAmenityMutation = useVoteAmenity()
+  const requestToJoin = useRequestToJoin()
+  const claimRewardMutation = useClaimReward()
+  const uploadReceiptMutation = useUploadReceipt()
+
+  // Loyalty progress
+  const merchantIdForLoyalty = merchantData?.merchant?.id || merchantId || null
+  const { data: loyaltyProgress, refetch: refetchLoyalty } = useLoyaltyProgress(merchantIdForLoyalty)
+
+  // Merchant rewards state
+  const [showRequestSheet, setShowRequestSheet] = useState(false)
+  const [showClaimSheet, setShowClaimSheet] = useState(false)
+  const [showReceiptUpload, setShowReceiptUpload] = useState(false)
+  const [showReceiptResult, setShowReceiptResult] = useState(false)
+  const [receiptResult, setReceiptResult] = useState<ReceiptUploadResponse | null>(null)
+  const [activeClaimId, setActiveClaimId] = useState<string | null>(null)
+  const [activeClaimRemaining, setActiveClaimRemaining] = useState(0)
 
   // V3: Validate merchant data has required fields
   useEffect(() => {
@@ -189,8 +211,7 @@ export function MerchantDetailsScreen() {
       return
     }
 
-    // TEMPORARY: Location is optional for demo
-    // Try to get location but proceed even if it fails
+    // Get user location for exclusive activation
     let lat: number | undefined
     let lng: number | undefined
     let accuracy_m: number | undefined
@@ -311,21 +332,18 @@ export function MerchantDetailsScreen() {
   }
 
   const handleAddToSessions = async () => {
-    // TEMPORARY: Location is optional for demo - try to get it but don't block if unavailable
-    // TODO: Re-enable location requirement after demo period
+    // Get location for session context
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
           enableHighAccuracy: true,
           timeout: 10000,
-          maximumAge: 60000 // Allow cached position up to 1 minute old
+          maximumAge: 60000
         })
       })
-      // Log location for analytics but don't block based on it
-      console.log('[Demo] Got location:', position.coords.latitude, position.coords.longitude)
+      console.log('Got location:', position.coords.latitude, position.coords.longitude)
     } catch (err) {
-      // Location not available - that's okay for demo
-      console.log('[Demo] Location not available, proceeding anyway:', err)
+      console.warn('Location not available:', err)
     }
 
     // Proceed to authentication check
@@ -639,6 +657,23 @@ export function MerchantDetailsScreen() {
             )}
           </div>
 
+          {/* Claim listing link */}
+          <div className="mt-3">
+            <button
+              onClick={() => {
+                const merchantId = merchantData.merchant.id
+                const driverPublicId = localStorage.getItem('public_id') || ''
+                const claimUrl = `https://merchant.nerava.network/claim/${merchantId}${driverPublicId ? `?ref=${driverPublicId}` : ''}`
+                openExternalUrl(claimUrl)
+                capture(DRIVER_EVENTS.MERCHANT_CLICKED, { action: 'claim_listing', merchant_id: merchantId })
+              }}
+              className="flex items-center gap-1.5 text-xs text-[#65676B] hover:text-[#1877F2] transition-colors"
+            >
+              <Store className="w-3.5 h-3.5" />
+              <span>Own this business? <span className="text-[#1877F2] underline">Claim your listing</span></span>
+            </button>
+          </div>
+
           {/* Social Proof Badge and Amenity Votes */}
           <div className="mt-3 flex items-start justify-between gap-3">
             <SocialProofBadge
@@ -675,6 +710,47 @@ export function MerchantDetailsScreen() {
           />
         )}
 
+        {/* Loyalty Punch Cards */}
+        {loyaltyProgress && loyaltyProgress.length > 0 && (
+          <div className="space-y-3">
+            {loyaltyProgress.map((card) => (
+              <div key={card.card_id} className="bg-white rounded-2xl p-4 border border-gray-100">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-900">{card.program_name}</span>
+                  <span className="text-xs text-gray-500">
+                    {card.visit_count}/{card.visits_required} visits
+                  </span>
+                </div>
+                <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-2">
+                  <div
+                    className="h-full bg-green-500 rounded-full transition-all"
+                    style={{ width: `${Math.min(100, (card.visit_count / card.visits_required) * 100)}%` }}
+                  />
+                </div>
+                {card.reward_unlocked && !card.reward_claimed && (
+                  <button
+                    className="w-full mt-1 py-2 bg-green-600 text-white text-sm font-medium rounded-xl"
+                    onClick={async () => {
+                      try {
+                        await claimLoyaltyReward(card.card_id)
+                        refetchLoyalty()
+                      } catch {}
+                    }}
+                  >
+                    Claim Reward — {card.reward_description || `$${(card.reward_cents / 100).toFixed(2)} off`}
+                  </button>
+                )}
+                {card.reward_claimed && (
+                  <p className="text-xs text-green-600 font-medium">Reward claimed</p>
+                )}
+                {!card.reward_unlocked && card.reward_description && (
+                  <p className="text-xs text-gray-500">{card.visits_required - card.visit_count} more visits for: {card.reward_description}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Distance card */}
         <DistanceCard
           distanceMiles={merchantData.moment.distance_miles}
@@ -700,6 +776,86 @@ export function MerchantDetailsScreen() {
         >
           Get Directions
         </Button>
+
+        {/* Merchant Reward CTA — three states based on reward_state */}
+        {flowState === 'idle' && merchantData.reward_state && (() => {
+          const rs = merchantData.reward_state
+          const hasExclusive = !!merchantData.perk
+
+          // State 1: Active reward with claim already made — show upload receipt CTA
+          if (rs.active_claim_id && rs.active_claim_status === 'claimed') {
+            return (
+              <Button
+                variant="primary"
+                className="w-full"
+                onClick={() => {
+                  setActiveClaimId(rs.active_claim_id!)
+                  setActiveClaimRemaining(
+                    rs.active_claim_expires_at
+                      ? Math.max(0, Math.floor((new Date(rs.active_claim_expires_at + 'Z').getTime() - Date.now()) / 1000))
+                      : 7200
+                  )
+                  setShowReceiptUpload(true)
+                }}
+              >
+                Upload Receipt
+              </Button>
+            )
+          }
+
+          // State 2: Active reward with receipt uploaded — show status
+          if (rs.active_claim_id && (rs.active_claim_status === 'receipt_uploaded' || rs.active_claim_status === 'approved')) {
+            return (
+              <div className="bg-green-50 rounded-xl px-4 py-3 text-center text-sm text-green-700 font-medium">
+                {rs.active_claim_status === 'approved' ? 'Receipt verified! Reward earned.' : 'Receipt under review...'}
+              </div>
+            )
+          }
+
+          // State 3: Has active reward, not yet claimed — show claim CTA
+          if (rs.has_active_reward && !rs.active_claim_id && hasExclusive) {
+            return (
+              <Button
+                variant="primary"
+                className="w-full"
+                onClick={() => setShowClaimSheet(true)}
+              >
+                Claim Reward
+              </Button>
+            )
+          }
+
+          // State 4: No active reward, non-partner merchant — show Request to Join CTA
+          if (!hasExclusive && !rs.user_has_requested) {
+            return (
+              <Button
+                variant="primary"
+                className="w-full bg-[#050505] hover:bg-[#1a1a1a]"
+                onClick={() => {
+                  if (!localStorage.getItem('access_token')) {
+                    setShowActivateModal(true)
+                  } else {
+                    setShowRequestSheet(true)
+                  }
+                }}
+              >
+                Request to Join Nerava
+              </Button>
+            )
+          }
+
+          // State 5: Already requested — show confirmation
+          if (!hasExclusive && rs.user_has_requested) {
+            return (
+              <div className="bg-[#F0F2F5] rounded-xl px-4 py-3 text-center text-sm text-[#65676B]">
+                You've requested this merchant{rs.join_request_count > 1 ? ` along with ${rs.join_request_count - 1} other driver${rs.join_request_count > 2 ? 's' : ''}` : ''}.
+                We'll notify you when they join!
+              </div>
+            )
+          }
+
+          return null
+        })()}
 
         {/* Compact Intent Summary - Progressive disclosure when previous intent exists */}
         {FEATURE_FLAGS.LIVE_COORDINATION_UI_V1 && FEATURE_FLAGS.SECURE_A_SPOT_V3 && showCompactIntentSummary && refuelDetails && flowState === 'idle' && merchantData.wallet.can_add && (
@@ -735,20 +891,55 @@ export function MerchantDetailsScreen() {
           onDismiss={() => setInlineError(null)}
         />
 
-        {/* Main action button based on state */}
-        {flowState === 'idle' && merchantData.wallet.can_add && (
-          <Button
-            variant="primary"
-            className="w-full"
-            onClick={FEATURE_FLAGS.SECURE_A_SPOT_V3 ? handleSecureSpot : handleAddToSessions}
-            disabled={activateExclusive.isPending}
-          >
-            {activateExclusive.isPending
-              ? (FEATURE_FLAGS.SECURE_A_SPOT_V3 ? 'Securing...' : 'Activating...')
-              : (FEATURE_FLAGS.SECURE_A_SPOT_V3 ? 'Secure a Spot' : 'Activate Exclusive')
-            }
-          </Button>
-        )}
+        {/* Main action button based on state — reward CTAs take priority over old exclusive flow */}
+        {flowState === 'idle' && (() => {
+          const rs = merchantData.reward_state
+          const hasExclusive = !!merchantData.perk
+
+          // Priority 1: Active claim needing receipt upload
+          if (rs?.active_claim_id && rs.active_claim_status === 'claimed') {
+            return null // Already rendered above in reward CTA section
+          }
+
+          // Priority 2: Active claim with receipt uploaded/approved
+          if (rs?.active_claim_id && (rs.active_claim_status === 'receipt_uploaded' || rs.active_claim_status === 'approved')) {
+            return null // Already rendered above
+          }
+
+          // Priority 3: Has active reward, not yet claimed — already rendered above
+          if (rs?.has_active_reward && !rs?.active_claim_id && hasExclusive) {
+            return null // Already rendered above
+          }
+
+          // Priority 4: Non-partner merchant — already rendered above
+          if (rs && !hasExclusive && !rs.user_has_requested) {
+            return null // Already rendered above
+          }
+
+          // Priority 5: Already requested — already rendered above
+          if (rs && !hasExclusive && rs.user_has_requested) {
+            return null // Already rendered above
+          }
+
+          // Fallback: old exclusive flow (only if no reward state or wallet.can_add)
+          if (merchantData.wallet.can_add) {
+            return (
+              <Button
+                variant="primary"
+                className="w-full"
+                onClick={FEATURE_FLAGS.SECURE_A_SPOT_V3 ? handleSecureSpot : handleAddToSessions}
+                disabled={activateExclusive.isPending}
+              >
+                {activateExclusive.isPending
+                  ? (FEATURE_FLAGS.SECURE_A_SPOT_V3 ? 'Securing...' : 'Activating...')
+                  : (FEATURE_FLAGS.SECURE_A_SPOT_V3 ? 'Secure a Spot' : 'Activate Exclusive')
+                }
+              </Button>
+            )
+          }
+
+          return null
+        })()}
 
         {isActiveState && (
           <Button
@@ -838,7 +1029,7 @@ export function MerchantDetailsScreen() {
 
       {/* Amenity Vote Modal */}
       {showAmenityVoteModal && selectedAmenity && localAmenityCounts && merchantData && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[3000] p-4">
           <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl">
             {/* Title */}
             <h2 className="text-xl text-center mb-4">
@@ -891,9 +1082,79 @@ export function MerchantDetailsScreen() {
 
       {/* Share Toast */}
       {showShareToast && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-[#050505] text-white px-4 py-2 rounded-full flex items-center gap-2 shadow-lg z-50">
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-[#050505] text-white px-4 py-2 rounded-full flex items-center gap-2 shadow-lg z-[3000]">
           <span className="text-sm font-medium">Link copied!</span>
         </div>
+      )}
+
+      {/* Request to Join Sheet */}
+      {merchantData && (
+        <RequestToJoinSheet
+          isOpen={showRequestSheet}
+          merchantName={merchantData.merchant.name}
+          requestCount={merchantData.reward_state?.join_request_count ?? 0}
+          onClose={() => setShowRequestSheet(false)}
+          onSubmit={async (tags) => {
+            const placeId = merchantData.merchant.place_id || merchantId || ''
+            await requestToJoin.mutateAsync({
+              placeId,
+              merchantName: merchantData.merchant.name,
+              interestTags: tags,
+            })
+          }}
+        />
+      )}
+
+      {/* Claim Reward Sheet */}
+      {merchantData && (
+        <ClaimRewardSheet
+          isOpen={showClaimSheet}
+          merchantName={merchantData.merchant.name}
+          rewardDescription={merchantData.perk?.title || 'EV Driver Reward'}
+          onClose={() => setShowClaimSheet(false)}
+          onClaim={async () => {
+            const resp = await claimRewardMutation.mutateAsync({
+              merchantName: merchantData.merchant.name,
+              placeId: merchantData.merchant.place_id || undefined,
+              merchantId: merchantData.merchant.id,
+              rewardDescription: merchantData.perk?.title,
+            })
+            setActiveClaimId(resp.id)
+            setActiveClaimRemaining(resp.remaining_seconds)
+            setShowClaimSheet(false)
+            setShowReceiptUpload(true)
+          }}
+        />
+      )}
+
+      {/* Receipt Upload Modal */}
+      {merchantData && activeClaimId && (
+        <ReceiptUploadModal
+          isOpen={showReceiptUpload}
+          merchantName={merchantData.merchant.name}
+          claimId={activeClaimId}
+          remainingSeconds={activeClaimRemaining}
+          onClose={() => setShowReceiptUpload(false)}
+          onUpload={async (imageBase64) => {
+            const result = await uploadReceiptMutation.mutateAsync({
+              claimId: activeClaimId,
+              imageBase64,
+            })
+            setReceiptResult(result)
+            setShowReceiptUpload(false)
+            setShowReceiptResult(true)
+          }}
+        />
+      )}
+
+      {/* Receipt Result Modal */}
+      {merchantData && receiptResult && (
+        <ReceiptResultModal
+          isOpen={showReceiptResult}
+          result={receiptResult}
+          merchantName={merchantData.merchant.name}
+          onClose={() => setShowReceiptResult(false)}
+        />
       )}
     </div>
   )
