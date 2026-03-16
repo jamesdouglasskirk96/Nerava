@@ -722,7 +722,7 @@ def list_exclusives(
                 continue
             seen_titles.add(title.lower())
             exclusives.append(ExclusiveResponse(
-                id=f"cm_{link.charger_id}_{link.merchant_id}",
+                id=f"cm_{link.id}",
                 merchant_id=merchant_id,
                 title=title,
                 description=link.exclusive_description or "",
@@ -854,40 +854,39 @@ def update_exclusive(
     # Handle charger_merchant-based exclusives (cm_ prefix)
     if exclusive_id.startswith("cm_"):
         from app.models.while_you_charge import ChargerMerchant
-        parts = exclusive_id.split("_", 2)  # cm_charger_id_merchant_id
-        if len(parts) >= 3:
-            cm_charger_id = parts[1]
-            cm_merchant_id = "_".join(parts[2:])
+        cm_pk = exclusive_id[3:]  # strip "cm_" prefix to get integer PK
+        try:
             link = db.query(ChargerMerchant).filter(
-                ChargerMerchant.charger_id == cm_charger_id,
-                ChargerMerchant.merchant_id == cm_merchant_id,
+                ChargerMerchant.id == int(cm_pk),
             ).first()
-            if link:
-                if request.title is not None:
-                    link.exclusive_title = request.title
-                if request.description is not None:
-                    link.exclusive_description = request.description
-                if request.is_active is not None and not request.is_active:
-                    link.exclusive_title = None
-                    link.exclusive_description = None
-                # Also update DomainMerchant perk_label
-                new_title = request.title if request.title is not None else link.exclusive_title
-                merchant.perk_label = new_title
-                # Update WYC merchant perk_label
-                wyc = db.query(WYCMerchant).filter(WYCMerchant.id == cm_merchant_id).first()
-                if wyc:
-                    wyc.perk_label = new_title
-                db.commit()
-                now_str = datetime.utcnow().isoformat()
-                return ExclusiveResponse(
-                    id=exclusive_id,
-                    merchant_id=merchant_id,
-                    title=link.exclusive_title or "",
-                    description=link.exclusive_description or "",
-                    daily_cap=None, session_cap=None,
-                    eligibility="charging_only", is_active=bool(link.exclusive_title),
-                    created_at=now_str, updated_at=now_str,
-                )
+        except (ValueError, TypeError):
+            link = None
+        if link:
+            if request.title is not None:
+                link.exclusive_title = request.title
+            if request.description is not None:
+                link.exclusive_description = request.description
+            if request.is_active is not None and not request.is_active:
+                link.exclusive_title = None
+                link.exclusive_description = None
+            # Also update DomainMerchant perk_label
+            new_title = request.title if request.title is not None else link.exclusive_title
+            merchant.perk_label = new_title
+            # Update WYC merchant perk_label
+            wyc = db.query(WYCMerchant).filter(WYCMerchant.id == link.merchant_id).first()
+            if wyc:
+                wyc.perk_label = new_title
+            db.commit()
+            now_str = datetime.utcnow().isoformat()
+            return ExclusiveResponse(
+                id=exclusive_id,
+                merchant_id=merchant_id,
+                title=link.exclusive_title or "",
+                description=link.exclusive_description or "",
+                daily_cap=None, session_cap=None,
+                eligibility="charging_only", is_active=bool(link.exclusive_title),
+                created_at=now_str, updated_at=now_str,
+            )
         raise HTTPException(status_code=404, detail="Exclusive not found")
 
     from app.models.while_you_charge import MerchantPerk
@@ -1031,18 +1030,41 @@ def toggle_exclusive(
             detail="Merchant not found or access denied"
         )
     
+    # Handle charger_merchant-based exclusives (cm_ prefix)
+    if exclusive_id.startswith("cm_"):
+        from app.models.while_you_charge import ChargerMerchant
+        cm_pk = exclusive_id[3:]
+        try:
+            link = db.query(ChargerMerchant).filter(
+                ChargerMerchant.id == int(cm_pk),
+            ).first()
+        except (ValueError, TypeError):
+            link = None
+        if not link:
+            raise HTTPException(status_code=404, detail="Exclusive not found")
+        if enabled:
+            # Re-enable: restore title if it was cleared
+            if not link.exclusive_title:
+                link.exclusive_title = "Exclusive Offer"
+        else:
+            link.exclusive_title = None
+            link.exclusive_description = None
+        _sync_exclusive_to_driver_app(db, merchant, link.exclusive_title or "", "", enabled)
+        db.commit()
+        return {"ok": True, "is_active": enabled}
+
     from app.models.while_you_charge import MerchantPerk
     perk = db.query(MerchantPerk).filter(
         MerchantPerk.id == int(exclusive_id),
         MerchantPerk.merchant_id == merchant_id
     ).first()
-    
+
     if not perk:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Exclusive not found"
         )
-    
+
     perk.is_active = enabled
     # Sync to driver-facing tables
     _sync_exclusive_to_driver_app(db, merchant, perk.title, "", enabled)
