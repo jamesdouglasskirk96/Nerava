@@ -58,6 +58,16 @@ object DeepLinkHandler {
                 val exclusiveId = path.getOrNull(1) ?: return webAppBaseUrl
                 "$webAppBaseUrl/exclusive/$exclusiveId"
             }
+            "s" -> {
+                // Short link: nerava://s/{code} → webAppBaseUrl/s/{code}
+                val code = path.getOrNull(1) ?: return webAppBaseUrl
+                "$webAppBaseUrl/s/$code"
+            }
+            "m" -> {
+                // Short merchant link: nerava://m/{id} → webAppBaseUrl/m/{id}
+                val merchantId = path.getOrNull(1) ?: return webAppBaseUrl
+                "$webAppBaseUrl/m/$merchantId"
+            }
             else -> {
                 // Pass through: nerava://path → webAppBaseUrl/path
                 "$webAppBaseUrl/${path.joinToString("/")}"
@@ -67,9 +77,15 @@ object DeepLinkHandler {
 
     private fun resolveAppLink(uri: Uri, webAppBaseUrl: String): String? {
         val host = uri.host
-        if (host != "app.nerava.network") {
+        if (host != "app.nerava.network" && host != "link.nerava.network") {
             Log.w(TAG, "App link from unexpected host: $host")
             return null
+        }
+
+        // link.nerava.network short links → resolve path in web app
+        if (host == "link.nerava.network") {
+            val path = uri.path ?: return webAppBaseUrl
+            return "$webAppBaseUrl$path"
         }
 
         // The URL is already the web app URL — load it directly

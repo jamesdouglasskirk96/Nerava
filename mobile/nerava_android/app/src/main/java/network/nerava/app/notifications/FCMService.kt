@@ -4,6 +4,7 @@ import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import network.nerava.app.NeravaApplication
+import network.nerava.app.bridge.NativeBridge
 
 /**
  * Firebase Cloud Messaging service.
@@ -21,8 +22,9 @@ class FCMService : FirebaseMessagingService() {
         val app = application as NeravaApplication
         app.tokenStore.setFCMToken(token)
 
-        // TODO: When backend adds POST /v1/notifications/register-device,
-        // send { platform: "android", token: token } here.
+        // Cache for later forwarding and send to web bridge
+        cachedToken = token
+        NativeBridge.activeBridge?.sendDeviceToken(token)
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
@@ -32,7 +34,14 @@ class FCMService : FirebaseMessagingService() {
 
         // Check for session-related push
         val type = data["type"]
-        val sessionId = data["session_id"]
+        val deepLink = data["deep_link"]
+
+        // Forward deep link to web bridge if present
+        if (type != null && deepLink != null) {
+            NativeBridge.activeBridge?.sendToWeb(
+                network.nerava.app.bridge.BridgeMessage.PushDeepLink(type, deepLink)
+            )
+        }
 
         when (type) {
             "session_update" -> {
@@ -67,5 +76,9 @@ class FCMService : FirebaseMessagingService() {
 
     companion object {
         private const val TAG = "FCMService"
+
+        /** Cached FCM token for forwarding to web bridge after bridge is ready. */
+        @Volatile
+        var cachedToken: String? = null
     }
 }

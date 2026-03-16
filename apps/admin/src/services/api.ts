@@ -93,7 +93,42 @@ export interface ActiveSession {
   time_remaining_minutes: number
 }
 
+export interface ChargingSession {
+  id: string
+  driver_id: number
+  driver_name: string | null
+  session_start: string | null
+  session_end: string | null
+  duration_minutes: number | null
+  kwh_delivered: number | null
+  charger_id: string | null
+  charger_network: string | null
+  quality_score: number | null
+  ended_reason: string | null
+  source: string | null
+  has_reward: boolean
+  reward_cents: number | null
+  reward_status: string | null
+  campaign_id: string | null
+}
+
 // API Functions
+export async function getSessionHistory(params: {
+  limit?: number
+  offset?: number
+  start_date?: string
+  end_date?: string
+  driver_id?: number
+}): Promise<{ sessions: ChargingSession[]; total: number; limit: number; offset: number }> {
+  const qs = new URLSearchParams()
+  if (params.limit) qs.append('limit', params.limit.toString())
+  if (params.offset != null) qs.append('offset', params.offset.toString())
+  if (params.start_date) qs.append('start_date', params.start_date)
+  if (params.end_date) qs.append('end_date', params.end_date)
+  if (params.driver_id) qs.append('driver_id', params.driver_id.toString())
+  return fetchAPI(`/v1/admin/sessions/history?${qs.toString()}`)
+}
+
 export async function searchMerchants(query: string): Promise<{ merchants: Merchant[] }> {
   return fetchAPI(`/v1/admin/merchants/search?query=${encodeURIComponent(query)}`)
 }

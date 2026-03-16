@@ -76,6 +76,17 @@ sealed class BridgeMessage(val action: String) {
     data object Ready : BridgeMessage("NATIVE_READY") {
         override fun toPayloadJson() = JSONObject()
     }
+
+    data class DeviceTokenRegistered(val token: String) : BridgeMessage("DEVICE_TOKEN_REGISTERED") {
+        override fun toPayloadJson() = JSONObject().put("token", token)
+    }
+
+    data class PushDeepLink(val type: String, val deepLink: String) : BridgeMessage("PUSH_DEEP_LINK") {
+        override fun toPayloadJson() = JSONObject().apply {
+            put("type", type)
+            put("deep_link", deepLink)
+        }
+    }
 }
 
 /**

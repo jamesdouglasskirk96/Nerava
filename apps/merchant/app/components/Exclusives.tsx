@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Users, AlertCircle } from 'lucide-react';
-import { 
-  getMerchantExclusives, 
+import { Plus, Users, AlertCircle, Pencil, Check, X } from 'lucide-react';
+import {
+  getMerchantExclusives,
   toggleExclusive,
+  updateExclusive,
   getMerchantAnalytics,
   type Exclusive,
   type MerchantAnalytics,
-  ApiError 
+  ApiError
 } from '../services/api';
 import { capture, MERCHANT_EVENTS } from '../analytics';
 
@@ -18,8 +19,11 @@ export function Exclusives() {
   const [error, setError] = useState<string | null>(null);
   const [toggleError, setToggleError] = useState<string | null>(null);
   const [analytics, setAnalytics] = useState<MerchantAnalytics | null>(null);
-  
-  // Get merchant ID from localStorage or context (for MVP, use a placeholder)
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [saving, setSaving] = useState(false);
+
   const merchantId = localStorage.getItem('merchant_id') || '';
 
   useEffect(() => {
@@ -81,6 +85,38 @@ export function Exclusives() {
     } catch (err) {
       console.error('Failed to toggle exclusive:', err);
       setToggleError(err instanceof ApiError ? err.message : 'Failed to update exclusive');
+    }
+  };
+
+  const startEditing = (exclusive: Exclusive) => {
+    setEditingId(exclusive.id);
+    setEditTitle(exclusive.title);
+    setEditDescription(exclusive.description || '');
+    setToggleError(null);
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setEditTitle('');
+    setEditDescription('');
+  };
+
+  const saveEdit = async () => {
+    if (!editingId || !editTitle.trim()) return;
+    setSaving(true);
+    setToggleError(null);
+    try {
+      await updateExclusive(merchantId, editingId, {
+        title: editTitle.trim(),
+        description: editDescription.trim(),
+      });
+      setEditingId(null);
+      await loadExclusives();
+    } catch (err) {
+      console.error('Failed to update exclusive:', err);
+      setToggleError(err instanceof ApiError ? err.message : 'Failed to update exclusive');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -167,55 +203,110 @@ export function Exclusives() {
         <div className="grid gap-6">
           {exclusives.map((exclusive) => (
             <div key={exclusive.id} className="bg-white p-6 rounded-lg border border-neutral-200">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-xl text-neutral-900">{exclusive.title}</h3>
-                    <span className={`px-3 py-1 rounded-full text-sm ${getStatusColor(exclusive)}`}>
-                      {getStatusText(exclusive)}
-                    </span>
-                  </div>
-                  <p className="text-sm text-neutral-600 mb-3">{exclusive.description}</p>
-
-                  <div className="flex items-center gap-6 text-sm">
-                    <div className="flex items-center gap-2 text-neutral-600">
-                      <span className="px-2 py-1 rounded bg-green-100 text-green-700">
-                        {exclusive.eligibility || 'All Customers'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-neutral-600">
-                      <Users className="w-4 h-4" />
-                      Daily cap: {exclusive.daily_cap || 'Unlimited'}
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => toggleExclusiveStatus(exclusive.id, exclusive.is_active)}
-                  className={`px-4 py-2 rounded-lg transition-colors ${
-                    exclusive.is_active
-                      ? 'bg-neutral-900 text-white hover:bg-neutral-800'
-                      : 'border border-neutral-300 text-neutral-700 hover:bg-neutral-50'
-                  }`}
-                >
-                  {exclusive.is_active ? 'Turn Off' : 'Turn On'}
-                </button>
-              </div>
-
-              {/* Progress bar - show only if daily_cap is set and we have activation data */}
-              {exclusive.daily_cap && exclusive.daily_cap > 0 && analytics && (
-                <div className="mt-4">
-                  <div className="flex items-center justify-between text-xs text-neutral-600 mb-1">
-                    <span>Daily Cap</span>
-                    <span>{analytics.activations} / {exclusive.daily_cap} activations</span>
-                  </div>
-                  <div className="h-2 bg-neutral-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all bg-neutral-900"
-                      style={{ width: `${Math.min((analytics.activations / exclusive.daily_cap) * 100, 100)}%` }}
+              {editingId === exclusive.id ? (
+                /* Inline Edit Mode */
+                <div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-neutral-700 mb-1">Offer Title</label>
+                    <input
+                      type="text"
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent text-neutral-900"
+                      placeholder="e.g. Free Chips & Salsa"
                     />
                   </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-neutral-700 mb-1">Description</label>
+                    <textarea
+                      value={editDescription}
+                      onChange={(e) => setEditDescription(e.target.value)}
+                      rows={2}
+                      className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent text-neutral-900 resize-none"
+                      placeholder="Describe the exclusive offer for EV drivers"
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={saveEdit}
+                      disabled={saving || !editTitle.trim()}
+                      className="bg-neutral-900 text-white px-4 py-2 rounded-lg hover:bg-neutral-800 transition-colors disabled:opacity-50 flex items-center gap-2"
+                    >
+                      <Check className="w-4 h-4" />
+                      {saving ? 'Saving...' : 'Save'}
+                    </button>
+                    <button
+                      onClick={cancelEditing}
+                      disabled={saving}
+                      className="border border-neutral-300 text-neutral-700 px-4 py-2 rounded-lg hover:bg-neutral-50 transition-colors flex items-center gap-2"
+                    >
+                      <X className="w-4 h-4" />
+                      Cancel
+                    </button>
+                  </div>
                 </div>
+              ) : (
+                /* Display Mode */
+                <>
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h3 className="text-xl text-neutral-900">{exclusive.title}</h3>
+                        <span className={`px-3 py-1 rounded-full text-sm ${getStatusColor(exclusive)}`}>
+                          {getStatusText(exclusive)}
+                        </span>
+                      </div>
+                      <p className="text-sm text-neutral-600 mb-3">{exclusive.description}</p>
+
+                      <div className="flex items-center gap-6 text-sm">
+                        <div className="flex items-center gap-2 text-neutral-600">
+                          <span className="px-2 py-1 rounded bg-green-100 text-green-700">
+                            {exclusive.eligibility || 'All Customers'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-neutral-600">
+                          <Users className="w-4 h-4" />
+                          Daily cap: {exclusive.daily_cap || 'Unlimited'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => startEditing(exclusive)}
+                        className="p-2 rounded-lg border border-neutral-300 text-neutral-600 hover:bg-neutral-50 transition-colors"
+                        title="Edit offer"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => toggleExclusiveStatus(exclusive.id, exclusive.is_active)}
+                        className={`px-4 py-2 rounded-lg transition-colors ${
+                          exclusive.is_active
+                            ? 'bg-neutral-900 text-white hover:bg-neutral-800'
+                            : 'border border-neutral-300 text-neutral-700 hover:bg-neutral-50'
+                        }`}
+                      >
+                        {exclusive.is_active ? 'Turn Off' : 'Turn On'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {exclusive.daily_cap && exclusive.daily_cap > 0 && analytics && (
+                    <div className="mt-4">
+                      <div className="flex items-center justify-between text-xs text-neutral-600 mb-1">
+                        <span>Daily Cap</span>
+                        <span>{analytics.activations} / {exclusive.daily_cap} activations</span>
+                      </div>
+                      <div className="h-2 bg-neutral-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all bg-neutral-900"
+                          style={{ width: `${Math.min((analytics.activations / exclusive.daily_cap) * 100, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           ))}

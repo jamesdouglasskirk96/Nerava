@@ -10,10 +10,6 @@ export default function Header() {
     }
   }
 
-  const scrollToContact = () => {
-    scrollToSection('final-cta')
-  }
-
   return (
     <header className="w-full bg-white border-b border-border">
       <div className="max-w-7xl mx-auto px-6 md:px-8 py-4">
@@ -27,40 +23,50 @@ export default function Header() {
           </a>
           <nav className="hidden md:flex items-center gap-6">
             <a
-              href="#activates-moment"
+              href="#drivers"
               onClick={(e) => {
                 e.preventDefault()
-                scrollToSection('activates-moment')
+                scrollToSection('drivers')
               }}
               className="text-foreground hover:text-muted-foreground transition-colors"
             >
-              How It Works
+              Drivers
             </a>
             <a
-              href="#built-to-scale"
+              href="#merchants"
               onClick={(e) => {
                 e.preventDefault()
-                scrollToSection('built-to-scale')
+                scrollToSection('merchants')
               }}
               className="text-foreground hover:text-muted-foreground transition-colors"
             >
-              For Charger Owners
+              Merchants
+            </a>
+            <a
+              href="#sponsors"
+              onClick={(e) => {
+                e.preventDefault()
+                scrollToSection('sponsors')
+              }}
+              className="text-foreground hover:text-muted-foreground transition-colors"
+            >
+              Sponsors
             </a>
             <Button
               variant="primary"
-              onClick={scrollToContact}
+              onClick={() => scrollToSection('download')}
               className="px-4 py-2"
             >
-              Get in Touch
+              Download
             </Button>
           </nav>
           <div className="md:hidden">
             <Button
               variant="primary"
-              onClick={scrollToContact}
+              onClick={() => scrollToSection('download')}
               className="px-3 py-1.5 text-sm"
             >
-              Get in Touch
+              Download
             </Button>
           </div>
         </div>
@@ -68,4 +74,3 @@ export default function Header() {
     </header>
   )
 }
-

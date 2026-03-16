@@ -1,14 +1,33 @@
 import { useState, useEffect } from 'react';
-import { Store, MapPin, Activity, AlertTriangle } from 'lucide-react';
+import { Store, MapPin, Activity, AlertTriangle, Zap, Car, CreditCard, Target, DollarSign, TrendingUp } from 'lucide-react';
 import { fetchAPI, getActiveSessions, getAuditLogs, type AuditLog } from '../services/api';
+
+interface RevenueBreakdown {
+  campaign_gross_cents: number;
+  campaign_platform_fees_cents: number;
+  campaign_driver_rewards_cents: number;
+  merchant_subscriptions_cents: number;
+  active_subscriptions: number;
+  nova_sales_cents: number;
+  merchant_fees_cents: number;
+  arrival_billing_cents: number;
+  total_realized_cents: number;
+  total_driver_payouts_cents: number;
+}
 
 interface OverviewResponse {
   total_drivers: number;
   total_merchants: number;
+  total_chargers: number;
+  total_charging_sessions: number;
+  active_campaigns: number;
   total_driver_nova: number;
   total_merchant_nova: number;
   total_nova_outstanding: number;
   total_stripe_usd: number;
+  total_tesla_connections: number;
+  total_stripe_express_onboarded: number;
+  revenue?: RevenueBreakdown;
 }
 
 export function Dashboard() {
@@ -64,20 +83,13 @@ export function Dashboard() {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(cents / 100);
   };
 
   const stats = overview
     ? [
-        {
-          label: 'Total Merchants',
-          value: formatNumber(overview.total_merchants),
-          icon: Store,
-          color: 'text-blue-600',
-          bgColor: 'bg-blue-50',
-        },
         {
           label: 'Total Drivers',
           value: formatNumber(overview.total_drivers),
@@ -86,18 +98,53 @@ export function Dashboard() {
           bgColor: 'bg-green-50',
         },
         {
-          label: 'Live Exclusive Sessions',
-          value: formatNumber(activeSessionsCount),
-          icon: Activity,
+          label: 'Connected Teslas',
+          value: formatNumber(overview.total_tesla_connections),
+          icon: Car,
+          color: 'text-red-600',
+          bgColor: 'bg-red-50',
+        },
+        {
+          label: 'Total Chargers',
+          value: formatNumber(overview.total_chargers),
+          icon: Zap,
+          color: 'text-yellow-600',
+          bgColor: 'bg-yellow-50',
+        },
+        {
+          label: 'Charging Sessions',
+          value: formatNumber(overview.total_charging_sessions),
+          icon: Zap,
+          color: 'text-blue-600',
+          bgColor: 'bg-blue-50',
+        },
+        {
+          label: 'Merchants',
+          value: formatNumber(overview.total_merchants),
+          icon: Store,
           color: 'text-purple-600',
           bgColor: 'bg-purple-50',
         },
         {
-          label: 'Total Stripe Revenue',
-          value: formatCurrency(overview.total_stripe_usd),
-          icon: AlertTriangle,
-          color: 'text-red-600',
-          bgColor: 'bg-red-50',
+          label: 'Active Campaigns',
+          value: formatNumber(overview.active_campaigns),
+          icon: Target,
+          color: 'text-orange-600',
+          bgColor: 'bg-orange-50',
+        },
+        {
+          label: 'Stripe Express',
+          value: formatNumber(overview.total_stripe_express_onboarded),
+          icon: CreditCard,
+          color: 'text-indigo-600',
+          bgColor: 'bg-indigo-50',
+        },
+        {
+          label: 'Total Revenue',
+          value: formatCurrency(overview.revenue?.total_realized_cents ?? overview.total_stripe_usd),
+          icon: DollarSign,
+          color: 'text-emerald-600',
+          bgColor: 'bg-emerald-50',
         },
       ]
     : [];
@@ -144,7 +191,7 @@ export function Dashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-4 gap-4 mb-8">
         {stats.map((stat) => {
           const Icon = stat.icon;
           return (
@@ -160,6 +207,52 @@ export function Dashboard() {
           );
         })}
       </div>
+
+      {/* Revenue Breakdown */}
+      {overview?.revenue && (
+        <div className="bg-white border border-neutral-200 rounded-lg mb-8">
+          <div className="px-6 py-4 border-b border-neutral-200">
+            <h2 className="text-lg text-neutral-900">Revenue</h2>
+          </div>
+          <div className="p-6">
+            {/* Gross inflows */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
+              {[
+                { label: 'Campaign Funding', cents: overview.revenue.campaign_gross_cents, desc: 'Total collected from sponsors' },
+                { label: 'Merchant Subscriptions', cents: overview.revenue.merchant_subscriptions_cents, desc: `${overview.revenue.active_subscriptions} active` },
+                { label: 'Nova Sales', cents: overview.revenue.nova_sales_cents, desc: 'Merchant purchases' },
+                { label: 'Merchant Fees', cents: overview.revenue.merchant_fees_cents, desc: 'Redemption commission' },
+                { label: 'Arrival Billing', cents: overview.revenue.arrival_billing_cents, desc: 'EV arrival fees' },
+              ].map((item) => (
+                <div key={item.label}>
+                  <div className="text-sm text-neutral-500">{item.label}</div>
+                  <div className="text-xl font-semibold text-neutral-900 mt-1">{formatCurrency(item.cents)}</div>
+                  <div className="text-xs text-neutral-400 mt-0.5">{item.desc}</div>
+                </div>
+              ))}
+            </div>
+            {/* Totals */}
+            <div className="mt-6 pt-4 border-t border-neutral-100 grid grid-cols-2 md:grid-cols-4 gap-6">
+              <div>
+                <div className="text-sm text-neutral-500">Total Collected</div>
+                <div className="text-2xl font-semibold text-emerald-600 mt-1">{formatCurrency(overview.revenue.total_realized_cents)}</div>
+              </div>
+              <div>
+                <div className="text-sm text-neutral-500">Platform Fees (20%)</div>
+                <div className="text-xl font-semibold text-neutral-900 mt-1">{formatCurrency(overview.revenue.campaign_platform_fees_cents)}</div>
+              </div>
+              <div>
+                <div className="text-sm text-neutral-500">Paid to Drivers</div>
+                <div className="text-xl font-semibold text-neutral-900 mt-1">{formatCurrency(overview.revenue.campaign_driver_rewards_cents)}</div>
+              </div>
+              <div>
+                <div className="text-sm text-neutral-500">Driver Withdrawals</div>
+                <div className="text-xl font-semibold text-neutral-900 mt-1">{formatCurrency(overview.revenue.total_driver_payouts_cents)}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-6">
         {/* Alerts - Coming Soon */}

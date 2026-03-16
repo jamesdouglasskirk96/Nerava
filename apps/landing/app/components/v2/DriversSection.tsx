@@ -3,17 +3,21 @@ import Card from './Card'
 export default function DriversSection() {
   const benefits = [
     {
-      title: 'Works quietly in the background',
-      description: "Nerava detects when you're charging, so you don't have to open anything. Just plug in and discover."
+      title: 'Earn while you charge',
+      description: 'Get cash rewards and Nova points for every verified charging session. Campaigns from sponsors pay you for charging at specific stations and times.'
     },
     {
-      title: 'Discover walkable places',
-      description: 'See coffee shops, restaurants, gyms, and stores within walking distance—no scrolling, no searching.'
+      title: 'Track your sessions',
+      description: 'Automatic Tesla integration detects when you plug in. Track energy delivered, session history, and climb the Bronze to Platinum reputation tiers.'
     },
     {
-      title: 'Instant decisions',
-      description: 'Get the information you need to decide quickly. No guessing, no wasting time thinking "what should I do?"'
-    }
+      title: 'Discover local deals',
+      description: 'Find coffee shops, restaurants, and stores within walking distance of your charger. Exclusive merchant deals unlock while you charge.'
+    },
+    {
+      title: 'Get paid to your wallet',
+      description: 'Withdraw your earnings anytime. Cash goes straight to your bank via Stripe. No minimums to start earning, no subscriptions.'
+    },
   ]
 
   return (
@@ -24,10 +28,10 @@ export default function DriversSection() {
             The driver experience
           </h2>
           <p className="text-lg text-muted-foreground">
-            Nerava works quietly in the background, surfacing nearby businesses exactly when drivers need them most: during their charging session.
+            Plug in, earn rewards, discover deals nearby. Nerava works in the background so you can make the most of every charge.
           </p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
           {benefits.map((benefit, index) => (
             <Card key={index}>
               <h3 className="font-bold text-foreground mb-2">{benefit.title}</h3>
@@ -39,4 +43,3 @@ export default function DriversSection() {
     </section>
   )
 }
-

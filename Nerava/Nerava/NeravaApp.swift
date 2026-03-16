@@ -1,9 +1,19 @@
 import SwiftUI
 import UIKit
+import UserNotifications
 
 // MARK: - AppDelegate for Remote Notification Handling
 
-class AppDelegate: NSObject, UIApplicationDelegate {
+class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        UNUserNotificationCenter.current().delegate = self
+        return true
+    }
+
     func application(
         _ application: UIApplication,
         didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
@@ -26,10 +36,47 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     ) {
         Log.app.error("Failed to register for remote notifications: \(error.localizedDescription)")
     }
+
+    // MARK: - UNUserNotificationCenterDelegate
+
+    /// Handle notification tap (app was in background or closed)
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+        let pushType = userInfo["type"] as? String ?? "unknown"
+        let deepLink = userInfo["deep_link"] as? String
+
+        Log.app.info("Push notification tapped: type=\(pushType)")
+
+        // Forward to web app via NativeBridge
+        NotificationCenter.default.post(
+            name: .didReceivePushDeepLink,
+            object: nil,
+            userInfo: [
+                "type": pushType,
+                "deep_link": deepLink ?? "",
+                "data": userInfo,
+            ]
+        )
+        completionHandler()
+    }
+
+    /// Show notification banner even when app is in foreground
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
+    }
 }
 
 extension Notification.Name {
     static let didReceiveAPNsToken = Notification.Name("didReceiveAPNsToken")
+    static let didReceivePushDeepLink = Notification.Name("didReceivePushDeepLink")
 }
 
 @main

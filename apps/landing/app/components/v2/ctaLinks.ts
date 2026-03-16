@@ -3,16 +3,16 @@
  * All CTAs use environment variables for production, with fallbacks for development
  */
 
-const DRIVER_FORM_FALLBACK = 'https://forms.gle/J6Rv2yo6uiQvH4pj7'
-const MERCHANT_FORM_FALLBACK = 'https://forms.gle/5gvVWqXrhSWwReDJA'
 const CHARGER_OWNER_FORM_FALLBACK = 'https://forms.gle/2HY3p3882yhqMkT69'
 
-// Default to localhost apps in development (these need to be running)
-// To start them:
-// - Driver app: cd apps/driver && npm run dev (runs on port 5173)
-// - Merchant app: cd apps/merchant && npm run dev (runs on port 5174)
 const DEFAULT_DRIVER_APP_URL = 'http://localhost:5173'
 const DEFAULT_MERCHANT_APP_URL = 'http://localhost:5174'
+const DEFAULT_CONSOLE_APP_URL = 'http://localhost:5176'
+
+// App store links — update APP_STORE_URL once the App Store listing is live
+export const APP_STORE_URL = 'https://apps.apple.com/us/app/nerava/id6759253986'
+export const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=network.nerava.app'
+export const WEB_APP_URL = 'https://app.nerava.network'
 
 /**
  * Get driver app CTA URL with tracking parameters
@@ -100,12 +100,24 @@ export function getMerchantFindHref(): string {
   return `${DEFAULT_MERCHANT_APP_URL}/find?src=landing&cta=merchant`
 }
 
-// Legacy exports for backward compatibility (deprecated, use helper functions instead)
-// Note: These are evaluated at build time, so they use build-time env vars
-// For runtime env vars, always use the helper functions directly
-export const DRIVER_CTA_HREF = DEFAULT_DRIVER_APP_URL
-export const MERCHANT_CTA_HREF = DEFAULT_MERCHANT_APP_URL
-export const CHARGER_OWNER_CTA_HREF = CHARGER_OWNER_FORM_FALLBACK
+/**
+ * Get sponsor console CTA URL with tracking parameters
+ */
+export function getSponsorCTAHref(): string {
+  const PRODUCTION_CONSOLE_URL = 'https://console.nerava.network'
+
+  if (process.env.NEXT_PUBLIC_CONSOLE_APP_URL) {
+    return `${process.env.NEXT_PUBLIC_CONSOLE_APP_URL}?src=landing&cta=sponsor`
+  }
+
+  const isProduction = process.env.NODE_ENV === 'production' || typeof window === 'undefined'
+
+  if (isProduction) {
+    return `${PRODUCTION_CONSOLE_URL}?src=landing&cta=sponsor`
+  }
+
+  return `${DEFAULT_CONSOLE_APP_URL}?src=landing&cta=sponsor`
+}
 
 
 

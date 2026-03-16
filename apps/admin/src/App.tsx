@@ -10,7 +10,6 @@ import { Overrides } from './components/Overrides';
 import { Deployments } from './components/Deployments';
 import { Logs } from './components/Logs';
 import { SeedManager } from './components/SeedManager';
-import { ConsentBanner } from './components/ConsentBanner';
 import './App.css'
 
 export default function App() {
@@ -63,7 +62,6 @@ export default function App() {
       <main className="flex-1 overflow-auto">
         {renderScreen()}
       </main>
-      <ConsentBanner />
     </div>
   );
 }

@@ -356,6 +356,14 @@ final class SessionEngine: ObservableObject {
 
     // MARK: - Web Bridge Commands
 
+    /// Web sends visible chargers for dynamic geofencing
+    func updateChargerGeofences(_ chargers: [(id: String, lat: Double, lng: Double)],
+                                 targetChargerId: String? = nil) {
+        // Only update geofences in idle/nearCharger states — don't disrupt active sessions
+        guard state == .idle || state == .nearCharger else { return }
+        geofenceManager.updateChargerGeofences(chargers, targetChargerId: targetChargerId)
+    }
+
     /// Web tells native which charger to monitor
     func setChargerTarget(chargerId: String, lat: Double, lng: Double) {
         // CRITICAL: Capture old charger ID BEFORE overwriting
@@ -395,6 +403,10 @@ final class SessionEngine: ObservableObject {
     func setAuthToken(_ token: String) {
         KeychainService.shared.setAccessToken(token)
         apiClient.setAuthToken(token)
+
+        // Now that user is logged in, request notification permission
+        // so the device token gets registered with the backend
+        NotificationService.shared.requestPermissionIfNeeded()
     }
 
     func triggerNotificationPermissionRationaleIfNeeded() {
@@ -576,6 +588,15 @@ final class SessionEngine: ObservableObject {
         if identifier.hasPrefix("charger_") && state == .idle {
             transition(to: .nearCharger, event: .enteredChargerIntentZone, occurredAt: now)
             locationService.setHighAccuracyMode(true)
+
+            // Send background ping to backend for Tesla charging detection.
+            // This works even when the app is backgrounded/suspended.
+            if let location = locationService.currentLocation {
+                apiClient.sendBackgroundPing(
+                    lat: location.coordinate.latitude,
+                    lng: location.coordinate.longitude
+                )
+            }
         }
 
         if identifier.hasPrefix("merchant_") && state == .inTransit {

@@ -105,6 +105,44 @@ final class APIClient: APIClientProtocol {
         try await executeWithRetry(request: request, eventId: eventId, event: event)
     }
 
+    // MARK: - Background Ping
+
+    /// Fire-and-forget background ping to trigger Tesla charging detection.
+    /// Called when a charger geofence is entered (can be backgrounded).
+    func sendBackgroundPing(lat: Double, lng: Double) {
+        let url = baseURL.appendingPathComponent("/v1/charging-sessions/background-ping")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        if let token = accessToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        } else {
+            // Try Keychain if no in-memory token
+            if let token = KeychainService.shared.getAccessToken() {
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            } else {
+                Log.api.warning("No auth token for background ping, skipping")
+                return
+            }
+        }
+
+        let body: [String: Any] = ["lat": lat, "lng": lng]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        // Fire-and-forget — backend handles push notifications
+        Task {
+            do {
+                let (_, response) = try await session.data(for: request)
+                if let http = response as? HTTPURLResponse {
+                    Log.api.info("Background ping: HTTP \(http.statusCode)")
+                }
+            } catch {
+                Log.api.warning("Background ping failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
     // MARK: - Config
 
     func fetchConfig() async throws -> SessionConfig {
@@ -195,5 +233,6 @@ protocol APIClientProtocol {
     func setAuthToken(_ token: String)
     func emitSessionEvent(sessionId: String, event: String, eventId: String, occurredAt: Date, metadata: [String: String]?) async throws
     func emitPreSessionEvent(event: String, chargerId: String?, eventId: String, occurredAt: Date, metadata: [String: String]?) async throws
+    func sendBackgroundPing(lat: Double, lng: Double)
     func fetchConfig() async throws -> SessionConfig
 }

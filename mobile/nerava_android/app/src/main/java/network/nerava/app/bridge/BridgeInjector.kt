@@ -109,6 +109,14 @@ object BridgeInjector {
 
                 getAuthToken: function() {
                     return this.request('GET_AUTH_TOKEN', {});
+                },
+
+                openExternalUrl: function(url) {
+                    this.postMessage('OPEN_EXTERNAL_URL', { url: url });
+                },
+
+                updateChargerGeofences: function(chargers) {
+                    this.postMessage('UPDATE_CHARGER_GEOFENCES', { chargers: chargers });
                 }
             };
 

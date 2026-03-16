@@ -36,28 +36,31 @@ function isTokenExpired(token: string): boolean {
  */
 function clearSessionAndRedirect() {
   localStorage.removeItem('access_token')
+  localStorage.removeItem('refresh_token')
   localStorage.removeItem('businessClaimed')
   localStorage.removeItem('merchant_id')
+  localStorage.removeItem('merchant_account_id')
+  localStorage.removeItem('place_id')
   window.location.href = `${import.meta.env.BASE_URL}claim`
 }
 
 export async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`
   const token = localStorage.getItem('access_token')
-  
+
   // Check token expiry before making request
   if (token && isTokenExpired(token)) {
     clearSessionAndRedirect()
     throw new ApiError(401, 'token_expired', 'Session expired')
   }
-  
+
   const headers = new Headers(options?.headers)
   headers.set('Content-Type', 'application/json')
-  
+
   if (token) {
     headers.set('Authorization', `Bearer ${token}`)
   }
-  
+
   const response = await fetch(url, {
     ...options,
     headers,
@@ -137,8 +140,6 @@ export interface Visit {
 
 // API Functions
 export async function getMerchantExclusives(merchantId: string): Promise<Exclusive[]> {
-  // For MVP, we'll need to query MerchantPerk with is_exclusive flag
-  // This is a simplified version - backend needs to add GET /v1/merchants/{id}/exclusives
   return fetchAPI<Exclusive[]>(`/v1/merchants/${merchantId}/exclusives`)
 }
 
@@ -202,6 +203,183 @@ export async function getMerchantVisits(
   )
 }
 
+// --- Google OAuth ---
+
+export async function startGoogleOAuth(): Promise<{ auth_url: string; state: string }> {
+  // Use raw fetch — this is an unauthenticated endpoint and fetchAPI would
+  // redirect to /claim if an old expired token is in localStorage
+  const url = `${API_BASE_URL}/v1/merchant/auth/google/start`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+  if (!response.ok) {
+    throw new ApiError(response.status, undefined, 'Failed to start Google OAuth')
+  }
+  return response.json()
+}
+
+export async function handleGoogleCallback(code: string, state: string): Promise<{
+  success: boolean
+  access_token: string
+  refresh_token: string
+  merchant_account_id: string
+  user_email: string
+  user_name: string
+}> {
+  // Use raw fetch — this is an unauthenticated endpoint and fetchAPI would
+  // redirect to /claim if an old expired token is in localStorage
+  const url = `${API_BASE_URL}/v1/merchant/auth/google/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`
+  const response = await fetch(url, {
+    headers: { 'Content-Type': 'application/json' },
+  })
+  if (!response.ok) {
+    let errorData: { detail?: string; message?: string } = {}
+    try { errorData = await response.json() } catch {}
+    throw new ApiError(response.status, undefined, errorData.detail || errorData.message || 'Failed to complete Google sign-in')
+  }
+  return response.json()
+}
+
+export async function listGBPLocations(): Promise<{ locations: Array<{ location_id: string; name: string; address: string; place_id: string }> }> {
+  return fetchAPI('/v1/merchant/locations')
+}
+
+export async function claimLocation(placeId: string, name?: string, address?: string): Promise<{ claim_id: string; place_id: string; status: string }> {
+  return fetchAPI('/v1/merchant/claim', {
+    method: 'POST',
+    body: JSON.stringify({ place_id: placeId, name, address }),
+  })
+}
+
+export async function searchPlaces(query: string): Promise<Array<{ place_id: string; name: string; address: string | null; lat: number; lng: number; types: string[] }>> {
+  return fetchAPI(`/v1/merchants/places/search?q=${encodeURIComponent(query)}`)
+}
+
+// --- Merchant Profile ---
+
+export async function fetchMyMerchant(): Promise<{ merchant: { id: string; name: string; nova_balance: number; zone_slug: string; status: string }; transactions: any[] }> {
+  return fetchAPI('/v1/merchants/me')
+}
+
+// --- Subscriptions ---
+
+export async function createSubscription(placeId: string, plan: string): Promise<{ checkout_url: string; session_id: string }> {
+  return fetchAPI('/v1/merchant/billing/subscribe', {
+    method: 'POST',
+    body: JSON.stringify({ place_id: placeId, plan }),
+  })
+}
+
+export async function getSubscription(): Promise<{ subscription: any }> {
+  return fetchAPI('/v1/merchant/billing/subscription')
+}
+
+export async function cancelSubscription(): Promise<{ ok: boolean }> {
+  return fetchAPI('/v1/merchant/billing/cancel', { method: 'POST' })
+}
+
+export async function getBillingPortalUrl(): Promise<{ url: string }> {
+  return fetchAPI('/v1/merchant/billing/portal', { method: 'POST' })
+}
+
+export interface Invoice {
+  id: string
+  amount_due: number
+  status: string
+  created: number
+  invoice_pdf: string | null
+  hosted_invoice_url: string | null
+}
+
+export async function getInvoices(limit = 20): Promise<{ invoices: Invoice[] }> {
+  return fetchAPI(`/v1/merchant/billing/invoices?limit=${limit}`)
+}
+
+// --- Ad Stats ---
+
+export async function getAdStats(period: string = '30d'): Promise<any> {
+  return fetchAPI(`/v1/ads/impressions/stats?period=${period}`)
+}
+
+// --- Profile ---
+
+export async function updateProfile(data: Record<string, any>): Promise<{ ok: boolean }> {
+  return fetchAPI('/v1/merchants/me/profile', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+// --- Loyalty ---
+
+export interface LoyaltyCard {
+  id: string
+  merchant_id: string
+  place_id: string | null
+  program_name: string
+  visits_required: number
+  reward_cents: number
+  reward_description: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string | null
+}
+
+export interface LoyaltyCustomer {
+  driver_id_anonymized: string
+  card_name: string
+  visit_count: number
+  visits_required: number
+  last_visit_at: string | null
+  reward_unlocked: boolean
+  reward_claimed: boolean
+}
+
+export interface LoyaltyStats {
+  enrolled_drivers: number
+  total_visits: number
+  rewards_unlocked: number
+  rewards_claimed: number
+}
+
+export async function getLoyaltyCards(merchantId: string): Promise<LoyaltyCard[]> {
+  return fetchAPI<LoyaltyCard[]>(`/v1/loyalty/cards?merchant_id=${merchantId}`)
+}
+
+export async function createLoyaltyCard(
+  merchantId: string,
+  data: { program_name: string; visits_required: number; reward_cents: number; reward_description?: string; place_id?: string }
+): Promise<LoyaltyCard> {
+  return fetchAPI<LoyaltyCard>(`/v1/loyalty/cards?merchant_id=${merchantId}`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function updateLoyaltyCard(
+  merchantId: string,
+  cardId: string,
+  data: Partial<{ program_name: string; visits_required: number; reward_cents: number; reward_description: string; is_active: boolean }>
+): Promise<LoyaltyCard> {
+  return fetchAPI<LoyaltyCard>(`/v1/loyalty/cards/${cardId}?merchant_id=${merchantId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function getLoyaltyCustomers(
+  merchantId: string,
+  limit = 50,
+  offset = 0
+): Promise<{ customers: LoyaltyCustomer[]; total: number }> {
+  return fetchAPI(`/v1/loyalty/customers?merchant_id=${merchantId}&limit=${limit}&offset=${offset}`)
+}
+
+export async function getLoyaltyStats(merchantId: string): Promise<LoyaltyStats> {
+  return fetchAPI<LoyaltyStats>(`/v1/loyalty/stats?merchant_id=${merchantId}`)
+}
+
 // Auth
 export interface MerchantAuthRequest {
   id_token: string
@@ -218,10 +396,10 @@ export async function merchantGoogleAuth(request: MerchantAuthRequest): Promise<
     method: 'POST',
     body: JSON.stringify(request),
   })
-  
+
   // Store token
   localStorage.setItem('access_token', response.access_token)
-  
+
   return response
 }
 

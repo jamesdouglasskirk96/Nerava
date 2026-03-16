@@ -5,8 +5,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.location.Location
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.util.Log
 import com.google.android.gms.location.Geofence
 import network.nerava.app.auth.SecureTokenStore
@@ -157,6 +161,32 @@ class SessionEngine(
         cleanupSession()
     }
 
+    /**
+     * Update charger geofences from web. Clears existing charger geofences and
+     * re-registers with the nearest chargers. Prioritizes the current target charger.
+     */
+    fun updateChargerGeofences(chargers: List<Triple<String, Double, Double>>) {
+        // Remove existing charger geofences (keep merchant geofences)
+        for (region in geofenceManager.activeRegions.filter { it.startsWith("charger_") }) {
+            geofenceManager.removeGeofence(region)
+        }
+
+        val targetId = chargerTarget?.id
+        // Add target charger first with tighter radius
+        for ((id, lat, lng) in chargers) {
+            if (id == targetId) {
+                geofenceManager.addChargerGeofence(id, lat, lng, config.chargerIntentRadiusM.toFloat())
+            }
+        }
+        // Add remaining chargers with standard radius (limited by MAX_ACTIVE_REGIONS)
+        for ((id, lat, lng) in chargers) {
+            if (id != targetId) {
+                geofenceManager.addChargerGeofence(id, lat, lng, 250f)
+            }
+        }
+        Log.i(TAG, "Updated charger geofences: ${chargers.size} chargers (target=$targetId)")
+    }
+
     fun webRequestsSessionEnd() {
         transition(SessionState.SESSION_ENDED, SessionEvent.WEB_REQUESTED_END)
         cleanupSession()
@@ -260,6 +290,9 @@ class SessionEngine(
 
         Log.i(TAG, "Transition: ${oldState.raw} → ${newState.raw} (${event.raw})")
         currentState = newState
+
+        // Haptic feedback on key state transitions (matches iOS)
+        triggerHaptic(newState)
 
         // Notify web via bridge
         bridge?.sendToWeb(BridgeMessage.SessionStateChanged(newState.raw))
@@ -436,6 +469,7 @@ class SessionEngine(
                     return
                 }
             }
+            Unit
         }
 
         data.hardTimeoutDeadline?.let { deadline ->
@@ -478,6 +512,31 @@ class SessionEngine(
         bridge?.sendToWeb(BridgeMessage.SessionStateChanged(currentState.raw))
 
         Log.i(TAG, "Restored session: ${currentState.raw}")
+    }
+
+    // MARK: - Haptic Feedback
+
+    private fun triggerHaptic(state: SessionState) {
+        val effect = when (state) {
+            SessionState.NEAR_CHARGER -> VibrationEffect.EFFECT_TICK
+            SessionState.ANCHORED -> VibrationEffect.EFFECT_CLICK
+            SessionState.SESSION_ACTIVE -> VibrationEffect.EFFECT_HEAVY_CLICK
+            SessionState.AT_MERCHANT -> VibrationEffect.EFFECT_DOUBLE_CLICK
+            SessionState.SESSION_ENDED -> VibrationEffect.EFFECT_CLICK
+            else -> return
+        }
+        try {
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                vm?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            }
+            vibrator?.vibrate(VibrationEffect.createPredefined(effect))
+        } catch (e: Exception) {
+            Log.w(TAG, "Haptic feedback failed: ${e.message}")
+        }
     }
 
     companion object {

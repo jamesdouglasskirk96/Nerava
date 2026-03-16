@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -6,13 +9,13 @@ plugins {
 
 android {
     namespace = "network.nerava.app"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "network.nerava.app"
         minSdk = 26
-        targetSdk = 34
-        versionCode = 1
+        targetSdk = 35
+        versionCode = 2
         versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -29,8 +32,8 @@ android {
         create("release") {
             val keystorePropertiesFile = rootProject.file("keystore.properties")
             if (keystorePropertiesFile.exists()) {
-                val keystoreProperties = java.util.Properties()
-                keystoreProperties.load(java.io.FileInputStream(keystorePropertiesFile))
+                val keystoreProperties = Properties()
+                keystoreProperties.load(FileInputStream(keystorePropertiesFile))
                 storeFile = file(keystoreProperties.getProperty("storeFile"))
                 storePassword = keystoreProperties.getProperty("storePassword")
                 keyAlias = keystoreProperties.getProperty("keyAlias")
@@ -64,6 +67,7 @@ android {
         create("staging") {
             initWith(getByName("release"))
             isMinifyEnabled = false
+            isShrinkResources = false
             buildConfigField("String", "WEB_APP_URL", "\"https://staging.nerava.network\"")
             buildConfigField("String", "API_BASE_URL", "\"https://staging-api.nerava.network\"")
         }
@@ -93,6 +97,7 @@ dependencies {
     implementation("androidx.webkit:webkit:1.9.0")
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
+    implementation("androidx.core:core-splashscreen:1.0.1")
 
     // Security (EncryptedSharedPreferences)
     implementation("androidx.security:security-crypto:1.1.0-alpha06")

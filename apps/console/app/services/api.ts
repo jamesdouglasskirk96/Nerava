@@ -17,8 +17,14 @@ export function setToken(token: string) {
   localStorage.setItem('access_token', token)
 }
 
+export function setRefreshToken(token: string) {
+  localStorage.setItem('refresh_token', token)
+}
+
 export function clearToken() {
   localStorage.removeItem('access_token')
+  localStorage.removeItem('refresh_token')
+  localStorage.removeItem('user_email')
 }
 
 export function isAuthenticated(): boolean {
@@ -85,6 +91,10 @@ export interface Campaign {
   max_grants_per_driver_per_campaign: number | null
   max_grants_per_driver_per_charger: number | null
   rules: CampaignRules
+  funding_status: 'unfunded' | 'pending' | 'funded'
+  funded_at: string | null
+  gross_funding_cents: number | null
+  platform_fee_cents: number | null
   created_at: string
   updated_at: string
 }
@@ -236,6 +246,50 @@ export async function getCampaignBudget(
   campaignId: string,
 ): Promise<BudgetStatus> {
   return fetchAPI(`/v1/campaigns/${campaignId}/budget`)
+}
+
+// --- Campaign Checkout (Funding) ---
+
+export async function createCampaignCheckout(
+  campaignId: string,
+): Promise<{ checkout_url: string | null; session_id: string; status?: string; message?: string }> {
+  return fetchAPI(`/v1/campaigns/${campaignId}/checkout`, { method: 'POST' })
+}
+
+// --- Charger Browse API ---
+
+export interface BrowseCharger {
+  id: string
+  name: string
+  network_name: string | null
+  lat: number | null
+  lng: number | null
+  address: string | null
+  city: string | null
+  state: string | null
+  power_kw: number | null
+  num_evse: number | null
+  connector_types: string[] | null
+  pricing_per_kwh: number | null
+  total_sessions: number
+  unique_drivers: number
+}
+
+export async function browseChargers(params?: {
+  search?: string
+  network?: string
+  state?: string
+  limit?: number
+  offset?: number
+}): Promise<{ chargers: BrowseCharger[]; total: number }> {
+  const qs = new URLSearchParams()
+  if (params?.search) qs.set('search', params.search)
+  if (params?.network) qs.set('network', params.network)
+  if (params?.state) qs.set('state', params.state)
+  if (params?.limit) qs.set('limit', String(params.limit))
+  if (params?.offset) qs.set('offset', String(params.offset))
+  const query = qs.toString() ? `?${qs}` : ''
+  return fetchAPI(`/v1/campaigns/chargers/browse${query}`)
 }
 
 // --- Utilization API ---

@@ -5,16 +5,16 @@ import { getMerchantFindHref } from './ctaLinks'
 export default function MerchantsSection() {
   const benefits = [
     {
-      title: 'Pay only for charging session impressions',
-      description: "You only pay when drivers are actively charging nearby. No wasted ad spend on people who can't reach you."
+      title: 'Reach drivers at the perfect moment',
+      description: "Your business appears to drivers who are actively charging nearby. High intent, high proximity, zero wasted spend."
     },
     {
-      title: 'Set a daily cap—no overruns',
+      title: 'Set a daily cap — no overruns',
       description: 'Control your spend with a daily maximum. Once you hit it, your listing still appears, but you stop paying for the day.'
     },
     {
       title: 'No POS integrations required',
-      description: 'Simple onboarding: no terminals, no integrations, and no commitments. You just start appearing to nearby drivers.'
+      description: 'Simple onboarding: no terminals, no integrations, and no commitments. Get started in minutes.'
     }
   ]
 
@@ -26,7 +26,7 @@ export default function MerchantsSection() {
             For merchants near chargers
           </h2>
           <p className="text-lg text-muted-foreground">
-            Reach drivers at the perfect moment—when they're charging nearby and actively deciding what to do. Pay only during charging windows, with full control over your daily spend.
+            Turn nearby EV chargers into foot traffic. Drivers see your business while they wait — and walk over.
           </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto mb-12">
@@ -39,11 +39,10 @@ export default function MerchantsSection() {
         </div>
         <div className="text-center">
           <Button variant="primary" href={getMerchantFindHref()}>
-            See how this works
+            Claim your business
           </Button>
         </div>
       </div>
     </section>
   )
 }
-

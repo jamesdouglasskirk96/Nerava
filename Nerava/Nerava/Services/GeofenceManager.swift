@@ -10,7 +10,7 @@ final class GeofenceManager: NSObject {
     private let locationManager: CLLocationManager
     private var activeRegions: [String: CLCircularRegion] = [:]
     private var regionOrder: [String] = []  // FIFO order tracking
-    private let maxRegions = 2
+    private let maxRegions = 20
 
     weak var delegate: GeofenceManagerDelegate?
 
@@ -30,7 +30,49 @@ final class GeofenceManager: NSObject {
         addRegion(identifier: identifier, coordinate: coordinate, radius: radius, notifyOnExit: false)
     }
 
+    /// Replace all charger geofences with a new set from the web app's visible chargers.
+    /// Prioritizes target charger (tighter 200m radius), then nearest chargers (250m).
+    func updateChargerGeofences(_ chargers: [(id: String, lat: Double, lng: Double)],
+                                 targetChargerId: String? = nil) {
+        // Remove existing charger geofences (keep merchant geofences)
+        let chargerKeys = activeRegions.keys.filter { $0.hasPrefix("charger_") }
+        for key in chargerKeys {
+            removeRegion(identifier: key)
+        }
+
+        // Add target charger first with tighter radius
+        var added = 0
+        let maxChargerRegions = maxRegions - activeRegions.count  // leave room for merchant geofences
+
+        if let targetId = targetChargerId,
+           let target = chargers.first(where: { $0.id == targetId }) {
+            addChargerGeofence(
+                id: target.id,
+                coordinate: CLLocationCoordinate2D(latitude: target.lat, longitude: target.lng),
+                radius: 200  // tighter for primary target
+            )
+            added += 1
+        }
+
+        // Add remaining chargers with standard radius
+        for charger in chargers where charger.id != targetChargerId && added < maxChargerRegions {
+            addChargerGeofence(
+                id: charger.id,
+                coordinate: CLLocationCoordinate2D(latitude: charger.lat, longitude: charger.lng),
+                radius: 250
+            )
+            added += 1
+        }
+
+        Log.geofence.info("Updated charger geofences: \(added) chargers registered")
+    }
+
     private func addRegion(identifier: String, coordinate: CLLocationCoordinate2D, radius: Double, notifyOnExit: Bool) {
+        // If this region already exists, remove it first to update
+        if activeRegions[identifier] != nil {
+            removeRegion(identifier: identifier)
+        }
+
         if activeRegions.count >= maxRegions {
             // FIFO: remove oldest region
             if let oldestKey = regionOrder.first {

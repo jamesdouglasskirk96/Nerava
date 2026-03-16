@@ -29,27 +29,29 @@ final class NotificationService {
     }
 
     func requestPermissionIfNeeded(completion: ((Bool) -> Void)? = nil) {
-        let defaults = UserDefaults.standard
-        if defaults.bool(forKey: permissionRequestedKey) {
-            completion?(false)
-            return
-        }
-
         UNUserNotificationCenter.current().getNotificationSettings { settings in
-            guard settings.authorizationStatus == .notDetermined else {
-                completion?(false)
-                return
-            }
-
-            defaults.set(true, forKey: self.permissionRequestedKey)
-            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
-                if granted {
-                    // Register for remote notifications after permission granted
-                    DispatchQueue.main.async {
-                        UIApplication.shared.registerForRemoteNotifications()
-                    }
+            switch settings.authorizationStatus {
+            case .authorized, .provisional, .ephemeral:
+                // Already authorized — re-register to get a fresh APNs token
+                DispatchQueue.main.async {
+                    UIApplication.shared.registerForRemoteNotifications()
                 }
-                completion?(granted)
+                completion?(true)
+
+            case .notDetermined:
+                // First time — request authorization
+                UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+                    if granted {
+                        DispatchQueue.main.async {
+                            UIApplication.shared.registerForRemoteNotifications()
+                        }
+                    }
+                    completion?(granted)
+                }
+
+            default:
+                // Denied or restricted
+                completion?(false)
             }
         }
     }

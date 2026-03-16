@@ -1,0 +1,23 @@
+# Gradle
+.gradle/
+build/
+app/build/
+
+# Local properties
+local.properties
+keystore.properties
+
+# Release keystore (NEVER commit)
+*.keystore
+*.jks
+
+# Firebase config (contains API keys)
+app/google-services.json
+
+# IDE
+.idea/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db

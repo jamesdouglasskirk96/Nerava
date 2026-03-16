@@ -1,5 +1,7 @@
 package network.nerava.app.bridge
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -9,6 +11,7 @@ import network.nerava.app.BuildConfig
 import network.nerava.app.engine.SessionEngine
 import network.nerava.app.location.LocationService
 import network.nerava.app.auth.SecureTokenStore
+import network.nerava.app.notifications.FCMService
 import java.net.URI
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -48,9 +51,18 @@ class NativeBridge(
     fun setupWebView(webView: WebView) {
         this.webView = webView
         webView.addJavascriptInterface(JsBridge(), "AndroidBridge")
+        activeBridge = this
 
         // Send NATIVE_READY after a short delay (matches iOS DispatchQueue.main.asyncAfter 0.1s)
         mainHandler.postDelayed({ sendToWeb(BridgeMessage.Ready) }, 100)
+    }
+
+    fun detach() {
+        if (activeBridge === this) activeBridge = null
+    }
+
+    fun sendDeviceToken(token: String) {
+        sendToWeb(BridgeMessage.DeviceTokenRegistered(token))
     }
 
     fun didFinishNavigation() {
@@ -140,6 +152,10 @@ class NativeBridge(
             "SET_AUTH_TOKEN" -> {
                 val token = msg.payload.optString("token", "").takeIf { it.isNotEmpty() } ?: return
                 sessionEngine?.setAuthToken(token)
+                // Forward existing FCM token after auth (mirrors iOS NativeBridge)
+                FCMService.cachedToken?.let { fcmToken ->
+                    mainHandler.postDelayed({ sendDeviceToken(fcmToken) }, 1000)
+                }
             }
 
             "EXCLUSIVE_ACTIVATED" -> {
@@ -205,6 +221,29 @@ class NativeBridge(
                 sendToWeb(BridgeMessage.AuthTokenResponse(requestId, token))
             }
 
+            "OPEN_EXTERNAL_URL" -> {
+                val url = msg.payload.optString("url", "").takeIf { it.isNotEmpty() } ?: return
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                    webView?.context?.startActivity(intent)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to open external URL: $url", e)
+                }
+            }
+
+            "UPDATE_CHARGER_GEOFENCES" -> {
+                val chargersJson = msg.payload.optJSONArray("chargers") ?: return
+                val chargers = mutableListOf<Triple<String, Double, Double>>()
+                for (i in 0 until chargersJson.length()) {
+                    val obj = chargersJson.optJSONObject(i) ?: continue
+                    val id = obj.optString("id", "").takeIf { it.isNotEmpty() } ?: continue
+                    val lat = obj.optDouble("lat", Double.NaN).takeIf { !it.isNaN() } ?: continue
+                    val lng = obj.optDouble("lng", Double.NaN).takeIf { !it.isNaN() } ?: continue
+                    chargers.add(Triple(id, lat, lng))
+                }
+                sessionEngine?.updateChargerGeofences(chargers)
+            }
+
             else -> {
                 Log.w(TAG, "Unknown bridge action: ${msg.action}")
             }
@@ -235,5 +274,9 @@ class NativeBridge(
     companion object {
         private const val TAG = "NativeBridge"
         private const val MAX_LOG_ENTRIES = 20
+
+        /** Singleton reference for FCMService to forward tokens without holding Activity. */
+        var activeBridge: NativeBridge? = null
+            private set
     }
 }

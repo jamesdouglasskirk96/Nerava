@@ -7,13 +7,10 @@ export default function BuiltToScaleSection() {
             Built for the entire charging ecosystem
           </h2>
           <p className="text-lg text-muted-foreground leading-relaxed">
-            Nerava starts with discovery—helping drivers find nearby businesses while they charge. But this is just the beginning. As the network grows, we'll expand to incentives, utilities, and grid behavior. The more drivers and merchants who join, the more valuable the network becomes for everyone.
+            Nerava is the programmable incentive layer for EV charging. We verify sessions, match them to campaigns, and distribute rewards — creating a data-driven engagement channel for energy providers, sponsors, and location partners. As the network grows, every driver, merchant, and sponsor makes it more valuable for everyone.
           </p>
         </div>
       </div>
     </section>
   )
 }
-
-
-

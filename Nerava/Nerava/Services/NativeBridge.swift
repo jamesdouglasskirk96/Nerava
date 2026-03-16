@@ -16,6 +16,7 @@ enum NativeBridgeMessage {
     case authRequired
     case authTokenResponse(requestId: String, token: String?)
     case deviceTokenRegistered(token: String)
+    case pushDeepLink(type: String, deepLink: String, data: [String: Any])
     case ready
 
     var action: String {
@@ -29,6 +30,7 @@ enum NativeBridgeMessage {
         case .authRequired: return "AUTH_REQUIRED"
         case .authTokenResponse: return "AUTH_TOKEN_RESPONSE"
         case .deviceTokenRegistered: return "DEVICE_TOKEN_REGISTERED"
+        case .pushDeepLink: return "PUSH_DEEP_LINK"
         case .ready: return "NATIVE_READY"
         }
     }
@@ -59,6 +61,8 @@ enum NativeBridgeMessage {
             return payload
         case .deviceTokenRegistered(let token):
             return ["token": token]
+        case .pushDeepLink(let type, let deepLink, _):
+            return ["type": type, "deep_link": deepLink]
         case .ready:
             return [:]
         }
@@ -72,6 +76,7 @@ final class NativeBridge: NSObject {
     weak var sessionEngine: SessionEngine?
     private let locationService: LocationService
     private var apnsTokenObserver: NSObjectProtocol?
+    private var pushDeepLinkObserver: NSObjectProtocol?
 
     // Exact origin matching (NOT substring)
     // Uses Environment configuration for allowed origins
@@ -89,6 +94,9 @@ final class NativeBridge: NSObject {
 
     deinit {
         if let observer = apnsTokenObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        if let observer = pushDeepLinkObserver {
             NotificationCenter.default.removeObserver(observer)
         }
     }
@@ -182,6 +190,10 @@ final class NativeBridge: NSObject {
 
                 openExternalUrl: function(url) {
                     this.postMessage('OPEN_EXTERNAL_URL', { url: url });
+                },
+
+                updateChargerGeofences: function(chargers) {
+                    this.postMessage('UPDATE_CHARGER_GEOFENCES', { chargers: chargers });
                 }
             };
 
@@ -238,6 +250,18 @@ final class NativeBridge: NSObject {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 self?.sendToWeb(.deviceTokenRegistered(token: existingToken))
             }
+        }
+
+        // Listen for push notification deep links and forward to web app
+        pushDeepLinkObserver = NotificationCenter.default.addObserver(
+            forName: .didReceivePushDeepLink,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            let pushType = notification.userInfo?["type"] as? String ?? "unknown"
+            let deepLink = notification.userInfo?["deep_link"] as? String ?? ""
+            let data = notification.userInfo as? [String: Any] ?? [:]
+            self?.sendToWeb(.pushDeepLink(type: pushType, deepLink: deepLink, data: data))
         }
     }
 
@@ -320,6 +344,13 @@ extension NativeBridge: WKScriptMessageHandler {
         case "SET_AUTH_TOKEN":
             guard let token = payload["token"] as? String else { return }
             sessionEngine?.setAuthToken(token)
+            // If we already have an APNs token, forward it to web now that user is authenticated
+            // This handles the case where the token arrived before login
+            if let existingToken = NotificationService.shared.apnsDeviceToken {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                    self?.sendToWeb(.deviceTokenRegistered(token: existingToken))
+                }
+            }
 
         case "EXCLUSIVE_ACTIVATED":
             guard let sessionId = payload["sessionId"] as? String,
@@ -378,6 +409,17 @@ extension NativeBridge: WKScriptMessageHandler {
             DispatchQueue.main.async {
                 UIApplication.shared.open(url, options: [:], completionHandler: nil)
             }
+
+        case "UPDATE_CHARGER_GEOFENCES":
+            guard let chargerDicts = payload["chargers"] as? [[String: Any]] else { return }
+            let chargers: [(id: String, lat: Double, lng: Double)] = chargerDicts.compactMap { dict in
+                guard let id = dict["id"] as? String,
+                      let lat = dict["lat"] as? Double,
+                      let lng = dict["lng"] as? Double else { return nil }
+                return (id: id, lat: lat, lng: lng)
+            }
+            let targetId = sessionEngine?.currentTargetedCharger?.id
+            sessionEngine?.updateChargerGeofences(chargers, targetChargerId: targetId)
 
         default:
             Log.bridge.warning("Unknown action: \(actionStr)")

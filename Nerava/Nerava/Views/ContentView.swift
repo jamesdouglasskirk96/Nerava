@@ -54,12 +54,7 @@ struct ContentView: View {
                 showWhenInUseRationale = true
             }
         }
-        .onChange(of: locationService.authorizationStatus) { status in
-            // If user granted when-in-use, app works. Later you can trigger Always rationale
-            if status == .authorizedWhenInUse {
-                // Do nothing automatically; web can request Always.
-                // But we keep the view hooks for a later UX trigger.
-            }
-        }
+        // Notification permission is now requested after login (in SessionEngine.setAuthToken)
+        // so the device token is captured when the user is authenticated
     }
 }

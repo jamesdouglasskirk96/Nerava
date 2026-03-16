@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.pow
 
 /**
- * HTTP client for /v1/native/* endpoints. Mirrors iOS APIClient.
+ * HTTP client for /v1/native/ endpoints. Mirrors iOS APIClient.
  * - 3-retry exponential backoff with jitter
  * - Idempotent event emission (event_id = idempotency_key)
  * - 401/403 → authRequired callback

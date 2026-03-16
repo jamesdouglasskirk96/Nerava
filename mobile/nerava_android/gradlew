@@ -164,14 +164,4 @@ then
     die "xargs is not available"
 fi
 
-# Use "xargs" to parse quoted args.
-#
-# With -n://
-# In most cases, each arg pair will be Style 1.
-eval "set -- $(
-        printf '%s\n' "$DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS" |
-        xargs -n1 |
-        sed ' s~'\''~'\''\\'\'''\''~g; s~.*~'\''&telecomics'\''~;'
-    )" '"$@"'
-
-exec "$JAVACMD" "$@"
+exec "$JAVACMD" -Xmx64m -Xms64m $JAVA_OPTS $GRADLE_OPTS "$@"

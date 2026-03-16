@@ -1,5 +1,5 @@
 import { Button } from '../Button'
-import { getMerchantFindHref, getChargerOwnerCTAHref } from './ctaLinks'
+import { getMerchantFindHref, getSponsorCTAHref, getDriverCTAHref } from './ctaLinks'
 
 export default function FinalCTA() {
   return (
@@ -7,25 +7,27 @@ export default function FinalCTA() {
       <div className="max-w-7xl mx-auto px-6 md:px-8">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-8">
-            Be part of the charging moment
+            Join the charging network
           </h2>
           <p className="text-lg text-muted-foreground mb-10">
-            Join the network that's transforming idle charging time into local discovery and commerce.
+            Whether you drive, own a business, or sponsor campaigns — there's a place for you on Nerava.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
-            <Button variant="primary" href={getMerchantFindHref()}>
+            <Button variant="primary" href={getDriverCTAHref()}>
+              I'm a Driver
+            </Button>
+            <Button variant="secondary" href={getMerchantFindHref()}>
               I'm a Merchant
             </Button>
-            <Button variant="secondary" href={getChargerOwnerCTAHref()}>
-              I'm a Charger Owner
+            <Button variant="secondary" href={getSponsorCTAHref()}>
+              I'm a Sponsor
             </Button>
           </div>
           <p className="text-sm text-muted-foreground">
-            Interested in sponsoring charging incentives? <a href="mailto:sponsors@nerava.network" className="text-primary underline hover:opacity-80">sponsors@nerava.network</a>
+            Questions? Reach us at <a href="mailto:hello@nerava.network" className="text-primary underline hover:opacity-80">hello@nerava.network</a>
           </p>
         </div>
       </div>
     </section>
   )
 }
-

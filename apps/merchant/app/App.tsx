@@ -4,21 +4,23 @@ import { DemoNav } from './components/DemoNav';
 import { ClaimBusiness } from './components/ClaimBusiness';
 import { ClaimVerify } from './components/ClaimVerify';
 import { SelectLocation } from './components/SelectLocation';
+import { GoogleCallback } from './components/GoogleCallback';
 import { DashboardLayout } from './components/DashboardLayout';
 import { Overview } from './components/Overview';
 import { Exclusives } from './components/Exclusives';
 import { CreateExclusive } from './components/CreateExclusive';
-import { PrimaryExperience } from './components/PrimaryExperience';
+import { NeravaAds } from './components/NeravaAds';
 import { PickupPackages } from './components/PickupPackages';
 import { CreatePickupPackage } from './components/CreatePickupPackage';
 import { Billing } from './components/Billing';
 import { Settings } from './components/Settings';
 import { CustomerExclusiveView } from './components/CustomerExclusiveView';
 import { Visits } from './components/Visits';
-import { ConsentBanner } from './components/ConsentBanner';
 import { FindBusiness } from './components/FindBusiness';
 import { MerchantPreview } from './components/MerchantPreview';
 import { EVArrivals } from './components/EVArrivals';
+import { Insights } from './components/Insights';
+import { Loyalty } from './components/Loyalty';
 
 export default function App() {
   // Support admin preview via URL params
@@ -26,7 +28,7 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const merchantIdParam = params.get('merchant_id');
     const adminPreview = params.get('admin_preview');
-    
+
     if (merchantIdParam) {
       localStorage.setItem('merchant_id', merchantIdParam);
       if (adminPreview === 'true') {
@@ -38,7 +40,7 @@ export default function App() {
 
   // Simulating auth state - in real app this would come from context/state management
   const isClaimed = localStorage.getItem('businessClaimed') === 'true';
-  
+
   // Set basename for React Router - Vite provides BASE_URL from base config
   // BASE_URL is '/merchant/' when built with VITE_PUBLIC_BASE=/merchant/, '/' in dev
   const basename = import.meta.env.BASE_URL || '/merchant';
@@ -53,7 +55,11 @@ export default function App() {
         <Route path="/find" element={<FindBusiness />} />
         <Route path="/preview" element={<MerchantPreview />} />
 
+        {/* Google OAuth callback */}
+        <Route path="/auth/google/callback" element={<GoogleCallback />} />
+
         {/* Onboarding Flow */}
+        <Route path="/sign-up" element={<Navigate to="/claim" replace />} />
         <Route path="/claim" element={<ClaimBusiness />} />
         <Route path="/claim/:merchantId" element={<ClaimBusiness />} />
         <Route path="/claim/verify" element={<ClaimVerify />} />
@@ -69,15 +75,16 @@ export default function App() {
           <Route path="exclusives" element={<Exclusives />} />
           <Route path="exclusives/new" element={<CreateExclusive />} />
           <Route path="visits" element={<Visits />} />
+          <Route path="loyalty" element={<Loyalty />} />
           <Route path="ev-arrivals" element={<EVArrivals />} />
-          <Route path="primary-experience" element={<PrimaryExperience />} />
+          <Route path="insights" element={<Insights />} />
+          <Route path="nerava-ads" element={<NeravaAds />} />
           <Route path="pickup-packages" element={<PickupPackages />} />
           <Route path="pickup-packages/new" element={<CreatePickupPackage />} />
           <Route path="billing" element={<Billing />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
-      <ConsentBanner />
     </BrowserRouter>
   );
 }

@@ -2,6 +2,7 @@ import Foundation
 import os.log
 
 enum Log {
+    static let app = Logger(subsystem: "network.nerava.app", category: "App")
     static let session = Logger(subsystem: "network.nerava.app", category: "SessionEngine")
     static let location = Logger(subsystem: "network.nerava.app", category: "LocationService")
     static let geofence = Logger(subsystem: "network.nerava.app", category: "GeofenceManager")

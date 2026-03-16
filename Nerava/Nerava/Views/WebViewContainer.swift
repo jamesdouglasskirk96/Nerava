@@ -284,6 +284,8 @@ struct WebViewRepresentable: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            // Ignore popup webview events for main loading state
+            if webView == popupWebView { return }
             autoRetryCount = 0
             setLoading(false)
             setError(nil)
@@ -293,15 +295,27 @@ struct WebViewRepresentable: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            if webView == popupWebView { return }
             setLoading(true)
             setError(nil)
         }
 
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            if webView == popupWebView {
+                // Dismiss popup on error
+                popupWebView?.removeFromSuperview()
+                popupWebView = nil
+                return
+            }
             handleWebError(error)
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            if webView == popupWebView {
+                popupWebView?.removeFromSuperview()
+                popupWebView = nil
+                return
+            }
             handleWebError(error)
         }
 
@@ -326,22 +340,52 @@ struct WebViewRepresentable: UIViewRepresentable {
             decisionHandler(.allow)
         }
 
+        /// Popup WKWebView for OAuth flows (Stripe Connect, Google Sign-In, etc.)
+        private var popupWebView: WKWebView?
+
         func webView(_ webView: WKWebView,
                      createWebViewWith configuration: WKWebViewConfiguration,
                      for navigationAction: WKNavigationAction,
                      windowFeatures: WKWindowFeatures) -> WKWebView? {
-            if navigationAction.targetFrame == nil {
-                if let url = navigationAction.request.url,
-                   let host = url.host,
-                   host.contains("nerava.network") || host.contains("localhost") {
-                    // Internal link - load in same WebView
-                    webView.load(navigationAction.request)
-                } else if let url = navigationAction.request.url {
-                    // External link - open in Safari
-                    UIApplication.shared.open(url)
-                }
+            guard navigationAction.targetFrame == nil,
+                  let url = navigationAction.request.url,
+                  let host = url.host else {
+                return nil
             }
+
+            // Internal links — load in same WebView
+            if host.contains("nerava.network") || host.contains("localhost") {
+                webView.load(navigationAction.request)
+                return nil
+            }
+
+            // OAuth/auth popups — open in a child WKWebView so postMessage works
+            let authDomains = ["accounts.google.com", "appleid.apple.com",
+                               "connect.stripe.com", "dashboard.stripe.com",
+                               "auth.tesla.com"]
+            let isAuthPopup = authDomains.contains(where: { host.contains($0) })
+
+            if isAuthPopup {
+                let popup = WKWebView(frame: webView.bounds, configuration: configuration)
+                popup.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+                popup.navigationDelegate = self
+                popup.uiDelegate = self
+                webView.addSubview(popup)
+                self.popupWebView = popup
+                return popup
+            }
+
+            // Other external links — open in Safari
+            UIApplication.shared.open(url)
             return nil
+        }
+
+        /// Dismiss popup WKWebView when it closes itself (window.close())
+        func webViewDidClose(_ webView: WKWebView) {
+            if webView == popupWebView {
+                popupWebView?.removeFromSuperview()
+                popupWebView = nil
+            }
         }
 
         func webView(_ webView: WKWebView,

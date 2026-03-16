@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { ChevronRight, Plus, X, Calendar, Loader2 } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { ChevronRight, Plus, X, Calendar, Loader2, Check, ChevronDown } from "lucide-react";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
@@ -15,6 +15,7 @@ import { Switch } from "../components/ui/switch";
 import {
   createCampaign,
   activateCampaign,
+  createCampaignCheckout,
   type CreateCampaignInput,
 } from "../services/api";
 
@@ -51,12 +52,20 @@ interface Rule {
 
 export function CreateCampaign() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [currentStep, setCurrentStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Pre-fill from URL params (e.g., from Charger Explorer)
+  const prefillChargerId = searchParams.get("charger_id");
+  const prefillChargerName = searchParams.get("charger_name");
+  const prefillNetwork = searchParams.get("network");
+
   // Step 1: Details
-  const [campaignName, setCampaignName] = useState("");
+  const [campaignName, setCampaignName] = useState(
+    prefillChargerName ? `${prefillChargerName} Campaign` : ""
+  );
   const [sponsorName, setSponsorName] = useState("");
   const [sponsorEmail, setSponsorEmail] = useState("");
   const [campaignType, setCampaignType] = useState("");
@@ -66,13 +75,22 @@ export function CreateCampaign() {
   const [runUntilExhausted, setRunUntilExhausted] = useState(false);
 
   // Step 2: Targeting
-  const [rules, setRules] = useState<Rule[]>([]);
+  const [rules, setRules] = useState<Rule[]>(
+    prefillChargerId
+      ? [{ id: "prefill-charger", type: "charger_ids", value: prefillChargerId }]
+      : []
+  );
   const [minDuration, setMinDuration] = useState("15");
-  const [chargerNetworks, setChargerNetworks] = useState("");
+  const [selectedNetworks, setSelectedNetworks] = useState<string[]>(
+    prefillNetwork ? [prefillNetwork] : []
+  );
+  const [networksOpen, setNetworksOpen] = useState(false);
+  const networksRef = useRef<HTMLDivElement>(null);
   const [timeStart, setTimeStart] = useState("");
   const [timeEnd, setTimeEnd] = useState("");
   const [maxPerDriverPerDay, setMaxPerDriverPerDay] = useState("");
   const [maxPerDriverPerCampaign, setMaxPerDriverPerCampaign] = useState("");
+  const [driverAllowlist, setDriverAllowlist] = useState("");
 
   // Step 3: Budget
   const [totalBudget, setTotalBudget] = useState("");
@@ -80,6 +98,41 @@ export function CreateCampaign() {
   const [maxSessions, setMaxSessions] = useState("");
   const [autoRenew, setAutoRenew] = useState(false);
   const [autoRenewBudget, setAutoRenewBudget] = useState("");
+
+  const AVAILABLE_NETWORKS = [
+    "Tesla",
+    "Tesla Destination",
+    "ChargePoint Network",
+    "Electrify America",
+    "EVgo",
+    "Blink Network",
+    "FLO",
+    "EV Connect",
+    "Volta",
+    "SemaConnect",
+    "Webasto",
+    "OpConnect",
+    "GreenLots",
+    "Non-Networked",
+  ];
+
+  const toggleNetwork = (network: string) => {
+    setSelectedNetworks((prev) =>
+      prev.includes(network)
+        ? prev.filter((n) => n !== network)
+        : [...prev, network]
+    );
+  };
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (networksRef.current && !networksRef.current.contains(event.target as Node)) {
+        setNetworksOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const addRule = () => {
     setRules([
@@ -96,10 +149,33 @@ export function CreateCampaign() {
   const costCents = costPerSession
     ? Math.round(parseFloat(costPerSession) * 100)
     : 0;
+  const platformFeeCents = Math.round(budgetCents * 0.2);
+  const netRewardCents = budgetCents - platformFeeCents;
   const estimatedSessions =
-    budgetCents && costCents ? Math.floor(budgetCents / costCents) : 0;
+    netRewardCents && costCents ? Math.floor(netRewardCents / costCents) : 0;
 
   function buildInput(): CreateCampaignInput {
+    // Process targeting rules from the rules array
+    const chargerIds = rules
+      .filter((r) => r.type === "charger_ids" && r.value)
+      .flatMap((r) => r.value.split(/[,\n]/).map((s) => s.trim()).filter(Boolean));
+    const zoneIds = rules
+      .filter((r) => r.type === "zone_ids" && r.value)
+      .flatMap((r) => r.value.split(/[,\n]/).map((s) => s.trim()).filter(Boolean));
+    const connectorTypes = rules
+      .filter((r) => r.type === "connector_types" && r.value)
+      .flatMap((r) => r.value.split(/[,\n]/).map((s) => s.trim()).filter(Boolean));
+
+    // Parse geo radius rules
+    const geoRule = rules.find((r) => r.type === "geo_radius" && r.value);
+    let geoParts: { lat: number; lng: number; radius: number } | null = null;
+    if (geoRule) {
+      const parts = geoRule.value.split(",").map((s) => parseFloat(s.trim()));
+      if (parts.length === 3 && parts.every((p) => !isNaN(p))) {
+        geoParts = { lat: parts[0], lng: parts[1], radius: parts[2] };
+      }
+    }
+
     const input: CreateCampaignInput = {
       sponsor_name: sponsorName || "Default Sponsor",
       sponsor_email: sponsorEmail || undefined,
@@ -117,11 +193,21 @@ export function CreateCampaign() {
       max_sessions: maxSessions ? parseInt(maxSessions) : undefined,
       rules: {
         min_duration_minutes: parseInt(minDuration) || 15,
-        charger_networks: chargerNetworks
-          ? chargerNetworks.split(",").map((s) => s.trim())
-          : undefined,
+        charger_ids: chargerIds.length > 0 ? chargerIds : undefined,
+        zone_ids: zoneIds.length > 0 ? zoneIds : undefined,
+        connector_types: connectorTypes.length > 0 ? connectorTypes : undefined,
+        charger_networks: selectedNetworks.length > 0 ? selectedNetworks : undefined,
+        geo_center_lat: geoParts?.lat ?? undefined,
+        geo_center_lng: geoParts?.lng ?? undefined,
+        geo_radius_m: geoParts?.radius ?? undefined,
         time_start: timeStart || undefined,
         time_end: timeEnd || undefined,
+        driver_allowlist: driverAllowlist
+          ? driverAllowlist
+              .split(/[,\n]/)
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : undefined,
       },
       caps: {
         per_day: maxPerDriverPerDay ? parseInt(maxPerDriverPerDay) : undefined,
@@ -153,6 +239,15 @@ export function CreateCampaign() {
       setError(null);
       const input = buildInput();
       const { campaign } = await createCampaign(input);
+
+      // Create Stripe Checkout for campaign funding
+      const checkout = await createCampaignCheckout(campaign.id);
+      if (checkout.checkout_url) {
+        // Redirect to Stripe Checkout
+        window.location.href = checkout.checkout_url;
+        return;
+      }
+      // If no checkout URL (already funded or mock), activate directly
       await activateCampaign(campaign.id);
       navigate("/campaigns");
     } catch (e) {
@@ -351,17 +446,62 @@ export function CreateCampaign() {
                   Required. Sessions shorter than this are rejected.
                 </p>
               </div>
-              <div>
-                <Label htmlFor="chargerNetworks">
-                  Charging Networks (comma-separated)
-                </Label>
-                <Input
-                  id="chargerNetworks"
-                  value={chargerNetworks}
-                  onChange={(e) => setChargerNetworks(e.target.value)}
-                  placeholder="Tesla Supercharger, ChargePoint"
-                  className="mt-1.5"
-                />
+              <div ref={networksRef} className="relative">
+                <Label>Charging Networks</Label>
+                <button
+                  type="button"
+                  onClick={() => setNetworksOpen(!networksOpen)}
+                  className="mt-1.5 flex h-9 w-full items-center justify-between border border-[#E4E6EB] bg-white px-3 py-2 text-sm text-[#050505] hover:border-[#1877F2] transition-colors"
+                >
+                  <span className={selectedNetworks.length === 0 ? "text-[#65676B]" : "text-[#050505] truncate"}>
+                    {selectedNetworks.length === 0
+                      ? "Select networks..."
+                      : `${selectedNetworks.length} network${selectedNetworks.length > 1 ? "s" : ""} selected`}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 text-[#65676B] transition-transform ${networksOpen ? "rotate-180" : ""}`} />
+                </button>
+                {networksOpen && (
+                  <div className="absolute z-50 mt-1 w-full bg-white border border-[#E4E6EB] shadow-lg max-h-60 overflow-y-auto">
+                    {AVAILABLE_NETWORKS.map((network) => (
+                      <button
+                        key={network}
+                        type="button"
+                        onClick={() => toggleNetwork(network)}
+                        className="flex items-center gap-2 w-full px-3 py-2 text-sm text-[#050505] hover:bg-[#F7F8FA] transition-colors"
+                      >
+                        <div className={`w-4 h-4 border rounded flex items-center justify-center flex-shrink-0 ${
+                          selectedNetworks.includes(network)
+                            ? "bg-[#1877F2] border-[#1877F2]"
+                            : "border-[#E4E6EB]"
+                        }`}>
+                          {selectedNetworks.includes(network) && (
+                            <Check className="w-3 h-3 text-white" />
+                          )}
+                        </div>
+                        {network}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {selectedNetworks.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {selectedNetworks.map((network) => (
+                      <span
+                        key={network}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 text-xs border border-blue-200"
+                      >
+                        {network}
+                        <button
+                          type="button"
+                          onClick={() => toggleNetwork(network)}
+                          className="hover:text-blue-900"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -417,6 +557,23 @@ export function CreateCampaign() {
               </div>
             </div>
 
+            <div>
+              <Label htmlFor="driverAllowlist">
+                Driver Allowlist (Optional)
+              </Label>
+              <Textarea
+                id="driverAllowlist"
+                value={driverAllowlist}
+                onChange={(e) => setDriverAllowlist(e.target.value)}
+                placeholder="Enter driver emails, one per line or comma-separated"
+                className="mt-1.5"
+                rows={3}
+              />
+              <p className="text-xs text-[#65676B] mt-1">
+                Only these drivers will be eligible. Leave empty for all drivers.
+              </p>
+            </div>
+
             {/* Additional custom rules */}
             {rules.length > 0 && (
               <div className="space-y-3">
@@ -431,7 +588,14 @@ export function CreateCampaign() {
                     <div className="flex-1 grid grid-cols-2 gap-3">
                       <div>
                         <Label className="text-xs">Rule Type</Label>
-                        <Select value={rule.type} onValueChange={() => {}}>
+                        <Select
+                          value={rule.type}
+                          onValueChange={(val) =>
+                            setRules(rules.map((r) =>
+                              r.id === rule.id ? { ...r, type: val, value: "" } : r
+                            ))
+                          }
+                        >
                           <SelectTrigger className="mt-1">
                             <SelectValue placeholder="Select type" />
                           </SelectTrigger>
@@ -446,9 +610,6 @@ export function CreateCampaign() {
                             <SelectItem value="connector_types">
                               Connector Types
                             </SelectItem>
-                            <SelectItem value="driver_allowlist">
-                              Driver Allowlist
-                            </SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -456,9 +617,19 @@ export function CreateCampaign() {
                         <Label className="text-xs">Value</Label>
                         <Input
                           value={rule.value}
+                          onChange={(e) =>
+                            setRules(rules.map((r) =>
+                              r.id === rule.id ? { ...r, value: e.target.value } : r
+                            ))
+                          }
                           className="mt-1"
-                          placeholder="Enter value"
-                          readOnly
+                          placeholder={
+                            rule.type === "charger_ids" ? "nrel_12345, nrel_67890" :
+                            rule.type === "zone_ids" ? "zone-uuid-1, zone-uuid-2" :
+                            rule.type === "geo_radius" ? "lat,lng,radius_m (e.g. 30.27,-97.74,5000)" :
+                            rule.type === "connector_types" ? "CCS, Tesla, CHAdeMO" :
+                            "Enter value"
+                          }
                         />
                       </div>
                     </div>
@@ -534,8 +705,35 @@ export function CreateCampaign() {
                   {estimatedSessions.toLocaleString()}
                 </div>
                 <div className="text-xs text-[#65676B] mt-1">
-                  Based on ${totalBudget} budget at ${costPerSession} per
-                  session
+                  ${(netRewardCents / 100).toFixed(2)} net rewards (after 20% fee) at ${costPerSession} per session
+                </div>
+              </div>
+            )}
+
+            {costCents > 0 && (
+              <div className="p-4 bg-blue-50 border border-blue-200">
+                <div className="text-sm font-medium text-blue-900 mb-3">
+                  Fee Breakdown Per Session
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-blue-800">Driver Reward (80%)</span>
+                    <span className="font-semibold text-blue-900">
+                      ${((costCents * 0.8) / 100).toFixed(2)} per session
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-blue-800">Platform Fee (20%)</span>
+                    <span className="font-semibold text-blue-900">
+                      ${((costCents * 0.2) / 100).toFixed(2)} per session
+                    </span>
+                  </div>
+                  <div className="border-t border-blue-200 pt-2 mt-2 flex items-center justify-between text-sm">
+                    <span className="text-blue-800 font-medium">Total Cost Per Session</span>
+                    <span className="font-semibold text-blue-900">
+                      ${(costCents / 100).toFixed(2)}
+                    </span>
+                  </div>
                 </div>
               </div>
             )}
@@ -648,10 +846,10 @@ export function CreateCampaign() {
                       {minDuration} minutes
                     </span>
                   </div>
-                  {chargerNetworks && (
+                  {selectedNetworks.length > 0 && (
                     <div>
                       <span className="text-[#65676B]">Networks:</span>{" "}
-                      <span className="text-[#050505]">{chargerNetworks}</span>
+                      <span className="text-[#050505]">{selectedNetworks.join(", ")}</span>
                     </div>
                   )}
                   {timeStart && timeEnd && (
@@ -667,6 +865,18 @@ export function CreateCampaign() {
                       <span className="text-[#65676B]">Max/Driver/Day:</span>{" "}
                       <span className="text-[#050505]">
                         {maxPerDriverPerDay}
+                      </span>
+                    </div>
+                  )}
+                  {driverAllowlist && (
+                    <div className="col-span-2">
+                      <span className="text-[#65676B]">Driver Allowlist:</span>{" "}
+                      <span className="text-[#050505]">
+                        {driverAllowlist
+                          .split(/[,\n]/)
+                          .map((s) => s.trim())
+                          .filter(Boolean).length}{" "}
+                        driver(s)
                       </span>
                     </div>
                   )}
@@ -749,7 +959,7 @@ export function CreateCampaign() {
                 {submitting ? (
                   <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
                 ) : null}
-                Launch Campaign
+                Fund & Launch Campaign
               </button>
             )}
           </div>

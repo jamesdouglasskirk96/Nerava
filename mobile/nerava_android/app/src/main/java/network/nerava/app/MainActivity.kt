@@ -11,6 +11,8 @@ import android.net.Uri
 import android.net.http.SslError
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.view.View
@@ -19,6 +21,7 @@ import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.google.android.material.button.MaterialButton
 import com.google.firebase.messaging.FirebaseMessaging
@@ -30,6 +33,7 @@ import network.nerava.app.engine.SessionEngine
 import network.nerava.app.location.GeofenceManager
 import network.nerava.app.location.LocationService
 import network.nerava.app.network.APIClient
+import network.nerava.app.notifications.FCMService
 import network.nerava.app.webview.WebViewErrorHandler
 
 class MainActivity : AppCompatActivity() {
@@ -48,6 +52,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sessionEngine: SessionEngine
 
     private var pendingDeepLinkUrl: String? = null
+    private var autoRetryCount = 0
+    private val maxAutoRetries = 2
 
     // Permission launchers
     private val locationPermissionLauncher = registerForActivityResult(
@@ -73,6 +79,7 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
@@ -155,6 +162,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        dismissPopupWebView()
+        bridge.detach()
         sessionEngine.stop()
         webView.destroy()
     }
@@ -208,6 +217,7 @@ class MainActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView, url: String?) {
                 swipeRefresh.isRefreshing = false
                 bridge.didFinishNavigation()
+                autoRetryCount = 0 // Reset retry counter on successful load
 
                 // Re-inject and send NATIVE_READY for SPA navigation
                 view.evaluateJavascript(
@@ -223,6 +233,15 @@ class MainActivity : AppCompatActivity() {
             ) {
                 if (WebViewErrorHandler.isMainFrameRequest(request)) {
                     val type = WebViewErrorHandler.classifyError(error)
+                    // Auto-retry network errors (up to 2 attempts, matches iOS)
+                    if (type == WebViewErrorHandler.ErrorType.OFFLINE && autoRetryCount < maxAutoRetries) {
+                        autoRetryCount++
+                        Log.i(TAG, "Auto-retrying navigation (attempt $autoRetryCount/$maxAutoRetries)")
+                        android.os.Handler(Looper.getMainLooper()).postDelayed({
+                            view.reload()
+                        }, 1500)
+                        return
+                    }
                     showError(type)
                 }
             }
@@ -277,7 +296,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Handle file uploads / camera
+        // Handle file uploads, camera, and OAuth popups
         webView.webChromeClient = object : WebChromeClient() {
             override fun onShowFileChooser(
                 webView: WebView,
@@ -296,7 +315,68 @@ class MainActivity : AppCompatActivity() {
                 }
                 return true
             }
+
+            // OAuth popup support — mirrors iOS createWebViewWith(configuration:)
+            override fun onCreateWindow(
+                view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?
+            ): Boolean {
+                val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
+
+                val popupView = WebView(this@MainActivity).apply {
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.userAgentString = view.settings.userAgentString
+
+                    webViewClient = object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(v: WebView, request: WebResourceRequest): Boolean {
+                            val url = request.url
+                            val host = url.host ?: return false
+                            // If callback returns to nerava domain, load in main WebView and close popup
+                            if (host.contains("nerava.network") || host == "localhost") {
+                                view.loadUrl(url.toString())
+                                dismissPopupWebView()
+                                return true
+                            }
+                            return false
+                        }
+                    }
+
+                    webChromeClient = object : WebChromeClient() {
+                        override fun onCloseWindow(window: WebView) {
+                            dismissPopupWebView()
+                        }
+                    }
+                }
+
+                popupWebView = popupView
+                webView.addView(popupView, android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT
+                ))
+
+                transport.webView = popupView
+                resultMsg.sendToTarget()
+                return true
+            }
+
+            override fun onCloseWindow(window: WebView) {
+                dismissPopupWebView()
+            }
         }
+
+        // Enable popup windows for OAuth flows
+        webView.settings.setSupportMultipleWindows(true)
+        webView.settings.javaScriptCanOpenWindowsAutomatically = true
+    }
+
+    private var popupWebView: WebView? = null
+
+    private fun dismissPopupWebView() {
+        popupWebView?.let {
+            webView.removeView(it)
+            it.destroy()
+        }
+        popupWebView = null
     }
 
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
@@ -377,6 +457,11 @@ class MainActivity : AppCompatActivity() {
                 val token = task.result
                 Log.i(TAG, "FCM token: ${token.take(10)}...")
                 tokenStore.setFCMToken(token)
+                FCMService.cachedToken = token
+                // Forward to web bridge after delay (bridge may not be ready yet)
+                android.os.Handler(Looper.getMainLooper()).postDelayed({
+                    bridge.sendDeviceToken(token)
+                }, 2000)
             } else {
                 Log.w(TAG, "FCM token fetch failed", task.exception)
             }

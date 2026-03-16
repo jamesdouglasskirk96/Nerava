@@ -8,4 +8,9 @@
         <item name="android:navigationBarColor">@color/nerava_background</item>
         <item name="android:windowLightNavigationBar">true</item>
     </style>
+
+    <style name="Theme.Nerava.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/nerava_splash_bg</item>
+        <item name="postSplashScreenTheme">@style/Theme.Nerava</item>
+    </style>
 </resources>

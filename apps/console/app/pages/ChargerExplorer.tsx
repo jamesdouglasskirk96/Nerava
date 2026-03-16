@@ -1,327 +1,465 @@
-import { useState, useEffect } from "react";
-import { MapPin, Plus, Loader2 } from "lucide-react";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { MapPin, Plus, Loader2, Search, Zap, X } from "lucide-react";
 import { Link } from "react-router-dom";
-import {
-  getChargerUtilization,
-  type ChargerUtilization,
-} from "../services/api";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import { browseChargers, type BrowseCharger } from "../services/api";
 
-interface ChargerDisplay extends ChargerUtilization {
-  utilization: "high" | "medium" | "low";
+const NETWORK_COLORS: Record<string, string> = {
+  Tesla: "#CC0000",
+  "Tesla Destination": "#E04040",
+  "ChargePoint Network": "#FF6B00",
+  "Electrify America": "#00A3E0",
+  EVgo: "#00B140",
+  "Blink Network": "#1A73E8",
+  FLO: "#6B21A8",
+  Volta: "#14B8A6",
+};
+
+function getNetworkColor(network: string | null): string {
+  if (!network) return "#65676B";
+  return NETWORK_COLORS[network] || "#65676B";
 }
 
-function classifyUtilization(
-  totalSessions: number,
-  sinceDays: number
-): "high" | "medium" | "low" {
-  const perDay = totalSessions / sinceDays;
-  if (perDay >= 35) return "high";
-  if (perDay >= 20) return "medium";
-  return "low";
+function createChargerIcon(network: string | null, selected: boolean, hasSessions: boolean) {
+  const color = getNetworkColor(network);
+  const size = selected ? 32 : 24;
+  const opacity = hasSessions ? 1 : 0.7;
+  const ring = hasSessions
+    ? `<circle cx="12" cy="10" r="4.5" fill="none" stroke="#22C55E" stroke-width="1.5"/>`
+    : "";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}" opacity="${opacity}" stroke="white" stroke-width="1.5"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="3" fill="white" stroke="none"/>${ring}</svg>`;
+  return L.divIcon({
+    html: svg,
+    className: "",
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size],
+  });
 }
 
 export function ChargerExplorer() {
-  const [chargers, setChargers] = useState<ChargerDisplay[]>([]);
-  const [selectedCharger, setSelectedCharger] = useState<ChargerDisplay | null>(
-    null
-  );
+  const [chargers, setChargers] = useState<BrowseCharger[]>([]);
+  const [selectedCharger, setSelectedCharger] = useState<BrowseCharger | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sinceDays] = useState(30);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [networkFilter, setNetworkFilter] = useState("");
+  const [total, setTotal] = useState(0);
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+  const markersRef = useRef<L.Marker[]>([]);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
-  useEffect(() => {
-    loadChargers();
-  }, [sinceDays]);
-
-  async function loadChargers() {
+  const loadChargers = useCallback(async (search?: string, network?: string) => {
     try {
       setLoading(true);
-      const { chargers: data } = await getChargerUtilization({
-        since_days: sinceDays,
+      const { chargers: data, total: count } = await browseChargers({
+        search: search || undefined,
+        network: network || undefined,
+        limit: 1000,
       });
-      const enriched: ChargerDisplay[] = data.map((c) => ({
-        ...c,
-        utilization: classifyUtilization(c.total_sessions, sinceDays),
-      }));
-      setChargers(enriched);
-      if (enriched.length > 0) setSelectedCharger(enriched[0]);
+      setChargers(data);
+      setTotal(count);
+      if (data.length > 0 && !selectedCharger) {
+        setSelectedCharger(data[0]);
+      }
     } catch (e) {
-      setError(
-        e instanceof Error ? e.message : "Failed to load charger data"
-      );
+      setError(e instanceof Error ? e.message : "Failed to load chargers");
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  const getUtilizationColor = (utilization: string) => {
-    switch (utilization) {
-      case "high":
-        return "#22C55E";
-      case "medium":
-        return "#EAB308";
-      case "low":
-        return "#EF4444";
-      default:
-        return "#65676B";
+  useEffect(() => {
+    loadChargers();
+  }, [loadChargers]);
+
+  // Debounced search
+  useEffect(() => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(() => {
+      loadChargers(searchQuery, networkFilter);
+    }, 300);
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
+  }, [searchQuery, networkFilter, loadChargers]);
+
+  // Initialize map
+  useEffect(() => {
+    if (!mapRef.current || mapInstanceRef.current) return;
+    const map = L.map(mapRef.current, {
+      center: [30.27, -97.74], // Austin, TX
+      zoom: 10,
+      zoomControl: true,
+    });
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "",
+      maxZoom: 19,
+    }).addTo(map);
+    mapInstanceRef.current = map;
+
+    return () => {
+      map.remove();
+      mapInstanceRef.current = null;
+    };
+  }, []);
+
+  // Update markers when chargers change
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    // Clear existing markers
+    markersRef.current.forEach((m) => m.remove());
+    markersRef.current = [];
+
+    const bounds: [number, number][] = [];
+
+    chargers.forEach((charger) => {
+      if (charger.lat == null || charger.lng == null) return;
+
+      const marker = L.marker([charger.lat, charger.lng], {
+        icon: createChargerIcon(
+          charger.network_name,
+          selectedCharger?.id === charger.id,
+          charger.total_sessions > 0
+        ),
+      });
+
+      const tooltipContent = `<strong>${charger.name}</strong>${
+        charger.network_name ? `<br/>${charger.network_name}` : ""
+      }${charger.total_sessions > 0 ? `<br/>${charger.total_sessions} sessions` : ""}`;
+
+      marker.bindTooltip(tooltipContent, {
+        direction: "top",
+        offset: [0, -10],
+        className: "text-xs",
+      });
+
+      marker.on("click", () => {
+        setSelectedCharger(charger);
+        // Pan to charger
+        map.setView([charger.lat!, charger.lng!], Math.max(map.getZoom(), 14), {
+          animate: true,
+        });
+      });
+
+      marker.addTo(map);
+      markersRef.current.push(marker);
+      bounds.push([charger.lat, charger.lng]);
+    });
+
+    if (bounds.length > 0 && !selectedCharger) {
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
     }
-  };
+  }, [chargers, selectedCharger]);
 
-  // Simple chart data
-  const chartData = Array.from({ length: 14 }, (_, i) => ({
-    day: i + 1,
-    sessions: selectedCharger
-      ? Math.max(
-          0,
-          Math.round(
-            selectedCharger.total_sessions / sinceDays +
-              (Math.random() - 0.5) * 6
-          )
+  // Update selected marker icon when selection changes
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    markersRef.current.forEach((marker, i) => {
+      const charger = chargers.filter((c) => c.lat != null && c.lng != null)[i];
+      if (!charger) return;
+      marker.setIcon(
+        createChargerIcon(
+          charger.network_name,
+          selectedCharger?.id === charger.id,
+          charger.total_sessions > 0
         )
-      : 0,
-  }));
+      );
+    });
+  }, [selectedCharger, chargers]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-[#1877F2]" />
-      </div>
-    );
-  }
+  // Get unique networks for filter
+  const networks = Array.from(
+    new Set(chargers.map((c) => c.network_name).filter(Boolean))
+  ).sort() as string[];
 
-  if (error) {
-    return (
-      <div className="p-8">
-        <div className="p-4 bg-red-50 border border-red-200 text-sm text-red-700">
-          {error}
-        </div>
-      </div>
-    );
-  }
-
-  if (chargers.length === 0) {
-    return (
-      <div className="p-8">
-        <h1 className="text-2xl font-semibold text-[#050505] mb-4">
-          Charger Explorer
-        </h1>
-        <div className="bg-white border border-[#E4E6EB] p-12 text-center">
-          <MapPin className="w-12 h-12 text-[#E4E6EB] mx-auto mb-4" />
-          <p className="text-sm text-[#65676B] mb-4">
-            No charger utilization data yet. Data appears once charging sessions
-            are recorded.
-          </p>
-          <Link
-            to="/campaigns/create"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[#1877F2] text-white text-sm font-medium hover:bg-[#166FE5] transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Create a Campaign
-          </Link>
-        </div>
-      </div>
-    );
+  function createCampaignUrl(charger: BrowseCharger): string {
+    const params = new URLSearchParams();
+    params.set("charger_id", charger.id);
+    params.set("charger_name", charger.name);
+    if (charger.network_name) params.set("network", charger.network_name);
+    return `/campaigns/create?${params}`;
   }
 
   return (
-    <div className="h-full flex">
-      {/* Map Panel */}
-      <div className="flex-1 relative bg-[#F7F8FA]">
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="relative w-full h-full">
-            {/* Grid background */}
-            <div className="absolute inset-0 opacity-20">
-              <div
-                className="w-full h-full"
-                style={{
-                  backgroundImage: `
-                    linear-gradient(#E4E6EB 1px, transparent 1px),
-                    linear-gradient(90deg, #E4E6EB 1px, transparent 1px)
-                  `,
-                  backgroundSize: "50px 50px",
-                }}
+    <div className="h-full flex flex-col">
+      {/* Header */}
+      <div className="px-6 py-4 bg-white border-b border-[#E4E6EB] flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-[#050505]">
+            Charger Explorer
+          </h1>
+          <p className="text-sm text-[#65676B]">
+            {total.toLocaleString()} chargers in database
+          </p>
+        </div>
+        <Link
+          to="/campaigns/create"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-[#1877F2] text-white text-sm font-medium hover:bg-[#166FE5] transition-colors rounded"
+        >
+          <Plus className="w-4 h-4" />
+          New Campaign
+        </Link>
+      </div>
+
+      <div className="flex-1 flex min-h-0">
+        {/* Map Panel */}
+        <div className="flex-1 relative">
+          <div ref={mapRef} className="absolute inset-0" />
+
+          {/* Search overlay */}
+          <div className="absolute top-4 left-4 right-4 z-[1000] flex gap-2">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#65676B]" />
+              <input
+                type="text"
+                placeholder="Search chargers by name, address, city, or network..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-8 py-2.5 bg-white border border-[#E4E6EB] shadow-lg text-sm rounded focus:outline-none focus:ring-2 focus:ring-[#1877F2]"
               />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded"
+                >
+                  <X className="w-3 h-3 text-[#65676B]" />
+                </button>
+              )}
             </div>
+            <select
+              value={networkFilter}
+              onChange={(e) => setNetworkFilter(e.target.value)}
+              className="bg-white border border-[#E4E6EB] shadow-lg text-sm py-2.5 px-3 rounded focus:outline-none focus:ring-2 focus:ring-[#1877F2]"
+            >
+              <option value="">All Networks</option>
+              {networks.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
 
-            {/* Charger Pins */}
-            {chargers.map((charger, index) => (
-              <button
-                key={charger.charger_id}
-                onClick={() => setSelectedCharger(charger)}
-                className="absolute transform -translate-x-1/2 -translate-y-full transition-all hover:scale-110"
-                style={{
-                  left: `${20 + (index * 60) / Math.max(chargers.length, 1)}%`,
-                  top: `${30 + (index % 4) * 12}%`,
-                }}
-              >
-                <div className="relative">
-                  <MapPin
-                    className="w-8 h-8 drop-shadow-lg"
-                    fill={getUtilizationColor(charger.utilization)}
-                    stroke="white"
-                    strokeWidth={1.5}
-                  />
-                  {selectedCharger?.charger_id === charger.charger_id && (
-                    <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2">
-                      <div className="w-2 h-2 bg-[#1877F2] rounded-full animate-pulse" />
-                    </div>
-                  )}
-                </div>
-              </button>
-            ))}
+          {/* Loading indicator */}
+          {loading && (
+            <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[1000] bg-white border border-[#E4E6EB] shadow-lg px-4 py-2 rounded flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-[#1877F2]" />
+              <span className="text-sm text-[#65676B]">Loading chargers...</span>
+            </div>
+          )}
 
-            {/* Map Legend */}
-            <div className="absolute bottom-6 left-6 bg-white border border-[#E4E6EB] p-4 shadow-lg">
-              <div className="text-xs font-semibold text-[#050505] mb-2">
-                Utilization
-              </div>
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <MapPin
-                    className="w-4 h-4"
-                    fill="#22C55E"
-                    stroke="white"
-                    strokeWidth={1.5}
+          {/* Network legend */}
+          <div className="absolute bottom-4 left-4 z-[1000] bg-white/95 border border-[#E4E6EB] p-3 shadow-lg rounded text-xs">
+            <div className="font-semibold text-[#050505] mb-2">Networks</div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+              {Object.entries(NETWORK_COLORS).slice(0, 6).map(([name, color]) => (
+                <div key={name} className="flex items-center gap-1.5">
+                  <div
+                    className="w-2.5 h-2.5 rounded-full"
+                    style={{ backgroundColor: color }}
                   />
-                  <span className="text-xs text-[#65676B]">
-                    High (35+ sessions/day)
-                  </span>
+                  <span className="text-[#050505] truncate">{name}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <MapPin
-                    className="w-4 h-4"
-                    fill="#EAB308"
-                    stroke="white"
-                    strokeWidth={1.5}
-                  />
-                  <span className="text-xs text-[#65676B]">
-                    Medium (20-34 sessions/day)
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <MapPin
-                    className="w-4 h-4"
-                    fill="#EF4444"
-                    stroke="white"
-                    strokeWidth={1.5}
-                  />
-                  <span className="text-xs text-[#65676B]">
-                    Low (&lt;20 sessions/day)
-                  </span>
-                </div>
-              </div>
+              ))}
+            </div>
+            <div className="mt-1.5 pt-1.5 border-t border-[#E4E6EB] flex items-center gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full border-2 border-green-500" />
+              <span className="text-[#65676B]">Has session data</span>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Detail Panel */}
-      <div className="w-96 bg-white border-l border-[#E4E6EB] overflow-y-auto">
-        {selectedCharger && (
-          <div className="p-6">
-            <div className="mb-6">
-              <h2 className="text-lg font-semibold text-[#050505] mb-1">
-                {selectedCharger.charger_id}
-              </h2>
-              <p className="text-sm text-[#65676B]">
-                {selectedCharger.unique_drivers} unique drivers
-              </p>
-            </div>
-
-            {/* Utilization Stats */}
-            <div className="mb-6 p-4 bg-[#F7F8FA] border border-[#E4E6EB]">
-              <h3 className="text-xs font-semibold text-[#050505] mb-3">
-                Utilization ({sinceDays} days)
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="text-xs text-[#65676B] mb-1">
-                    Total Sessions
+        {/* Detail Panel */}
+        <div className="w-96 bg-white border-l border-[#E4E6EB] overflow-y-auto flex flex-col">
+          {selectedCharger ? (
+            <div className="p-6 border-b border-[#E4E6EB]">
+              {/* Charger header */}
+              <div className="mb-4">
+                <div className="flex items-start justify-between">
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-lg font-semibold text-[#050505] leading-tight">
+                      {selectedCharger.name}
+                    </h2>
+                    {selectedCharger.network_name && (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <div
+                          className="w-2 h-2 rounded-full"
+                          style={{
+                            backgroundColor: getNetworkColor(
+                              selectedCharger.network_name
+                            ),
+                          }}
+                        />
+                        <span className="text-sm text-[#65676B]">
+                          {selectedCharger.network_name}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                  <div className="text-xl font-semibold text-[#050505]">
+                  <button
+                    onClick={() => setSelectedCharger(null)}
+                    className="p-1 hover:bg-gray-100 rounded"
+                  >
+                    <X className="w-4 h-4 text-[#65676B]" />
+                  </button>
+                </div>
+                {selectedCharger.address && (
+                  <p className="text-xs text-[#65676B] mt-2">
+                    {selectedCharger.address}
+                    {selectedCharger.city && `, ${selectedCharger.city}`}
+                    {selectedCharger.state && ` ${selectedCharger.state}`}
+                  </p>
+                )}
+              </div>
+
+              {/* Stats grid */}
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                {selectedCharger.power_kw && (
+                  <div className="p-3 bg-[#F7F8FA] border border-[#E4E6EB] rounded">
+                    <div className="text-xs text-[#65676B]">Power</div>
+                    <div className="text-base font-semibold text-[#050505]">
+                      {selectedCharger.power_kw} kW
+                    </div>
+                  </div>
+                )}
+                {selectedCharger.num_evse && (
+                  <div className="p-3 bg-[#F7F8FA] border border-[#E4E6EB] rounded">
+                    <div className="text-xs text-[#65676B]">Stalls</div>
+                    <div className="text-base font-semibold text-[#050505]">
+                      {selectedCharger.num_evse}
+                    </div>
+                  </div>
+                )}
+                <div className="p-3 bg-[#F7F8FA] border border-[#E4E6EB] rounded">
+                  <div className="text-xs text-[#65676B]">Sessions (30d)</div>
+                  <div className="text-base font-semibold text-[#050505]">
                     {selectedCharger.total_sessions}
                   </div>
                 </div>
-                <div>
-                  <div className="text-xs text-[#65676B] mb-1">
-                    Avg Duration
-                  </div>
-                  <div className="text-xl font-semibold text-[#050505]">
-                    {selectedCharger.avg_duration_minutes} min
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-[#65676B] mb-1">
-                    Sessions/Day
-                  </div>
-                  <div className="text-xl font-semibold text-[#050505]">
-                    {Math.round(selectedCharger.total_sessions / sinceDays)}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-[#65676B] mb-1">
-                    Unique Drivers
-                  </div>
-                  <div className="text-xl font-semibold text-[#050505]">
+                <div className="p-3 bg-[#F7F8FA] border border-[#E4E6EB] rounded">
+                  <div className="text-xs text-[#65676B]">Unique Drivers</div>
+                  <div className="text-base font-semibold text-[#050505]">
                     {selectedCharger.unique_drivers}
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Chart */}
-            <div className="mb-6">
-              <h3 className="text-xs font-semibold text-[#050505] mb-3">
-                Sessions (Last 14 Days)
-              </h3>
-              <ResponsiveContainer width="100%" height={150}>
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E4E6EB" />
-                  <XAxis
-                    dataKey="day"
-                    stroke="#65676B"
-                    style={{ fontSize: "10px" }}
-                  />
-                  <YAxis stroke="#65676B" style={{ fontSize: "10px" }} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "white",
-                      border: "1px solid #E4E6EB",
-                      borderRadius: "4px",
-                      fontSize: "12px",
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="sessions"
-                    stroke="#1877F2"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+              {/* Connector types */}
+              {selectedCharger.connector_types &&
+                selectedCharger.connector_types.length > 0 && (
+                  <div className="mb-4">
+                    <div className="text-xs text-[#65676B] mb-1.5">
+                      Connectors
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedCharger.connector_types.map((ct) => (
+                        <span
+                          key={ct}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded"
+                        >
+                          <Zap className="w-3 h-3" />
+                          {ct}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-            {/* Action Button */}
-            <Link
-              to="/campaigns/create"
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#1877F2] text-white text-sm font-medium hover:bg-[#166FE5] transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Create Campaign for This Charger
-            </Link>
+              {selectedCharger.pricing_per_kwh != null && (
+                <div className="mb-4 text-xs text-[#65676B]">
+                  Pricing: ${selectedCharger.pricing_per_kwh.toFixed(2)}/kWh
+                </div>
+              )}
+
+              {/* Charger ID */}
+              <div className="mb-4 text-xs text-[#65676B] font-mono">
+                ID: {selectedCharger.id}
+              </div>
+
+              {/* Create Campaign button */}
+              <Link
+                to={createCampaignUrl(selectedCharger)}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#1877F2] text-white text-sm font-medium hover:bg-[#166FE5] transition-colors rounded"
+              >
+                <Plus className="w-4 h-4" />
+                Create Campaign for This Charger
+              </Link>
+            </div>
+          ) : (
+            <div className="p-6 text-center text-sm text-[#65676B] border-b border-[#E4E6EB]">
+              <MapPin className="w-8 h-8 text-[#E4E6EB] mx-auto mb-2" />
+              Select a charger on the map to view details
+            </div>
+          )}
+
+          {/* Charger List */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="px-4 py-2.5 bg-[#F7F8FA] border-b border-[#E4E6EB] sticky top-0">
+              <span className="text-xs font-semibold text-[#050505]">
+                {chargers.length.toLocaleString()} chargers
+                {searchQuery && ` matching "${searchQuery}"`}
+              </span>
+            </div>
+            <div className="divide-y divide-[#E4E6EB]">
+              {chargers.map((charger) => (
+                <button
+                  key={charger.id}
+                  onClick={() => {
+                    setSelectedCharger(charger);
+                    const map = mapInstanceRef.current;
+                    if (map && charger.lat != null && charger.lng != null) {
+                      map.setView([charger.lat, charger.lng], Math.max(map.getZoom(), 14), {
+                        animate: true,
+                      });
+                    }
+                  }}
+                  className={`w-full text-left px-4 py-3 hover:bg-[#F7F8FA] transition-colors ${
+                    selectedCharger?.id === charger.id
+                      ? "bg-blue-50 border-l-2 border-l-[#1877F2]"
+                      : ""
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                      style={{
+                        backgroundColor: getNetworkColor(charger.network_name),
+                      }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-[#050505] truncate">
+                        {charger.name}
+                      </p>
+                      <p className="text-xs text-[#65676B] truncate">
+                        {[charger.network_name, charger.city, charger.state]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    </div>
+                    {charger.total_sessions > 0 && (
+                      <span className="text-xs text-green-600 font-medium flex-shrink-0">
+                        {charger.total_sessions} sessions
+                      </span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
-        )}
+        </div>
       </div>
+
+      {error && (
+        <div className="px-6 py-3 bg-red-50 border-t border-red-200 text-sm text-red-700">
+          {error}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,14 +1,5 @@
 import { useState, useEffect } from "react";
 import { Pause, Edit, Loader2 } from "lucide-react";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
 import { StatusPill } from "../components/StatusPill";
 import { Link } from "react-router-dom";
 import { Progress } from "../components/ui/progress";
@@ -112,15 +103,6 @@ export function Dashboard() {
     },
   ];
 
-  // Generate simple chart data from campaign sessions_granted
-  const chartData = Array.from({ length: 30 }, (_, i) => ({
-    day: i + 1,
-    sessions: Math.max(
-      0,
-      Math.round(totalSessionsFunded / 30 + (Math.random() - 0.5) * 10)
-    ),
-  }));
-
   return (
     <div className="p-8">
       {/* Header */}
@@ -164,33 +146,11 @@ export function Dashboard() {
           </h2>
           <p className="text-xs text-[#65676B] mt-1">Last 30 days</p>
         </div>
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#E4E6EB" />
-            <XAxis
-              dataKey="day"
-              stroke="#65676B"
-              style={{ fontSize: "12px" }}
-            />
-            <YAxis stroke="#65676B" style={{ fontSize: "12px" }} />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "white",
-                border: "1px solid #E4E6EB",
-                borderRadius: "4px",
-                fontSize: "12px",
-              }}
-            />
-            <Line
-              type="monotone"
-              dataKey="sessions"
-              stroke="#1877F2"
-              strokeWidth={2}
-              dot={false}
-              name="Sessions"
-            />
-          </LineChart>
-        </ResponsiveContainer>
+        <div className="flex items-center justify-center h-[300px] text-sm text-[#65676B]">
+          {campaigns.length === 0
+            ? "Create your first campaign to see performance data"
+            : "Session data will appear as your campaigns run"}
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-8">
