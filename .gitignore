@@ -73,6 +73,13 @@ cookies.txt
 # === Android signing & Firebase ===
 keystore.properties
 google-services.json
+*-firebase-adminsdk-*.json
+
+# === Infrastructure secrets ===
+infra/certs/
+
+# === Claude Code local memory ===
+.claude/
 
 # === Backup directory (local only) ===
 backups/
