@@ -209,7 +209,13 @@ async def discovery(
             drive_time_min = max(1, math.ceil(distance_m / 500))
 
             nearby_merchants = []
+            seen_names = set()
             for link, merchant in links_by_charger.get(charger.id, []):
+                # Deduplicate by name (multiple WYC records for same business)
+                dedup_key = (merchant.name or "").lower()
+                if dedup_key in seen_names:
+                    continue
+                seen_names.add(dedup_key)
                 walk_time_min = max(1, math.ceil(link.distance_m / 80))
 
                 merchant_name_lower = merchant.name.lower() if merchant.name else ""
@@ -356,10 +362,16 @@ async def charger_detail(
         ).order_by(ChargerMerchant.distance_m.asc()).limit(6).all()
 
         nearby_merchants = []
+        seen_merchant_names = set()
         for link in merchant_links:
             merchant = db.query(Merchant).filter(Merchant.id == link.merchant_id).first()
             if not merchant:
                 continue
+            # Deduplicate by name (multiple WYC records for same business)
+            dedup_key = (merchant.name or "").lower()
+            if dedup_key in seen_merchant_names:
+                continue
+            seen_merchant_names.add(dedup_key)
             walk_time_min = max(1, math.ceil(link.distance_m / 80))
             merchant_name_lower = merchant.name.lower() if merchant.name else ""
             if "asadas" in merchant_name_lower and "grill" in merchant_name_lower:

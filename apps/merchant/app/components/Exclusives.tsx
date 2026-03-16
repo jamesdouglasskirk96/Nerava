@@ -22,6 +22,7 @@ export function Exclusives() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
+  const [editDailyCap, setEditDailyCap] = useState('');
   const [saving, setSaving] = useState(false);
 
   const merchantId = localStorage.getItem('merchant_id') || '';
@@ -92,6 +93,7 @@ export function Exclusives() {
     setEditingId(exclusive.id);
     setEditTitle(exclusive.title);
     setEditDescription(exclusive.description || '');
+    setEditDailyCap(exclusive.daily_cap ? String(exclusive.daily_cap) : '');
     setToggleError(null);
   };
 
@@ -99,6 +101,7 @@ export function Exclusives() {
     setEditingId(null);
     setEditTitle('');
     setEditDescription('');
+    setEditDailyCap('');
   };
 
   const saveEdit = async () => {
@@ -109,6 +112,7 @@ export function Exclusives() {
       await updateExclusive(merchantId, editingId, {
         title: editTitle.trim(),
         description: editDescription.trim(),
+        daily_cap: editDailyCap ? parseInt(editDailyCap, 10) : undefined,
       });
       setEditingId(null);
       await loadExclusives();
@@ -224,6 +228,17 @@ export function Exclusives() {
                       rows={2}
                       className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent text-neutral-900 resize-none"
                       placeholder="Describe the exclusive offer for EV drivers"
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-neutral-700 mb-1">Daily Activation Cap</label>
+                    <input
+                      type="number"
+                      value={editDailyCap}
+                      onChange={(e) => setEditDailyCap(e.target.value)}
+                      min="0"
+                      className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent text-neutral-900"
+                      placeholder="Leave empty for unlimited"
                     />
                   </div>
                   <div className="flex items-center gap-3">
