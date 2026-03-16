@@ -265,6 +265,18 @@ class SessionEngine(
             regionId.startsWith("charger_") && transition == Geofence.GEOFENCE_TRANSITION_ENTER -> {
                 if (currentState == SessionState.IDLE) {
                     transition(SessionState.NEAR_CHARGER, SessionEvent.ENTERED_CHARGER_INTENT_ZONE)
+
+                    // Send background ping to backend for Tesla charging detection.
+                    // Mirrors iOS SessionEngine.handleGeofenceEntry().
+                    val location = locationService.currentLocation
+                    if (location != null) {
+                        ioExecutor.execute {
+                            apiClient.sendBackgroundPing(
+                                location.latitude,
+                                location.longitude,
+                            )
+                        }
+                    }
                 }
             }
             regionId.startsWith("charger_") && transition == Geofence.GEOFENCE_TRANSITION_EXIT -> {
