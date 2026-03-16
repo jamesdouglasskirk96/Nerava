@@ -861,33 +861,26 @@ def update_exclusive(
             ).first()
         except (ValueError, TypeError):
             link = None
-        if link:
-            if request.title is not None:
-                link.exclusive_title = request.title
-            if request.description is not None:
-                link.exclusive_description = request.description
-            if request.is_active is not None and not request.is_active:
-                link.exclusive_title = None
-                link.exclusive_description = None
-            # Also update DomainMerchant perk_label
-            new_title = request.title if request.title is not None else link.exclusive_title
-            merchant.perk_label = new_title
-            # Update WYC merchant perk_label
-            wyc = db.query(WYCMerchant).filter(WYCMerchant.id == link.merchant_id).first()
-            if wyc:
-                wyc.perk_label = new_title
-            db.commit()
-            now_str = datetime.utcnow().isoformat()
-            return ExclusiveResponse(
-                id=exclusive_id,
-                merchant_id=merchant_id,
-                title=link.exclusive_title or "",
-                description=link.exclusive_description or "",
-                daily_cap=None, session_cap=None,
-                eligibility="charging_only", is_active=bool(link.exclusive_title),
-                created_at=now_str, updated_at=now_str,
-            )
-        raise HTTPException(status_code=404, detail="Exclusive not found")
+        if not link:
+            raise HTTPException(status_code=404, detail="Exclusive not found")
+        new_title = request.title if request.title is not None else link.exclusive_title
+        new_desc = request.description if request.description is not None else (link.exclusive_description or "")
+        is_active = True
+        if request.is_active is not None and not request.is_active:
+            is_active = False
+        # Sync to ALL charger-merchant links + WYC merchant + DomainMerchant
+        _sync_exclusive_to_driver_app(db, merchant, new_title or "", new_desc, is_active)
+        db.commit()
+        now_str = datetime.utcnow().isoformat()
+        return ExclusiveResponse(
+            id=exclusive_id,
+            merchant_id=merchant_id,
+            title=new_title or "",
+            description=new_desc,
+            daily_cap=None, session_cap=None,
+            eligibility="charging_only", is_active=is_active,
+            created_at=now_str, updated_at=now_str,
+        )
 
     from app.models.while_you_charge import MerchantPerk
     perk = db.query(MerchantPerk).filter(
@@ -1042,14 +1035,9 @@ def toggle_exclusive(
             link = None
         if not link:
             raise HTTPException(status_code=404, detail="Exclusive not found")
-        if enabled:
-            # Re-enable: restore title if it was cleared
-            if not link.exclusive_title:
-                link.exclusive_title = "Exclusive Offer"
-        else:
-            link.exclusive_title = None
-            link.exclusive_description = None
-        _sync_exclusive_to_driver_app(db, merchant, link.exclusive_title or "", "", enabled)
+        title = link.exclusive_title or "Exclusive Offer"
+        # Sync to ALL charger-merchant links + WYC merchant + DomainMerchant
+        _sync_exclusive_to_driver_app(db, merchant, title, "", enabled)
         db.commit()
         return {"ok": True, "is_active": enabled}
 
