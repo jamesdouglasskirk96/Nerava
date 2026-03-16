@@ -813,37 +813,30 @@ def create_exclusive(
             detail="Merchant not found or access denied"
         )
     
-    # For MVP, create a MerchantPerk with exclusive flag
-    # TODO: Create dedicated Exclusive model in future
-    from app.models.while_you_charge import MerchantPerk
-    
-    perk = MerchantPerk(
-        merchant_id=merchant_id,
-        title=request.title,
-        description=request.description,
-        nova_reward=0,  # Exclusives don't have Nova rewards
-        is_active=True
-    )
-    db.add(perk)
-    db.commit()
-    db.refresh(perk)
-    
-    # Store exclusive metadata in perk description or create separate table
-    # For MVP, we'll use description field to store JSON metadata
-    import json
-    metadata = {
-        "daily_cap": request.daily_cap,
-        "session_cap": request.session_cap,
-        "eligibility": request.eligibility,
-        "is_exclusive": True
-    }
-    perk.description = json.dumps(metadata)
-
-    # Sync to driver-facing tables
-    _sync_exclusive_to_driver_app(db, merchant, request.title, request.description or "", True)
+    # Set exclusive_title on ALL ChargerMerchant links for this merchant.
+    # This is the same data the driver app reads — no FK issues.
+    all_links = _find_all_charger_merchant_links(db, merchant)
+    if not all_links:
+        raise HTTPException(
+            status_code=400,
+            detail="No charger links found for this merchant. A charger must be nearby to create an exclusive."
+        )
+    for cm_link in all_links:
+        cm_link.exclusive_title = request.title
+        cm_link.exclusive_description = request.description or ""
+    # Update WYC merchant perk_labels
+    wyc_ids = {cm_link.merchant_id for cm_link in all_links}
+    for wyc_id in wyc_ids:
+        wyc = db.query(WYCMerchant).filter(WYCMerchant.id == wyc_id).first()
+        if wyc:
+            wyc.perk_label = request.title
+    merchant.perk_label = request.title
     db.commit()
 
-    # Analytics: Capture exclusive creation
+    # Use first link's ID for the response
+    first_link = all_links[0]
+
+    # Analytics
     request_id = getattr(http_request.state, "request_id", None)
     analytics = get_analytics_client()
     analytics.capture(
@@ -855,20 +848,21 @@ def create_exclusive(
         ip=http_request.client.host if http_request.client else None,
         user_agent=http_request.headers.get("user-agent"),
         properties={
-            "exclusive_id": str(perk.id),
+            "exclusive_id": f"cm_{first_link.id}",
         }
     )
-    
+
+    now_str = datetime.utcnow().isoformat()
     return ExclusiveResponse(
-        id=str(perk.id),
+        id=f"cm_{first_link.id}",
         merchant_id=merchant_id,
-        title=perk.title,
-        description=perk.description,
+        title=request.title,
+        description=request.description or "",
         daily_cap=request.daily_cap,
         session_cap=request.session_cap,
         eligibility=request.eligibility,
-        is_active=perk.is_active,
-        created_at=perk.created_at.isoformat(),
+        is_active=True,
+        created_at=now_str,
         updated_at=perk.updated_at.isoformat()
     )
 
