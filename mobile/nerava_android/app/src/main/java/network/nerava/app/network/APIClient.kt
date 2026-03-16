@@ -106,6 +106,44 @@ class APIClient(
     }
 
     /**
+     * Fire-and-forget background ping to trigger Tesla charging detection.
+     * Called when a charger geofence is entered (can be backgrounded/killed).
+     * Mirrors iOS APIClient.sendBackgroundPing().
+     *
+     * @param lat device latitude from geofence trigger
+     * @param lng device longitude from geofence trigger
+     * @param authToken optional auth token override (for use from BroadcastReceiver
+     *                  when the in-memory accessToken may not be set)
+     */
+    fun sendBackgroundPing(lat: Double, lng: Double, authToken: String? = null) {
+        val token = authToken ?: accessToken
+        if (token == null) {
+            Log.w(TAG, "No auth token for background ping, skipping")
+            return
+        }
+
+        val body = JSONObject().apply {
+            put("lat", lat)
+            put("lng", lng)
+        }
+
+        val request = Request.Builder()
+            .url("$baseUrl/v1/charging-sessions/background-ping")
+            .post(body.toString().toRequestBody(jsonType))
+            .addHeader("Content-Type", "application/json")
+            .addHeader("Authorization", "Bearer $token")
+            .build()
+
+        try {
+            client.newCall(request).execute().use { response ->
+                Log.i(TAG, "Background ping: HTTP ${response.code}")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Background ping failed: ${e.message}")
+        }
+    }
+
+    /**
      * Fetch runtime config from GET /v1/native/config.
      */
     fun fetchConfig(): SessionConfig {
