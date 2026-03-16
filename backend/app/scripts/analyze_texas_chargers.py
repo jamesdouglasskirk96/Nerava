@@ -29,8 +29,8 @@ import os
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-# Hardcoded Google Places API key (from existing codebase)
-HARDCODED_API_KEY = "AIzaSyAs0PVYXj3-ztRXCjdd0ztUGUSjQR73FFg"
+# Use API key from environment — never hardcode secrets
+HARDCODED_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "")
 
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
