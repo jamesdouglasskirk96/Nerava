@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..dependencies.domain import get_current_user
-from ..services.payout_service import PayoutService
+from ..services.payout_service import PayoutService, calculate_withdrawal_fee
 from ..models.driver_wallet import WalletLedger, DriverWallet
 from ..models.session_event import IncentiveGrant
 from ..models.campaign import Campaign
@@ -106,6 +106,16 @@ async def get_wallet_ledger(
     return {"entries": results, "count": len(results)}
 
 
+@router.get("/withdraw/fee")
+async def get_withdrawal_fee(
+    amount_cents: int,
+    current_user=Depends(get_current_user),
+):
+    """Calculate the processing fee for a withdrawal amount"""
+    fee = calculate_withdrawal_fee(amount_cents)
+    return {"amount_cents": amount_cents, "fee_cents": fee, "net_cents": amount_cents}
+
+
 @router.post("/withdraw")
 async def request_withdrawal(
     request: WithdrawRequest,
@@ -159,6 +169,22 @@ async def create_stripe_account_link(
         raise HTTPException(status_code=500, detail="Failed to create onboarding link")
 
 
+@router.get("/stripe/status")
+async def check_stripe_status(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Check Stripe account onboarding status by calling Stripe API directly"""
+    try:
+        result = PayoutService.check_stripe_onboarding_status(db, current_user.id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("Stripe status check failed for user %s", current_user.id)
+        raise HTTPException(status_code=500, detail="Failed to check status")
+
+
 @router.post("/stripe/webhook")
 async def handle_stripe_webhook(
     request: Request,
@@ -178,6 +204,115 @@ async def handle_stripe_webhook(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Dwolla Endpoints (gated behind ENABLE_DWOLLA_PAYOUTS) ---
+
+import os as _os
+_ENABLE_DWOLLA = _os.getenv("ENABLE_DWOLLA_PAYOUTS", "false").lower() == "true"
+
+
+@router.post("/dwolla/webhook")
+async def handle_dwolla_webhook(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Handle Dwolla webhook events for ACH payout lifecycle."""
+    if not _ENABLE_DWOLLA:
+        return {"status": "ignored", "reason": "dwolla_disabled"}
+
+    import json
+    from ..services.dwolla_webhook_service import DwollaWebhookService
+
+    payload = await request.body()
+
+    # Verify signature in production
+    dwolla_secret = _os.getenv("DWOLLA_WEBHOOK_SECRET", "")
+    if _os.getenv("ENV", "dev") == "prod":
+        signature = request.headers.get("X-Request-Signature-SHA-256", "")
+        if not DwollaWebhookService.verify_signature(payload, signature, dwolla_secret):
+            logger.warning("Invalid Dwolla webhook signature")
+            return {"status": "error", "reason": "invalid_signature"}
+
+    try:
+        body = json.loads(payload)
+        topic = body.get("topic", "")
+        resource_url = ""
+        links = body.get("_links", {})
+        if "resource" in links:
+            resource_url = links["resource"].get("href", "")
+
+        result = DwollaWebhookService.handle_event(db, topic, resource_url)
+        return result
+    except Exception as e:
+        logger.error(f"Dwolla webhook processing error: {e}")
+        return {"status": "error", "reason": str(e)}
+
+
+class DwollaAccountRequest(BaseModel):
+    email: str = ""
+    first_name: str = "Driver"
+    last_name: str = ""
+
+
+@router.post("/dwolla/account")
+async def create_dwolla_account(
+    request: DwollaAccountRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Create or retrieve Dwolla receive-only customer for driver."""
+    if not _ENABLE_DWOLLA:
+        raise HTTPException(status_code=400, detail="Dwolla payouts are not enabled. Use Stripe Connect instead.")
+
+    from ..services.dwolla_payout_provider import DwollaPayoutProvider
+
+    wallet = db.query(DriverWallet).filter(
+        DriverWallet.driver_id == current_user.id
+    ).first()
+
+    if not wallet:
+        import uuid
+        wallet = DriverWallet(
+            id=str(uuid.uuid4()),
+            driver_id=current_user.id,
+            balance_cents=0,
+            pending_balance_cents=0,
+        )
+        db.add(wallet)
+        db.flush()
+
+    if wallet.external_account_id:
+        return {
+            "dwolla_customer_url": wallet.external_account_id,
+            "status": "existing",
+            "payout_provider": wallet.payout_provider,
+        }
+
+    try:
+        provider = DwollaPayoutProvider()
+        email = request.email or getattr(current_user, "email", "") or f"driver-{current_user.id}@nerava.network"
+        customer_url = provider.create_account(
+            current_user.id,
+            email,
+            first_name=request.first_name or "Driver",
+            last_name=request.last_name or str(current_user.id),
+        )
+        wallet.external_account_id = customer_url
+        wallet.payout_provider = "dwolla"
+        from datetime import datetime as dt
+        wallet.updated_at = dt.utcnow()
+        db.commit()
+
+        logger.info(f"Created Dwolla account for driver {current_user.id}: {customer_url}")
+        return {
+            "dwolla_customer_url": customer_url,
+            "status": "created",
+            "payout_provider": "dwolla",
+        }
+    except Exception as e:
+        logger.error(f"Failed to create Dwolla account for driver {current_user.id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create payout account")
 
 
 # Admin endpoints for testing/debugging

@@ -198,6 +198,131 @@ def get_merchant_dashboard(
     )
 
 
+@router.get("/me/insights")
+def get_merchant_insights(
+    period: str = Query("30d", description="Time period: 7d, 30d, 90d"),
+    user: User = Depends(require_merchant_admin),
+    db: Session = Depends(get_db),
+):
+    """Merchant insights — nearby charging sessions, dwell time, peak hours."""
+    merchant = AuthService.get_user_merchant(db, user.id)
+    if not merchant:
+        raise HTTPException(status_code=404, detail="Merchant not found for user")
+
+    from app.models.session_event import SessionEvent
+    from datetime import timedelta
+    from sqlalchemy import func
+
+    days = 30
+    if period.endswith("d"):
+        try:
+            days = int(period[:-1])
+        except ValueError:
+            days = 30
+
+    since = datetime.utcnow() - timedelta(days=days)
+
+    # Count nearby sessions (sessions at chargers linked to this merchant)
+    # If no charger links, fall back to 0
+    from app.models.while_you_charge import ChargerMerchant
+    wyc = db.query(WYCMerchant).filter(WYCMerchant.place_id == merchant.google_place_id).first() if merchant.google_place_id else None
+    charger_ids = []
+    if wyc:
+        links = db.query(ChargerMerchant.charger_id).filter(ChargerMerchant.merchant_id == wyc.id).all()
+        charger_ids = [l[0] for l in links]
+
+    ev_sessions = 0
+    unique_drivers = 0
+    avg_duration = None
+    avg_kwh = None
+    peak_hours = []
+
+    if charger_ids:
+        base = db.query(SessionEvent).filter(
+            SessionEvent.charger_id.in_(charger_ids),
+            SessionEvent.session_start >= since,
+        )
+        ev_sessions = base.count()
+        unique_drivers = base.with_entities(SessionEvent.driver_user_id).distinct().count()
+
+        dur = base.with_entities(func.avg(SessionEvent.duration_seconds)).scalar()
+        if dur:
+            avg_duration = round(dur / 60, 1)
+
+        kwh = base.with_entities(func.avg(SessionEvent.kwh_added)).scalar()
+        if kwh:
+            avg_kwh = round(float(kwh), 1)
+
+        # Peak hours
+        hour_counts = (
+            base.with_entities(
+                func.extract("hour", SessionEvent.session_start).label("hr"),
+                func.count().label("cnt"),
+            )
+            .group_by("hr")
+            .order_by("hr")
+            .all()
+        )
+        peak_hours = [{"hour": int(h), "sessions": c} for h, c in hour_counts]
+
+    return {
+        "period": period,
+        "ev_sessions_nearby": ev_sessions,
+        "unique_drivers": unique_drivers,
+        "avg_duration_minutes": avg_duration,
+        "avg_kwh": avg_kwh,
+        "peak_hours": peak_hours,
+        "dwell_distribution": None,
+        "walk_traffic": None,
+    }
+
+
+@router.put("/me/profile")
+def update_merchant_profile(
+    request: dict,
+    user: User = Depends(require_merchant_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Update merchant profile fields.
+    Accepts: name, description, photo_url, website, hours_text, perk_label, custom_perk_cents.
+    """
+    merchant = AuthService.get_user_merchant(db, user.id)
+    if not merchant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Merchant not found for user",
+        )
+
+    allowed_fields = {"name", "description", "photo_url", "website", "hours_text", "perk_label", "custom_perk_cents"}
+    updated = []
+    for field in allowed_fields:
+        if field in request:
+            setattr(merchant, field, request[field])
+            updated.append(field)
+
+    if updated:
+        from datetime import datetime
+        merchant.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(merchant)
+
+    return {
+        "ok": True,
+        "updated_fields": updated,
+        "merchant": {
+            "id": merchant.id,
+            "name": merchant.name,
+            "description": merchant.description,
+            "photo_url": merchant.photo_url,
+            "website": merchant.website,
+            "hours_text": merchant.hours_text,
+            "perk_label": merchant.perk_label,
+            "custom_perk_cents": merchant.custom_perk_cents,
+        },
+    }
+
+
 @router.post("/redeem_from_driver", response_model=RedeemFromDriverResponse)
 def redeem_from_driver(
     request: RedeemFromDriverRequest,
@@ -445,6 +570,51 @@ class ExclusiveResponse(BaseModel):
     updated_at: str
 
 
+def _sync_exclusive_to_driver_app(db: Session, merchant: DomainMerchant, title: str, description: str = "", is_active: bool = True):
+    """
+    Sync an exclusive offer to the driver-facing tables so it shows in the driver app.
+    Updates: DomainMerchant perk_label, WYC Merchant perk_label, ChargerMerchant exclusive fields.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # Update DomainMerchant perk_label
+    merchant.perk_label = title if is_active else None
+    db.flush()
+
+    # Update ALL matching WYC Merchants (by place_id and by name — may be different records)
+    from app.models.while_you_charge import ChargerMerchant
+    wyc_merchants = []
+    if merchant.google_place_id:
+        wyc_by_place = db.query(WYCMerchant).filter(WYCMerchant.place_id == merchant.google_place_id).first()
+        if wyc_by_place:
+            wyc_merchants.append(wyc_by_place)
+    if merchant.name:
+        from sqlalchemy import func as sqlfunc
+        wyc_by_name_all = db.query(WYCMerchant).filter(
+            sqlfunc.lower(WYCMerchant.name) == merchant.name.lower()
+        ).all()
+        existing_ids = {w.id for w in wyc_merchants}
+        for w in wyc_by_name_all:
+            if w.id not in existing_ids:
+                wyc_merchants.append(w)
+
+    for wyc_merchant in wyc_merchants:
+        wyc_merchant.perk_label = title if is_active else None
+        db.flush()
+        logger.info(f"Synced exclusive to WYC merchant {wyc_merchant.id}: {title}")
+
+        charger_links = db.query(ChargerMerchant).filter(
+            ChargerMerchant.merchant_id == wyc_merchant.id
+        ).all()
+        for link in charger_links:
+            link.exclusive_title = title if is_active else None
+            link.exclusive_description = description if is_active else None
+        if charger_links:
+            db.flush()
+            logger.info(f"Synced exclusive to {len(charger_links)} charger-merchant links for WYC {wyc_merchant.id}")
+
+
 @router.get("/{merchant_id}/exclusives", response_model=List[ExclusiveResponse])
 def list_exclusives(
     merchant_id: str,
@@ -462,15 +632,16 @@ def list_exclusives(
             detail="Merchant not found or access denied"
         )
     
-    from app.models.while_you_charge import MerchantPerk
+    from app.models.while_you_charge import MerchantPerk, ChargerMerchant
     import json
-    
-    # Query perks that are exclusives (check description for is_exclusive flag)
+
+    exclusives = []
+
+    # 1. Query MerchantPerk exclusives created via portal
     perks = db.query(MerchantPerk).filter(
         MerchantPerk.merchant_id == merchant_id
     ).all()
-    
-    exclusives = []
+
     for perk in perks:
         try:
             metadata = json.loads(perk.description or "{}")
@@ -479,7 +650,7 @@ def list_exclusives(
                     id=str(perk.id),
                     merchant_id=merchant_id,
                     title=perk.title,
-                    description=metadata.get("description") or perk.description,
+                    description=metadata.get("description") or "",
                     daily_cap=metadata.get("daily_cap"),
                     session_cap=metadata.get("session_cap"),
                     eligibility=metadata.get("eligibility", "charging_only"),
@@ -488,9 +659,81 @@ def list_exclusives(
                     updated_at=perk.updated_at.isoformat()
                 ))
         except:
-            # Skip if not valid JSON or not an exclusive
             continue
-    
+
+    # 2. Also pull charger_merchant exclusives (seeded offers visible to drivers)
+    #    These may exist before the merchant portal was used
+    import logging as _logging
+    _logger = _logging.getLogger(__name__)
+    if not exclusives:
+        _logger.info(f"Exclusives search: merchant.id={merchant.id}, name={merchant.name!r}, google_place_id={merchant.google_place_id!r}")
+
+        # Strategy: find ALL charger_merchant links with exclusives that belong to
+        # ANY WYC merchant matching by place_id OR by name (case-insensitive).
+        # This handles the case where there are multiple WYC records for the same business.
+        from sqlalchemy import func as sqlfunc
+
+        charger_links = []
+
+        # Method 1: via place_id
+        if merchant.google_place_id:
+            links_by_place = (
+                db.query(ChargerMerchant)
+                .join(WYCMerchant, ChargerMerchant.merchant_id == WYCMerchant.id)
+                .filter(
+                    WYCMerchant.place_id == merchant.google_place_id,
+                    ChargerMerchant.exclusive_title.isnot(None),
+                )
+                .all()
+            )
+            charger_links.extend(links_by_place)
+            _logger.info(f"Exclusives by place_id={merchant.google_place_id}: {len(links_by_place)} links")
+
+        # Method 2: via name match (catches seeded demo merchants with different place_id)
+        merchant_name = merchant.name or ""
+        if not merchant_name:
+            # Try to get name from the WYC merchant found by place_id
+            if merchant.google_place_id:
+                wyc = db.query(WYCMerchant).filter(WYCMerchant.place_id == merchant.google_place_id).first()
+                if wyc:
+                    merchant_name = wyc.name or ""
+        if merchant_name:
+            existing_link_ids = {(l.charger_id, l.merchant_id) for l in charger_links}
+            links_by_name = (
+                db.query(ChargerMerchant)
+                .join(WYCMerchant, ChargerMerchant.merchant_id == WYCMerchant.id)
+                .filter(
+                    sqlfunc.lower(WYCMerchant.name) == merchant_name.lower(),
+                    ChargerMerchant.exclusive_title.isnot(None),
+                )
+                .all()
+            )
+            for link in links_by_name:
+                if (link.charger_id, link.merchant_id) not in existing_link_ids:
+                    charger_links.append(link)
+            _logger.info(f"Exclusives by name={merchant_name!r}: {len(links_by_name)} links")
+
+        # Deduplicate by title — multiple charger links may share the same exclusive offer
+        now_str = datetime.utcnow().isoformat()
+        seen_titles = set()
+        for link in charger_links:
+            title = link.exclusive_title or ""
+            if title.lower() in seen_titles:
+                continue
+            seen_titles.add(title.lower())
+            exclusives.append(ExclusiveResponse(
+                id=f"cm_{link.charger_id}_{link.merchant_id}",
+                merchant_id=merchant_id,
+                title=title,
+                description=link.exclusive_description or "",
+                daily_cap=None,
+                session_cap=None,
+                eligibility="charging_only",
+                is_active=True,
+                created_at=now_str,
+                updated_at=now_str,
+            ))
+
     return exclusives
 
 
@@ -556,8 +799,11 @@ def create_exclusive(
         "is_exclusive": True
     }
     perk.description = json.dumps(metadata)
+
+    # Sync to driver-facing tables
+    _sync_exclusive_to_driver_app(db, merchant, request.title, request.description or "", True)
     db.commit()
-    
+
     # Analytics: Capture exclusive creation
     request_id = getattr(http_request.state, "request_id", None)
     analytics = get_analytics_client()
@@ -598,73 +844,94 @@ def update_exclusive(
     current_user: User = Depends(require_merchant_admin)
 ):
     """Update an exclusive."""
-    # Verify merchant belongs to user
     merchant = AuthService.get_user_merchant(db, current_user.id)
     if not merchant or str(merchant.id) != merchant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Merchant not found or access denied"
         )
-    
+
+    # Handle charger_merchant-based exclusives (cm_ prefix)
+    if exclusive_id.startswith("cm_"):
+        from app.models.while_you_charge import ChargerMerchant
+        parts = exclusive_id.split("_", 2)  # cm_charger_id_merchant_id
+        if len(parts) >= 3:
+            cm_charger_id = parts[1]
+            cm_merchant_id = "_".join(parts[2:])
+            link = db.query(ChargerMerchant).filter(
+                ChargerMerchant.charger_id == cm_charger_id,
+                ChargerMerchant.merchant_id == cm_merchant_id,
+            ).first()
+            if link:
+                if request.title is not None:
+                    link.exclusive_title = request.title
+                if request.description is not None:
+                    link.exclusive_description = request.description
+                if request.is_active is not None and not request.is_active:
+                    link.exclusive_title = None
+                    link.exclusive_description = None
+                # Also update DomainMerchant perk_label
+                new_title = request.title if request.title is not None else link.exclusive_title
+                merchant.perk_label = new_title
+                # Update WYC merchant perk_label
+                wyc = db.query(WYCMerchant).filter(WYCMerchant.id == cm_merchant_id).first()
+                if wyc:
+                    wyc.perk_label = new_title
+                db.commit()
+                now_str = datetime.utcnow().isoformat()
+                return ExclusiveResponse(
+                    id=exclusive_id,
+                    merchant_id=merchant_id,
+                    title=link.exclusive_title or "",
+                    description=link.exclusive_description or "",
+                    daily_cap=None, session_cap=None,
+                    eligibility="charging_only", is_active=bool(link.exclusive_title),
+                    created_at=now_str, updated_at=now_str,
+                )
+        raise HTTPException(status_code=404, detail="Exclusive not found")
+
     from app.models.while_you_charge import MerchantPerk
     perk = db.query(MerchantPerk).filter(
         MerchantPerk.id == int(exclusive_id),
         MerchantPerk.merchant_id == merchant_id
     ).first()
-    
+
     if not perk:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Exclusive not found"
-        )
-    
-    # Update fields
+        raise HTTPException(status_code=404, detail="Exclusive not found")
+
     if request.title is not None:
         perk.title = request.title
-    if request.description is not None:
-        perk.description = request.description
     if request.is_active is not None:
         perk.is_active = request.is_active
-    
-    # Update metadata
+
     import json
     try:
         metadata = json.loads(perk.description or "{}")
     except:
         metadata = {}
-    
+
     if request.daily_cap is not None:
         metadata["daily_cap"] = request.daily_cap
     if request.session_cap is not None:
         metadata["session_cap"] = request.session_cap
     if request.eligibility is not None:
         metadata["eligibility"] = request.eligibility
-    
+    if request.description is not None:
+        metadata["description"] = request.description
+
     perk.description = json.dumps(metadata)
+
+    final_title = request.title if request.title is not None else perk.title
+    final_active = request.is_active if request.is_active is not None else perk.is_active
+    _sync_exclusive_to_driver_app(db, merchant, final_title, request.description or "", final_active)
     db.commit()
     db.refresh(perk)
-    
-    # Analytics: Capture exclusive update
-    request_id = getattr(http_request.state, "request_id", None)
-    analytics = get_analytics_client()
-    analytics.capture(
-        event="server.merchant.exclusive.update",
-        distinct_id=current_user.public_id,
-        request_id=request_id,
-        user_id=current_user.public_id,
-        merchant_id=merchant_id,
-        ip=http_request.client.host if http_request.client else None,
-        user_agent=http_request.headers.get("user-agent"),
-        properties={
-            "exclusive_id": exclusive_id,
-        }
-    )
-    
+
     return ExclusiveResponse(
         id=str(perk.id),
         merchant_id=merchant_id,
         title=perk.title,
-        description=perk.description,
+        description=metadata.get("description", ""),
         daily_cap=metadata.get("daily_cap"),
         session_cap=metadata.get("session_cap"),
         eligibility=metadata.get("eligibility", "charging_only"),
@@ -672,6 +939,78 @@ def update_exclusive(
         created_at=perk.created_at.isoformat(),
         updated_at=perk.updated_at.isoformat()
     )
+
+
+@router.get("/{merchant_id}/visits")
+def get_merchant_visits_portal(
+    merchant_id: str,
+    period: str = Query("week", description="week, month, or all"),
+    status_filter: str = Query(None, alias="status", description="VERIFIED, PARTIAL, or REJECTED"),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_merchant_admin),
+):
+    """
+    List visits for a merchant (merchant portal view).
+    Queries ExclusiveSessions as a proxy for visits.
+    """
+    merchant = AuthService.get_user_merchant(db, current_user.id)
+    if not merchant or str(merchant.id) != merchant_id:
+        raise HTTPException(status_code=403, detail="Merchant not found or access denied")
+
+    from app.models.exclusive_session import ExclusiveSession, ExclusiveSessionStatus
+    from datetime import timedelta
+
+    query = db.query(ExclusiveSession).filter(
+        ExclusiveSession.merchant_id == merchant_id
+    )
+
+    # Period filter
+    now = datetime.utcnow()
+    if period == "week":
+        query = query.filter(ExclusiveSession.created_at >= now - timedelta(days=7))
+    elif period == "month":
+        query = query.filter(ExclusiveSession.created_at >= now - timedelta(days=30))
+
+    # Status filter
+    if status_filter == "VERIFIED":
+        query = query.filter(ExclusiveSession.status == ExclusiveSessionStatus.COMPLETED)
+    elif status_filter == "REJECTED":
+        query = query.filter(ExclusiveSession.status == ExclusiveSessionStatus.EXPIRED)
+
+    total = query.count()
+    verified_count = query.filter(
+        ExclusiveSession.status == ExclusiveSessionStatus.COMPLETED
+    ).count()
+
+    sessions = query.order_by(ExclusiveSession.created_at.desc()).offset(offset).limit(limit).all()
+
+    visits = []
+    for s in sessions:
+        v_status = "VERIFIED" if s.status == ExclusiveSessionStatus.COMPLETED else (
+            "REJECTED" if s.status == ExclusiveSessionStatus.EXPIRED else "PARTIAL"
+        )
+        visits.append({
+            "id": str(s.id),
+            "timestamp": s.created_at.isoformat() if s.created_at else now.isoformat(),
+            "exclusive_id": s.exclusive_id,
+            "exclusive_title": "",
+            "driver_id_anonymized": f"driver_{s.driver_id}" if s.driver_id else "unknown",
+            "verification_status": v_status,
+            "duration_minutes": None,
+            "charger_id": s.charger_id,
+            "location_name": None,
+        })
+
+    return {
+        "visits": visits,
+        "total": total,
+        "verified_count": verified_count,
+        "period": period,
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @router.post("/{merchant_id}/exclusives/{exclusive_id}/enable")
@@ -705,8 +1044,10 @@ def toggle_exclusive(
         )
     
     perk.is_active = enabled
+    # Sync to driver-facing tables
+    _sync_exclusive_to_driver_app(db, merchant, perk.title, "", enabled)
     db.commit()
-    
+
     # Analytics: Capture exclusive toggle
     request_id = getattr(http_request.state, "request_id", None)
     analytics = get_analytics_client()

@@ -26,6 +26,7 @@ from app.services.intent_service import (
     requires_vehicle_onboarding,
     find_nearest_chargers,
 )
+from app.core.config import settings
 from app.services.analytics import get_analytics_client
 from fastapi import Request
 
@@ -132,11 +133,10 @@ async def capture_intent(
         from app.services.intent_service import find_nearest_charger, assign_confidence_tier, validate_location_accuracy
 
         if not validate_location_accuracy(request.accuracy_m):
-            from app.core.config import settings
             raise ValueError(f"Location accuracy {request.accuracy_m}m exceeds threshold {settings.LOCATION_ACCURACY_THRESHOLD_M}m")
 
-        # Find up to 5 nearest chargers within 25km
-        charger_results = find_nearest_chargers(db, request.lat, request.lng, radius_m=25000, limit=5)
+        # Find nearest chargers within 25km (limit configurable via CHARGER_SEARCH_LIMIT)
+        charger_results = find_nearest_chargers(db, request.lat, request.lng, radius_m=25000, limit=settings.CHARGER_SEARCH_LIMIT)
         chargers_list = []
 
         for charger, distance in charger_results:
@@ -145,34 +145,50 @@ async def capture_intent(
                 name=charger.name,
                 distance_m=round(distance),
                 network_name=charger.network_name,
+                lat=charger.lat,
+                lng=charger.lng,
+                num_evse=getattr(charger, 'num_evse', None),
+                power_kw=getattr(charger, 'power_kw', None),
+                pricing_per_kwh=getattr(charger, 'pricing_per_kwh', None),
             ))
+
+        # Enrich chargers with exclusive merchant perk info (gold star on map)
+        # Only shows when a merchant has an exclusive offer (e.g. "Free Margarita", "$6 off")
+        try:
+            from app.models.while_you_charge import ChargerMerchant, Merchant
+            charger_ids_list = [cs.id for cs in chargers_list]
+            if charger_ids_list:
+                perk_links = (
+                    db.query(ChargerMerchant)
+                    .filter(
+                        ChargerMerchant.charger_id.in_(charger_ids_list),
+                        ChargerMerchant.exclusive_title.isnot(None),
+                        ChargerMerchant.exclusive_title != "",
+                    )
+                    .all()
+                )
+                perk_by_charger = {}
+                for link in perk_links:
+                    if link.charger_id not in perk_by_charger:
+                        perk_by_charger[link.charger_id] = link.exclusive_title
+                for cs in chargers_list:
+                    if cs.id in perk_by_charger:
+                        cs.has_merchant_perk = True
+                        cs.merchant_perk_title = perk_by_charger[cs.id]
+        except Exception as e:
+            logger.warning(f"Failed to enrich chargers with merchant perks: {e}")
 
         # Enrich chargers with campaign reward info
         try:
             from app.services.campaign_service import CampaignService
-            from app.services.geo import haversine_m as campaign_haversine
+            from app.routers.chargers import _get_reward_for_charger
             active_campaigns = CampaignService.get_active_campaigns(db)
             for cs in chargers_list:
-                best_reward = 0
-                for camp in active_campaigns:
-                    # Check charger_id targeting
-                    if camp.rule_charger_ids and cs.id not in camp.rule_charger_ids:
-                        continue
-                    # Check geo targeting
-                    if camp.rule_geo_center_lat and camp.rule_geo_center_lng and camp.rule_geo_radius_m:
-                        # Use charger's actual location from results
-                        charger_obj = next((c for c, _ in charger_results if c.id == cs.id), None)
-                        if charger_obj:
-                            dist = campaign_haversine(
-                                charger_obj.lat, charger_obj.lng,
-                                camp.rule_geo_center_lat, camp.rule_geo_center_lng
-                            )
-                            if dist > camp.rule_geo_radius_m:
-                                continue
-                    if camp.cost_per_session_cents > best_reward:
-                        best_reward = camp.cost_per_session_cents
-                if best_reward > 0:
-                    cs.campaign_reward_cents = best_reward
+                charger_obj = next((c for c, _ in charger_results if c.id == cs.id), None)
+                charger_network = charger_obj.network_name if charger_obj else (cs.network_name or "")
+                reward = _get_reward_for_charger(active_campaigns, cs.id, charger_network)
+                if reward:
+                    cs.campaign_reward_cents = reward
         except Exception as e:
             logger.warning(f"Failed to enrich chargers with campaign rewards: {e}")
             try:

@@ -68,12 +68,22 @@ _email_sender: Optional[EmailSender] = None
 
 
 def get_email_sender() -> EmailSender:
-    """Get the configured email sender instance"""
+    """Get the configured email sender instance based on EMAIL_SENDER env var."""
     global _email_sender
     if _email_sender is None:
-        # For now, always use console sender
-        # In the future, check env vars and instantiate appropriate sender
-        _email_sender = ConsoleEmailSender()
+        import os
+        provider = os.getenv("EMAIL_SENDER", "console")
+        if provider == "ses":
+            from .ses_email_sender import SESEmailSender
+            _email_sender = SESEmailSender()
+            logger.info("Email sender: SES")
+        elif provider == "sendgrid":
+            from .sendgrid_email_sender import SendGridEmailSender
+            _email_sender = SendGridEmailSender()
+            logger.info("Email sender: SendGrid")
+        else:
+            _email_sender = ConsoleEmailSender()
+            logger.info("Email sender: Console (dev)")
     return _email_sender
 
 

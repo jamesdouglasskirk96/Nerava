@@ -152,7 +152,8 @@ class TestPayoutServiceWithMockModels:
             total_earned_cents=1000,
         )
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_wallet
+        # Chain: query().filter().with_for_update().first() returns wallet
+        mock_db.query.return_value.filter.return_value.with_for_update.return_value.first.return_value = mock_wallet
 
         with patch.dict("sys.modules", {
             "app.models.driver_wallet": MagicMock(),

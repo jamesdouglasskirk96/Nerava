@@ -23,6 +23,11 @@ class ChargerSummary(BaseModel):
     campaign_reward_cents: Optional[int] = None
     lat: Optional[float] = None
     lng: Optional[float] = None
+    num_evse: Optional[int] = None
+    power_kw: Optional[float] = None
+    pricing_per_kwh: Optional[float] = None
+    has_merchant_perk: bool = False
+    merchant_perk_title: Optional[str] = None
 
     class Config:
         from_attributes = True

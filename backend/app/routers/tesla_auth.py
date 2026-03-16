@@ -45,6 +45,9 @@ class TeslaConnectionStatus(BaseModel):
     connected: bool
     vehicle_name: Optional[str] = None
     vehicle_model: Optional[str] = None
+    vehicle_year: Optional[int] = None
+    exterior_color: Optional[str] = None
+    battery_level: Optional[int] = None
     vin: Optional[str] = None
 
 
@@ -182,6 +185,7 @@ async def tesla_login(
             user = User(
                 public_id=str(uuid.uuid4()),
                 email=profile.get("email"),
+                display_name=profile.get("name"),
                 auth_provider="tesla",
                 provider_sub=tesla_sub,
                 is_active=True,
@@ -193,6 +197,8 @@ async def tesla_login(
             # Update email if we got one and user doesn't have one
             if profile.get("email") and not user.email:
                 user.email = profile["email"]
+            if profile.get("name") and not user.display_name:
+                user.display_name = profile["name"]
 
         # Store / update TeslaConnection
         existing_conn = db.query(TeslaConnection).filter(
@@ -250,6 +256,7 @@ async def tesla_login(
                 "public_id": user.public_id,
                 "auth_provider": user.auth_provider,
                 "email": user.email,
+                "display_name": user.display_name,
                 "phone": user.phone if hasattr(user, "phone") else None,
             },
             vehicles=vehicles_out,
@@ -307,9 +314,21 @@ async def select_vehicle(
     connection.vehicle_name = selected.get("display_name")
     connection.vehicle_model = selected.get("vehicle_config", {}).get("car_type", "Tesla")
     connection.updated_at = datetime.utcnow()
+
+    # Decode VIN for richer vehicle display (e.g. "2024 Model Y Long Range")
+    decoded_vehicle_model = connection.vehicle_model
+    if connection.vin:
+        from app.services.vin_decoder import decode_tesla_vin
+        decoded = decode_tesla_vin(connection.vin)
+        if decoded:
+            decoded_vehicle_model = decoded["display"]
+            connection.vehicle_model = decoded_vehicle_model
+            # Also update user's vehicle_model for account display
+            current_user.vehicle_model = decoded_vehicle_model
+
     db.commit()
 
-    logger.info(f"User {current_user.id} selected vehicle {connection.vin}")
+    logger.info(f"User {current_user.id} selected vehicle {connection.vin} ({decoded_vehicle_model})")
 
     return {
         "success": True,
@@ -317,7 +336,7 @@ async def select_vehicle(
             "id": connection.vehicle_id,
             "vin": connection.vin,
             "display_name": connection.vehicle_name,
-            "model": connection.vehicle_model,
+            "model": decoded_vehicle_model,
         },
     }
 
@@ -329,7 +348,7 @@ async def get_tesla_connection_status(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Check if user has connected their Tesla account."""
+    """Check if user has connected their Tesla account, with live battery + model."""
     connection = db.query(TeslaConnection).filter(
         TeslaConnection.user_id == current_user.id,
         TeslaConnection.is_active == True
@@ -338,11 +357,84 @@ async def get_tesla_connection_status(
     if not connection:
         return TeslaConnectionStatus(connected=False)
 
+    vehicle_model = connection.vehicle_model
+    vehicle_year = None
+    exterior_color = None
+    battery_level = None
+
+    # Try VIN decode first for year + model
+    if connection.vin:
+        from app.services.vin_decoder import decode_tesla_vin
+        decoded = decode_tesla_vin(connection.vin)
+        if decoded:
+            vehicle_year = decoded["year"]
+            if not vehicle_model or vehicle_model in ("Tesla", "model3", "modely", "models", "modelx"):
+                vehicle_model = decoded["display"]  # e.g. "2024 Model 3 Long Range"
+
+    # Fetch live vehicle data from Tesla API for battery + color + backfill
+    if connection.vehicle_id:
+        try:
+            oauth_service = get_tesla_oauth_service()
+            access_token = await get_valid_access_token(db, connection, oauth_service)
+            vehicle_data = await oauth_service.get_vehicle_data(access_token, connection.vehicle_id)
+
+            charge_state = vehicle_data.get("charge_state", {})
+            battery_level = charge_state.get("battery_level")
+
+            vehicle_config = vehicle_data.get("vehicle_config", {})
+            exterior_color = vehicle_config.get("exterior_color")
+            logger.info(
+                "Tesla vehicle_config for user %s: car_type=%s model_year=%s exterior_color=%s",
+                current_user.id,
+                vehicle_config.get("car_type"),
+                vehicle_config.get("model_year"),
+                exterior_color,
+            )
+
+            # Backfill model year from vehicle_config if VIN decode didn't get it
+            if not vehicle_year:
+                vehicle_year = vehicle_config.get("model_year")
+
+            # Backfill vehicle_model if still raw car_type
+            if not vehicle_model or vehicle_model in ("Tesla", "model3", "modely", "models", "modelx"):
+                car_type = vehicle_config.get("car_type")
+                if car_type:
+                    model_map = {
+                        "model3": "Model 3",
+                        "modely": "Model Y",
+                        "models": "Model S",
+                        "modelx": "Model X",
+                        "cybertruck": "Cybertruck",
+                    }
+                    vehicle_model = model_map.get(car_type.lower(), car_type)
+
+            # Persist enriched data
+            if connection.vehicle_model != vehicle_model:
+                connection.vehicle_model = vehicle_model
+                db.commit()
+        except Exception as e:
+            logger.warning(f"Could not fetch live Tesla data for status: {e}")
+            # Fall back to session data for battery
+            try:
+                from sqlalchemy import text
+                result = db.execute(text(
+                    "SELECT battery_end_pct FROM session_events "
+                    "WHERE driver_user_id = :uid AND battery_end_pct IS NOT NULL "
+                    "ORDER BY updated_at DESC LIMIT 1"
+                ), {"uid": current_user.id}).first()
+                if result:
+                    battery_level = result[0]
+            except Exception:
+                pass
+
     return TeslaConnectionStatus(
         connected=True,
         vehicle_name=connection.vehicle_name,
-        vehicle_model=connection.vehicle_model,
-        vin=connection.vin[-4:] if connection.vin else None  # Only last 4 chars
+        vehicle_model=vehicle_model,
+        vehicle_year=vehicle_year,
+        exterior_color=exterior_color,
+        vin=connection.vin[-4:] if connection.vin else None,
+        battery_level=battery_level,
     )
 
 

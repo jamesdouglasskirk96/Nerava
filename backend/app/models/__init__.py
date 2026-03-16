@@ -5,6 +5,7 @@ Models package - organized by domain
 from .user import User, UserPreferences
 from .refresh_token import RefreshToken
 from .otp_challenge import OTPChallenge
+from .email_otp_challenge import EmailOTPChallenge
 from .notification_prefs import UserNotificationPrefs
 from .domain import (
     Zone,
@@ -78,6 +79,18 @@ from .device_token import DeviceToken
 from .campaign import Campaign
 from .session_event import SessionEvent, IncentiveGrant
 from .driver_wallet import Payout, WalletLedger
+from .merchant_oauth_token import MerchantOAuthToken
+from .merchant_subscription import MerchantSubscription
+from .ad_impression import AdImpression
+from .partner import Partner, PartnerAPIKey
+from .merchant_reward import (
+    MerchantJoinRequest,
+    RewardClaim,
+    RewardClaimStatus,
+    ReceiptSubmission,
+    ReceiptStatus,
+)
+from .loyalty import LoyaltyCard, LoyaltyProgress
 from .extra import (
     CreditLedger,
     IncentiveRule,
@@ -98,6 +111,7 @@ __all__ = [
     "UserPreferences",
     "RefreshToken",
     "OTPChallenge",
+    "EmailOTPChallenge",
     "UserNotificationPrefs",
     # Domain models
     "Zone",
@@ -179,5 +193,15 @@ __all__ = [
     "Participation",
     "FeatureFlag",
     "DualZoneSession",
+    # Merchant overhaul models
+    "MerchantOAuthToken",
+    "MerchantSubscription",
+    "AdImpression",
+    # Partner models
+    "Partner",
+    "PartnerAPIKey",
+    # Loyalty models
+    "LoyaltyCard",
+    "LoyaltyProgress",
 ]
 

@@ -12,6 +12,8 @@ from app.services.async_wallet import async_wallet
 from app.services.cache import cache
 from app.workers.outbox_relay import outbox_relay
 from app.workers.prewarm import cache_prewarmer
+from app.workers.scheduled_polls import scheduled_poll_worker
+from app.workers.weekly_merchant_report import weekly_merchant_report_worker
 from app.analytics.batch_writer import analytics_batch_writer
 from app.subscribers.wallet_credit import *  # Import to register subscribers
 
@@ -68,7 +70,19 @@ async def lifespan(app):
         await analytics_batch_writer.start()
         logger.info("Analytics batch writer started")
         print("[STARTUP] Analytics batch writer started", flush=True)
-        
+
+        # Start scheduled poll worker (smart polling verification)
+        print("[STARTUP] Starting scheduled poll worker...", flush=True)
+        await scheduled_poll_worker.start()
+        logger.info("Scheduled poll worker started")
+        print("[STARTUP] Scheduled poll worker started", flush=True)
+
+        # Start weekly merchant report worker
+        print("[STARTUP] Starting weekly merchant report worker...", flush=True)
+        await weekly_merchant_report_worker.start()
+        logger.info("Weekly merchant report worker started")
+        print("[STARTUP] Weekly merchant report worker started", flush=True)
+
         # Test cache connection
         print("[STARTUP] Verifying cache connection...", flush=True)
         try:
@@ -185,6 +199,14 @@ async def lifespan(app):
     logger.info("Shutting down Nerava Backend v9...")
     
     try:
+        # Stop weekly merchant report worker
+        await weekly_merchant_report_worker.stop()
+        logger.info("Weekly merchant report worker stopped")
+
+        # Stop scheduled poll worker
+        await scheduled_poll_worker.stop()
+        logger.info("Scheduled poll worker stopped")
+
         # Stop analytics batch writer
         await analytics_batch_writer.stop()
         logger.info("Analytics batch writer stopped")

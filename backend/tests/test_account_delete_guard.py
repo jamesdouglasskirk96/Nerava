@@ -38,37 +38,37 @@ def auth_token(test_user, db: Session):
 
 
 def test_delete_account_requires_confirmation(auth_token, test_user):
-    """Test DELETE /v1/account requires "DELETE" confirmation"""
-    # Try without confirmation
-    response = client.delete(
-        "/v1/account",
+    """Test POST /v1/account/delete requires "DELETE" confirmation"""
+    # Try with wrong confirmation
+    response = client.post(
+        "/v1/account/delete",
         headers={"Authorization": f"Bearer {auth_token}"},
         json={
             "confirmation": "WRONG"
         }
     )
-    
+
     assert response.status_code == 400
     data = response.json()
     assert "CONFIRMATION_REQUIRED" in str(data)
 
 
 def test_delete_account_with_confirmation(auth_token, test_user, db: Session):
-    """Test DELETE /v1/account with correct confirmation"""
+    """Test POST /v1/account/delete with correct confirmation"""
     assert test_user.is_active is True
-    
-    response = client.delete(
-        "/v1/account",
+
+    response = client.post(
+        "/v1/account/delete",
         headers={"Authorization": f"Bearer {auth_token}"},
         json={
             "confirmation": "DELETE"
         }
     )
-    
+
     assert response.status_code == 200
     data = response.json()
     assert data["ok"] is True
-    
+
     # Verify user is soft-deleted
     db.refresh(test_user)
     assert test_user.is_active is False

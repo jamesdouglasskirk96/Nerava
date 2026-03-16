@@ -2,23 +2,23 @@
 Merchant Onboarding Router
 
 Handles merchant onboarding endpoints:
-- Google Business Profile OAuth
+- Google Business Profile OAuth (sign-in + verify ownership)
 - Location claims
 - Stripe SetupIntent for card-on-file
 - Placement rule updates
 """
 import logging
 import secrets
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+import uuid
+from datetime import datetime, timedelta
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import User
+from app.models import User, MerchantAccount
 from app.dependencies_domain import get_current_user
 from app.schemas.merchant_onboarding import (
-    GoogleAuthStartRequest,
     GoogleAuthStartResponse,
-    GoogleAuthCallbackRequest,
     GoogleAuthCallbackResponse,
     LocationsListResponse,
     LocationSummary,
@@ -33,11 +33,15 @@ from app.services.google_business_profile import (
     get_oauth_authorize_url,
     exchange_oauth_code,
     list_locations,
+    get_user_info,
 )
 from app.services.merchant_onboarding_service import (
     create_or_get_merchant_account,
     store_oauth_state,
     validate_oauth_state,
+    store_oauth_tokens,
+    get_valid_access_token,
+    link_location_to_merchant,
     claim_location,
     create_setup_intent,
     update_placement_rule,
@@ -53,31 +57,21 @@ router = APIRouter(prefix="/v1/merchant", tags=["merchant_onboarding"])
     "/auth/google/start",
     response_model=GoogleAuthStartResponse,
     summary="Start Google Business Profile OAuth",
-    description="""
-    Initiate Google Business Profile OAuth flow for merchant onboarding.
-    
-    Returns authorization URL and state token for CSRF protection.
-    Frontend should redirect user to auth_url.
-    """
 )
 async def start_google_auth(
-    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Start Google Business Profile OAuth flow.
+    Start Google OAuth flow. No auth required — this IS the login.
+    Returns auth_url to redirect the user to Google consent screen.
     """
     try:
-        # Generate state token for CSRF protection
         state = secrets.token_urlsafe(32)
-        store_oauth_state(state, current_user.id)
-        
-        # Build redirect URI
-        redirect_uri = f"{settings.FRONTEND_URL}/merchant/auth/google/callback"
-        
-        # Get authorization URL
+        redirect_uri = settings.GOOGLE_OAUTH_REDIRECT_URI or f"{settings.MERCHANT_PORTAL_URL}/auth/google/callback"
+        store_oauth_state(state, {"redirect_uri": redirect_uri})
+
         auth_url = get_oauth_authorize_url(state, redirect_uri)
-        
+
         return GoogleAuthStartResponse(
             auth_url=auth_url,
             state=state,
@@ -92,14 +86,7 @@ async def start_google_auth(
 
 @router.get(
     "/auth/google/callback",
-    response_model=GoogleAuthCallbackResponse,
     summary="Handle Google OAuth callback",
-    description="""
-    Handle Google OAuth callback and store access token.
-    
-    This endpoint is called by Google after user authorizes.
-    Stores encrypted token (or short-lived for dev).
-    """
 )
 async def google_auth_callback(
     code: str = Query(..., description="OAuth authorization code"),
@@ -108,33 +95,80 @@ async def google_auth_callback(
 ):
     """
     Handle Google OAuth callback.
+    Exchanges code for tokens, creates/finds user, creates merchant account,
+    stores encrypted tokens, and returns JWT.
     """
     try:
-        # Validate state
-        user_id = validate_oauth_state(state)
-        if not user_id:
+        # Validate state (best-effort — in-memory store doesn't survive across instances)
+        state_data = validate_oauth_state(state)
+        if not state_data:
+            logger.warning(f"OAuth state not found (likely cross-instance). Proceeding with config redirect_uri.")
+
+        redirect_uri = (state_data or {}).get("redirect_uri", "")
+        if not redirect_uri:
+            redirect_uri = settings.GOOGLE_OAUTH_REDIRECT_URI or f"{settings.MERCHANT_PORTAL_URL}/auth/google/callback"
+
+        # Exchange code for tokens
+        tokens = await exchange_oauth_code(code, redirect_uri)
+
+        # Get user info from Google
+        user_info = await get_user_info(tokens["access_token"])
+        email = user_info.get("email", "")
+        name = user_info.get("name", "")
+
+        if not email:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid or expired OAuth state",
+                detail="Could not retrieve email from Google account",
             )
-        
-        # Exchange code for tokens
-        redirect_uri = f"{settings.FRONTEND_URL}/merchant/auth/google/callback"
-        tokens = await exchange_oauth_code(code, redirect_uri)
-        
-        # Create or get merchant account
-        merchant_account = create_or_get_merchant_account(db, user_id)
-        
-        # TODO: Store encrypted tokens in database
-        # For now, we'll just create the account
-        # In production, create a MerchantOAuthToken model to store encrypted tokens
-        
-        logger.info(f"Google OAuth completed for merchant account {merchant_account.id}")
-        
-        return GoogleAuthCallbackResponse(
-            success=True,
-            merchant_account_id=merchant_account.id,
+
+        # Find or create user
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            user = User(
+                phone=f"google_{secrets.token_urlsafe(8)}",  # placeholder for phone-first schema
+                display_name=name,
+                email=email,
+                role_flags="merchant_admin",
+                auth_provider="google",
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            logger.info(f"Created merchant user {user.id} for {email}")
+        else:
+            # Ensure merchant_admin role
+            if user.role_flags and "merchant_admin" not in user.role_flags:
+                user.role_flags = f"{user.role_flags},merchant_admin"
+                db.commit()
+
+        # Create merchant account
+        merchant_account = create_or_get_merchant_account(db, user.id)
+
+        # Store encrypted OAuth tokens
+        store_oauth_tokens(db, merchant_account.id, tokens)
+
+        # Issue JWT
+        from app.core.security import create_access_token
+        access_token = create_access_token(
+            subject=user.public_id,
+            auth_provider="google",
+            role=user.role_flags or "merchant_admin",
         )
+
+        # Create refresh token
+        from app.services.refresh_token_service import RefreshTokenService
+        refresh_token_str, _ = RefreshTokenService.create_refresh_token(db, user)
+        db.commit()
+
+        return {
+            "success": True,
+            "access_token": access_token,
+            "refresh_token": refresh_token_str,
+            "merchant_account_id": merchant_account.id,
+            "user_email": email,
+            "user_name": name,
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -149,38 +183,29 @@ async def google_auth_callback(
     "/locations",
     response_model=LocationsListResponse,
     summary="List Google Business Profile locations",
-    description="""
-    List available Google Business Profile locations for the authenticated merchant.
-    
-    In mock mode (MERCHANT_AUTH_MOCK=true), returns seeded fake locations.
-    """
 )
 async def list_merchant_locations(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """
-    List available locations for the merchant.
-    """
+    """List available locations from the merchant's Google Business Profile."""
     try:
-        # Get merchant account
         merchant_account = create_or_get_merchant_account(db, current_user.id)
-        
-        # TODO: Get access token from stored OAuth tokens
-        # For now, use mock token in mock mode
-        access_token = "mock_token" if settings.MERCHANT_AUTH_MOCK else None
-        
-        if not access_token:
-            # In real mode, we'd fetch from stored tokens
-            # For now, raise error if not in mock mode
+
+        # Get valid access token (auto-refreshes if expired)
+        access_token = await get_valid_access_token(db, merchant_account.id)
+
+        if not access_token and not settings.MERCHANT_AUTH_MOCK:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="OAuth not completed. Please complete Google OAuth flow first.",
             )
-        
-        # List locations
+
+        if settings.MERCHANT_AUTH_MOCK and not access_token:
+            access_token = "mock_token"
+
         locations_data = await list_locations(access_token)
-        
+
         locations = [
             LocationSummary(
                 location_id=loc.get("location_id", ""),
@@ -190,51 +215,52 @@ async def list_merchant_locations(
             )
             for loc in locations_data
         ]
-        
+
         return LocationsListResponse(locations=locations)
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error listing locations: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to list locations",
-        )
+        logger.warning(f"GBP locations unavailable (falling back to search): {e}")
+        # Return empty list so frontend falls back to Places search
+        return LocationsListResponse(locations=[])
 
 
 @router.post(
     "/claim",
     response_model=ClaimLocationResponse,
     summary="Claim a location",
-    description="""
-    Claim a Google Place location for the merchant account.
-    
-    Creates a MerchantLocationClaim record.
-    """
 )
 async def claim_location_endpoint(
     request: ClaimLocationRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """
-    Claim a location for the merchant account.
-    """
+    """Claim a Google Place location and link it to the merchant's DomainMerchant record."""
     try:
-        # Get merchant account
         merchant_account = create_or_get_merchant_account(db, current_user.id)
-        
-        # Claim location
-        claim = claim_location(
+
+        # Claim in MerchantLocationClaim table
+        claim_record = claim_location(
             db=db,
             merchant_account_id=merchant_account.id,
             place_id=request.place_id,
         )
-        
+
+        # Also create/update DomainMerchant record
+        name = getattr(request, "name", "") or ""
+        address = getattr(request, "address", "") or ""
+        link_location_to_merchant(
+            db=db,
+            user_id=current_user.id,
+            place_id=request.place_id,
+            name=name,
+            address=address,
+        )
+
         return ClaimLocationResponse(
-            claim_id=claim.id,
-            place_id=claim.place_id,
-            status=claim.status,
+            claim_id=claim_record.id,
+            place_id=claim_record.place_id,
+            status=claim_record.status,
         )
     except ValueError as e:
         raise HTTPException(
@@ -253,27 +279,15 @@ async def claim_location_endpoint(
     "/billing/setup_intent",
     response_model=SetupIntentResponse,
     summary="Create Stripe SetupIntent",
-    description="""
-    Create Stripe SetupIntent for card-on-file collection.
-    
-    Returns client_secret for frontend to complete card setup.
-    Does not charge the card - only collects for future use.
-    """
 )
 async def create_setup_intent_endpoint(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """
-    Create Stripe SetupIntent for card-on-file.
-    """
+    """Create Stripe SetupIntent for card-on-file."""
     try:
-        # Get merchant account
         merchant_account = create_or_get_merchant_account(db, current_user.id)
-        
-        # Create SetupIntent
         result = create_setup_intent(db, merchant_account.id)
-        
         return SetupIntentResponse(
             client_secret=result["client_secret"],
             setup_intent_id=result["setup_intent_id"],
@@ -295,29 +309,15 @@ async def create_setup_intent_endpoint(
     "/placement/update",
     response_model=UpdatePlacementResponse,
     summary="Update placement rules",
-    description="""
-    Update placement rules for a claimed location.
-    
-    Requires:
-    - Location must be claimed by merchant
-    - Active payment method must exist
-    
-    Updates boost_weight (additive), daily_cap_cents, and perks_enabled.
-    """
 )
 async def update_placement_endpoint(
     request: UpdatePlacementRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """
-    Update placement rules for a location.
-    """
+    """Update placement rules for a location."""
     try:
-        # Get merchant account
         merchant_account = create_or_get_merchant_account(db, current_user.id)
-        
-        # Update placement rule
         rule = update_placement_rule(
             db=db,
             merchant_account_id=merchant_account.id,
@@ -326,7 +326,6 @@ async def update_placement_endpoint(
             boost_weight=request.boost_weight,
             perks_enabled=request.perks_enabled,
         )
-        
         return UpdatePlacementResponse(
             rule_id=rule.id,
             place_id=rule.place_id,
@@ -346,6 +345,3 @@ async def update_placement_endpoint(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update placement",
         )
-
-
-

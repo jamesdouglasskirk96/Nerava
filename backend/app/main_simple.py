@@ -60,6 +60,30 @@ from .core.env import is_local_env, get_env_name
 is_local = is_local_env()
 env = get_env_name()  # Define env before Sentry initialization (used at line 85)
 
+import re as _re
+
+_PII_PATTERNS = [
+    (_re.compile(r'\+?1?\d{10,15}'), '[PHONE]'),          # phone numbers
+    (_re.compile(r'eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+'), '[JWT]'),  # JWT tokens
+    (_re.compile(r'sk_live_[A-Za-z0-9]{20,}'), '[STRIPE_KEY]'),  # Stripe keys
+]
+
+
+def _scrub_pii_from_sentry_event(event, hint):
+    """Scrub PII (phone numbers, tokens) from Sentry events."""
+    def _scrub(obj):
+        if isinstance(obj, str):
+            for pattern, replacement in _PII_PATTERNS:
+                obj = pattern.sub(replacement, obj)
+            return obj
+        if isinstance(obj, dict):
+            return {k: _scrub(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [_scrub(i) for i in obj]
+        return obj
+    return _scrub(event)
+
+
 if sentry_dsn and not is_local:
     try:
         import sentry_sdk
@@ -85,7 +109,7 @@ if sentry_dsn and not is_local:
             # Don't send PII (scrub sensitive data)
             send_default_pii=False,
             # Additional options to scrub PII
-            before_send=lambda event, hint: event,  # Can add custom filtering here
+            before_send=_scrub_pii_from_sentry_event,
         )
         logger.info(f"Sentry error tracking initialized for environment: {env}")
         print(f"[STARTUP] Sentry error tracking enabled for {env}", flush=True)
@@ -343,6 +367,7 @@ from .routers import discover_api, affiliate_api, insights_api
 from .routers import while_you_charge, merchant_reports, merchant_balance, bootstrap
 from .routers import ev_smartcar, checkout, wallet_pass, demo_qr, demo_charging, demo_square, virtual_cards
 from .routers import intent, vehicle_onboarding, perks, merchant_onboarding, merchant_claim, merchants, exclusive, native_events
+from .routers import merchant_rewards
 from .services.nova_accrual import nova_accrual_service
 
 # Auth + JWT preferences
@@ -390,7 +415,7 @@ async def root_healthz():
 @app.get("/health")
 async def root_health():
     """Health check endpoint for Docker Compose (alias for /healthz).
-    
+
     Returns the same response as /healthz for consistency with Docker health checks.
     """
     return {
@@ -402,15 +427,15 @@ async def root_health():
 
 @app.get("/.well-known/appspecific/com.tesla.3p.public-key.pem")
 async def tesla_public_key():
-    """Serve Tesla Fleet API public key for partner registration."""
+    """Serve Tesla EC public key for domain verification."""
     from fastapi.responses import PlainTextResponse
-    TESLA_PUBLIC_KEY = """-----BEGIN PUBLIC KEY-----
-MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4uafZwnneewhvV7DM7t682nwl5ux
-tbK1A4U3xq7RBW3WNEKKYZXltqSD3RD/6AmHkQYGJRlqYGySK3PRATpGBA==
------END PUBLIC KEY-----
-"""
+    pem = os.environ.get("TESLA_EC_PUBLIC_KEY_PEM", "")
+    if not pem:
+        raise HTTPException(status_code=404, detail="Public key not configured")
+    # Handle escaped newlines from env var
+    pem = pem.replace("\\n", "\n")
     return PlainTextResponse(
-        content=TESLA_PUBLIC_KEY,
+        content=pem,
         media_type="application/x-pem-file",
     )
 
@@ -787,6 +812,16 @@ app.include_router(vehicle_onboarding.router)
 app.include_router(perks.router)
 app.include_router(merchant_onboarding.router)
 app.include_router(merchant_claim.router)
+app.include_router(merchant_rewards.router)  # /v1/merchants/{place_id}/request-join, /v1/rewards/*
+
+# Loyalty punch cards
+from .routers import loyalty
+app.include_router(loyalty.router)  # /v1/loyalty/*
+
+# Merchant billing and ad impressions
+from .routers import merchant_billing, ad_impressions
+app.include_router(merchant_billing.router)  # /v1/merchant/billing/*
+app.include_router(ad_impressions.router)     # /v1/ads/*
 app.include_router(merchants.router)
 app.include_router(wallet.router)
 app.include_router(wallet_pass.router)
@@ -861,6 +896,11 @@ app.include_router(virtual_key.router)
 app.include_router(clo.router)
 app.include_router(notifications.router)
 app.include_router(account.router)
+from .routers import referrals as referrals_router
+app.include_router(referrals_router.router)  # /v1/referrals/*
+from .routers.plaid import router as plaid_router, wallet_router as plaid_wallet_router
+app.include_router(plaid_router)  # /v1/wallet/plaid/*
+app.include_router(plaid_wallet_router)  # /v1/wallet/funding-sources
 app.include_router(consent.router)
 app.include_router(merchant_funnel.router)
 app.include_router(merchant_arrivals.router)
@@ -868,10 +908,28 @@ app.include_router(twilio_sms_webhook.router)
 app.include_router(client_telemetry.router)
 app.include_router(arrival_router.router)
 
+# Console auth (email OTP for sponsor portal)
+from .routers import console_auth
+app.include_router(console_auth.router)  # /v1/console/auth/*
+
 # Campaign / Incentive Layer routers
 from .routers import campaign_sessions, campaigns as campaigns_router
 app.include_router(campaign_sessions.router)  # /v1/charging-sessions/*
 app.include_router(campaigns_router.router)   # /v1/campaigns/*
+
+# Partner Incentive API
+from .routers import partner_api, admin_partners
+app.include_router(partner_api.router)        # /v1/partners/*
+app.include_router(admin_partners.router)     # /v1/admin/partners/*
+
+# Consolidated Stripe Webhooks
+from .routers import stripe_webhooks
+app.include_router(stripe_webhooks.router)    # /v1/stripe/webhooks
+
+# Tesla Fleet Telemetry routers
+from .routers import tesla_telemetry, tesla_telemetry_config
+app.include_router(tesla_telemetry.router)         # /v1/webhooks/tesla/telemetry
+app.include_router(tesla_telemetry_config.router)   # /v1/tesla/configure-telemetry
 
 # Canonical v1 API routers (promoted from Domain Charge Party MVP)
 # These are the production endpoints that the PWA uses
@@ -972,6 +1030,70 @@ async def ops_seed_merchants(key: str = "", max_cells: int = 0):
     thread.start()
     return {"job_id": job_id, "status": "started"}
 
+
+@app.post("/v1/ops/run-migrations")
+async def ops_run_migrations(key: str = ""):
+    """Run Alembic migrations to head. Protected by OPS_API_KEY."""
+    if not _OPS_KEY or key != _OPS_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    try:
+        from .run_migrations import run_migrations as _run_mig
+        _run_mig()
+        return {"ok": True, "status": "migrations_complete"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+@app.post("/v1/ops/seed-merchants-city")
+async def ops_seed_merchants_city(city: str = "", key: str = ""):
+    if not _OPS_KEY or key != _OPS_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    import threading
+    from datetime import datetime, timezone
+    from .routers.admin_domain import _seed_jobs
+
+    # Validate city
+    from scripts.seed_merchants_city import CITY_BBOXES
+    if city not in CITY_BBOXES:
+        raise HTTPException(status_code=400, detail=f"Unknown city: {city}. Available: {list(CITY_BBOXES.keys())}")
+
+    # Check for already running city seed
+    for jid, job in _seed_jobs.items():
+        if job["type"] == f"merchants_city_{city}" and job["status"] == "running":
+            return {"job_id": jid, "status": "already_running"}
+
+    job_id = f"city_seed_{city}_{_uuid.uuid4().hex[:8]}"
+    _seed_jobs[job_id] = {
+        "type": f"merchants_city_{city}",
+        "status": "starting",
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "started_by": "ops_endpoint",
+        "progress": {},
+        "result": None,
+        "error": None,
+    }
+
+    def _run_city_seed(jid, city_name):
+        import asyncio
+        from app.db import SessionLocal
+        from scripts.seed_merchants_city import seed_city
+
+        _seed_jobs[jid]["status"] = "running"
+        db = SessionLocal()
+        try:
+            result = asyncio.run(seed_city(db, city_name))
+            _seed_jobs[jid]["status"] = "completed"
+            _seed_jobs[jid]["result"] = result
+            _seed_jobs[jid]["completed_at"] = datetime.now(timezone.utc).isoformat()
+        except Exception as e:
+            _seed_jobs[jid]["status"] = "failed"
+            _seed_jobs[jid]["error"] = str(e)
+        finally:
+            db.close()
+
+    thread = threading.Thread(target=_run_city_seed, args=(job_id, city), daemon=True)
+    thread.start()
+    return {"job_id": job_id, "status": "started", "city": city}
+
 @app.get("/v1/ops/seed-status")
 async def ops_seed_status(key: str = ""):
     if not _OPS_KEY or key != _OPS_KEY:
@@ -1012,6 +1134,171 @@ async def ops_seed_debug(key: str = "", charger_id: str = ""):
         }
     finally:
         db.close()
+@app.post("/v1/ops/configure-telemetry")
+async def ops_configure_telemetry(user_id: int = 0, key: str = "", proxy_url: str = ""):
+    """Temporary ops endpoint to trigger telemetry config for debugging."""
+    if not _OPS_KEY or key != _OPS_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    from .db import SessionLocal
+    from .models.tesla_connection import TeslaConnection
+    from .services.tesla_oauth import get_tesla_oauth_service, get_valid_access_token
+    db = SessionLocal()
+    try:
+        conn = db.query(TeslaConnection).filter(
+            TeslaConnection.user_id == user_id,
+            TeslaConnection.is_active == True,
+        ).first()
+        if not conn:
+            return {"error": f"No active Tesla connection for user {user_id}"}
+        oauth = get_tesla_oauth_service()
+        token = await get_valid_access_token(db, conn, oauth)
+        if not token:
+            return {"error": "Could not get valid access token"}
+        if proxy_url:
+            # Route through Vehicle Command HTTP Proxy
+            result = await oauth.subscribe_vehicle_telemetry(
+                token, conn.vin, proxy_base_url=proxy_url,
+            )
+        else:
+            result = await oauth.subscribe_vehicle_telemetry(token, conn.vin)
+        conn.telemetry_enabled = True
+        from datetime import datetime
+        conn.telemetry_configured_at = datetime.utcnow()
+        db.commit()
+        return {"status": "configured", "vin": conn.vin, "result": result}
+    except Exception as e:
+        resp_body = None
+        if hasattr(e, 'response') and e.response is not None:
+            resp_body = e.response.text
+        return {"error": str(e), "response_body": resp_body}
+    finally:
+        db.close()
+
+@app.get("/v1/ops/tesla-token")
+async def ops_tesla_token(user_id: int = 0, key: str = ""):
+    """Get a valid Tesla access token for a user (for proxy-based telemetry config)."""
+    if not _OPS_KEY or key != _OPS_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    from .db import SessionLocal
+    from .models.tesla_connection import TeslaConnection
+    from .services.tesla_oauth import get_tesla_oauth_service, get_valid_access_token
+    db = SessionLocal()
+    try:
+        conn = db.query(TeslaConnection).filter(
+            TeslaConnection.user_id == user_id,
+            TeslaConnection.is_active == True,
+        ).first()
+        if not conn:
+            return {"error": f"No active Tesla connection for user {user_id}"}
+        oauth = get_tesla_oauth_service()
+        token = await get_valid_access_token(db, conn, oauth)
+        if not token:
+            return {"error": "Could not get valid access token"}
+        return {"access_token": token, "vin": conn.vin}
+    finally:
+        db.close()
+@app.get("/v1/ops/user-lookup")
+async def ops_user_lookup(email: str = "", key: str = ""):
+    """Ops: Look up user by email and return admin status."""
+    if not _OPS_KEY or key != _OPS_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    from .db import SessionLocal
+    from .models.user import User
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            return {"found": False, "email": email}
+        return {
+            "found": True,
+            "id": user.id,
+            "email": user.email,
+            "phone_number": getattr(user, 'phone_number', None),
+            "admin_role": user.admin_role,
+            "role_flags": user.role_flags,
+            "is_active": user.is_active,
+        }
+    finally:
+        db.close()
+
+
+@app.post("/v1/ops/set-admin")
+async def ops_set_admin(email: str = "", admin_role: str = "super_admin", key: str = ""):
+    """Ops: Set admin_role for a user by email."""
+    if not _OPS_KEY or key != _OPS_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    from .db import SessionLocal
+    from .models.user import User
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            raise HTTPException(status_code=404, detail=f"User {email} not found")
+        user.admin_role = admin_role
+        db.commit()
+        return {"ok": True, "user_id": user.id, "email": email, "admin_role": admin_role}
+    finally:
+        db.close()
+
+
+@app.post("/v1/ops/set-password")
+async def ops_set_password(email: str = "", password: str = "", key: str = ""):
+    """Ops: Set password for a user by email."""
+    if not _OPS_KEY or key != _OPS_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if not password or len(password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    from .db import SessionLocal
+    from .models.user import User
+    from .core.security import hash_password
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            raise HTTPException(status_code=404, detail=f"User {email} not found")
+        user.password_hash = hash_password(password)
+        db.commit()
+        return {"ok": True, "user_id": user.id, "email": email}
+    finally:
+        db.close()
+
+
+@app.post("/v1/ops/test-push")
+async def ops_test_push(email: str = "", title: str = "Test Push", body: str = "This is a test notification from Nerava", key: str = ""):
+    """Ops: Send a test push notification to a user by email."""
+    if not _OPS_KEY or key != _OPS_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    from .db import SessionLocal
+    from .models.user import User
+    from .models.device_token import DeviceToken
+    from .services.push_service import send_push_notification, _get_apns_client
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            raise HTTPException(status_code=404, detail=f"User {email} not found")
+        tokens = db.query(DeviceToken).filter(
+            DeviceToken.user_id == user.id,
+            DeviceToken.is_active.is_(True),
+        ).all()
+        client = _get_apns_client()
+        sent = send_push_notification(
+            db, user.id, title=title, body=body,
+            data={"type": "test_push"},
+        )
+        return {
+            "ok": True,
+            "user_id": user.id,
+            "email": email,
+            "device_tokens": len(tokens),
+            "token_previews": [t.token[:12] + "..." for t in tokens],
+            "apns_client_initialized": client is not None,
+            "notifications_sent": sent,
+        }
+    finally:
+        db.close()
+
+
 # ─── End temporary ops endpoint ───
 
 

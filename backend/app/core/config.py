@@ -4,12 +4,14 @@ from datetime import timedelta
 from typing import Dict, Any
 from functools import lru_cache
 
+from app.core.secrets import get_secret
+
 class Settings(BaseModel):
     # JWT Secret (supports both JWT_SECRET and NERAVA_SECRET_KEY env vars for backward compatibility)
     JWT_SECRET: str = os.getenv("JWT_SECRET", os.getenv("NERAVA_SECRET_KEY", "dev-secret-change-me"))
     # SECRET_KEY is an alias for JWT_SECRET (used by JWT encoding code)
     SECRET_KEY: str = os.getenv("JWT_SECRET", os.getenv("NERAVA_SECRET_KEY", "dev-secret-change-me"))
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "10080"))  # 7 days default for mobile app
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "10080"))  # 7 days; mobile app needs long-lived tokens
     ALGORITHM: str = "HS256"
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./nerava.db")
     
@@ -17,11 +19,23 @@ class Settings(BaseModel):
     STRIPE_SECRET_KEY: str = os.getenv("STRIPE_SECRET_KEY", os.getenv("STRIPE_SECRET", ""))  # Support both names
     STRIPE_WEBHOOK_SECRET: str = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 
-    # Stripe Express Payouts configuration
+    @property
+    def stripe_webhook_secret(self) -> str:
+        """Lowercase alias used by stripe_api.py webhook endpoint."""
+        return self.STRIPE_WEBHOOK_SECRET
+
+    # Stripe feature flags
+    ENABLE_STRIPE: bool = os.getenv("ENABLE_STRIPE", "true").lower() == "true"
     ENABLE_STRIPE_PAYOUTS: bool = os.getenv("ENABLE_STRIPE_PAYOUTS", "false").lower() == "true"
     STRIPE_PAYOUT_WEBHOOK_SECRET: str = os.getenv("STRIPE_PAYOUT_WEBHOOK_SECRET", "")
-    MINIMUM_WITHDRAWAL_CENTS: int = int(os.getenv("MINIMUM_WITHDRAWAL_CENTS", "2000"))  # $20 minimum
+    MINIMUM_WITHDRAWAL_CENTS: int = int(os.getenv("MINIMUM_WITHDRAWAL_CENTS", "100"))  # $1 minimum (lowered for testing)
     WEEKLY_WITHDRAWAL_LIMIT_CENTS: int = int(os.getenv("WEEKLY_WITHDRAWAL_LIMIT_CENTS", "100000"))  # $1000/week
+
+    # Integration feature flags (referenced by app/dependencies/feature_flags.py)
+    ENABLE_SQUARE: bool = os.getenv("ENABLE_SQUARE", "false").lower() == "true"
+    ENABLE_SMARTCAR: bool = os.getenv("ENABLE_SMARTCAR", "false").lower() == "true"
+    ENABLE_GOOGLE_OAUTH: bool = os.getenv("ENABLE_GOOGLE_OAUTH", "true").lower() == "true"
+    ENABLE_APPLE_WALLET_SIGNING: bool = os.getenv("ENABLE_APPLE_WALLET_SIGNING", "false").lower() == "true"
 
     # Fidel CLO (Card Linked Offers) configuration
     ENABLE_CLO: bool = os.getenv("ENABLE_CLO", "false").lower() == "true"
@@ -54,13 +68,32 @@ class Settings(BaseModel):
     SMARTCAR_ENABLED: bool = os.getenv("SMARTCAR_ENABLED", "false").lower() == "true"  # Feature flag to disable Smartcar
     
     # Tesla Fleet API configuration
-    TESLA_CLIENT_ID: str = os.getenv("TESLA_CLIENT_ID", "")
-    TESLA_CLIENT_SECRET: str = os.getenv("TESLA_CLIENT_SECRET", "")
+    # Try AWS Secrets Manager first, fall back to env vars
+    TESLA_CLIENT_ID: str = get_secret("nerava/tesla-client-id") or os.getenv("TESLA_CLIENT_ID", "")
+    TESLA_CLIENT_SECRET: str = get_secret("nerava/tesla-client-secret") or os.getenv("TESLA_CLIENT_SECRET", "")
     TESLA_PUBLIC_KEY_URL: str = os.getenv("TESLA_PUBLIC_KEY_URL", "https://api.nerava.network/.well-known/appspecific/com.tesla.3p.public-key.pem")
-    TESLA_WEBHOOK_SECRET: str = os.getenv("TESLA_WEBHOOK_SECRET", "")
+    TESLA_WEBHOOK_SECRET: str = get_secret("nerava/tesla-webhook-secret") or os.getenv("TESLA_WEBHOOK_SECRET", "")
     TESLA_FLEET_TELEMETRY_ENDPOINT: str = os.getenv("TESLA_FLEET_TELEMETRY_ENDPOINT", "wss://fleet-telemetry.nerava.com")
     FEATURE_VIRTUAL_KEY_ENABLED: bool = os.getenv("FEATURE_VIRTUAL_KEY_ENABLED", "false").lower() == "true"
     TESLA_MOCK_MODE: bool = os.getenv("TESLA_MOCK_MODE", "false").lower() == "true"
+
+    # Tesla Fleet Telemetry configuration
+    TESLA_EC_PUBLIC_KEY_PEM: str = os.getenv("TESLA_EC_PUBLIC_KEY_PEM", "")
+    TESLA_FLEET_TELEMETRY_CA_CERT: str = os.getenv("TESLA_FLEET_TELEMETRY_CA_CERT", "")  # Full cert PEM for ca field
+    TESLA_TELEMETRY_HMAC_SECRET: str = get_secret("nerava/tesla-telemetry-hmac-secret") or os.getenv("TESLA_TELEMETRY_HMAC_SECRET", "")
+    TELEMETRY_WEBHOOK_ENABLED: bool = os.getenv("TELEMETRY_WEBHOOK_ENABLED", "true").lower() == "true"
+    VEHICLE_COMMAND_PROXY_URL: str = os.getenv("VEHICLE_COMMAND_PROXY_URL", "")  # e.g. https://nlb-dns:4443
+
+    # APNs Push Notification configuration
+    APNS_KEY_PATH: str = os.getenv("APNS_KEY_PATH", "")
+    APNS_KEY_CONTENT: str = os.getenv("APNS_KEY_CONTENT", "")  # .p8 key content as env var (alternative to file path)
+    APNS_KEY_ID: str = os.getenv("APNS_KEY_ID", "")
+    APNS_TEAM_ID: str = os.getenv("APNS_TEAM_ID", "")
+    APNS_BUNDLE_ID: str = os.getenv("APNS_BUNDLE_ID", "com.nerava.driver")
+    APNS_USE_SANDBOX: bool = os.getenv("APNS_USE_SANDBOX", "false").lower() == "true"
+
+    # Firebase Cloud Messaging (FCM) for Android push notifications
+    FIREBASE_CREDENTIALS_JSON: str = os.getenv("FIREBASE_CREDENTIALS_JSON", "")
 
     # App URLs
     API_BASE_URL: str = os.getenv("API_BASE_URL", "https://api.nerava.network")
@@ -121,6 +154,9 @@ class Settings(BaseModel):
     NATIVE_LOCATION_ACCURACY_THRESHOLD_M: float = float(os.getenv("NATIVE_LOCATION_ACCURACY_THRESHOLD_M", "50"))  # Minimum location accuracy required (meters)
     NATIVE_SPEED_THRESHOLD_FOR_DWELL_MPS: float = float(os.getenv("NATIVE_SPEED_THRESHOLD_FOR_DWELL_MPS", "1.5"))  # Max speed for dwell detection (m/s)
     
+    # Charger search configuration
+    CHARGER_SEARCH_LIMIT: int = int(os.getenv("CHARGER_SEARCH_LIMIT", "20"))  # Max chargers returned by intent capture
+
     # Google Places search radius
     GOOGLE_PLACES_SEARCH_RADIUS_M: int = int(os.getenv("GOOGLE_PLACES_SEARCH_RADIUS_M", "800"))  # 800m radius for merchant search
     
@@ -155,6 +191,9 @@ class Settings(BaseModel):
     APPLE_KEY_ID: str = os.getenv("APPLE_KEY_ID", "")
     APPLE_PRIVATE_KEY: str = os.getenv("APPLE_PRIVATE_KEY", "")
     
+    # Email OTP / SES Configuration
+    EMAIL_SENDER: str = os.getenv("EMAIL_SENDER", "console")  # "console" (dev) or "ses" (production)
+
     # Phone OTP Configuration (Twilio)
     TWILIO_ACCOUNT_SID: str = os.getenv("TWILIO_ACCOUNT_SID", "")
     TWILIO_AUTH_TOKEN: str = os.getenv("TWILIO_AUTH_TOKEN", "")
@@ -177,6 +216,8 @@ class Settings(BaseModel):
     
     # Environment and Debug Settings
     ENV: str = os.getenv("ENV", "dev")  # dev, staging, prod
+    region: str = os.getenv("REGION", "us-east-1")
+    emergency_readonly_mode: bool = os.getenv("EMERGENCY_READONLY_MODE", "false").lower() == "true"
     DEBUG_RETURN_MAGIC_LINK: bool = os.getenv("DEBUG_RETURN_MAGIC_LINK", "false").lower() == "true"
     
     # Apple Wallet Configuration
@@ -189,6 +230,12 @@ class Settings(BaseModel):
     APPLE_WALLET_APNS_TEAM_ID: str = os.getenv("APPLE_WALLET_APNS_TEAM_ID", "")
     APPLE_WALLET_APNS_AUTH_KEY_PATH: str = os.getenv("APPLE_WALLET_APNS_AUTH_KEY_PATH", "")
     
+    # Merchant subscription Stripe Price IDs
+    STRIPE_PRICE_PRO_MONTHLY: str = os.getenv("STRIPE_PRICE_PRO_MONTHLY", "")
+    STRIPE_PRICE_ADS_FLAT_MONTHLY: str = os.getenv("STRIPE_PRICE_ADS_FLAT_MONTHLY", "")
+    STRIPE_MERCHANT_WEBHOOK_SECRET: str = os.getenv("STRIPE_MERCHANT_WEBHOOK_SECRET", "")
+    MERCHANT_PORTAL_URL: str = os.getenv("MERCHANT_PORTAL_URL", "https://merchant.nerava.network")
+
     # Preview signing key for merchant funnel (HMAC-SHA256)
     PREVIEW_SIGNING_KEY: str = os.getenv("PREVIEW_SIGNING_KEY", "")
 
@@ -198,6 +245,9 @@ class Settings(BaseModel):
     HUBSPOT_PRIVATE_APP_TOKEN: str = os.getenv("HUBSPOT_PRIVATE_APP_TOKEN", "")
     HUBSPOT_PORTAL_ID: str = os.getenv("HUBSPOT_PORTAL_ID", "")
     
+    # Partner Incentive API
+    PARTNER_DEFAULT_RATE_LIMIT_RPM: int = int(os.getenv("PARTNER_DEFAULT_RATE_LIMIT_RPM", "60"))
+
     # Feature Flags (default OFF for safety)
     feature_merchant_intel: bool = False
     feature_behavior_cloud: bool = False

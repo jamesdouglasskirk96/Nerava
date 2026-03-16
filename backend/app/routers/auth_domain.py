@@ -708,6 +708,34 @@ async def admin_login(
     return TokenResponse(access_token=access_token)
 
 
+class AdminResetPasswordRequest(BaseModel):
+    email: EmailStr
+    new_password: str
+    secret: str
+
+
+@router.post("/admin/reset-password")
+async def admin_reset_password(
+    payload: AdminResetPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Reset admin password. Requires JWT_SECRET as the secret field for authorization.
+    """
+    from app.core.config import settings
+    if payload.secret != settings.JWT_SECRET:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid secret")
+
+    user = db.query(User).filter(User.email == payload.email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.password_hash = hash_password(payload.new_password)
+    db.commit()
+    logger.info(f"[Auth][Admin] Password reset for {payload.email}")
+    return {"status": "ok", "message": "Password updated"}
+
+
 @router.post("/admin/google", response_model=TokenResponse)
 async def admin_google_auth(
     payload: MerchantGoogleAuthRequest,  # Reuse same model

@@ -78,6 +78,12 @@ class DomainMerchant(Base):
     lat = Column(Float, nullable=False)
     lng = Column(Float, nullable=False)
     
+    # Profile fields (editable by merchant)
+    description = Column(Text, nullable=True)
+    website = Column(String(512), nullable=True)
+    hours_text = Column(String(512), nullable=True)
+    photo_url = Column(String(512), nullable=True)
+
     # Contact
     public_phone = Column(String, nullable=True)
     
@@ -199,8 +205,8 @@ class NovaTransaction(Base):
     stripe_payment_id = Column(String, ForeignKey("stripe_payments.id"), nullable=True)
     session_id = Column(String, ForeignKey("domain_charging_sessions.id"), nullable=True)
     event_id = Column(String, ForeignKey("energy_events.id"), nullable=True, index=True)  # Optional event reference
-    campaign_id = Column(UUIDType(), ForeignKey("campaigns.id"), nullable=True, index=True)  # Campaign grant reference
-    
+    campaign_id = Column(String, nullable=True)
+
     # Metadata (Python attribute is 'transaction_meta' to avoid SQLAlchemy reserved word 'metadata')
     # Database column name remains 'metadata' for backward compatibility
     transaction_meta = Column("metadata", JSON, nullable=True)  # Flexible JSON for additional context

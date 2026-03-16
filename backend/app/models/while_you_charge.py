@@ -36,9 +36,17 @@ class Charger(Base):
     # Charger details
     connector_types = Column(JSON, default=list)  # ["CCS", "CHAdeMO", "Tesla"]
     power_kw = Column(Float, nullable=True)
+    num_evse = Column(Integer, nullable=True)  # Number of EVSE stalls/plugs
     is_public = Column(Boolean, default=True, nullable=False)
     access_code = Column(String, nullable=True)
     
+    # Pricing
+    pricing_per_kwh = Column(Float, nullable=True)  # e.g. 0.43
+    pricing_source = Column(String(50), nullable=True)  # 'network_average', 'user_reported', 'api'
+
+    # Nerava Score (reliability rating 0-100)
+    nerava_score = Column(Float, nullable=True)
+
     # Status
     status = Column(String, default="available", nullable=False)  # available, in_use, broken, unknown
     last_verified_at = Column(DateTime, nullable=True)

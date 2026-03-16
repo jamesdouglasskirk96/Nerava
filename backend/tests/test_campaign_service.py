@@ -27,6 +27,14 @@ def _make_user(db, email="sponsor@test.com"):
     return user
 
 
+def _fund_campaign(db, campaign):
+    """Mark a campaign as funded so it can be activated (mirrors Stripe checkout flow)."""
+    campaign.funding_status = "funded"
+    campaign.funded_at = datetime.utcnow()
+    db.flush()
+    return campaign
+
+
 class TestCampaignServiceCRUD:
     """Tests for campaign creation, read, update, and listing."""
 
@@ -119,6 +127,7 @@ class TestCampaignServiceCRUD:
             cost_per_session_cents=100,
             start_date=datetime.utcnow(),
         )
+        _fund_campaign(db, campaign)
         CampaignService.activate_campaign(db, campaign.id)
 
         with pytest.raises(ValueError, match="Cannot edit"):
@@ -136,6 +145,7 @@ class TestCampaignServiceCRUD:
             budget_cents=10000, cost_per_session_cents=100,
             start_date=datetime.utcnow(),
         )
+        _fund_campaign(db, c2)
         CampaignService.activate_campaign(db, c2.id)
 
         drafts = CampaignService.list_campaigns(db, status="draft")
@@ -148,12 +158,13 @@ class TestCampaignServiceTransitions:
     """Tests for campaign lifecycle status transitions."""
 
     def test_activate_from_draft(self, db):
-        """draft -> active transition should work."""
+        """draft -> active transition should work when funded."""
         campaign = CampaignService.create_campaign(
             db, sponsor_name="T", name="T", campaign_type="custom",
             budget_cents=10000, cost_per_session_cents=100,
             start_date=datetime.utcnow(),
         )
+        _fund_campaign(db, campaign)
         result = CampaignService.activate_campaign(db, campaign.id)
         assert result.status == "active"
 
@@ -164,6 +175,7 @@ class TestCampaignServiceTransitions:
             budget_cents=10000, cost_per_session_cents=100,
             start_date=datetime.utcnow(),
         )
+        _fund_campaign(db, campaign)
         CampaignService.activate_campaign(db, campaign.id)
 
         with pytest.raises(ValueError, match="Can only activate draft"):
@@ -176,6 +188,7 @@ class TestCampaignServiceTransitions:
             budget_cents=10000, cost_per_session_cents=100,
             start_date=datetime.utcnow(),
         )
+        _fund_campaign(db, campaign)
         CampaignService.activate_campaign(db, campaign.id)
         result = CampaignService.pause_campaign(db, campaign.id, reason="Testing pause")
 
@@ -189,11 +202,22 @@ class TestCampaignServiceTransitions:
             budget_cents=10000, cost_per_session_cents=100,
             start_date=datetime.utcnow(),
         )
+        _fund_campaign(db, campaign)
         CampaignService.activate_campaign(db, campaign.id)
         CampaignService.pause_campaign(db, campaign.id)
         result = CampaignService.resume_campaign(db, campaign.id)
 
         assert result.status == "active"
+
+    def test_activate_unfunded_raises(self, db):
+        """Cannot activate an unfunded campaign."""
+        campaign = CampaignService.create_campaign(
+            db, sponsor_name="T", name="T", campaign_type="custom",
+            budget_cents=10000, cost_per_session_cents=100,
+            start_date=datetime.utcnow(),
+        )
+        with pytest.raises(ValueError, match="must be funded"):
+            CampaignService.activate_campaign(db, campaign.id)
 
     def test_resume_exhausted_budget_raises(self, db):
         """Cannot resume a paused campaign with exhausted budget."""
@@ -202,6 +226,7 @@ class TestCampaignServiceTransitions:
             budget_cents=100, cost_per_session_cents=100,
             start_date=datetime.utcnow(),
         )
+        _fund_campaign(db, campaign)
         CampaignService.activate_campaign(db, campaign.id)
         # Manually set spent = budget to simulate exhaustion
         campaign.spent_cents = 100
@@ -222,6 +247,7 @@ class TestCampaignServiceBudget:
             budget_cents=10000, cost_per_session_cents=200,
             start_date=datetime.utcnow(),
         )
+        _fund_campaign(db, campaign)
         CampaignService.activate_campaign(db, campaign.id)
         # Simulate some spending
         campaign.spent_cents = 3000
@@ -241,6 +267,7 @@ class TestCampaignServiceBudget:
             budget_cents=1000, cost_per_session_cents=100,
             start_date=datetime.utcnow(),
         )
+        _fund_campaign(db, campaign)
         CampaignService.activate_campaign(db, campaign.id)
 
         result = CampaignService.decrement_budget_atomic(db, campaign.id, 100)
@@ -257,6 +284,7 @@ class TestCampaignServiceBudget:
             budget_cents=100, cost_per_session_cents=100,
             start_date=datetime.utcnow(),
         )
+        _fund_campaign(db, campaign)
         CampaignService.activate_campaign(db, campaign.id)
         campaign.spent_cents = 50
         db.flush()
@@ -279,6 +307,7 @@ class TestCampaignServiceBudget:
             budget_cents=100, cost_per_session_cents=100,
             start_date=datetime.utcnow(),
         )
+        _fund_campaign(db, campaign)
         CampaignService.activate_campaign(db, campaign.id)
 
         result = CampaignService.decrement_budget_atomic(db, campaign.id, 100)
@@ -304,6 +333,7 @@ class TestCampaignServiceClawback:
             budget_cents=10000, cost_per_session_cents=500,
             start_date=datetime.utcnow(),
         )
+        _fund_campaign(db, campaign)
         CampaignService.activate_campaign(db, campaign.id)
         campaign.spent_cents = 500
         campaign.sessions_granted = 1
@@ -389,6 +419,7 @@ class TestCampaignServiceClawback:
             budget_cents=500, cost_per_session_cents=500,
             start_date=datetime.utcnow(),
         )
+        _fund_campaign(db, campaign)
         CampaignService.activate_campaign(db, campaign.id)
         campaign.spent_cents = 500
         campaign.sessions_granted = 1

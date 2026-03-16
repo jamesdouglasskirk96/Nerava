@@ -11,7 +11,7 @@ from sqlalchemy import func
 
 from app.models import IntentSession, Charger, MerchantCache
 from app.core.config import settings
-from app.services.google_places_new import search_nearby, _get_geo_cell
+from app.services.google_places_new import _get_geo_cell
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ def find_nearest_charger(db: Session, lat: float, lng: float, radius_m: float = 
     return None
 
 
-def find_nearest_chargers(db: Session, lat: float, lng: float, radius_m: float = 25000, limit: int = 5) -> List[Tuple[Charger, float]]:
+def find_nearest_chargers(db: Session, lat: float, lng: float, radius_m: float = 25000, limit: int = 20) -> List[Tuple[Charger, float]]:
     """
     Find the nearest public chargers using PostgreSQL spatial query.
 
@@ -305,16 +305,9 @@ async def get_merchants_for_intent(
                 }
                 merchants.append(merchant_dict)
 
-    # Fall back to Google Places API if no database merchants found
+    # No Google Places fallback — only show merchants linked in the database
     if not merchants:
-        logger.info(f"No database merchants found, falling back to Google Places API for lat={lat}, lng={lng}")
-        radius = settings.GOOGLE_PLACES_SEARCH_RADIUS_M
-        merchants = await search_nearby(
-            lat=lat,
-            lng=lng,
-            radius_m=radius,
-            max_results=20,
-        )
+        logger.info(f"No database merchants linked for charger_id={charger_id} at lat={lat}, lng={lng}")
     
     # Cache merchants in database — batch query to reduce DB round trips
     geo_cell_lat, geo_cell_lng = _get_geo_cell(lat, lng)

@@ -1,11 +1,13 @@
 """
 Account management router
 """
+from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from datetime import datetime, timezone
+from typing import Optional
 import logging
 
 from app.db import get_db
@@ -20,18 +22,170 @@ from app.models import (
 from app.models.while_you_charge import FavoriteMerchant
 from app.models.vehicle import VehicleAccount, VehicleToken
 from app.models.domain import DriverWallet
-from app.dependencies_domain import get_current_user
+from app.dependencies_domain import get_current_user, require_admin
 from app.dependencies.driver import get_current_driver
 from app.services.audit import log_admin_action
+from app.schemas.account import ProfileUpdate, ProfileResponse, AccountStats, FavoriteChargerInfo
+from app.models.session_event import SessionEvent, IncentiveGrant
+from app.models.tesla_connection import TeslaConnection
+from app.models.device_token import DeviceToken
 
 router = APIRouter(prefix="/v1/account", tags=["account"])
 
 logger = logging.getLogger(__name__)
 
 
-class ExportResponse(BaseModel):
-    ok: bool
-    data: dict
+@router.put("/profile", response_model=ProfileResponse)
+def update_profile(
+    body: ProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update user profile fields (email, display_name)."""
+    if body.email is not None:
+        current_user.email = body.email
+    if body.display_name is not None:
+        current_user.display_name = body.display_name
+    db.commit()
+
+    return ProfileResponse(
+        email=current_user.email,
+        display_name=current_user.display_name,
+        phone=current_user.phone,
+        vehicle_model=current_user.vehicle_model,
+        member_since=current_user.created_at.isoformat() if current_user.created_at else None,
+    )
+
+
+@router.get("/profile", response_model=ProfileResponse)
+def get_profile(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get current user profile."""
+    return ProfileResponse(
+        email=current_user.email,
+        display_name=current_user.display_name,
+        phone=current_user.phone,
+        vehicle_model=current_user.vehicle_model,
+        member_since=current_user.created_at.isoformat() if current_user.created_at else None,
+    )
+
+
+@router.get("/stats", response_model=AccountStats)
+def get_account_stats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get driver account stats (total sessions, kWh, earnings, streak, CO2)."""
+    from sqlalchemy import func, case
+
+    user_id = current_user.id
+
+    # Session stats
+    session_stats = db.query(
+        func.count(SessionEvent.id),
+        func.coalesce(func.sum(SessionEvent.kwh_delivered), 0),
+    ).filter(
+        SessionEvent.driver_user_id == user_id,
+        SessionEvent.session_end.isnot(None),
+    ).first()
+
+    total_sessions = session_stats[0] if session_stats else 0
+    total_kwh = float(session_stats[1]) if session_stats else 0.0
+
+    # Wallet / earnings
+    wallet = db.query(DriverWallet).filter(DriverWallet.user_id == user_id).first()
+    total_earned_cents = 0
+    total_nova = 0
+    if wallet:
+        total_earned_cents = getattr(wallet, 'total_earned_cents', 0) or 0
+        total_nova = getattr(wallet, 'nova_balance', 0) or 0
+
+    # Favorite charger (most sessions)
+    fav_charger = None
+    if total_sessions > 0:
+        from app.models.while_you_charge import Charger
+        fav_row = db.query(
+            SessionEvent.charger_id,
+            func.count(SessionEvent.id).label("cnt"),
+        ).filter(
+            SessionEvent.driver_user_id == user_id,
+            SessionEvent.session_end.isnot(None),
+            SessionEvent.charger_id.isnot(None),
+        ).group_by(SessionEvent.charger_id).order_by(
+            func.count(SessionEvent.id).desc()
+        ).first()
+
+        if fav_row and fav_row[0]:
+            charger = db.query(Charger).filter(Charger.id == fav_row[0]).first()
+            if charger:
+                fav_charger = FavoriteChargerInfo(name=charger.name, sessions=fav_row[1])
+
+    # Streak (consecutive days)
+    streak = 0
+    if wallet:
+        streak = getattr(wallet, 'streak_days', 0) or 0
+
+    # CO2 avoided: EPA average ~0.4 kg CO2 per kWh displaced
+    co2_avoided_kg = round(total_kwh * 0.4, 1)
+
+    member_since = current_user.created_at.isoformat() if current_user.created_at else None
+
+    return AccountStats(
+        total_sessions=total_sessions,
+        total_kwh=round(total_kwh, 1),
+        total_earned_cents=total_earned_cents,
+        total_nova=total_nova,
+        favorite_charger=fav_charger,
+        member_since=member_since,
+        current_streak=streak,
+        co2_avoided_kg=co2_avoided_kg,
+    )
+
+
+class PreferencesUpdate(BaseModel):
+    notifications_enabled: Optional[bool] = None
+    email_marketing: Optional[bool] = None
+
+
+class PreferencesResponse(BaseModel):
+    notifications_enabled: bool
+    email_marketing: bool
+
+
+@router.put("/preferences", response_model=PreferencesResponse)
+@router.patch("/preferences", response_model=PreferencesResponse)
+def update_preferences(
+    body: PreferencesUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update user notification/marketing preferences."""
+    if body.notifications_enabled is not None:
+        current_user.notifications_enabled = body.notifications_enabled
+    if body.email_marketing is not None:
+        current_user.email_marketing = body.email_marketing
+    db.commit()
+    return PreferencesResponse(
+        notifications_enabled=getattr(current_user, 'notifications_enabled', True) or True,
+        email_marketing=getattr(current_user, 'email_marketing', False) or False,
+    )
+
+
+@router.get("/preferences", response_model=PreferencesResponse)
+def get_preferences(
+    current_user: User = Depends(get_current_user),
+):
+    """Get current user preferences."""
+    return PreferencesResponse(
+        notifications_enabled=getattr(current_user, 'notifications_enabled', True) or True,
+        email_marketing=getattr(current_user, 'email_marketing', False) or False,
+    )
+
+
+class FeedbackRequest(BaseModel):
+    message: str
 
 
 class DeleteRequest(BaseModel):
@@ -40,6 +194,35 @@ class DeleteRequest(BaseModel):
 
 class DeleteResponse(BaseModel):
     ok: bool
+
+
+class ExportResponse(BaseModel):
+    ok: bool
+    data: dict
+
+
+@router.post("/feedback")
+def submit_feedback(
+    body: FeedbackRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Submit user feedback."""
+    if not body.message.strip():
+        raise HTTPException(status_code=400, detail="Feedback message cannot be empty")
+    logger.info(f"Feedback from user {current_user.id}: {body.message[:500]}")
+    return {"ok": True}
+
+
+# Also support POST /v1/account/delete for clients that can't send DELETE with body
+@router.post("/delete")
+def delete_account_post(
+    request: DeleteRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete account via POST (for clients that can't send DELETE with body)."""
+    return delete_account(request, current_user, db)
 
 
 # ─── Vehicle Endpoint ──────────────────────────────────────────────
@@ -324,6 +507,110 @@ def delete_account(
         )
 
 
+# ─── Admin: Transfer Sessions Between Users ──────────────────────
+
+class TransferRequest(BaseModel):
+    from_user_id: int
+    to_phone: Optional[str] = None
+    to_user_id: Optional[int] = None
+    transfer_tesla: bool = True
+    transfer_wallet: bool = True
+
+
+@router.post("/admin/transfer-sessions")
+def transfer_sessions(
+    body: TransferRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Transfer charging sessions (and optionally Tesla connection, wallet) from one user to another.
+    Only the target user can pull sessions into their own account."""
+    # Resolve target user first to check authorization
+    if body.to_user_id and body.to_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Can only transfer to your own account")
+    if body.to_phone:
+        phone = body.to_phone if body.to_phone.startswith("+") else "+1" + body.to_phone
+        if phone != current_user.phone:
+            raise HTTPException(status_code=403, detail="Can only transfer to your own account")
+    # Find source user
+    src = db.query(User).filter(User.id == body.from_user_id).first()
+    if not src:
+        raise HTTPException(status_code=404, detail=f"Source user {body.from_user_id} not found")
+
+    # Find target user
+    if body.to_user_id:
+        tgt = db.query(User).filter(User.id == body.to_user_id).first()
+    elif body.to_phone:
+        phone = body.to_phone
+        if not phone.startswith("+"):
+            phone = "+1" + phone
+        tgt = db.query(User).filter(User.phone == phone).first()
+    else:
+        raise HTTPException(status_code=400, detail="Must specify to_user_id or to_phone")
+
+    if not tgt:
+        raise HTTPException(status_code=404, detail="Target user not found")
+
+    if src.id == tgt.id:
+        raise HTTPException(status_code=400, detail="Source and target are the same user")
+
+    result = {
+        "from_user": {"id": src.id, "phone": src.phone, "email": src.email, "provider": src.auth_provider},
+        "to_user": {"id": tgt.id, "phone": tgt.phone, "email": tgt.email, "provider": tgt.auth_provider},
+        "transferred": {},
+    }
+
+    # Transfer sessions
+    sessions_updated = db.query(SessionEvent).filter(
+        SessionEvent.driver_user_id == src.id
+    ).update({"driver_user_id": tgt.id, "user_id": tgt.id}, synchronize_session=False)
+    result["transferred"]["sessions"] = sessions_updated
+
+    # Transfer grants
+    grants_updated = db.query(IncentiveGrant).filter(
+        IncentiveGrant.driver_user_id == src.id
+    ).update({"driver_user_id": tgt.id}, synchronize_session=False)
+    result["transferred"]["grants"] = grants_updated
+
+    # Transfer Tesla connection
+    if body.transfer_tesla:
+        existing_tesla = db.query(TeslaConnection).filter(TeslaConnection.user_id == tgt.id).first()
+        if not existing_tesla:
+            tesla_updated = db.query(TeslaConnection).filter(
+                TeslaConnection.user_id == src.id
+            ).update({"user_id": tgt.id}, synchronize_session=False)
+            result["transferred"]["tesla_connection"] = tesla_updated
+        else:
+            result["transferred"]["tesla_connection"] = "target_already_has_one"
+
+    # Transfer wallet balance
+    if body.transfer_wallet:
+        src_wallet = db.query(DriverWallet).filter(DriverWallet.user_id == src.id).first()
+        if src_wallet and (src_wallet.balance_cents or 0) > 0:
+            tgt_wallet = db.query(DriverWallet).filter(DriverWallet.user_id == tgt.id).first()
+            if tgt_wallet:
+                tgt_wallet.balance_cents = (tgt_wallet.balance_cents or 0) + (src_wallet.balance_cents or 0)
+                tgt_wallet.nova_balance = (tgt_wallet.nova_balance or 0) + (src_wallet.nova_balance or 0)
+                src_wallet.balance_cents = 0
+                src_wallet.nova_balance = 0
+                result["transferred"]["wallet"] = "merged"
+            else:
+                result["transferred"]["wallet"] = "no_target_wallet"
+        else:
+            result["transferred"]["wallet"] = "no_source_balance"
+
+    # Transfer device tokens
+    devices_updated = db.query(DeviceToken).filter(
+        DeviceToken.user_id == src.id
+    ).update({"user_id": tgt.id}, synchronize_session=False)
+    result["transferred"]["device_tokens"] = devices_updated
+
+    db.commit()
+
+    logger.info("Admin %s transferred data from user %s to user %s: %s",
+                admin.id, src.id, tgt.id, result["transferred"])
+
+    return result
 
 
 

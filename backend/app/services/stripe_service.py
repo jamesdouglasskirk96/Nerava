@@ -212,7 +212,21 @@ class StripeService:
         stripe_session_id = session["id"]
         payment_intent_id = session.get("payment_intent")
         metadata = session.get("metadata", {})
-        
+
+        # Route campaign funding checkouts to CampaignService
+        if metadata.get("type") == "campaign_funding":
+            try:
+                from app.services.campaign_service import CampaignService
+                result = CampaignService.fund_campaign(
+                    db,
+                    checkout_session_id=stripe_session_id,
+                    payment_intent_id=payment_intent_id,
+                )
+                return result
+            except Exception as e:
+                logger.error(f"Campaign funding failed for session {stripe_session_id}: {e}")
+                return {"status": "error", "message": str(e)}
+
         merchant_id = metadata.get("merchant_id")
         nova_amount = int(metadata.get("nova_amount", 0))
         package_id = metadata.get("package_id")

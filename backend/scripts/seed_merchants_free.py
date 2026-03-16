@@ -111,6 +111,7 @@ def _cell_bbox(grid_key: tuple[int, int], buffer_deg: float = 0.008):
 async def seed_merchants(
     db,
     max_cells: Optional[int] = None,
+    chargers_override=None,
     progress_callback=None,
 ) -> dict:
     """
@@ -141,8 +142,8 @@ async def seed_merchants(
         "errors": [],
     }
 
-    # Step 1: Load all chargers
-    chargers = db.query(Charger).all()
+    # Step 1: Load chargers (use override if provided, else load all)
+    chargers = chargers_override if chargers_override is not None else db.query(Charger).all()
     if not chargers:
         logger.warning("[MerchantSeed] No chargers in DB. Run charger seed first.")
         return result

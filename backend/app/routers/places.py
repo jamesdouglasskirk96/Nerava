@@ -77,7 +77,7 @@ async def search_places(
             name=result["name"],
             lat=result["lat"],
             lng=result["lng"],
-            address=None,  # Not in search results
+            address=result.get("address"),
             rating=result.get("rating"),
             user_rating_count=result.get("user_rating_count"),
             photo_url=photo_url,

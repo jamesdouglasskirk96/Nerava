@@ -32,10 +32,10 @@ def upgrade():
             "energy_reputation_score INTEGER NOT NULL DEFAULT 0"
         ))
     else:
-        # SQLite: check if columns exist via PRAGMA
-        cols = [row[1] for row in conn.execute(sa.text(
-            "PRAGMA table_info('driver_wallets')"
-        )).fetchall()]
+        # Check if columns exist using database-agnostic inspector
+        from sqlalchemy import inspect as sa_inspect
+        inspector = sa_inspect(conn)
+        cols = [c["name"] for c in inspector.get_columns("driver_wallets")]
         if "nova_balance" not in cols:
             conn.execute(sa.text(
                 "ALTER TABLE driver_wallets ADD COLUMN "

@@ -48,13 +48,32 @@ class GrantNovaRequest(BaseModel):
     idempotency_key: Optional[str] = None  # Optional idempotency key for deduplication
 
 
+class RevenueBreakdown(BaseModel):
+    campaign_gross_cents: int = 0
+    campaign_platform_fees_cents: int = 0
+    campaign_driver_rewards_cents: int = 0
+    merchant_subscriptions_cents: int = 0
+    active_subscriptions: int = 0
+    nova_sales_cents: int = 0
+    merchant_fees_cents: int = 0
+    arrival_billing_cents: int = 0
+    total_realized_cents: int = 0
+    total_driver_payouts_cents: int = 0
+
+
 class AdminOverviewResponse(BaseModel):
     total_drivers: int
     total_merchants: int
+    total_chargers: int = 0
+    total_charging_sessions: int = 0
+    active_campaigns: int = 0
     total_driver_nova: int
     total_merchant_nova: int
     total_nova_outstanding: int
     total_stripe_usd: int
+    total_tesla_connections: int = 0
+    total_stripe_express_onboarded: int = 0
+    revenue: Optional[RevenueBreakdown] = None
 
 
 @router.get("/health")
@@ -124,25 +143,32 @@ async def get_overview(
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    """Get admin overview statistics (cached for 60 seconds)"""
-    from app.cache.layers import LayeredCache
-    from app.core.config import settings
-    
-    cache = LayeredCache(settings.redis_url, region="admin")
-    cache_key = "overview"
-    
-    # Try to get from cache
-    cached_result = await cache.get(cache_key)
-    if cached_result:
-        return AdminOverviewResponse(**cached_result)
-    
+    """Get admin overview statistics"""
     # Count drivers (users with driver role)
     total_drivers = db.query(User).filter(
         User.role_flags.contains("driver")
     ).count()
     
-    # Count merchants
-    total_merchants = db.query(DomainMerchant).count()
+    # Count merchants (While You Charge merchants — the real ones with perks)
+    from app.models.while_you_charge import Merchant as WYCMerchant, Charger as WYCCharger
+    total_merchants = db.query(WYCMerchant).count()
+
+    # Count chargers
+    total_chargers = db.query(WYCCharger).count()
+
+    # Count total charging sessions
+    from app.models.session_event import SessionEvent
+    total_charging_sessions = db.query(SessionEvent).count()
+
+    # Count active campaigns
+    from app.models.campaign import Campaign
+    from datetime import datetime as dt
+    now = dt.utcnow()
+    active_campaigns = db.query(Campaign).filter(
+        Campaign.status == "active",
+        Campaign.start_date <= now,
+        Campaign.spent_cents < Campaign.budget_cents,
+    ).count()
     
     # Sum driver Nova balances
     driver_nova_result = db.query(func.sum(DriverWallet.nova_balance)).scalar()
@@ -155,25 +181,212 @@ async def get_overview(
     # Total outstanding Nova
     total_nova_outstanding = total_driver_nova + total_merchant_nova
     
-    # Sum Stripe payments (successful)
-    stripe_usd_result = db.query(func.sum(StripePayment.amount_usd)).filter(
-        StripePayment.status == "paid"
+    # --- Revenue breakdown ---
+    from app.models.campaign import Campaign
+    from app.core.config import settings
+
+    # 1. Campaign revenue — ALL campaigns that have been active (not just funding_status='funded')
+    # Some campaigns may have been activated without going through Stripe checkout
+    active_statuses = ("active", "paused", "exhausted", "completed")
+    campaigns_with_revenue = db.query(Campaign).filter(
+        or_(
+            Campaign.funding_status == "funded",
+            Campaign.status.in_(active_statuses),
+            Campaign.spent_cents > 0,
+        )
+    ).all()
+
+    campaign_gross = 0
+    campaign_fees = 0
+    campaign_driver_rewards = 0
+    fee_bps = getattr(settings, 'PLATFORM_FEE_BPS', 2000)
+
+    for c in campaigns_with_revenue:
+        # Use stored values if available, otherwise calculate from budget
+        if c.gross_funding_cents:
+            campaign_gross += c.gross_funding_cents
+            campaign_fees += c.platform_fee_cents or 0
+        elif c.budget_cents:
+            # Campaign was funded without fee extraction — gross = budget
+            campaign_gross += c.budget_cents
+            # Calculate implied platform fee
+            campaign_fees += int(c.budget_cents * fee_bps / (10000 + fee_bps))
+        campaign_driver_rewards += c.spent_cents or 0
+
+    # 2. Merchant subscription revenue (amounts stored in Stripe, not DB)
+    from app.models.merchant_subscription import MerchantSubscription
+    import stripe as stripe_module
+
+    active_subs = db.query(MerchantSubscription).filter(
+        MerchantSubscription.status == "active",
+    ).all()
+
+    subscription_revenue = 0
+    for sub in active_subs:
+        if sub.stripe_customer_id:
+            try:
+                invoices = stripe_module.Invoice.list(
+                    customer=sub.stripe_customer_id,
+                    status="paid",
+                    limit=100,
+                )
+                for inv in invoices.data:
+                    subscription_revenue += inv.amount_paid or 0
+            except Exception as e:
+                logger.debug("Stripe invoice fetch failed for %s: %s", sub.stripe_customer_id, e)
+
+    # 3. Legacy Nova sales (merchant Stripe checkout for Nova)
+    nova_sales = db.query(func.sum(StripePayment.amount_usd)).filter(
+        StripePayment.status == "paid",
     ).scalar()
-    total_stripe_usd = int(stripe_usd_result) if stripe_usd_result else 0
+    nova_sales = int(nova_sales) if nova_sales else 0
+
+    # 4. Merchant redemption fees (15% of Nova redeemed)
+    from app.models_domain import MerchantFeeLedger
+    merchant_fees = db.query(func.sum(MerchantFeeLedger.fee_cents)).filter(
+        MerchantFeeLedger.status.in_(["invoiced", "paid"]),
+    ).scalar()
+    merchant_fees = int(merchant_fees) if merchant_fees else 0
+
+    # 5. Arrival billing fees
+    from app.models.billing_event import BillingEvent
+    arrival_billing = db.query(func.sum(BillingEvent.billable_cents)).filter(
+        BillingEvent.status == "paid",
+    ).scalar()
+    arrival_billing = int(arrival_billing) if arrival_billing else 0
+
+    total_realized = campaign_gross + subscription_revenue + nova_sales + merchant_fees + arrival_billing
+
+    # Driver payouts (outflow)
+    from app.models.driver_wallet import Payout
+    driver_payouts = db.query(func.sum(Payout.amount_cents)).filter(
+        Payout.status.in_(["paid", "processing"]),
+    ).scalar()
+    driver_payouts = int(driver_payouts) if driver_payouts else 0
+
+    revenue = RevenueBreakdown(
+        campaign_gross_cents=campaign_gross,
+        campaign_platform_fees_cents=campaign_fees,
+        campaign_driver_rewards_cents=campaign_driver_rewards,
+        merchant_subscriptions_cents=subscription_revenue,
+        active_subscriptions=len(active_subs),
+        nova_sales_cents=nova_sales,
+        merchant_fees_cents=merchant_fees,
+        arrival_billing_cents=arrival_billing,
+        total_realized_cents=total_realized,
+        total_driver_payouts_cents=driver_payouts,
+    )
+
+    # Keep legacy field populated with total for backward compat
+    total_stripe_usd = total_realized
     
-    result = AdminOverviewResponse(
+    # Count active Tesla connections (cars on the network)
+    from app.models.tesla_connection import TeslaConnection
+    total_tesla_connections = db.query(TeslaConnection).filter(
+        TeslaConnection.is_active == True
+    ).count()
+
+    # Count completed Stripe Express onboardings
+    total_stripe_express = db.query(DriverWallet).filter(
+        DriverWallet.stripe_account_id.isnot(None),
+        DriverWallet.stripe_onboarding_complete == True,
+    ).count()
+
+    return AdminOverviewResponse(
         total_drivers=total_drivers,
         total_merchants=total_merchants,
+        total_chargers=total_chargers,
+        total_charging_sessions=total_charging_sessions,
+        active_campaigns=active_campaigns,
         total_driver_nova=total_driver_nova,
         total_merchant_nova=total_merchant_nova,
         total_nova_outstanding=total_nova_outstanding,
-        total_stripe_usd=total_stripe_usd
+        total_stripe_usd=total_stripe_usd,
+        total_tesla_connections=total_tesla_connections,
+        total_stripe_express_onboarded=total_stripe_express,
+        revenue=revenue,
     )
-    
-    # Cache result for 60 seconds
-    await cache.set(cache_key, result.dict(), ttl=60)
-    
-    return result
+
+
+@router.get("/sessions/history")
+def list_session_history(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    start_date: Optional[str] = Query(None, description="ISO date YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="ISO date YYYY-MM-DD"),
+    driver_id: Optional[int] = Query(None),
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """List all charging sessions with driver info and reward status."""
+    from app.models.session_event import SessionEvent, IncentiveGrant
+
+    q = db.query(SessionEvent).order_by(SessionEvent.session_start.desc())
+
+    if driver_id:
+        q = q.filter(SessionEvent.driver_user_id == driver_id)
+    if start_date:
+        try:
+            sd = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            q = q.filter(SessionEvent.session_start >= sd)
+        except ValueError:
+            pass
+    if end_date:
+        try:
+            ed = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
+            q = q.filter(SessionEvent.session_start < ed)
+        except ValueError:
+            pass
+
+    total = q.count()
+    sessions = q.offset(offset).limit(limit).all()
+
+    # Batch-load driver info and grants
+    driver_ids = list({s.driver_user_id for s in sessions if s.driver_user_id})
+    session_ids = [s.id for s in sessions]
+
+    drivers_map = {}
+    if driver_ids:
+        drivers = db.query(User).filter(User.id.in_(driver_ids)).all()
+        drivers_map = {d.id: d for d in drivers}
+
+    grants_map = {}
+    if session_ids:
+        grants = db.query(IncentiveGrant).filter(IncentiveGrant.session_event_id.in_(session_ids)).all()
+        grants_map = {g.session_event_id: g for g in grants}
+
+    rows = []
+    for s in sessions:
+        driver = drivers_map.get(s.driver_user_id)
+        grant = grants_map.get(s.id)
+        driver_name = None
+        if driver:
+            if driver.display_name:
+                parts = driver.display_name.split()
+                driver_name = f"{parts[0]} {parts[-1][0]}." if len(parts) > 1 else parts[0]
+            elif driver.phone:
+                driver_name = f"***{driver.phone[-4:]}"
+
+        rows.append({
+            "id": s.id,
+            "driver_id": s.driver_user_id,
+            "driver_name": driver_name,
+            "session_start": s.session_start.isoformat() if s.session_start else None,
+            "session_end": s.session_end.isoformat() if s.session_end else None,
+            "duration_minutes": s.duration_minutes,
+            "kwh_delivered": s.kwh_delivered,
+            "charger_id": s.charger_id,
+            "charger_network": s.charger_network,
+            "quality_score": s.quality_score,
+            "ended_reason": s.ended_reason,
+            "source": s.source,
+            "has_reward": grant is not None,
+            "reward_cents": grant.amount_cents if grant else None,
+            "reward_status": grant.status if grant else None,
+            "campaign_id": grant.campaign_id if grant else None,
+        })
+
+    return {"sessions": rows, "total": total, "limit": limit, "offset": offset}
 
 
 @router.get("/merchants")
@@ -1918,6 +2131,71 @@ def get_seed_status(
     return {"jobs": _seed_jobs}
 
 
+# --- Seed-key authenticated versions (no admin JWT needed) ---
+
+@router.post("/seed-key/chargers")
+def start_charger_seed_key(
+    request: SeedChargersRequest2 = Body(default=SeedChargersRequest2()),
+    x_seed_key: Optional[str] = Header(None),
+):
+    """Start charger seed via seed key (no JWT needed)."""
+    from app.core.config import settings as cfg
+    if not x_seed_key or x_seed_key != cfg.JWT_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    for jid, job in _seed_jobs.items():
+        if job["type"] == "chargers" and job["status"] == "running":
+            return {"job_id": jid, "status": "already_running"}
+    job_id = f"charger_seed_{uuid.uuid4().hex[:8]}"
+    _seed_jobs[job_id] = {"type": "chargers", "status": "starting", "started_at": datetime.now(tz.utc).isoformat(), "started_by": 0, "progress": {}, "result": None, "error": None}
+    threading.Thread(target=_run_seed_chargers_job, args=(job_id, request.states), daemon=True).start()
+    return {"job_id": job_id, "status": "started"}
+
+
+@router.post("/seed-key/merchants")
+def start_merchant_seed_key(
+    request: SeedMerchantsRequest = Body(default=SeedMerchantsRequest()),
+    x_seed_key: Optional[str] = Header(None),
+):
+    """Start merchant seed via seed key (no JWT needed)."""
+    from app.core.config import settings as cfg
+    if not x_seed_key or x_seed_key != cfg.JWT_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    for jid, job in _seed_jobs.items():
+        if job["type"] == "merchants" and job["status"] == "running":
+            return {"job_id": jid, "status": "already_running"}
+    job_id = f"merchant_seed_{uuid.uuid4().hex[:8]}"
+    _seed_jobs[job_id] = {"type": "merchants", "status": "starting", "started_at": datetime.now(tz.utc).isoformat(), "started_by": 0, "progress": {}, "result": None, "error": None}
+    threading.Thread(target=_run_seed_merchants_job, args=(job_id, request.max_cells), daemon=True).start()
+    return {"job_id": job_id, "status": "started"}
+
+
+@router.get("/seed-key/status")
+def get_seed_status_key(
+    x_seed_key: Optional[str] = Header(None),
+):
+    """Get seed job status via seed key."""
+    from app.core.config import settings as cfg
+    if not x_seed_key or x_seed_key != cfg.JWT_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return {"jobs": _seed_jobs}
+
+
+@router.get("/seed-key/stats")
+def get_seed_stats_key(
+    x_seed_key: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Get charger/merchant counts via seed key."""
+    from app.core.config import settings as cfg
+    if not x_seed_key or x_seed_key != cfg.JWT_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    from app.models.while_you_charge import Charger, Merchant, ChargerMerchant
+    charger_count = db.query(func.count(Charger.id)).scalar() or 0
+    merchant_count = db.query(func.count(Merchant.id)).scalar() or 0
+    junction_count = db.query(func.count(ChargerMerchant.id)).scalar() or 0
+    return {"chargers": charger_count, "merchants": merchant_count, "junctions": junction_count}
+
+
 @router.get("/seed/stats")
 def get_seed_stats(
     admin: User = Depends(require_admin),
@@ -2145,5 +2423,290 @@ async def list_chargers(
             }
             for charger, count in chargers_with_counts
         ]
+    }
+
+
+class NrelSeedRequest(BaseModel):
+    states: Optional[List[str]] = None  # None = all 50 states + DC
+
+
+@router.post("/chargers/seed-nrel")
+async def seed_chargers_nrel(
+    request: NrelSeedRequest = Body(default=NrelSeedRequest()),
+    x_seed_key: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Seed chargers from NREL AFDC API (all US public EV chargers).
+    Upserts by external_id so safe to re-run. Takes 15-30 min for all states.
+    Auth: X-Seed-Key header matching JWT_SECRET.
+    """
+    from app.core.config import settings as cfg
+
+    if not x_seed_key or x_seed_key != cfg.JWT_SECRET:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+    from scripts.seed_chargers_bulk import seed_chargers
+
+    logger.info(f"Seed-key triggered NREL charger seed, states={request.states}")
+
+    try:
+        result = await seed_chargers(db, states=request.states)
+        logger.info(f"NREL seed complete: {result}")
+        return {
+            "success": len(result["errors"]) == 0,
+            "total_fetched": result["total_fetched"],
+            "inserted": result["inserted"],
+            "updated": result["updated"],
+            "skipped": result["skipped"],
+            "states_processed": result["states_processed"],
+            "errors": result["errors"],
+        }
+    except Exception as e:
+        logger.error(f"NREL seed failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"NREL seed failed: {str(e)}",
+        )
+
+
+class ChargerUpsertItem(BaseModel):
+    id: str
+    external_id: Optional[str] = None
+    name: str
+    network_name: Optional[str] = None
+    lat: float
+    lng: float
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
+    connector_types: Optional[list] = None
+    power_kw: Optional[float] = None
+    is_public: bool = True
+    status: str = "available"
+    logo_url: Optional[str] = None
+
+
+class ChargerBulkUpsertRequest(BaseModel):
+    chargers: List[ChargerUpsertItem]
+
+
+@router.post("/chargers/bulk-upsert")
+async def bulk_upsert_chargers(
+    request: ChargerBulkUpsertRequest,
+    x_seed_key: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Bulk upsert chargers by ID. If charger exists, updates fields; if not, inserts.
+    Auth: X-Seed-Key header matching JWT_SECRET.
+    """
+    from app.core.config import settings as cfg
+    from app.models.while_you_charge import Charger
+
+    if not x_seed_key or x_seed_key != cfg.JWT_SECRET:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+    inserted = 0
+    updated = 0
+    for item in request.chargers:
+        existing = db.query(Charger).filter(Charger.id == item.id).first()
+        if existing:
+            for field, value in item.model_dump(exclude_none=True).items():
+                setattr(existing, field, value)
+            existing.updated_at = datetime.utcnow()
+            updated += 1
+        else:
+            charger = Charger(**item.model_dump())
+            charger.updated_at = datetime.utcnow()
+            charger.created_at = datetime.utcnow()
+            db.add(charger)
+            inserted += 1
+
+    db.commit()
+    return {"inserted": inserted, "updated": updated, "total": len(request.chargers)}
+
+
+@router.get("/debug/sessions/{driver_id}")
+async def debug_driver_sessions(
+    driver_id: int,
+    x_seed_key: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Temporary debug endpoint to inspect session trail data."""
+    from app.core.config import settings as cfg
+    from app.models.session_event import SessionEvent
+    from app.services.intent_service import haversine_distance
+
+    if not x_seed_key or x_seed_key != cfg.JWT_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    sessions = (
+        db.query(SessionEvent)
+        .filter(SessionEvent.driver_user_id == driver_id)
+        .order_by(SessionEvent.session_start.desc())
+        .limit(20)
+        .all()
+    )
+
+    results = []
+    for s in sessions:
+        meta = s.session_metadata or {}
+        trail = meta.get("location_trail", [])
+
+        # Calculate distance from each trail point to the charger (session lat/lng)
+        trail_with_distance = []
+        for pt in trail:
+            dist = None
+            if s.lat and s.lng and pt.get("lat") and pt.get("lng"):
+                dist = round(haversine_distance(pt["lat"], pt["lng"], s.lat, s.lng), 1)
+            trail_with_distance.append({
+                "lat": pt.get("lat"),
+                "lng": pt.get("lng"),
+                "ts": pt.get("ts"),
+                "distance_to_charger_m": dist,
+            })
+
+        results.append({
+            "session_id": s.id,
+            "session_start": str(s.session_start) if s.session_start else None,
+            "session_end": str(s.session_end) if s.session_end else None,
+            "charger_id": s.charger_id,
+            "charger_network": s.charger_network,
+            "tesla_lat": s.lat,
+            "tesla_lng": s.lng,
+            "device_lat": meta.get("device_lat"),
+            "device_lng": meta.get("device_lng"),
+            "kwh_delivered": s.kwh_delivered,
+            "duration_minutes": s.duration_minutes,
+            "trail_points": len(trail),
+            "location_trail": trail_with_distance,
+        })
+
+    return {"driver_id": driver_id, "session_count": len(results), "sessions": results}
+
+
+# ---------------------------------------------------------------------------
+# Seed a merchant near a charger (admin-only)
+# ---------------------------------------------------------------------------
+
+class SeedMerchantRequest(BaseModel):
+    charger_id: str
+    merchant_name: str
+    merchant_id: Optional[str] = None
+    category: str = "restaurant"
+    primary_category: str = "food"
+    lat: float
+    lng: float
+    address: Optional[str] = None
+    short_code: Optional[str] = None
+    place_id: Optional[str] = None
+    distance_m: float = 50
+    walk_duration_s: int = 60
+    rating: float = 4.5
+    website: Optional[str] = None
+    perk_title: Optional[str] = None
+    perk_description: Optional[str] = None
+    perk_nova_reward: Optional[int] = None
+
+
+@router.post("/seed-merchant")
+def admin_seed_merchant(
+    request: SeedMerchantRequest,
+    db: Session = Depends(get_db),
+    x_bootstrap_key: Optional[str] = Header(None, alias="X-Bootstrap-Key"),
+):
+    # Accept either admin JWT or bootstrap key
+    bootstrap_key = os.getenv("BOOTSTRAP_KEY") or os.getenv("JWT_SECRET")
+    if not x_bootstrap_key or x_bootstrap_key != bootstrap_key:
+        raise HTTPException(status_code=401, detail="Invalid X-Bootstrap-Key")
+    """
+    Create a merchant and link it to an existing charger.
+    Idempotent — updates if merchant_id already exists.
+    """
+    from app.models.while_you_charge import Charger, Merchant, ChargerMerchant, MerchantPerk
+
+    # Verify charger exists
+    charger = db.query(Charger).filter(Charger.id == request.charger_id).first()
+    if not charger:
+        raise HTTPException(status_code=404, detail=f"Charger {request.charger_id} not found")
+
+    merchant_id = request.merchant_id or f"m_{request.merchant_name.lower().replace(' ', '_')}"
+
+    # Upsert merchant
+    merchant = db.query(Merchant).filter(Merchant.id == merchant_id).first()
+    if merchant:
+        merchant.name = request.merchant_name
+        merchant.lat = request.lat
+        merchant.lng = request.lng
+        merchant.address = request.address
+        merchant.category = request.category
+        merchant.primary_category = request.primary_category
+        merchant.rating = request.rating
+        merchant.website = request.website
+        merchant.place_id = request.place_id
+        merchant.short_code = request.short_code
+        merchant.updated_at = datetime.utcnow()
+    else:
+        merchant = Merchant(
+            id=merchant_id,
+            name=request.merchant_name,
+            category=request.category,
+            primary_category=request.primary_category,
+            lat=request.lat,
+            lng=request.lng,
+            address=request.address,
+            short_code=request.short_code,
+            place_id=request.place_id,
+            region_code="ATX",
+            rating=request.rating,
+            website=request.website,
+            nearest_charger_id=request.charger_id,
+            nearest_charger_distance_m=int(request.distance_m),
+        )
+        db.add(merchant)
+
+    # Upsert charger-merchant link
+    link = db.query(ChargerMerchant).filter(
+        ChargerMerchant.charger_id == request.charger_id,
+        ChargerMerchant.merchant_id == merchant_id,
+    ).first()
+    if link:
+        link.distance_m = request.distance_m
+        link.walk_duration_s = request.walk_duration_s
+        link.is_primary = True
+        link.updated_at = datetime.utcnow()
+    else:
+        link = ChargerMerchant(
+            charger_id=request.charger_id,
+            merchant_id=merchant_id,
+            distance_m=request.distance_m,
+            walk_duration_s=request.walk_duration_s,
+            is_primary=True,
+        )
+        db.add(link)
+
+    # Add perk if specified
+    if request.perk_title:
+        existing_perk = db.query(MerchantPerk).filter(
+            MerchantPerk.merchant_id == merchant_id,
+        ).first()
+        if not existing_perk:
+            perk = MerchantPerk(
+                merchant_id=merchant_id,
+                title=request.perk_title,
+                description=request.perk_description or "",
+                nova_reward=request.perk_nova_reward or 10,
+            )
+            db.add(perk)
+
+    db.commit()
+
+    return {
+        "ok": True,
+        "merchant_id": merchant_id,
+        "charger_id": request.charger_id,
+        "message": f"Merchant '{request.merchant_name}' linked to charger '{charger.name}'",
     }
 

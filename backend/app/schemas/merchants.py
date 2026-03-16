@@ -50,12 +50,25 @@ class ActionsInfo(BaseModel):
     get_directions_url: Optional[str] = None
 
 
+class MerchantRewardStateInfo(BaseModel):
+    """Merchant reward state from driver's perspective — drives CTA logic in frontend."""
+    has_active_reward: bool = False
+    reward_description: Optional[str] = None
+    reward_amount_cents: Optional[int] = None
+    active_claim_id: Optional[str] = None
+    active_claim_status: Optional[str] = None
+    active_claim_expires_at: Optional[str] = None
+    join_request_count: int = 0
+    user_has_requested: bool = False
+
+
 class MerchantDetailsResponse(BaseModel):
     merchant: MerchantInfo
     moment: MomentInfo
     perk: Optional[PerkInfo] = None  # Only merchants with exclusive offers have perks
     wallet: WalletInfo
     actions: ActionsInfo
+    reward_state: Optional[MerchantRewardStateInfo] = None
 
 
 class AmenityVoteRequest(BaseModel):

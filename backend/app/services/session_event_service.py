@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy import and_, desc
 
 from app.models.session_event import SessionEvent
@@ -19,7 +20,31 @@ from app.models.tesla_connection import TeslaConnection
 logger = logging.getLogger(__name__)
 
 # Cache: driver_id -> last_poll_result to reduce redundant API calls
+# Bounded to prevent unbounded memory growth in long-running processes
+_CACHE_MAX_SIZE = 10000
+_CACHE_EVICT_AGE_SECS = 300  # evict entries older than 5 minutes
 _charging_cache: Dict[int, Dict[str, Any]] = {}
+
+
+def _cache_cleanup() -> None:
+    """Evict stale entries when cache exceeds max size."""
+    if len(_charging_cache) <= _CACHE_MAX_SIZE:
+        return
+    now = datetime.utcnow()
+    stale_keys = [
+        k for k, v in _charging_cache.items()
+        if (now - v.get("last_poll", datetime.min)).total_seconds() > _CACHE_EVICT_AGE_SECS
+    ]
+    for k in stale_keys:
+        _charging_cache.pop(k, None)
+    # If still too large, remove oldest entries
+    if len(_charging_cache) > _CACHE_MAX_SIZE:
+        sorted_keys = sorted(
+            _charging_cache.keys(),
+            key=lambda k: _charging_cache[k].get("last_poll", datetime.min)
+        )
+        for k in sorted_keys[:len(_charging_cache) - _CACHE_MAX_SIZE]:
+            _charging_cache.pop(k, None)
 
 
 class SessionEventService:
@@ -59,7 +84,7 @@ class SessionEventService:
         # Use vehicle_id + current date to avoid duplicates within same day
         # (Tesla doesn't provide a unique charge session ID)
         now = datetime.utcnow()
-        source_session_id = f"tesla_{vehicle_id}_{now.strftime('%Y%m%d_%H%M')}"
+        source_session_id = f"tesla_{vehicle_id}_{now.strftime('%Y%m%d_%H')}"
 
         # Create new session event
         session_event = SessionEvent(
@@ -81,10 +106,23 @@ class SessionEventService:
             vehicle_id=vehicle_id,
             vehicle_vin=vin,
             kwh_delivered=charge_data.get("charge_energy_added"),
+            # Charger cable/adapter telemetry — key for CCS adapter detection (EVject)
+            conn_charge_cable=charge_data.get("conn_charge_cable"),
+            fast_charger_brand=charge_data.get("fast_charger_brand"),
+            charger_voltage=charge_data.get("charger_voltage"),
+            charger_actual_current=charge_data.get("charger_actual_current"),
         )
         db.add(session_event)
         db.flush()
-        logger.info(f"Created session_event {session_event.id} for driver {driver_id}")
+        cable_info = ""
+        if charge_data.get("conn_charge_cable") or charge_data.get("fast_charger_brand"):
+            cable_info = (
+                f" cable={charge_data.get('conn_charge_cable')}"
+                f" brand={charge_data.get('fast_charger_brand')}"
+                f" voltage={charge_data.get('charger_voltage')}"
+                f" current={charge_data.get('charger_actual_current')}"
+            )
+        logger.info(f"Created session_event {session_event.id} for driver {driver_id}{cable_info}")
         return session_event
 
     @staticmethod
@@ -99,7 +137,14 @@ class SessionEventService:
         End an active session. Computes duration.
         IncentiveEngine should be called AFTER this returns.
         """
-        session = db.query(SessionEvent).filter(SessionEvent.id == session_event_id).first()
+        # Use FOR UPDATE to prevent concurrent end_session calls from racing
+        try:
+            session = db.query(SessionEvent).filter(
+                SessionEvent.id == session_event_id
+            ).with_for_update(skip_locked=True).first()
+        except Exception:
+            # SQLite doesn't support FOR UPDATE — fall back to regular query
+            session = db.query(SessionEvent).filter(SessionEvent.id == session_event_id).first()
         if not session or session.session_end is not None:
             return session
 
@@ -107,6 +152,7 @@ class SessionEventService:
         session.session_end = now
         session.duration_minutes = int((now - session.session_start).total_seconds() / 60)
         session.ended_reason = ended_reason
+        session.next_poll_at = None  # Clear scheduled verification poll
         if battery_end_pct is not None:
             session.battery_end_pct = battery_end_pct
         if kwh_delivered is not None:
@@ -221,13 +267,18 @@ class SessionEventService:
                 return {"session_active": False, "error": "token_expired"}
 
             # get_vehicle_data with wake-up and retry on 408/sleeping
+            # Only wake vehicle if there's an active session or geofence trigger
+            # Routine polls should NOT wake sleeping cars (saves ~100 wake calls/day)
             import asyncio
             import httpx
+            active_before_poll = SessionEventService.get_active_session(db, driver_id)
+            should_wake = active_before_poll is not None or (device_lat is not None and device_lng is not None)
             vehicle_data = None
-            for attempt in range(3):
+            max_attempts = 3 if should_wake else 1
+            for attempt in range(max_attempts):
                 try:
-                    # Wake vehicle before data request (best-effort)
-                    if attempt > 0:
+                    # Wake vehicle before data request only when justified
+                    if attempt > 0 and should_wake:
                         try:
                             await tesla_oauth_service.wake_vehicle(access_token, vehicle_id)
                         except Exception:
@@ -239,13 +290,21 @@ class SessionEventService:
                     )
                     break  # Success
                 except httpx.HTTPStatusError as e:
-                    if e.response.status_code == 408 and attempt < 2:
-                        logger.info(
-                            "Vehicle %s returned 408 (attempt %d/3), waking and retrying",
-                            vehicle_id, attempt + 1
-                        )
-                        continue
-                    raise  # Non-408 or final attempt — propagate
+                    if e.response.status_code == 408:
+                        if should_wake and attempt < 2:
+                            logger.info(
+                                "Vehicle %s returned 408 (attempt %d/%d), waking and retrying",
+                                vehicle_id, attempt + 1, max_attempts
+                            )
+                            continue
+                        # Vehicle is asleep and no reason to wake — return early
+                        logger.info("Vehicle %s is asleep, skipping (no active session)", vehicle_id)
+                        _charging_cache[cache_key] = {
+                            "still_charging": False,
+                            "last_poll": datetime.utcnow(),
+                        }
+                        return {"session_active": False, "vehicle_asleep": True}
+                    raise  # Non-408 — propagate
 
             if vehicle_data is None:
                 return {"session_active": False, "error": "vehicle_unavailable"}
@@ -264,6 +323,30 @@ class SessionEventService:
             logger.warning(f"Tesla poll error for driver {driver_id}: {e}")
             _charging_cache.pop(cache_key, None)
 
+            # Even though Tesla didn't respond, still record the driver's
+            # walking location if there's an active session. The phone GPS
+            # is independent of the car API.
+            if device_lat is not None and device_lng is not None:
+                active_for_trail = SessionEventService.get_active_session(db, driver_id)
+                if active_for_trail:
+                    meta = dict(active_for_trail.session_metadata or {})
+                    meta["device_lat"] = device_lat
+                    meta["device_lng"] = device_lng
+                    trail = list(meta.get("location_trail", []))
+                    trail.append({
+                        "lat": device_lat,
+                        "lng": device_lng,
+                        "ts": datetime.utcnow().isoformat(),
+                    })
+                    if len(trail) > 120:
+                        trail = trail[-120:]
+                    meta["location_trail"] = trail
+                    active_for_trail.session_metadata = meta
+                    flag_modified(active_for_trail, "session_metadata")
+                    active_for_trail.updated_at = datetime.utcnow()
+                    db.commit()
+                    logger.info(f"Trail point added for driver {driver_id} despite Tesla error (total: {len(trail)})")
+
             # Auto-close stale sessions on poll error (>15 min since last update)
             stale = SessionEventService._close_stale_session(db, driver_id)
             if stale:
@@ -279,15 +362,84 @@ class SessionEventService:
 
             return {"session_active": False, "error": "poll_failed"}
 
-        # Update cache
+        # Update cache (with periodic eviction)
+        _cache_cleanup()
         _charging_cache[cache_key] = {
             "still_charging": is_charging,
             "last_poll": datetime.utcnow(),
         }
 
+        # Expire only session-related objects instead of the entire identity map
+        for obj in db.identity_map.values():
+            if isinstance(obj, SessionEvent):
+                db.expire(obj)
         active = SessionEventService.get_active_session(db, driver_id)
 
+        # Raw SQL fallback — bypasses ORM column mapping issues
+        if not active:
+            from sqlalchemy import text
+            row = db.execute(
+                text("SELECT id FROM session_events "
+                     "WHERE driver_user_id = :did AND session_end IS NULL "
+                     "ORDER BY session_start DESC LIMIT 1"),
+                {"did": driver_id},
+            ).first()
+            if row:
+                active = db.query(SessionEvent).filter(
+                    SessionEvent.id == str(row[0])
+                ).first()
+                if active:
+                    logger.warning(
+                        f"Raw SQL found active session {active.id} missed by ORM "
+                        f"for driver {driver_id}"
+                    )
+
         if is_charging and not active:
+            # Before creating a new session, check if there's a recently ended
+            # session for this vehicle that we should REOPEN instead.
+            # This prevents session fragmentation when the app goes to background
+            # and comes back (stale cleanup may have closed a still-active session).
+            recent_cutoff = datetime.utcnow() - timedelta(minutes=30)
+            recently_ended = (
+                db.query(SessionEvent)
+                .filter(
+                    SessionEvent.driver_user_id == driver_id,
+                    SessionEvent.vehicle_id == str(vehicle_id),
+                    SessionEvent.session_end.is_not(None),
+                    SessionEvent.session_end >= recent_cutoff,
+                    SessionEvent.ended_reason.in_(["stale_cleanup", "manual"]),
+                )
+                .order_by(desc(SessionEvent.session_end))
+                .first()
+            )
+            if recently_ended:
+                # Reopen the session — car is still charging
+                logger.info(
+                    f"Reopening recently closed session {recently_ended.id} "
+                    f"(ended {recently_ended.session_end}, reason={recently_ended.ended_reason}) "
+                    f"— vehicle still charging"
+                )
+                recently_ended.session_end = None
+                recently_ended.duration_minutes = None
+                recently_ended.ended_reason = None
+                recently_ended.quality_score = None
+                recently_ended.kwh_delivered = charge_state.get("charge_energy_added")
+                recently_ended.battery_end_pct = charge_state.get("battery_level")
+                recently_ended.power_kw = charge_state.get("charger_power")
+                recently_ended.updated_at = datetime.utcnow()
+                db.commit()
+                _charging_cache[cache_key] = {
+                    "still_charging": True,
+                    "last_poll": datetime.utcnow(),
+                }
+                return {
+                    "session_active": True,
+                    "session_id": recently_ended.id,
+                    "duration_minutes": int((datetime.utcnow() - recently_ended.session_start).total_seconds() / 60),
+                    "kwh_delivered": recently_ended.kwh_delivered,
+                    "session_reopened": True,
+                }
+
             # Start new session — match to nearest known charger
             vehicle_info = {"id": vehicle_id, "vin": tesla_connection.vin}
             matched_charger_id = None
@@ -326,12 +478,68 @@ class SessionEventService:
             if metadata:
                 session.session_metadata = metadata
                 db.flush()
+
+            # Extract Tesla's estimated time remaining for smart polling
+            # minutes_to_full_charge is in MINUTES, time_to_full_charge is in HOURS
+            _mtf_min = charge_state.get("minutes_to_full_charge")
+            _mtf_hr = charge_state.get("time_to_full_charge")
+            if _mtf_min and isinstance(_mtf_min, (int, float)) and _mtf_min > 0:
+                minutes_remaining = int(_mtf_min)
+            elif _mtf_hr and isinstance(_mtf_hr, (int, float)) and _mtf_hr > 0:
+                minutes_remaining = int(_mtf_hr * 60)
+            else:
+                minutes_remaining = None
+
+            # Schedule server-side verification poll (smart halving)
+            try:
+                session.next_poll_at = SessionEventService._calculate_next_poll_at(
+                    db, session, minutes_to_full=minutes_remaining,
+                )
+                db.flush()
+                logger.info(
+                    f"Scheduled next poll for session {session.id} at {session.next_poll_at} "
+                    f"(minutes_to_full={minutes_remaining})"
+                )
+            except Exception as e:
+                logger.debug(f"next_poll_at calculation failed (non-fatal): {e}")
+
             db.commit()
+
+            # Send push notification for charging detection (best-effort)
+            charger_name = None
+            if matched_charger_id:
+                try:
+                    from app.models.domain import Charger
+                    charger = db.query(Charger).filter(Charger.id == matched_charger_id).first()
+                    if charger:
+                        charger_name = charger.name
+                except Exception:
+                    pass
+            try:
+                from app.services.push_service import send_charging_detected_push
+                send_charging_detected_push(db, driver_id, session.id, charger_name)
+            except Exception as e:
+                logger.debug("Charging detected push failed (non-fatal): %s", e)
+
+            # Smart poll interval for client: halve remaining time, floor 2 min (120s)
+            if minutes_remaining and minutes_remaining > 0:
+                recommended = max(120, int(minutes_remaining / 2.0 * 60))
+            else:
+                recommended = 300  # Unknown ETA, check in 5 min
+
             return {
                 "session_active": True,
                 "session_id": session.id,
                 "duration_minutes": 0,
                 "kwh_delivered": session.kwh_delivered,
+                "minutes_to_full": minutes_remaining,
+                "battery_level": charge_state.get("battery_level"),
+                "charger_power_kw": charge_state.get("charger_power"),
+                "recommended_interval_s": recommended,
+                "conn_charge_cable": charge_state.get("conn_charge_cable"),
+                "fast_charger_brand": charge_state.get("fast_charger_brand"),
+                "charger_voltage": charge_state.get("charger_voltage"),
+                "charger_actual_current": charge_state.get("charger_actual_current"),
             }
 
         elif is_charging and active:
@@ -340,6 +548,18 @@ class SessionEventService:
             active.battery_end_pct = charge_state.get("battery_level")
             active.power_kw = charge_state.get("charger_power")
             active.updated_at = datetime.utcnow()
+
+            # Update cable/adapter telemetry (may arrive after session start)
+            cable = charge_state.get("conn_charge_cable")
+            if cable and not active.conn_charge_cable:
+                active.conn_charge_cable = cable
+                logger.info(f"Session {active.id} cable detected: {cable}")
+            brand = charge_state.get("fast_charger_brand")
+            if brand and not active.fast_charger_brand:
+                active.fast_charger_brand = brand
+                logger.info(f"Session {active.id} charger brand detected: {brand}")
+            active.charger_voltage = charge_state.get("charger_voltage")
+            active.charger_actual_current = charge_state.get("charger_actual_current")
 
             # Backfill Tesla location if missing from session start
             tesla_lat = charge_state.get("lat")
@@ -360,10 +580,10 @@ class SessionEventService:
 
             # Append device location to location trail in metadata
             if device_lat is not None and device_lng is not None:
-                meta = active.session_metadata or {}
+                meta = dict(active.session_metadata or {})
                 meta["device_lat"] = device_lat
                 meta["device_lng"] = device_lng
-                trail = meta.get("location_trail", [])
+                trail = list(meta.get("location_trail", []))
                 trail.append({
                     "lat": device_lat,
                     "lng": device_lng,
@@ -374,16 +594,58 @@ class SessionEventService:
                     trail = trail[-120:]
                 meta["location_trail"] = trail
                 active.session_metadata = meta
+                flag_modified(active, "session_metadata")
 
             db.commit()
+
+            # Smart interval: halve remaining time, floor 2 min (120s)
+            # minutes_to_full_charge is in MINUTES, time_to_full_charge is in HOURS
+            _mtf_min2 = charge_state.get("minutes_to_full_charge")
+            _mtf_hr2 = charge_state.get("time_to_full_charge")
+            if _mtf_min2 and isinstance(_mtf_min2, (int, float)) and _mtf_min2 > 0:
+                mtf = int(_mtf_min2)
+            elif _mtf_hr2 and isinstance(_mtf_hr2, (int, float)) and _mtf_hr2 > 0:
+                mtf = int(_mtf_hr2 * 60)
+            else:
+                mtf = None
+
+            if mtf and mtf > 0:
+                rec_interval = max(120, int(mtf / 2.0 * 60))
+            else:
+                rec_interval = 300
+
             return {
                 "session_active": True,
                 "session_id": active.id,
                 "duration_minutes": int((datetime.utcnow() - active.session_start).total_seconds() / 60),
                 "kwh_delivered": active.kwh_delivered,
+                "minutes_to_full": mtf,
+                "battery_level": charge_state.get("battery_level"),
+                "charger_power_kw": charge_state.get("charger_power"),
+                "recommended_interval_s": rec_interval,
+                "conn_charge_cable": charge_state.get("conn_charge_cable"),
+                "fast_charger_brand": charge_state.get("fast_charger_brand"),
+                "charger_voltage": charge_state.get("charger_voltage"),
+                "charger_actual_current": charge_state.get("charger_actual_current"),
             }
 
         elif not is_charging and active:
+            # Guard: refresh ORM state to prevent re-ending already-ended sessions
+            db.refresh(active)
+            if active.session_end is not None:
+                logger.info("Session %s already ended, skipping re-end", active.id)
+                _charging_cache.pop(cache_key, None)
+                return {
+                    "session_active": False,
+                    "session_id": active.id,
+                    "duration_minutes": active.duration_minutes or 0,
+                    "kwh_delivered": active.kwh_delivered,
+                    "session_ended": True,
+                    "incentive_earned": None,
+                    "incentive_amount_cents": None,
+                    "incentive_campaign_name": None,
+                }
+
             # Session ended — evaluate incentives (per review: pay on END)
             session = SessionEventService.end_session(
                 db, active.id,
@@ -448,7 +710,7 @@ class SessionEventService:
                     "incentive_granted": False,
                     "incentive_amount_cents": 0,
                 }
-            return {"session_active": False}
+            return {"session_active": False, "recommended_interval_s": 300}
 
     @staticmethod
     def _compute_quality_score(session: SessionEvent) -> int:
@@ -488,36 +750,53 @@ class SessionEventService:
     def _close_stale_session(
         db: Session,
         driver_id: int,
-        stale_minutes: int = 5,
+        stale_minutes: int = 15,
     ) -> Optional[SessionEvent]:
         """
-        Find and close any active session that hasn't been updated in
-        `stale_minutes`. Returns the closed session or None.
+        Find and close ALL active sessions that haven't been updated in
+        `stale_minutes`. Evaluates incentives for each closed session.
+        Returns the most recent closed session or None.
         """
-        cutoff = datetime.utcnow() - timedelta(minutes=stale_minutes)
-        stale = (
+        from app.services.incentive_engine import IncentiveEngine
+
+        now = datetime.utcnow()
+        cutoff = now - timedelta(minutes=stale_minutes)
+        stale_sessions = (
             db.query(SessionEvent)
             .filter(
                 SessionEvent.driver_user_id == driver_id,
                 SessionEvent.session_end.is_(None),
                 SessionEvent.updated_at < cutoff,
+                # Respect smart polling: don't close sessions with future scheduled polls
+                (SessionEvent.next_poll_at.is_(None)) | (SessionEvent.next_poll_at <= now),
             )
             .order_by(desc(SessionEvent.session_start))
-            .first()
+            .all()
         )
-        if not stale:
+        if not stale_sessions:
             return None
 
-        logger.info(
-            f"Auto-closing stale session {stale.id} for driver {driver_id} "
-            f"(last updated {stale.updated_at})"
-        )
-        return SessionEventService.end_session(
-            db, stale.id,
-            ended_reason="stale_cleanup",
-            battery_end_pct=stale.battery_end_pct,
-            kwh_delivered=stale.kwh_delivered,
-        )
+        for stale in stale_sessions:
+            logger.info(
+                f"Auto-closing stale session {stale.id} for driver {driver_id} "
+                f"(last updated {stale.updated_at})"
+            )
+            ended = SessionEventService.end_session(
+                db, stale.id,
+                ended_reason="stale_cleanup",
+                battery_end_pct=stale.battery_end_pct,
+                kwh_delivered=stale.kwh_delivered,
+            )
+            # Evaluate incentives for stale-closed sessions too
+            if ended and ended.duration_minutes and ended.duration_minutes > 0:
+                grant = IncentiveEngine.evaluate_session(db, ended)
+                if grant:
+                    logger.info(
+                        f"Granted {grant.amount_cents}c for stale-closed session "
+                        f"{ended.id} ({ended.duration_minutes}min)"
+                    )
+
+        return stale_sessions[0]  # Most recent for backward compat
 
     @staticmethod
     def end_session_manual(
@@ -527,8 +806,11 @@ class SessionEventService:
     ) -> Optional[SessionEvent]:
         """
         Manually end a session (user-initiated). Verifies ownership.
+        Evaluates incentives after ending.
         Returns the ended session or None if not found / not owned / already ended.
         """
+        from app.services.incentive_engine import IncentiveEngine
+
         session = db.query(SessionEvent).filter(
             SessionEvent.id == session_event_id,
             SessionEvent.driver_user_id == driver_id,
@@ -538,10 +820,114 @@ class SessionEventService:
             return None
 
         logger.info(f"Manual session end for {session.id} by driver {driver_id}")
-        return SessionEventService.end_session(
+        ended = SessionEventService.end_session(
             db, session.id,
             ended_reason="manual",
         )
+
+        # Evaluate incentives for manually ended sessions
+        if ended and ended.duration_minutes and ended.duration_minutes > 0:
+            grant = IncentiveEngine.evaluate_session(db, ended)
+            if grant:
+                logger.info(
+                    f"Granted {grant.amount_cents}c for manually ended session "
+                    f"{ended.id} ({ended.duration_minutes}min)"
+                )
+            db.commit()
+
+        return ended
+
+    @staticmethod
+    def _calculate_next_poll_at(
+        db: Session,
+        session: SessionEvent,
+        minutes_to_full: Optional[int] = None,
+    ) -> datetime:
+        """
+        Smart polling: use Tesla's `minutes_to_full_charge` to schedule
+        the next server-side poll using a halving strategy.
+
+        Strategy: check at half the remaining time, with a 2-minute floor.
+        Example: 30 min remaining → poll in 15 min → 7 min → 3 min → 2 min → 2 min...
+
+        If Tesla doesn't provide time remaining, fall back to campaign-based
+        scheduling (poll at session_start + min_campaign_duration + 2 min).
+        """
+        now = datetime.utcnow()
+
+        if minutes_to_full and minutes_to_full > 0:
+            # Smart halving: poll at half the remaining time, floor 2 min
+            half = minutes_to_full / 2.0
+            interval_minutes = max(2.0, half)
+            return now + timedelta(minutes=interval_minutes)
+
+        # Fallback: campaign-based scheduling
+        from app.services.campaign_service import CampaignService
+
+        campaigns = CampaignService.get_active_campaigns(db)
+        min_duration = 15  # default fallback (minutes)
+
+        for campaign in campaigns:
+            if SessionEventService._session_could_match_campaign(session, campaign):
+                if campaign.rule_min_duration_minutes < min_duration:
+                    min_duration = campaign.rule_min_duration_minutes
+
+        buffer_minutes = 2
+        return session.session_start + timedelta(minutes=min_duration + buffer_minutes)
+
+    @staticmethod
+    def _session_could_match_campaign(session: SessionEvent, campaign) -> bool:
+        """
+        Lightweight check if a session COULD match a campaign, ignoring
+        duration (since the session just started). Used to find the minimum
+        duration we need to wait before the verification poll.
+
+        Only checks rules that are known at session start time:
+        charger, network, zone, geo, time, day of week.
+        """
+        # Charger IDs
+        if campaign.rule_charger_ids:
+            if session.charger_id not in campaign.rule_charger_ids:
+                return False
+
+        # Charger networks
+        if campaign.rule_charger_networks:
+            if session.charger_network not in campaign.rule_charger_networks:
+                return False
+
+        # Zone IDs
+        if campaign.rule_zone_ids:
+            if session.zone_id not in campaign.rule_zone_ids:
+                return False
+
+        # Geo radius
+        if campaign.rule_geo_center_lat is not None and campaign.rule_geo_center_lng is not None and campaign.rule_geo_radius_m:
+            if session.lat is None or session.lng is None:
+                return False
+            from app.services.incentive_engine import IncentiveEngine
+            dist = IncentiveEngine._haversine_m(
+                campaign.rule_geo_center_lat, campaign.rule_geo_center_lng,
+                session.lat, session.lng,
+            )
+            if dist > campaign.rule_geo_radius_m:
+                return False
+
+        # Time of day
+        if campaign.rule_time_start and campaign.rule_time_end:
+            from app.services.incentive_engine import IncentiveEngine
+            session_hour_min = session.session_start.strftime("%H:%M")
+            if not IncentiveEngine._time_in_window(
+                session_hour_min, campaign.rule_time_start, campaign.rule_time_end
+            ):
+                return False
+
+        # Day of week
+        if campaign.rule_days_of_week:
+            session_dow = session.session_start.isoweekday()
+            if session_dow not in campaign.rule_days_of_week:
+                return False
+
+        return True
 
     @staticmethod
     def count_driver_sessions(

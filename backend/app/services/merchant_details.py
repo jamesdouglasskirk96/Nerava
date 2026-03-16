@@ -164,7 +164,8 @@ def _get_mock_merchant_for_details(merchant_id: str) -> Optional[Merchant]:
 async def get_merchant_details(
     db: Session,
     merchant_id: str,
-    session_id: Optional[str] = None
+    session_id: Optional[str] = None,
+    driver_user_id: Optional[int] = None,
 ) -> MerchantDetailsResponse:
     """
     Get merchant details for a given merchant ID.
@@ -216,18 +217,26 @@ async def get_merchant_details(
             badge="Exclusive",
             description=perk.description or "Show your Nerava app to redeem your reward while you charge."
         )
-    
+
     # Calculate distance and walk time from ChargerMerchant link
     distance_miles = 0.0
     moment_label = None
     moment_copy = "Fits your charge window"
-    
+
     # Query ChargerMerchant for walk time and distance (only for real merchants)
     link = None
     if merchant.id and not merchant.id.startswith("m_mock_"):
         link = db.query(ChargerMerchant).filter(
             ChargerMerchant.merchant_id == merchant.id
         ).first()
+
+    # Fallback: if no MerchantPerk, use ChargerMerchant.exclusive_title
+    if not perk_info and link and link.exclusive_title:
+        perk_info = PerkInfo(
+            title=link.exclusive_title,
+            badge="Exclusive",
+            description=link.exclusive_description or "Show your Nerava app to redeem your reward while you charge.",
+        )
     
     if link:
         if link.walk_duration_s is not None:
@@ -382,11 +391,27 @@ async def get_merchant_details(
         get_directions_url=directions_url
     )
     
+    # Build reward state (for CTA logic in frontend)
+    reward_state_data = None
+    try:
+        from app.services.merchant_reward_service import get_merchant_reward_state
+        from app.schemas.merchants import MerchantRewardStateInfo
+        raw_state = get_merchant_reward_state(
+            db=db,
+            place_id=getattr(merchant, 'place_id', None),
+            merchant_id=merchant.id if merchant.id and not merchant.id.startswith("m_mock_") else None,
+            driver_user_id=driver_user_id,
+        )
+        reward_state_data = MerchantRewardStateInfo(**raw_state)
+    except Exception as e:
+        logger.warning(f"[MerchantDetails] Failed to get reward state: {e}")
+
     return MerchantDetailsResponse(
         merchant=merchant_info,
         moment=moment_info,
         perk=perk_info,
         wallet=wallet_info,
-        actions=actions_info
+        actions=actions_info,
+        reward_state=reward_state_data,
     )
 

@@ -246,7 +246,7 @@ async def auth_google(
         refresh_token_plain, refresh_token_model = RefreshTokenService.create_refresh_token(db, user)
         
         db.commit()
-        
+
         return TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token_plain,
@@ -255,10 +255,12 @@ async def auth_google(
                 "public_id": user.public_id,
                 "auth_provider": user.auth_provider,
                 "email": user.email,
-                "phone": user.phone
+                "phone": user.phone,
+                "name": user.display_name,
+                "created_at": user.created_at.isoformat() if user.created_at else None,
             }
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -315,13 +317,27 @@ async def auth_apple(
             db.add(UserPreferences(user_id=user.id))
             db.commit()
             db.refresh(user)
-        
+
+            # Emit driver_signed_up event (non-blocking)
+            try:
+                from ..events.domain import DriverSignedUpEvent
+                from ..events.outbox import store_outbox_event
+                event = DriverSignedUpEvent(
+                    user_id=str(user.id),
+                    email=email or "",
+                    auth_provider="apple",
+                    created_at=datetime.utcnow()
+                )
+                store_outbox_event(db, event)
+            except Exception as e:
+                logger.warning(f"Failed to emit driver_signed_up event: {e}")
+
         # Create tokens
         access_token = create_access_token(user.public_id, auth_provider=user.auth_provider)
         refresh_token_plain, refresh_token_model = RefreshTokenService.create_refresh_token(db, user)
-        
+
         db.commit()
-        
+
         return TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token_plain,
@@ -333,7 +349,7 @@ async def auth_apple(
                 "phone": user.phone
             }
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -511,7 +527,7 @@ async def otp_verify(
         # HubSpot: Track OTP verify (only for new users - signup event handled in auth_domain)
         # Note: Login events are not tracked as lifecycle events per HubSpot design
         # Only lifecycle milestones are sent to HubSpot
-        
+
         return TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token_plain,
@@ -520,10 +536,12 @@ async def otp_verify(
                 "public_id": user.public_id,
                 "auth_provider": user.auth_provider,
                 "email": user.email,
-                "phone": user.phone
+                "phone": user.phone,
+                "name": user.display_name,
+                "created_at": user.created_at.isoformat() if user.created_at else None,
             }
         )
-        
+
     except HTTPException as e:
         # PostHog: Capture OTP verify failure
         analytics = get_analytics_client()
@@ -573,46 +591,32 @@ async def dev_login(
 ):
     """
     Dev mode login - automatically logs in as dev@nerava.local user.
-    Available in DEMO_MODE or when running on localhost (for development convenience).
+    Only available when ENV is explicitly set to dev/local, or DEMO_MODE is enabled.
+    NEVER accessible in production.
     """
-    # Allow dev login in DEMO_MODE or when running locally
-    # Check multiple conditions to be permissive for development
-    # Try to get region safely (may not exist in all config classes)
-    region = getattr(settings, 'region', None) or getattr(settings, 'REGION', None) or "local"
-    
-    # Check if frontend URL is S3 staging site
-    frontend_url_lower = str(settings.FRONTEND_URL).lower()
-    is_s3_staging = (
-        "s3-website" in frontend_url_lower or
-        ".s3." in frontend_url_lower or
-        "nerava-ui-prod" in frontend_url_lower
-    )
-    
-    is_localhost = (
-        settings.ENV == "dev" or 
-        settings.ENV == "local" or
-        settings.ENV.lower() == "dev" or
-        settings.ENV.lower() == "local" or
-        "localhost" in frontend_url_lower or 
-        "127.0.0.1" in frontend_url_lower or
-        (region and (region == "local" or str(region).lower() == "local"))
-    )
-    
-    # Log for debugging
     import logging
     logger = logging.getLogger("nerava")
-    region = getattr(settings, 'region', None) or getattr(settings, 'REGION', None) or "unknown"
-    logger.info(f"Dev login attempt - DEMO_MODE: {settings.DEMO_MODE}, is_localhost: {is_localhost}, is_s3_staging: {is_s3_staging}, ENV: {settings.ENV}, region: {region}, FRONTEND_URL: {settings.FRONTEND_URL}")
-    
-    # Always allow in dev/local environments, S3 staging sites, or if DEMO_MODE is enabled
-    if not settings.DEMO_MODE and not is_localhost and not is_s3_staging:
-        logger.warning("Dev login rejected - not in DEMO_MODE, not localhost, and not S3 staging")
+
+    env_lower = settings.ENV.lower() if settings.ENV else ""
+
+    # SECURITY: Block dev login in production — no exceptions
+    if env_lower in ("prod", "production", "staging"):
+        logger.warning(f"Dev login rejected — ENV={settings.ENV}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dev login endpoint not available"
+            detail="Not found"
         )
-    
-    logger.info("Dev login allowed - proceeding with authentication")
+
+    is_dev_env = env_lower in ("dev", "local", "test")
+
+    if not settings.DEMO_MODE and not is_dev_env:
+        logger.warning(f"Dev login rejected — ENV={settings.ENV}, DEMO_MODE={settings.DEMO_MODE}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Not found"
+        )
+
+    logger.info(f"Dev login allowed — ENV={settings.ENV}, DEMO_MODE={settings.DEMO_MODE}")
     
     try:
         # Find or create dev user
@@ -662,7 +666,7 @@ async def dev_login(
         db.commit()
         
         logger.info("Dev login successful - tokens created")
-        
+
         return TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token_plain,
@@ -671,7 +675,9 @@ async def dev_login(
                 "public_id": user.public_id,
                 "auth_provider": user.auth_provider,
                 "email": user.email,
-                "phone": user.phone
+                "phone": user.phone,
+                "name": user.display_name,
+                "created_at": user.created_at.isoformat() if user.created_at else None,
             }
         )
     except Exception as e:

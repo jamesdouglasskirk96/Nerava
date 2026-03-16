@@ -54,10 +54,23 @@ class IncentiveEngine:
         # Get active campaigns sorted by priority
         campaigns = CampaignService.get_active_campaigns(db)
         if not campaigns:
+            logger.info(f"No active campaigns found for session {session.id}")
             return None
 
+        logger.info(
+            f"Evaluating session {session.id} ({session.duration_minutes}min, "
+            f"charger={session.charger_id}, network={session.charger_network}) "
+            f"against {len(campaigns)} active campaigns"
+        )
+
         for campaign in campaigns:
-            if IncentiveEngine._session_matches_campaign(db, session, campaign):
+            matched = IncentiveEngine._session_matches_campaign(db, session, campaign)
+            if not matched:
+                logger.info(
+                    f"Session {session.id} did NOT match campaign '{campaign.name}' "
+                    f"(id={campaign.id}, min_dur={campaign.rule_min_duration_minutes}min)"
+                )
+            else:
                 grant = IncentiveEngine._create_grant(db, session, campaign)
                 if grant:
                     return grant
@@ -74,39 +87,46 @@ class IncentiveEngine:
         Check if a session matches ALL rules of a campaign.
         All non-null rules are AND-ed.
         """
+        def _reject(rule_name):
+            logger.info(
+                f"Campaign '{campaign.name}' rejected session {session.id}: "
+                f"failed rule '{rule_name}'"
+            )
+            return False
+
         # --- Mandatory: minimum duration ---
         if session.duration_minutes < campaign.rule_min_duration_minutes:
-            return False
+            return _reject(f"min_duration ({session.duration_minutes}min < {campaign.rule_min_duration_minutes}min)")
 
         # --- Optional max duration ---
         if campaign.rule_max_duration_minutes and session.duration_minutes > campaign.rule_max_duration_minutes:
-            return False
+            return _reject(f"max_duration ({session.duration_minutes}min > {campaign.rule_max_duration_minutes}min)")
 
         # --- Charger IDs ---
         if campaign.rule_charger_ids:
             if session.charger_id not in campaign.rule_charger_ids:
-                return False
+                return _reject(f"charger_ids ({session.charger_id} not in {campaign.rule_charger_ids})")
 
         # --- Charger networks ---
         if campaign.rule_charger_networks:
             if session.charger_network not in campaign.rule_charger_networks:
-                return False
+                return _reject(f"charger_networks ({session.charger_network} not in {campaign.rule_charger_networks})")
 
         # --- Zone IDs ---
         if campaign.rule_zone_ids:
             if session.zone_id not in campaign.rule_zone_ids:
-                return False
+                return _reject(f"zone_ids")
 
         # --- Geo radius ---
         if campaign.rule_geo_center_lat is not None and campaign.rule_geo_center_lng is not None and campaign.rule_geo_radius_m:
             if session.lat is None or session.lng is None:
-                return False
+                return _reject("geo_radius (no session lat/lng)")
             dist = IncentiveEngine._haversine_m(
                 campaign.rule_geo_center_lat, campaign.rule_geo_center_lng,
                 session.lat, session.lng,
             )
             if dist > campaign.rule_geo_radius_m:
-                return False
+                return _reject(f"geo_radius ({dist:.0f}m > {campaign.rule_geo_radius_m}m)")
 
         # --- Time of day ---
         if campaign.rule_time_start and campaign.rule_time_end:
@@ -114,23 +134,23 @@ class IncentiveEngine:
             if not IncentiveEngine._time_in_window(
                 session_hour_min, campaign.rule_time_start, campaign.rule_time_end
             ):
-                return False
+                return _reject(f"time_of_day ({session_hour_min} not in {campaign.rule_time_start}-{campaign.rule_time_end})")
 
         # --- Day of week ---
         if campaign.rule_days_of_week:
             session_dow = session.session_start.isoweekday()  # 1=Mon, 7=Sun
             if session_dow not in campaign.rule_days_of_week:
-                return False
+                return _reject(f"day_of_week ({session_dow} not in {campaign.rule_days_of_week})")
 
         # --- Min power (DC fast only) ---
         if campaign.rule_min_power_kw:
             if session.power_kw is None or session.power_kw < campaign.rule_min_power_kw:
-                return False
+                return _reject(f"min_power ({session.power_kw}kW < {campaign.rule_min_power_kw}kW)")
 
         # --- Connector types ---
         if campaign.rule_connector_types:
             if session.connector_type not in campaign.rule_connector_types:
-                return False
+                return _reject(f"connector_types ({session.connector_type} not in {campaign.rule_connector_types})")
 
         # --- Driver session count (for new/repeat driver rules) ---
         if campaign.rule_driver_session_count_min is not None or campaign.rule_driver_session_count_max is not None:
@@ -138,10 +158,10 @@ class IncentiveEngine:
             count = SessionEventService.count_driver_sessions(db, session.driver_user_id)
             if campaign.rule_driver_session_count_min is not None:
                 if count < campaign.rule_driver_session_count_min:
-                    return False
+                    return _reject(f"driver_session_count_min ({count} < {campaign.rule_driver_session_count_min})")
             if campaign.rule_driver_session_count_max is not None:
                 if count > campaign.rule_driver_session_count_max:
-                    return False
+                    return _reject(f"driver_session_count_max ({count} > {campaign.rule_driver_session_count_max})")
 
         # --- Driver allowlist ---
         if campaign.rule_driver_allowlist:
@@ -155,9 +175,22 @@ class IncentiveEngine:
             if driver_email not in campaign.rule_driver_allowlist and driver_id_str not in campaign.rule_driver_allowlist:
                 return False
 
+        # --- Partner session controls ---
+        if session.partner_id:
+            if not getattr(campaign, 'allow_partner_sessions', True):
+                return False
+            if campaign.rule_partner_ids:
+                if session.partner_id not in campaign.rule_partner_ids:
+                    return False
+            if campaign.rule_min_trust_tier:
+                from app.models.partner import Partner
+                partner = db.query(Partner).filter(Partner.id == session.partner_id).first()
+                if partner and partner.trust_tier > campaign.rule_min_trust_tier:
+                    return False
+
         # --- Driver caps ---
         if not CampaignService.check_driver_caps(db, campaign, session.driver_user_id, session.charger_id):
-            return False
+            return _reject("driver_caps")
 
         return True
 
@@ -179,28 +212,38 @@ class IncentiveEngine:
             logger.info(f"Campaign {campaign.id} budget insufficient for {amount}c")
             return None
 
-        # Create Nova transaction (atomic with grant)
-        from app.services.nova_service import NovaService
-        try:
-            nova_tx = NovaService.grant_to_driver(
-                db,
-                driver_id=session.driver_user_id,
-                amount=amount,
-                type="campaign_grant",
-                session_id=str(session.id),
-                metadata={
-                    "source": "incentive_engine",
-                    "campaign_id": str(campaign.id),
-                    "campaign_name": campaign.name,
-                    "charger_id": session.charger_id,
-                    "duration_minutes": session.duration_minutes,
-                },
-                idempotency_key=idempotency_key,
-                auto_commit=False,
-            )
-        except Exception as e:
-            logger.error(f"Failed to grant Nova for campaign {campaign.id}: {e}")
-            return None
+        # Determine reward destination for partner sessions
+        reward_dest = "nerava_wallet"
+        if session.partner_id:
+            from app.models.user import User
+            driver = db.query(User).filter(User.id == session.driver_user_id).first()
+            if driver and driver.auth_provider == "partner":
+                reward_dest = "partner_managed"
+
+        nova_tx = None
+        if reward_dest == "nerava_wallet":
+            # Create Nova transaction (atomic with grant) — only for Nerava wallet users
+            from app.services.nova_service import NovaService
+            try:
+                nova_tx = NovaService.grant_to_driver(
+                    db,
+                    driver_id=session.driver_user_id,
+                    amount=amount,
+                    type="campaign_grant",
+                    session_id=None,  # Don't pass session_events ID — FK points to legacy domain_charging_sessions table
+                    metadata={
+                        "source": "incentive_engine",
+                        "campaign_id": str(campaign.id),
+                        "campaign_name": campaign.name,
+                        "charger_id": session.charger_id,
+                        "duration_minutes": session.duration_minutes,
+                    },
+                    idempotency_key=idempotency_key,
+                    auto_commit=False,
+                )
+            except Exception as e:
+                logger.error(f"Failed to grant Nova for campaign {campaign.id}: {e}")
+                return None
 
         # Create incentive grant record
         grant = IncentiveGrant(
@@ -210,12 +253,50 @@ class IncentiveEngine:
             driver_user_id=session.driver_user_id,
             amount_cents=amount,
             status="granted",
+            reward_destination=reward_dest,
             nova_transaction_id=nova_tx.id if nova_tx else None,
             idempotency_key=idempotency_key,
             granted_at=datetime.utcnow(),
         )
         db.add(grant)
         db.flush()
+
+        # Credit real USD to driver wallet — only for Nerava wallet users
+        if reward_dest == "nerava_wallet":
+            try:
+                from app.models.driver_wallet import DriverWallet, WalletLedger
+                wallet = db.query(DriverWallet).filter(
+                    DriverWallet.driver_id == session.driver_user_id
+                ).first()
+                if not wallet:
+                    wallet = DriverWallet(
+                        id=str(uuid.uuid4()),
+                        driver_id=session.driver_user_id,
+                        balance_cents=0,
+                        pending_balance_cents=0,
+                    )
+                    db.add(wallet)
+                    db.flush()
+
+                wallet.balance_cents += amount
+                wallet.total_earned_cents += amount
+                wallet.updated_at = datetime.utcnow()
+
+                ledger_entry = WalletLedger(
+                    id=str(uuid.uuid4()),
+                    wallet_id=wallet.id,
+                    driver_id=session.driver_user_id,
+                    amount_cents=amount,
+                    balance_after_cents=wallet.balance_cents,
+                    transaction_type="credit",
+                    reference_type="campaign_grant",
+                    reference_id=grant.id,
+                    description=f"Earned from {campaign.name}",
+                )
+                db.add(ledger_entry)
+                db.flush()
+            except Exception as e:
+                logger.error(f"Failed to credit wallet for grant {grant.id}: {e}")
 
         logger.info(
             f"Granted {amount}c from campaign '{campaign.name}' to driver {session.driver_user_id} "

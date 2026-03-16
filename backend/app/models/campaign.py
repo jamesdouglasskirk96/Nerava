@@ -89,6 +89,20 @@ class Campaign(Base):
     rule_driver_session_count_max = Column(Integer, nullable=True)  # new driver (e.g., max=1)
     rule_driver_allowlist = Column(JSON, nullable=True)  # email list or user_id list
 
+    # --- Partner session controls ---
+    allow_partner_sessions = Column(Boolean, default=True, nullable=False)
+    rule_partner_ids = Column(JSON, nullable=True)       # restrict to specific partner IDs
+    rule_min_trust_tier = Column(Integer, nullable=True)  # minimum partner trust tier required
+
+    # --- Funding (Stripe Checkout) ---
+    funding_status = Column(String, nullable=False, default="unfunded", server_default="unfunded")
+    # Values: unfunded, pending, funded
+    stripe_checkout_session_id = Column(String(255), nullable=True)
+    stripe_payment_intent_id = Column(String(255), nullable=True)
+    funded_at = Column(DateTime, nullable=True)
+    gross_funding_cents = Column(Integer, nullable=True)  # Total amount charged to sponsor
+    platform_fee_cents = Column(Integer, nullable=True)   # Nerava's platform fee (20% default)
+
     # --- Metadata ---
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

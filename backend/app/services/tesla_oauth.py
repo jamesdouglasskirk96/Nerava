@@ -166,7 +166,7 @@ class TeslaOAuthService:
             "Content-Type": "application/json",
         }
         params = {
-            "endpoints": "charge_state;drive_state;location_data"
+            "endpoints": "charge_state;drive_state;location_data;vehicle_config"
         }
 
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -174,18 +174,13 @@ class TeslaOAuthService:
             response.raise_for_status()
             data = response.json()
             vehicle_resp = data.get("response", {})
-            # Debug: log raw charge_state from Fleet API
+            # Debug: log FULL raw charge_state from Fleet API
+            # Captures all ~41 fields so we can compare adapter vs non-adapter sessions
+            import json as _json
             raw_charge = vehicle_resp.get("charge_state", {})
             logger.info(
-                f"Fleet API raw charge_state for vehicle {vehicle_id}: "
-                f"charging_state={raw_charge.get('charging_state')} "
-                f"battery_level={raw_charge.get('battery_level')} "
-                f"charge_rate={raw_charge.get('charge_rate')} "
-                f"charger_power={raw_charge.get('charger_power')} "
-                f"charger_voltage={raw_charge.get('charger_voltage')} "
-                f"charge_port_latch={raw_charge.get('charge_port_latch')} "
-                f"charge_port_door_open={raw_charge.get('charge_port_door_open')} "
-                f"conn_charge_cable={raw_charge.get('conn_charge_cable')}"
+                f"Fleet API FULL charge_state for vehicle {vehicle_id}: "
+                f"{_json.dumps(raw_charge, default=str)}"
             )
             return vehicle_resp
 
@@ -211,6 +206,86 @@ class TeslaOAuthService:
             response.raise_for_status()
             data = response.json()
             return data.get("response", {}).get("state") == "online"
+
+    async def subscribe_vehicle_telemetry(
+        self,
+        access_token: str,
+        vin: str,
+        hostname: str = "telemetry.nerava.network",
+        port: int = 443,
+    ) -> Dict[str, Any]:
+        """
+        Configure Fleet Telemetry streaming for a vehicle.
+
+        Calls the Tesla Fleet API to set up the vehicle's telemetry config
+        so it streams data to our Fleet Telemetry server via WebSocket.
+
+        Args:
+            access_token: Valid Tesla access token
+            vin: Vehicle Identification Number
+            hostname: Fleet Telemetry server hostname
+            port: Fleet Telemetry server port
+
+        Returns:
+            API response dict
+
+        Raises:
+            httpx.HTTPStatusError: If API call fails
+        """
+        # Must go through Vehicle Command HTTP Proxy (signs requests with fleet key)
+        proxy_url = settings.VEHICLE_COMMAND_PROXY_URL
+        if proxy_url:
+            base_url = proxy_url.rstrip("/")
+        else:
+            base_url = TESLA_FLEET_API_URL
+        url = f"{base_url}/api/1/vehicles/fleet_telemetry_config"
+
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+        }
+
+        # The ca field needs the full certificate PEM, not just the public key
+        # Env vars may store PEM with escaped \n — convert back to real newlines
+        ca_cert = (settings.TESLA_FLEET_TELEMETRY_CA_CERT or settings.TESLA_EC_PUBLIC_KEY_PEM or "")
+        if "\\n" in ca_cert:
+            ca_cert = ca_cert.replace("\\n", "\n")
+
+        config = {
+            "vins": [vin],
+            "config": {
+                "hostname": hostname,
+                "port": port,
+                "ca": ca_cert,
+                "fields": {
+                    "DetailedChargeState": {"interval_seconds": 30},
+                    "BatteryLevel": {"interval_seconds": 60},
+                    "ACChargingPower": {"interval_seconds": 30},
+                    "DCChargingPower": {"interval_seconds": 30},
+                    "ACChargingEnergyIn": {"interval_seconds": 60},
+                    "DCChargingEnergyIn": {"interval_seconds": 60},
+                    "Location": {"interval_seconds": 60},
+                    "ChargePortDoorOpen": {"interval_seconds": 30},
+                    "FastChargerPresent": {"interval_seconds": 300},
+                    "FastChargerType": {"interval_seconds": 300},
+                },
+                "alert_types": ["service"],
+            },
+        }
+
+        # Proxy uses self-signed TLS — skip verification for internal calls
+        verify_ssl = not bool(proxy_url)
+        async with httpx.AsyncClient(timeout=30.0, verify=verify_ssl) as client:
+            response = await client.post(url, headers=headers, json=config)
+            if response.status_code >= 400:
+                logger.error(
+                    "Fleet Telemetry config failed for VIN %s: HTTP %s — %s",
+                    vin, response.status_code, response.text,
+                )
+            response.raise_for_status()
+            result = response.json()
+            logger.info("Fleet Telemetry configured for VIN %s: %s", vin, result)
+            return result
 
     # States the Tesla Fleet API reports when the vehicle is actively charging
     # or about to start (e.g. during initial power negotiation).
@@ -307,12 +382,22 @@ class TeslaOAuthService:
                     break
 
                 except httpx.HTTPStatusError as e:
-                    if e.response.status_code == 408 and attempt < 2:
+                    status_code = e.response.status_code
+                    if status_code == 408 and attempt < 2:
                         logger.warning(
                             f"Timeout checking vehicle {vin} "
                             f"(attempt {attempt + 1}), retrying in 5s"
                         )
                         await asyncio.sleep(5)
+                        continue
+                    if status_code == 429 and attempt < 2:
+                        retry_after = int(e.response.headers.get("Retry-After", "10"))
+                        wait_secs = min(retry_after, 30)
+                        logger.warning(
+                            f"Tesla API rate limited (429) for vehicle {vin} "
+                            f"(attempt {attempt + 1}), retrying in {wait_secs}s"
+                        )
+                        await asyncio.sleep(wait_secs)
                         continue
                     logger.warning(f"HTTP error checking vehicle {vin}: {e}")
                     break

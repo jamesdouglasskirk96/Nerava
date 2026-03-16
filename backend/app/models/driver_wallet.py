@@ -27,6 +27,10 @@ class DriverWallet(Base):
     total_withdrawn_cents = Column(Integer, nullable=False, default=0)
     nova_balance = Column(Integer, nullable=False, default=0)
     energy_reputation_score = Column(Integer, nullable=False, default=0)
+    # Dual-provider support
+    payout_provider = Column(String(20), nullable=False, default="stripe", server_default="stripe")  # "stripe" or "dwolla"
+    external_account_id = Column(String(500), nullable=True)  # Dwolla customer URL
+    bank_verified = Column(Boolean, nullable=False, default=False, server_default="0")
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=True, onupdate=datetime.utcnow)
 
@@ -50,6 +54,10 @@ class Payout(Base):
     amount_cents = Column(Integer, nullable=False)
     stripe_transfer_id = Column(String(255), nullable=True)
     stripe_payout_id = Column(String(255), nullable=True)
+    # Dual-provider support
+    payout_provider = Column(String(20), nullable=False, default="stripe", server_default="stripe")
+    external_transfer_id = Column(String(500), nullable=True)  # Dwolla transfer URL
+    funding_source_id = Column(String(36), nullable=True)  # FK to funding_sources
     status = Column(String(20), nullable=False, default="pending")  # pending, processing, paid, failed
     failure_reason = Column(String(500), nullable=True)
     idempotency_key = Column(String(100), unique=True, nullable=False)

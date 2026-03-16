@@ -157,6 +157,8 @@ def register_device(
 class SendTestPushResponse(BaseModel):
     sent: int
     message: str
+    device_count: int = 0
+    apns_configured: bool = False
 
 
 @router.post("/send-test", response_model=SendTestPushResponse)
@@ -166,20 +168,45 @@ def send_test_push(
 ):
     """
     Send a test push notification to the current user's registered devices.
-    Useful for verifying push notification setup end-to-end.
+    Returns diagnostic info about token count and APNs configuration.
     """
-    from app.services.push_service import send_push_notification
+    from app.services.push_service import send_push_notification, _get_apns_client
 
-    sent = send_push_notification(
-        db,
-        user_id=current_user.id,
-        title="Test notification",
-        body="Push notifications are working!",
-        data={"type": "test"},
+    # Count registered devices for this user
+    device_count = db.query(DeviceToken).filter(
+        DeviceToken.user_id == current_user.id,
+        DeviceToken.is_active.is_(True),
+    ).count()
+
+    # Check if APNs is configured (either production or sandbox)
+    apns_configured = _get_apns_client(use_sandbox=False) is not None or _get_apns_client(use_sandbox=True) is not None
+
+    logger.info(
+        "Test push for user %s: %d active devices, APNs configured: %s",
+        current_user.id, device_count, apns_configured,
     )
+
+    sent = 0
+    if device_count > 0:
+        sent = send_push_notification(
+            db,
+            user_id=current_user.id,
+            title="Test notification",
+            body="Push notifications are working!",
+            data={"type": "test"},
+        )
+
+    if device_count == 0:
+        message = "No device tokens registered. Check notification permissions on your device."
+    elif sent > 0:
+        message = f"Sent to {sent} device(s)"
+    else:
+        message = f"{device_count} device(s) registered but send failed. APNs configured: {apns_configured}"
 
     return SendTestPushResponse(
         sent=sent,
-        message=f"Sent to {sent} device(s)" if sent > 0 else "No active devices found (or APNs not configured)",
+        message=message,
+        device_count=device_count,
+        apns_configured=apns_configured,
     )
 

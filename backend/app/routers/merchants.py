@@ -21,6 +21,138 @@ router = APIRouter(prefix="/v1/merchants", tags=["merchants"])
 
 
 # IMPORTANT: Static routes must be defined BEFORE dynamic /{merchant_id} routes
+
+
+@router.get("/me")
+def get_my_merchant(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_driver),
+):
+    """
+    Get merchant dashboard data for the authenticated merchant admin.
+    Delegates to merchants_domain /me endpoint logic.
+    """
+    from app.services.auth_service import AuthService
+    from app.models.domain import DomainMerchant
+    from sqlalchemy import and_
+
+    merchant = db.query(DomainMerchant).filter(
+        and_(
+            DomainMerchant.owner_user_id == current_user.id,
+            DomainMerchant.status == "active",
+        )
+    ).first()
+
+    if not merchant:
+        raise HTTPException(status_code=404, detail="Merchant not found for user")
+
+    from app.services.nova_service import NovaService
+    transactions = NovaService.get_merchant_transactions(db, merchant.id, limit=10)
+
+    return {
+        "merchant": {
+            "id": merchant.id,
+            "name": merchant.name,
+            "nova_balance": merchant.nova_balance,
+            "zone_slug": merchant.zone_slug,
+            "status": merchant.status,
+        },
+        "transactions": [
+            {
+                "id": txn.id,
+                "type": txn.type,
+                "amount": txn.amount,
+                "driver_user_id": txn.driver_user_id,
+                "created_at": txn.created_at.isoformat(),
+                "metadata": txn.transaction_meta,
+            }
+            for txn in transactions
+        ],
+    }
+
+
+@router.get("/me/insights")
+def get_my_merchant_insights(
+    period: str = Query("30d", description="Time period: 7d, 30d, 90d"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_driver),
+):
+    """Merchant insights — nearby charging sessions, dwell time, peak hours."""
+    from app.models.domain import DomainMerchant
+    from app.models.while_you_charge import Merchant as WYCMerchant2, ChargerMerchant
+    from app.models.session_event import SessionEvent
+    from sqlalchemy import and_
+    from datetime import datetime, timedelta
+
+    merchant = db.query(DomainMerchant).filter(
+        and_(
+            DomainMerchant.owner_user_id == current_user.id,
+            DomainMerchant.status == "active",
+        )
+    ).first()
+    if not merchant:
+        raise HTTPException(status_code=404, detail="Merchant not found for user")
+
+    days = 30
+    if period.endswith("d"):
+        try:
+            days = int(period[:-1])
+        except ValueError:
+            days = 30
+
+    since = datetime.utcnow() - timedelta(days=days)
+
+    wyc = db.query(WYCMerchant2).filter(WYCMerchant2.place_id == merchant.google_place_id).first() if merchant.google_place_id else None
+    charger_ids = []
+    if wyc:
+        links = db.query(ChargerMerchant.charger_id).filter(ChargerMerchant.merchant_id == wyc.id).all()
+        charger_ids = [l[0] for l in links]
+
+    ev_sessions = 0
+    unique_drivers = 0
+    avg_duration = None
+    avg_kwh = None
+    peak_hours = []
+
+    if charger_ids:
+        base = db.query(SessionEvent).filter(
+            SessionEvent.charger_id.in_(charger_ids),
+            SessionEvent.session_start >= since,
+        )
+        ev_sessions = base.count()
+        unique_drivers = base.with_entities(SessionEvent.driver_user_id).distinct().count()
+
+        dur = base.with_entities(func.avg(SessionEvent.duration_seconds)).scalar()
+        if dur:
+            avg_duration = round(dur / 60, 1)
+
+        kwh = base.with_entities(func.avg(SessionEvent.kwh_added)).scalar()
+        if kwh:
+            avg_kwh = round(float(kwh), 1)
+
+        hour_counts = (
+            base.with_entities(
+                func.extract("hour", SessionEvent.session_start).label("hr"),
+                func.count().label("cnt"),
+            )
+            .group_by("hr")
+            .order_by("hr")
+            .all()
+        )
+        peak_hours = [{"hour": int(h), "sessions": c} for h, c in hour_counts]
+
+    return {
+        "period": period,
+        "ev_sessions_nearby": ev_sessions,
+        "unique_drivers": unique_drivers,
+        "avg_duration_minutes": avg_duration,
+        "avg_kwh": avg_kwh,
+        "peak_hours": peak_hours,
+        "dwell_distribution": None,
+        "walk_traffic": None,
+    }
+
+
 @router.get("/favorites")
 def list_favorites(
     driver: User = Depends(get_current_driver),
@@ -273,9 +405,21 @@ async def get_merchant_details_endpoint(
     """
     Get merchant details for a given merchant ID.
     """
+    # Try to resolve driver for reward state (optional — no auth required)
+    driver_user_id = None
     try:
-        result = await get_merchant_details(db, merchant_id, session_id)
-        
+        auth_header = http_request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            from app.dependencies.driver import get_current_driver_optional
+            driver = get_current_driver_optional(http_request, auth_header[7:], db)
+            if driver:
+                driver_user_id = driver.id
+    except Exception:
+        pass
+
+    try:
+        result = await get_merchant_details(db, merchant_id, session_id, driver_user_id=driver_user_id)
+
         # PostHog: Fire merchant_details_viewed event
         from app.services.analytics import get_analytics_client
         analytics = get_analytics_client()

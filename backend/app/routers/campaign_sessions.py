@@ -6,12 +6,14 @@ GET /v1/charging-sessions/active   — current active session
 GET /v1/charging-sessions/reputation — energy reputation + streak
 GET /v1/charging-sessions/{id}     — session details + grant info
 POST /v1/charging-sessions/poll    — poll Tesla for current charging state
+POST /v1/charging-sessions/background-ping — geofence-triggered background detection
 """
 import logging
 from datetime import datetime, date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy import func, desc, text
 from typing import Optional
 
@@ -28,6 +30,12 @@ class PollSessionRequest(BaseModel):
     """Optional device location sent with each poll."""
     lat: Optional[float] = None
     lng: Optional[float] = None
+
+
+class BackgroundPingRequest(BaseModel):
+    """Location sent by native app when geofence entry fires (background)."""
+    lat: float
+    lng: float
 
 router = APIRouter(prefix="/v1/charging-sessions", tags=["charging-sessions"])
 
@@ -54,13 +62,70 @@ async def get_active_session(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get current active (un-ended) session, if any."""
+    """Get current active (un-ended) session, if any.
+
+    Also returns the most recently ended session (within 5 min) so the
+    frontend can detect incentive grants on session end transitions.
+
+    If an active session hasn't been updated in 5+ minutes (e.g. the poll
+    loop stopped), it is auto-closed here so the driver isn't stuck in a
+    phantom "currently charging" state.
+    """
     session = SessionEventService.get_active_session(db, current_user.id)
-    if not session:
-        return {"session": None, "active": False}
+
+    # Auto-close stale sessions that the poll loop never ended
+    # (e.g. app was backgrounded, poll stopped, or Tesla API was unreachable)
+    # But respect smart polling: if next_poll_at is in the future, the session
+    # is waiting for a scheduled server-side poll — not stale.
+    if session:
+        now = datetime.utcnow()
+        has_future_poll = (
+            hasattr(session, 'next_poll_at')
+            and session.next_poll_at
+            and session.next_poll_at > now
+        )
+        stale_cutoff = now - timedelta(minutes=15)
+        if session.updated_at and session.updated_at < stale_cutoff and not has_future_poll:
+            logger.info(
+                f"Auto-closing stale session {session.id} from /active endpoint "
+                f"(last updated {session.updated_at})"
+            )
+            SessionEventService.end_session(
+                db, session.id,
+                ended_reason="stale_cleanup",
+                battery_end_pct=session.battery_end_pct,
+                kwh_delivered=session.kwh_delivered,
+            )
+            db.commit()
+            # Return as recently ended so frontend can show incentive toast
+            return {
+                "session": None,
+                "active": False,
+                "last_ended_session": _session_to_dict(session, db),
+            }
+
+        return {
+            "session": _session_to_dict(session, db),
+            "active": True,
+            "last_ended_session": None,
+        }
+
+    # No active session — check if one ended recently (for incentive toast)
+    cutoff = datetime.utcnow() - timedelta(minutes=5)
+    recent = (
+        db.query(SessionEvent)
+        .filter(
+            SessionEvent.driver_user_id == current_user.id,
+            SessionEvent.session_end.isnot(None),
+            SessionEvent.session_end >= cutoff,
+        )
+        .order_by(desc(SessionEvent.session_end))
+        .first()
+    )
     return {
-        "session": _session_to_dict(session, db),
-        "active": True,
+        "session": None,
+        "active": False,
+        "last_ended_session": _session_to_dict(recent, db) if recent else None,
     }
 
 
@@ -142,6 +207,99 @@ def _compute_streak(db: Session, driver_id: int) -> int:
         return 0
 
 
+@router.post("/background-ping")
+async def background_ping(
+    body: BackgroundPingRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Called by iOS/Android native app when a charger geofence entry fires
+    (can be in background or killed state).
+
+    1. Check if lat/lng is within 300m of a known charger
+    2. If match AND driver has Tesla connected -> poll Tesla API once
+    3. If charging -> create session, set next_poll_at, send push
+    4. Return result (native app may be suspended, response is best-effort)
+    """
+    from ..models.tesla_connection import TeslaConnection
+    from ..services.tesla_oauth import get_tesla_oauth_service
+
+    # Also record trail point if there's already an active session
+    active = SessionEventService.get_active_session(db, current_user.id)
+    if active:
+        meta = dict(active.session_metadata or {})
+        meta["device_lat"] = body.lat
+        meta["device_lng"] = body.lng
+        trail = list(meta.get("location_trail", []))
+        trail.append({
+            "lat": body.lat,
+            "lng": body.lng,
+            "ts": datetime.utcnow().isoformat(),
+        })
+        if len(trail) > 120:
+            trail = trail[-120:]
+        meta["location_trail"] = trail
+        active.session_metadata = meta
+        flag_modified(active, "session_metadata")
+        active.updated_at = datetime.utcnow()
+        db.commit()
+        return {
+            "matched": True,
+            "session_active": True,
+            "session_id": str(active.id),
+            "already_active": True,
+        }
+
+    # Step 1: Find nearest charger within 300m
+    try:
+        from ..services.intent_service import find_nearest_charger
+        result = find_nearest_charger(db, body.lat, body.lng, radius_m=300)
+    except Exception as e:
+        logger.warning(f"Background ping charger lookup failed: {e}")
+        return {"matched": False}
+
+    if not result:
+        return {"matched": False}
+
+    matched_charger, distance_m = result
+    logger.info(
+        f"Background ping matched charger {matched_charger.id} "
+        f"({matched_charger.name}) at {distance_m:.0f}m for driver {current_user.id}"
+    )
+
+    # Step 2: Check for Tesla connection
+    tesla_conn = (
+        db.query(TeslaConnection)
+        .filter(
+            TeslaConnection.user_id == current_user.id,
+            TeslaConnection.is_active == True,
+        )
+        .first()
+    )
+    if not tesla_conn:
+        return {"matched": True, "session_active": False, "reason": "no_tesla_connection"}
+
+    if not tesla_conn.vehicle_id:
+        return {"matched": True, "session_active": False, "reason": "no_vehicle_selected"}
+
+    # Step 3: Poll Tesla API once
+    oauth_service = get_tesla_oauth_service()
+    poll_result = await SessionEventService.poll_driver_session(
+        db, current_user.id, tesla_conn, oauth_service,
+        device_lat=body.lat,
+        device_lng=body.lng,
+    )
+
+    return {
+        "matched": True,
+        "session_active": poll_result.get("session_active", False),
+        "session_id": str(poll_result.get("session_id", "")) if poll_result.get("session_id") else None,
+        "charger_id": matched_charger.id,
+        "charger_name": matched_charger.name,
+    }
+
+
 @router.get("/{session_id}")
 async def get_session_detail(
     session_id: str,
@@ -200,6 +358,43 @@ async def poll_session(
     if not tesla_conn:
         return {"session_active": False, "error": "no_tesla_connection"}
 
+    # Telemetry-mode: if Fleet Telemetry is configured,
+    # check for active session first (created by webhook). If found, use it.
+    # If not, fall back to Tesla API poll so sessions still get created
+    # even when telemetry webhooks don't include DetailedChargeState.
+    telemetry_enabled = getattr(tesla_conn, 'telemetry_enabled', False)
+    if telemetry_enabled:
+        active = SessionEventService.get_active_session(db, current_user.id)
+        if active:
+            # Still record device location trail even in telemetry mode
+            device_lat = body.lat if body else None
+            device_lng = body.lng if body else None
+            if device_lat is not None and device_lng is not None:
+                meta = dict(active.session_metadata or {})
+                meta["device_lat"] = device_lat
+                meta["device_lng"] = device_lng
+                trail = list(meta.get("location_trail", []))
+                trail.append({
+                    "lat": device_lat,
+                    "lng": device_lng,
+                    "ts": datetime.utcnow().isoformat(),
+                })
+                if len(trail) > 120:
+                    trail = trail[-120:]
+                meta["location_trail"] = trail
+                active.session_metadata = meta
+                flag_modified(active, "session_metadata")
+                active.updated_at = datetime.utcnow()
+                db.commit()
+            return {
+                "session_active": True,
+                "session_id": active.id,
+                "duration_minutes": int((datetime.utcnow() - active.session_start).total_seconds() / 60),
+                "kwh_delivered": active.kwh_delivered,
+                "telemetry_mode": True,
+            }
+        # No active session from telemetry — fall through to Tesla API poll
+
     oauth_service = get_tesla_oauth_service()
     result = await SessionEventService.poll_driver_session(
         db, current_user.id, tesla_conn, oauth_service,
@@ -244,6 +439,11 @@ def _session_to_dict(session: SessionEvent, db: Session) -> dict:
         "quality_score": session.quality_score,
         "ended_reason": session.ended_reason,
     }
+
+    # Include location trail from session metadata (v2.7+)
+    metadata = session.session_metadata or {}
+    result["location_trail"] = metadata.get("location_trail", [])
+
 
     if grant:
         granted_at = grant[4]  # granted_at column

@@ -38,6 +38,10 @@ class User(Base):
     admin_role = Column(String, nullable=True)  # AdminRole enum value
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=True)
 
+    # Notification / marketing preferences
+    notifications_enabled = Column(Boolean, default=True, nullable=False, server_default="1")
+    email_marketing = Column(Boolean, default=False, nullable=False, server_default="0")
+
     # EV Arrival: vehicle info (cached, one-time setup)
     vehicle_color = Column(String(30), nullable=True)
     vehicle_model = Column(String(60), nullable=True)

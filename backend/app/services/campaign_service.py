@@ -137,13 +137,86 @@ class CampaignService:
         return campaign
 
     @staticmethod
+    def fund_campaign(
+        db: Session,
+        checkout_session_id: str,
+        payment_intent_id: Optional[str] = None,
+        metadata: Optional[dict] = None,
+    ) -> dict:
+        """
+        Mark a campaign as funded after Stripe checkout completes.
+        Called from the Stripe webhook handler.
+
+        Fee-inclusive: the sponsor paid gross_amount, Nerava keeps the platform fee,
+        and budget_cents is reduced to the net amount available for driver rewards.
+        """
+        campaign = db.query(Campaign).filter(
+            Campaign.stripe_checkout_session_id == checkout_session_id
+        ).first()
+        if not campaign:
+            logger.warning(f"No campaign found for checkout session {checkout_session_id}")
+            return {"status": "error", "message": "Campaign not found for checkout session"}
+
+        if campaign.funding_status == "funded":
+            # Still activate if somehow funded but stuck in draft
+            if campaign.status == "draft":
+                campaign.status = "active"
+                campaign.updated_at = datetime.utcnow()
+                db.commit()
+                logger.info(f"Campaign {campaign.id} activated on re-fund (was funded but stuck in draft)")
+                return {"status": "activated", "campaign_id": campaign.id}
+            logger.info(f"Campaign {campaign.id} already funded (idempotent)")
+            return {"status": "already_processed", "campaign_id": campaign.id}
+
+        # Apply platform fee — reduce budget to net amount for driver rewards
+        metadata = metadata or {}
+        gross_cents = int(metadata.get("gross_amount_cents", 0))
+        fee_cents = int(metadata.get("platform_fee_cents", 0))
+        net_cents = int(metadata.get("net_reward_cents", 0))
+
+        if gross_cents and fee_cents and net_cents:
+            # New flow with fee breakdown in metadata
+            campaign.gross_funding_cents = gross_cents
+            campaign.platform_fee_cents = fee_cents
+            campaign.budget_cents = net_cents
+            logger.info(
+                f"Campaign {campaign.id} fee applied: "
+                f"gross=${gross_cents/100:.2f}, fee=${fee_cents/100:.2f}, "
+                f"net=${net_cents/100:.2f}"
+            )
+        else:
+            # Legacy: no fee metadata (older checkout sessions)
+            campaign.gross_funding_cents = campaign.budget_cents
+            campaign.platform_fee_cents = 0
+
+        campaign.funding_status = "funded"
+        campaign.stripe_payment_intent_id = payment_intent_id
+        campaign.funded_at = datetime.utcnow()
+        campaign.updated_at = datetime.utcnow()
+
+        # Auto-activate campaign when funded (if still in draft)
+        if campaign.status == "draft":
+            campaign.status = "active"
+            logger.info(f"Campaign {campaign.id} auto-activated on funding")
+
+        db.commit()
+
+        logger.info(f"Campaign {campaign.id} funded via Stripe checkout {checkout_session_id}")
+        return {"status": "success", "campaign_id": campaign.id, "action": "funded"}
+
+    @staticmethod
     def activate_campaign(db: Session, campaign_id: str) -> Optional[Campaign]:
-        """Move campaign from draft → active."""
+        """Move campaign from draft → active. Requires funding_status == 'funded'."""
         campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
         if not campaign:
             return None
         if campaign.status != "draft":
             raise ValueError(f"Can only activate draft campaigns, current status: {campaign.status}")
+        if getattr(campaign, 'funding_status', 'funded') not in ('funded',):
+            raise ValueError(
+                f"Campaign must be funded before activation (current: {campaign.funding_status}). "
+                "Use the checkout endpoint to fund this campaign."
+            )
         campaign.status = "active"
         campaign.updated_at = datetime.utcnow()
         db.commit()
@@ -215,8 +288,11 @@ class CampaignService:
         status: Optional[str] = None,
         limit: int = 50,
         offset: int = 0,
+        owner_user_id: Optional[int] = None,
     ) -> List[Campaign]:
         query = db.query(Campaign)
+        if owner_user_id is not None:
+            query = query.filter(Campaign.created_by_user_id == owner_user_id)
         if sponsor_name:
             query = query.filter(Campaign.sponsor_name == sponsor_name)
         if status:
@@ -259,7 +335,20 @@ class CampaignService:
             {"amount": amount_cents, "id": campaign_id, "now": datetime.utcnow()},
         )
         if result.rowcount == 0:
+            logger.info(
+                f"Budget decrement failed for campaign {campaign_id}: "
+                f"rowcount=0 (budget full, status not active, or ID mismatch)"
+            )
             return False
+
+        logger.info(
+            f"Budget decremented for campaign {campaign_id}: +{amount_cents}c spent, +1 session"
+        )
+
+        # Flush the raw SQL and expire ORM cache so subsequent reads
+        # see the updated spent_cents/sessions_granted values
+        db.flush()
+        db.expire_all()
 
         # Check if budget is now exhausted → auto-pause
         campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
