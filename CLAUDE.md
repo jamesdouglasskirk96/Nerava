@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is Nerava
 
-Nerava is an EV charging rewards platform that connects drivers at charging stations with nearby merchants offering exclusive deals. Drivers charge their EV, earn rewards (Nova points + cash via Stripe), and redeem at participating merchants. Sponsors create campaigns that pay drivers for charging at specific locations/times. The system has a driver-facing app, merchant portal, admin dashboard, sponsor console, landing page, iOS native shell, and a FastAPI backend.
+Nerava is a programmable incentive and verification layer for the EV charging ecosystem. The platform transforms verified charging sessions into a data-driven engagement and monetization channel for energy providers, sponsors, and location partners. Drivers charge their EV, earn rewards (Nova points + cash via Stripe), and redeem at participating merchants. Sponsors create campaigns that pay drivers for charging at specific locations/times. External partners (charging networks, fleet platforms, driver apps) can submit sessions via the Partner Incentive API and receive campaign-matched rewards. The system has a driver-facing app, merchant portal, admin dashboard, sponsor console, landing page, iOS native shell, Android app, and a FastAPI backend.
 
 ## Repository Structure
 
@@ -19,6 +19,7 @@ This is a monorepo with independently deployed apps:
 - **`backend/`** — FastAPI monolith (Python, SQLAlchemy 2, Alembic, Pydantic 2)
 - **`packages/analytics`** — Shared PostHog analytics wrapper (`@nerava/analytics`)
 - **`Nerava/`** — iOS Xcode project (WKWebView shell wrapping the driver web app)
+- **`mobile/nerava_android/`** — Android app (Kotlin, WebView shell mirroring iOS, FCM, native bridge)
 - **`Nerava-Campaign-Portal/`** — Newer iteration of sponsor campaign portal (React Router 7, may supersede `apps/console`)
 - **`e2e/`** — Cross-app Playwright E2E tests
 - **`infra/terraform/`** — AWS infrastructure (Terraform configs for ECS, RDS, ALB, Route53, CloudWatch)
@@ -110,9 +111,9 @@ docker-compose up                               # all services
 
 - **`app/routers/`** — FastAPI route handlers. All routes use `/v1` prefix.
 - **`app/services/`** — Business logic layer (arrival, checkin, checkout, payments, notifications, etc.)
-- **`app/models/`** — SQLAlchemy ORM models. `domain.py` has core models (Zone, EnergyEvent, DomainMerchant, DomainChargingSession, NovaTransaction). Other key models: `user.py`, `arrival_session.py`, `exclusive_session.py`, `tesla_connection.py`, `campaign.py` (sponsor campaigns), `session_event.py` (SessionEvent + IncentiveGrant).
+- **`app/models/`** — SQLAlchemy ORM models. `domain.py` has core models (Zone, EnergyEvent, DomainMerchant, DomainChargingSession, NovaTransaction). Other key models: `user.py`, `arrival_session.py`, `exclusive_session.py`, `tesla_connection.py`, `campaign.py` (sponsor campaigns), `session_event.py` (SessionEvent + IncentiveGrant), `partner.py` (Partner + PartnerAPIKey).
 - **`app/schemas/`** — Pydantic request/response schemas
-- **`app/dependencies/`** — FastAPI dependency injection (`get_db`, auth, feature flags)
+- **`app/dependencies/`** — FastAPI dependency injection (`get_db`, auth, feature flags, partner API key auth)
 - **`app/middleware/`** — Auth (JWT), rate limiting, metrics, region routing, audit logging, security headers, request size limits
 - **`app/integrations/`** — Third-party clients (legacy Google Places, Google Distance Matrix, NREL, Overpass/OSM)
 - **`app/cache/`** — Two-layer caching (L1 in-memory + L2 Redis) with TTL support
@@ -135,7 +136,7 @@ docker-compose up                               # all services
 
 - **Dev:** SQLite (`sqlite:///./nerava.db`)
 - **Production:** PostgreSQL on RDS (`nerava-db.c27i820wot9o.us-east-1.rds.amazonaws.com`)
-- **Migrations:** Alembic, run from `backend/` directory. ~90 migration files in `alembic/versions/`.
+- **Migrations:** Alembic, run from `backend/` directory. ~105 migration files in `alembic/versions/`.
 - **Lazy engine init:** `app/db.py` creates the engine on first access, not at import time. This matters for container health checks.
 
 ### Key Database Tables
@@ -157,6 +158,8 @@ docker-compose up                               # all services
 | `tesla_connections` | Tesla OAuth tokens per driver (access_token, refresh_token, vehicle_id, vin) |
 | `ev_verification_codes` | EV-XXXX codes, valid for 2 hours |
 | `device_tokens` | APNs/FCM push notification tokens |
+| `partners` | External integration partners (charging networks, fleet platforms, driver apps) with trust tiers and rate limits |
+| `partner_api_keys` | SHA-256 hashed API keys for partner authentication (`nrv_pk_` prefix) |
 
 ### Auth Flow
 
@@ -205,12 +208,15 @@ Evaluates sessions against active campaigns when a session ends. Managed by `Inc
 - Driver session count bounds (new vs repeat driver rules)
 - Driver allowlist (email or user ID)
 - Per-driver caps (daily/weekly/total limits per campaign)
+- Partner session controls: `allow_partner_sessions`, `rule_partner_ids`, `rule_min_trust_tier`
 
 **Grant logic:**
 - One session = one grant max (highest priority campaign wins, no stacking)
 - Grants created only on session END
 - Atomic budget decrement prevents overruns
 - Idempotent via `session_event_id` uniqueness constraint
+- `reward_destination` field routes rewards: `nerava_wallet` (Nerava drivers), `partner_managed` (partner handles rewards), `deferred` (pending account creation)
+- Partner shadow driver sessions skip wallet/Nova credit (partner handles their own rewards)
 
 ### Nova Transaction System
 
@@ -355,6 +361,54 @@ WKWebView shell wrapping the driver web app. **No App Store push needed for web-
 - APNs authorization request, local notifications for session/arrival events
 - Stores APNs token for forwarding to backend
 
+## Android App Architecture (`mobile/nerava_android/`)
+
+Kotlin WebView shell mirroring the iOS app. **No Play Store push needed for web-only changes.**
+
+### Key Classes
+
+| Class | Purpose |
+|-------|---------|
+| `MainActivity.kt` | WebView setup, permissions, FCM registration, deep links, error overlays |
+| `NativeBridge.kt` | Bidirectional JS ↔ Kotlin via `@JavascriptInterface`. Same `window.neravaNative` API as iOS |
+| `BridgeInjector.kt` | JavaScript injection script (equivalent to iOS WKUserScript) |
+| `BridgeMessage.kt` | Sealed class for native → web messages (mirrors iOS `NativeBridgeMessage` enum) |
+| `SessionEngine.kt` | Background session management, geofence transitions |
+| `LocationService.kt` | FusedLocationProvider, foreground + background location |
+| `GeofenceManager.kt` | Geofence registration/monitoring for charger proximity |
+| `FCMService.kt` | Firebase Cloud Messaging token management + push handling |
+| `SecureTokenStore.kt` | EncryptedSharedPreferences for auth + FCM tokens |
+| `APIClient.kt` | OkHttp REST client for backend communication |
+| `DeepLinkHandler.kt` | Intent → web URL resolution for deep links |
+
+### Native Bridge (JS ↔ Kotlin)
+- **JS → Kotlin:** `AndroidBridge.onMessage()` via `@JavascriptInterface` (same actions as iOS)
+- **Kotlin → JS:** `window.neravaNativeCallback(action, payload)` via `evaluateJavascript()`
+- **Messages:** `SESSION_STATE_CHANGED`, `PERMISSION_STATUS`, `LOCATION_RESPONSE`, `AUTH_TOKEN_RESPONSE`, `DEVICE_TOKEN_REGISTERED`, `NATIVE_READY`, `PUSH_DEEP_LINK`, `ERROR`
+- Bridge parity with iOS confirmed as of 2026-03-04
+
+### Build
+```bash
+cd mobile/nerava_android
+./gradlew assembleDebug          # debug APK
+./gradlew bundleRelease          # release AAB for Play Store
+./gradlew test                   # unit tests
+```
+
+### Release Signing
+- Keystore properties read from `keystore.properties` (not committed)
+- Template at `keystore.properties.example`
+- ProGuard rules in `app/proguard-rules.pro` keep bridge classes + `@JavascriptInterface`
+
+## Growth Readiness & Cost
+
+- **`GROWTH_GAP_ANALYSIS.md`** — Blockers and priorities for Android Play Store launch and iOS hardening. Living document with checkboxes.
+- **`COST_ANALYSIS.md`** — Full breakdown of every paid service, monthly/usage-based costs, DDoS risk assessment, and optimization roadmap. Key findings:
+  - Minimum viable production cost: **~$52-88/mo** (after removing optional services)
+  - Biggest cost risks at scale: Twilio OTP ($20K/mo at 100K users) and Google Places ($13K/mo) — both replaceable with free alternatives
+  - DDoS worst case: **~$15K** from CloudWatch log ingestion (7-day sustained L7 attack) — mitigated by adding AWS WAF ($5/mo)
+  - No AWS WAF configured currently — application-layer rate limiting only
+
 ## Analytics Events
 
 Tracked via PostHog (`packages/analytics`). Key events in `apps/driver/src/analytics/events.ts`:
@@ -377,7 +431,7 @@ Tracked via PostHog (`packages/analytics`). Key events in `apps/driver/src/analy
 - **Fixtures:** `backend/tests/conftest.py` provides `db` (isolated session per test, auto-rollback), `client` (FastAPI TestClient with dependency overrides), `test_user`, `test_merchant`
 - **Test DB override:** Uses `app.dependency_overrides` to inject test sessions into both `app.db.get_db` and `app.dependencies.get_db`
 - **Root `tests/` directory** has security/integration tests that import from `backend/`
-- **Key test files:** `test_session_event_service.py`, `test_incentive_engine.py`, `test_payout_service.py`, `test_campaign_service.py`, `test_tesla_oauth.py`, `test_security_headers.py`
+- **Key test files:** `test_session_event_service.py`, `test_incentive_engine.py`, `test_payout_service.py`, `test_campaign_service.py`, `test_tesla_oauth.py`, `test_security_headers.py`, `test_partner_api.py`
 
 ### Frontend Tests
 
@@ -416,11 +470,28 @@ The production architecture does **NOT** match the ECS setup in `deploy-prod.yml
 | Admin | `admin.nerava.network` | `E1WZNEUSEZC1X0` |
 | Link | `link.nerava.network` | `E10ZCPA7D2D99W` |
 
+### Pre-Deploy: Commit and Push
+
+**IMPORTANT:** Before ANY deployment (backend or frontend), always commit all relevant changes and push to GitHub. This ensures the deployed code matches what's in the repo and enables rollbacks via git history.
+
+```bash
+# 1. Stage and commit changes
+git add <relevant files>
+git commit -m "Description of changes"
+
+# 2. Push to GitHub
+git push origin <branch>
+```
+
+Never deploy uncommitted or unpushed code. The git history should always reflect what's running in production.
+
 ### Deploying the Backend (App Runner)
 
 The backend uses **manual deployment** (`AutoDeploymentsEnabled: false`). The CI workflow (`deploy-prod.yml`) pushes to the `nerava/backend` ECR repo but App Runner reads from the **`nerava-backend`** ECR repo with explicit image tags. To deploy:
 
 ```bash
+# 0. Commit and push all changes to GitHub first (see Pre-Deploy section above)
+
 # 1. Login to ECR
 aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 566287346479.dkr.ecr.us-east-1.amazonaws.com
 
@@ -473,6 +544,8 @@ For frontend rollback, redeploy the previous git commit's build to S3.
 Frontend apps are static builds deployed to S3 with CloudFront cache invalidation:
 
 ```bash
+# 0. Commit and push all changes to GitHub first (see Pre-Deploy section above)
+
 # Driver app example
 cd apps/driver && VITE_API_BASE_URL=https://api.nerava.network VITE_ENV=prod npm run build
 aws s3 sync dist/ s3://app.nerava.network/ --delete --region us-east-1
@@ -521,9 +594,30 @@ All Docker images **must** be built for `linux/amd64`. On Apple Silicon Macs, us
 
 Sponsors create campaigns via the console (`apps/console`) that reward drivers for charging at specific locations.
 
-- **Models:** `Campaign` (budget, targeting rules as JSON, status lifecycle), `SessionEvent` (verified charging session), `IncentiveGrant` (links a campaign reward to a session)
-- **Backend:** `app/routers/campaigns.py` (`/v1/campaigns/*`), `app/routers/campaign_sessions.py` (`/v1/charging-sessions/*`)
-- **Services:** `campaign_service.py` (CRUD + lifecycle), `incentive_engine.py` (evaluates sessions against campaign rules), `corporate_classifier.py` (corporate vs local targeting), `session_event_service.py` (session + grant CRUD)
+- **Models:** `Campaign` (budget, targeting rules as JSON, status lifecycle, partner controls), `SessionEvent` (verified charging session, partner fields), `IncentiveGrant` (links a campaign reward to a session, reward_destination)
+- **Backend:** `app/routers/campaigns.py` (`/v1/campaigns/*`), `app/routers/campaign_sessions.py` (`/v1/charging-sessions/*`), `app/routers/partner_api.py` (`/v1/partners/*`)
+- **Services:** `campaign_service.py` (CRUD + lifecycle), `incentive_engine.py` (evaluates sessions against campaign rules, including partner controls), `corporate_classifier.py` (corporate vs local targeting), `session_event_service.py` (session + grant CRUD), `partner_session_service.py` (external session ingest)
+
+### Partner Incentive API (External Session Ingest)
+
+Enables external partners (charging networks, fleet platforms, driver apps) to submit charging sessions and receive incentive evaluations against active Nerava campaigns via API.
+
+- **Models:** `Partner` (trust tier, rate limit, webhook config), `PartnerAPIKey` (SHA-256 hashed, `nrv_pk_` prefix, scoped)
+- **Auth:** `X-Partner-Key` header → `app/dependencies/partner_auth.py`. Key hashed + matched against `partner_api_keys.key_hash`. Scope-checked per endpoint.
+- **Partner API Router:** `app/routers/partner_api.py` (`/v1/partners/*`)
+  - `POST /sessions` — Submit a charging session (idempotent via `partner_session_id`)
+  - `GET /sessions` — List partner's sessions
+  - `GET /sessions/{id}` — Get session + grant details
+  - `PATCH /sessions/{id}` — Update telemetry or complete session
+  - `GET /grants` — List grants for partner's sessions
+  - `GET /campaigns/available` — Active campaigns matching partner's trust tier
+  - `GET /me` — Partner profile + usage stats
+- **Admin Router:** `app/routers/admin_partners.py` (`/v1/admin/partners/*`) — Partner + key CRUD (JWT admin auth)
+- **Services:** `partner_service.py` (partner CRUD, key generation), `partner_session_service.py` (session ingest, shadow driver resolution, quality scoring)
+- **Shadow users:** Partner drivers get `auth_provider="partner"` users with email `partner_{slug}_{driver_id}@partner.nerava.network`. Satisfies `SessionEvent.driver_user_id` NOT NULL FK.
+- **Trust tiers:** 1=hardware-verified (+20 quality), 2=api-verified (+10), 3=app-reported (-10). Campaigns can require minimum tier.
+- **Idempotency:** `(source, source_session_id)` unique constraint on `session_events`. Source is `partner_{slug}`.
+- **Tests:** `backend/tests/test_partner_api.py` — 19 tests covering full flow, auth, idempotency, campaign matching, partner controls
 
 ### Merchant Enrichment
 
@@ -571,6 +665,9 @@ TESLA_CLIENT_ID, TESLA_CLIENT_SECRET, TESLA_MOCK_MODE, TESLA_WEBHOOK_SECRET
 # Google / Apple
 GOOGLE_PLACES_API_KEY, GOOGLE_CLIENT_ID, APPLE_CLIENT_ID
 
+# Partner API
+PARTNER_DEFAULT_RATE_LIMIT_RPM (default 60)
+
 # Other
 ENV (dev/staging/prod), OTP_PROVIDER (stub for dev), SENTRY_DSN
 FRONTEND_URL, PUBLIC_BASE_URL, API_BASE_URL, DRIVER_APP_URL
@@ -615,3 +712,162 @@ There are **two** DriverWallet models:
 - `app/models_domain.py` → `DriverWallet` (re-exported from driver_wallet.py) — Same model. The `energy_reputation_score` column lives on this model (added via migration 018). The domain.py file re-exports it for backward compatibility.
 
 When querying reputation, use `DriverWallet.user_id` (mapped to `driver_id` column) not `DriverWallet.id`.
+
+### Partner Session Columns on Existing Tables
+
+Three existing tables have partner-related columns added via migration 105:
+- **`session_events`**: `partner_id` (FK to partners.id, nullable), `partner_driver_id` (partner's driver identifier, nullable). Indexed on `(partner_id, session_start)`.
+- **`incentive_grants`**: `reward_destination` (default `"nerava_wallet"`, also `"partner_managed"` or `"deferred"`).
+- **`campaigns`**: `allow_partner_sessions` (bool, default true), `rule_partner_ids` (JSON, nullable), `rule_min_trust_tier` (int, nullable).
+
+All columns are nullable with defaults — zero risk to existing data. Sessions from Nerava's own app have `partner_id=NULL` and skip all partner checks in the IncentiveEngine.
+
+## Business Model: Three Verified Outcome Categories
+
+Nerava monetizes verified EV outcomes across charging, spend, and data. The company is described by **outcome type**, not customer type.
+
+### 1. Charging Outcomes
+
+Nerava verifies and monetizes charging behavior. Examples: verified charging sessions, off-peak charging, charger utilization shifts, dwell-time thresholds, charger-cluster activation, campaign-triggered charging behavior.
+
+**Who pays:** Charging networks, utilities, hardware brands (e.g., EVject), sponsors.
+
+**Campaign type:** `session` — driver charges at the right place/time, grant pays on session end. This is the **existing system** (live today).
+
+### 2. Spend Outcomes
+
+Nerava verifies and monetizes charger-adjacent commerce. Examples: verified merchant visits, receipt-confirmed purchases, redemptions, spend thresholds, local conversion during charging dwell.
+
+**Who pays:** Merchants, retail chains, restaurants, hotels, local sponsors.
+
+**Campaign type:** `receipt` — driver charges nearby, visits merchant, uploads receipt photo. Grant is `pending_verification` until receipt OCR confirms merchant + spend + timestamp. Phase 1 uses Taggun OCR ($0.04/scan). Phase 2 upgrades to card-linked verification via Fidel API (automatic, no driver action per visit).
+
+### 3. Data Outcomes
+
+Nerava monetizes intelligence created from verified charging and spend behavior. Examples: charger safety/quality reviews, charging behavior surveys, photo reports, location ratings.
+
+**Campaign type:** `data` — driver charges at charger, submits structured data (review, survey, photos). Grant is `pending_verification` until submission validated.
+
+**Who pays:** Charging networks, utilities, real estate groups, brands, insurers, enterprise partners.
+
+### Campaign Stacking
+
+One driver session can earn grants from **up to three campaigns** (one per type) funded by **different buyers**. The unique constraint on `incentive_grants` is `(session_event_id, grant_type)` not just `session_event_id`. Each campaign type has "highest priority wins" within its category. Buyers only see their own campaign performance.
+
+### Merchant Funding Model
+
+- **Free trial:** Merchant enters promo code (e.g., `NERAVA100`) → gets $100 campaign balance, platform fee waived, campaign auto-activates
+- **Paid deposits:** Merchant adds funds via Stripe checkout → 20% platform fee → net credited to campaign balance
+- **Auto-pause:** Campaign pauses when balance < reward amount
+- **Sponsor trials:** Same promo code system (e.g., `EVJECT500` → $500 free credit)
+
+This model mirrors Upside's pay-for-performance approach: merchants pay only when verified customers spend money.
+
+## Tesla Fleet API Costs & Polling Strategy
+
+### Per-Request Pricing (effective Jan 1, 2025)
+
+| Category | Unit | Cost | Per-request |
+|----------|------|------|-------------|
+| **vehicle_data** (REST) | 500 requests | $1.00 | **$0.002/request** |
+| **wake_up** | 50 requests | $1.00 | **$0.02/wake** |
+| **Commands** | 1,000 requests | $1.00 | $0.001/command |
+| **Streaming Signals** | 150,000 signals | $1.00 | $0.0000067/signal |
+| **specs endpoint** | per result | — | $0.10/result |
+
+Every account gets a **$10/month credit** (covers ~2 vehicles at light usage). No volume discounts or tiers.
+
+### Rate Limits
+
+- `vehicle_data`: 60 requests/minute per device
+- `wake_up`: 3 requests/minute
+- Device commands: 30 requests/minute
+
+### Cost at Nerava's Scale
+
+Current architecture: `vehicle_data` every 60s per active driver.
+
+| Scale | Sessions/month | Tesla API cost/month |
+|-------|---------------|---------------------|
+| 1,000 drivers | 2,500 | $200-300 |
+| 10,000 drivers | 25,000 | $2,000-3,000 |
+| 100,000 drivers | 250,000 | $20,000-30,000 |
+
+Per session: ~$0.06 (vehicle_data) + ~$0.04 (wake calls) = **~$0.08-0.12/session**
+
+### Fleet Telemetry vs Polling
+
+| Method | Cost/hr/vehicle | At 100K drivers/mo |
+|--------|----------------|-------------------|
+| REST polling (60s) | $0.12/hr | $20K-30K |
+| Fleet Telemetry streaming | $0.007/hr | $2K-4K |
+
+Streaming is **18x cheaper**. Tesla explicitly says "the vehicle_data endpoint should never be polled regularly."
+
+### Upcoming Tesla Changes
+
+- **July 1, 2025:** vehicle_data charged at 2 command credits per call (effectively doubling cost)
+- **October 1, 2025:** Legacy vehicle (Intel Atom) discount removed
+- Tesla is sunsetting REST polling in favor of Fleet Telemetry
+
+### Server-Side Polling Strategy (Current Plan)
+
+**Phase 1 (immediate):** Extend `scheduled_polls` worker to continuous server-side polling
+- Client triggers first poll → if charging detected, set `next_poll_at = now + 60s`
+- Worker picks it up every 120s, polls Tesla, updates session
+- If still charging: re-enqueue `next_poll_at = now + 60s`
+- If not charging: end session, evaluate incentive, clear `next_poll_at`
+- Client switches to lazy DB read (`GET /active`) once session detected
+- ~50 lines of code change to existing worker
+
+**Phase 2 (weeks):** Deploy Fleet Telemetry
+- Apply existing Terraform in `infra/terraform/fleet-telemetry/`
+- ECS Fargate task (~$30/mo) receives WebSocket streams from vehicles
+- SQS/Kinesis queue → Lambda/ECS worker processes state transitions
+- Auto-subscribe vehicles during Tesla OAuth flow
+- Vehicles with `telemetry_enabled=true` get push-based sessions
+- Others fall back to Phase 1 server-side polling
+
+**Phase 3 (scale):** Full Fleet Telemetry, remove polling entirely
+
+### Fleet Telemetry Infrastructure (Existing)
+
+- **Terraform:** `infra/terraform/fleet-telemetry/` — ECS Fargate task, NLB, Route53, Secrets Manager
+- **Backend:** `app/routers/tesla_telemetry.py` (webhook receiver), `app/routers/tesla_telemetry_config.py` (per-vehicle config)
+- **Service:** `app/services/tesla_oauth.py` → `subscribe_vehicle_telemetry()` (configures vehicle streaming fields)
+- **Model:** `TeslaConnection.telemetry_enabled` column exists
+- **Certs:** `infra/certs/` — EC keys (need rotation to Secrets Manager)
+- **Missing:** Real CA cert (Let's Encrypt), message queue, event-driven session processor, virtual key pairing UX
+
+## Receipt OCR Integration (Planned)
+
+### Architecture
+
+- **Provider:** Taggun API ($0.04-0.08/scan, 90%+ accuracy, <4s processing)
+- **Flow:** Driver uploads receipt photo → S3 → Taggun OCR → extract merchant name + total + timestamp → auto-validate → approve/reject grant
+- **Auto-approval:** OCR confidence ≥ 80%, merchant name fuzzy match ≥ 70%, total within campaign range, timestamp within session window
+- **Fallback:** Low-confidence receipts flagged for admin manual review
+
+### New Tables (Planned)
+
+- **`receipt_submissions`** — Links session to receipt image, stores OCR results, tracks approval status
+- **`promo_codes`** — Merchant/sponsor trial codes with credit amounts and redemption limits
+- **`campaign_deposits`** — Tracks all funding events (promo credits, Stripe payments) per campaign
+- **`driver_submissions`** — Data outcome submissions (reviews, surveys, photos) linked to sessions
+
+### Campaign Model Extensions (Planned)
+
+- `campaign_type`: `session` (existing), `receipt` (spend outcomes), `data` (data outcomes)
+- Receipt campaigns add: `receipt_enabled`, `receipt_cashback_percent_bps`, `min_purchase_cents`, `eligible_merchant_ids`, `receipt_window_minutes`
+- Data campaigns add: `data_enabled`, `data_reward_cents`, `data_submission_type`, `data_submission_schema`
+- Grant unique constraint changes from `UNIQUE(session_event_id)` to `UNIQUE(session_event_id, grant_type)` to allow stacking
+
+## Session Bug Fixes (Deployed 2026-03-12)
+
+Three critical fixes deployed to production (`session-fix-20260312-1005`):
+
+1. **Stale timeout 5min → 15min** in `_close_stale_session()` — prevents premature session closure when app backgrounds
+2. **Session reopening logic** — if car is still charging within 30 min of a stale-cleanup or manual close, reopens the existing session instead of creating a duplicate
+3. **Incentive evaluation on all end paths** — `_close_stale_session()` and `end_session_manual()` now both call `IncentiveEngine.evaluate_session()`, fixing silent reward loss
+
+Also fixed: `charge_data` → `charge_state` variable name bug in reopening logic that would have caused `NameError` at runtime.

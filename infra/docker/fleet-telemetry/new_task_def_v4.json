@@ -1,0 +1,57 @@
+{
+  "family": "nerava-fleet-telemetry",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::566287346479:role/nerava-fleet-telemetry-execution-role",
+  "taskRoleArn": "arn:aws:iam::566287346479:role/nerava-fleet-telemetry-task-role",
+  "containerDefinitions": [
+    {
+      "name": "fleet-telemetry",
+      "image": "566287346479.dkr.ecr.us-east-1.amazonaws.com/nerava-fleet-telemetry:v1",
+      "cpu": 0,
+      "portMappings": [
+        {
+          "containerPort": 443,
+          "hostPort": 443,
+          "protocol": "tcp"
+        }
+      ],
+      "essential": true,
+      "environment": [
+        {
+          "name": "FLEET_TELEMETRY_PORT",
+          "value": "443"
+        }
+      ],
+      "mountPoints": [],
+      "volumesFrom": [],
+      "secrets": [
+        {
+          "name": "FLEET_TELEMETRY_CONFIG_JSON",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:566287346479:secret:nerava/fleet-telemetry/config:config::"
+        },
+        {
+          "name": "FLEET_TELEMETRY_CERT",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:566287346479:secret:nerava/fleet-telemetry/config:cert::"
+        },
+        {
+          "name": "FLEET_TELEMETRY_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:566287346479:secret:nerava/fleet-telemetry/config:key::"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/nerava-fleet-telemetry",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "fleet-telemetry"
+        }
+      },
+      "systemControls": []
+    }
+  ]
+}
