@@ -1321,15 +1321,28 @@ async def start_nova_accrual():
     try:
         from .db import SessionLocal
         from .models.while_you_charge import Merchant as _WYCMerchant, ChargerMerchant as _CM
+        from .models.domain import DomainMerchant as _DM
         from sqlalchemy import func as _func
         _db = SessionLocal()
-        _mids = [m.id for m in _db.query(_WYCMerchant).filter(_func.lower(_WYCMerchant.name).contains("heights pizzeria")).all()]
+        _new_title = "Free Garlic Knots"
+        # Update ALL ChargerMerchant links for any WYC merchant with "heights" and "pizzeria" in name
+        _mids = [m.id for m in _db.query(_WYCMerchant).filter(
+            _func.lower(_WYCMerchant.name).contains("heights"),
+            _func.lower(_WYCMerchant.name).contains("pizzeria"),
+        ).all()]
         if _mids:
-            _n = _db.query(_CM).filter(_CM.merchant_id.in_(_mids)).update({_CM.exclusive_title: "Free Garlic Knots"}, synchronize_session=False)
-            _db.commit()
-            print(f"[STARTUP] Updated {_n} links for Heights Pizzeria → Free Garlic Knots", flush=True)
-        else:
-            print("[STARTUP] No Heights Pizzeria WYC merchants found", flush=True)
+            _n = _db.query(_CM).filter(_CM.merchant_id.in_(_mids)).update({_CM.exclusive_title: _new_title}, synchronize_session=False)
+            # Also update WYC merchant perk_labels
+            _db.query(_WYCMerchant).filter(_WYCMerchant.id.in_(_mids)).update({_WYCMerchant.perk_label: _new_title}, synchronize_session=False)
+            print(f"[STARTUP] Updated {_n} CM links + {len(_mids)} WYC merchants → {_new_title}", flush=True)
+        # Also update DomainMerchant perk_label
+        _dm_n = _db.query(_DM).filter(
+            _func.lower(_DM.name).contains("heights"),
+            _func.lower(_DM.name).contains("pizzeria"),
+        ).update({_DM.perk_label: _new_title}, synchronize_session=False)
+        if _dm_n:
+            print(f"[STARTUP] Updated {_dm_n} DomainMerchants → {_new_title}", flush=True)
+        _db.commit()
         _db.close()
     except Exception as _e:
         print(f"[STARTUP] Exclusive fix skipped: {_e}", flush=True)
