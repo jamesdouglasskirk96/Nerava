@@ -904,6 +904,10 @@ app.include_router(plaid_wallet_router)  # /v1/wallet/funding-sources
 app.include_router(consent.router)
 app.include_router(merchant_funnel.router)
 app.include_router(merchant_arrivals.router)
+
+# Toast POS Integration
+from .routers import toast_pos
+app.include_router(toast_pos.router)  # /v1/merchant/pos/*
 app.include_router(twilio_sms_webhook.router)
 app.include_router(client_telemetry.router)
 app.include_router(arrival_router.router)

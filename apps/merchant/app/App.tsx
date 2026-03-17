@@ -5,6 +5,7 @@ import { ClaimBusiness } from './components/ClaimBusiness';
 import { ClaimVerify } from './components/ClaimVerify';
 import { SelectLocation } from './components/SelectLocation';
 import { GoogleCallback } from './components/GoogleCallback';
+import { ToastCallback } from './components/ToastCallback';
 import { DashboardLayout } from './components/DashboardLayout';
 import { Overview } from './components/Overview';
 import { Exclusives } from './components/Exclusives';
@@ -55,8 +56,9 @@ export default function App() {
         <Route path="/find" element={<FindBusiness />} />
         <Route path="/preview" element={<MerchantPreview />} />
 
-        {/* Google OAuth callback */}
+        {/* OAuth callbacks */}
         <Route path="/auth/google/callback" element={<GoogleCallback />} />
+        <Route path="/toast/callback" element={<ToastCallback />} />
 
         {/* Onboarding Flow */}
         <Route path="/sign-up" element={<Navigate to="/claim" replace />} />

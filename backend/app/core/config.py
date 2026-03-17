@@ -248,6 +248,11 @@ class Settings(BaseModel):
     # Partner Incentive API
     PARTNER_DEFAULT_RATE_LIMIT_RPM: int = int(os.getenv("PARTNER_DEFAULT_RATE_LIMIT_RPM", "60"))
 
+    # Toast POS Integration
+    TOAST_CLIENT_ID: str = os.getenv("TOAST_CLIENT_ID", "")
+    TOAST_CLIENT_SECRET: str = os.getenv("TOAST_CLIENT_SECRET", "")
+    TOAST_MOCK_MODE: bool = os.getenv("TOAST_MOCK_MODE", "true").lower() == "true"
+
     # Feature Flags (default OFF for safety)
     feature_merchant_intel: bool = False
     feature_behavior_cloud: bool = False

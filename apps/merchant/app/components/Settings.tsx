@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Save, Loader2 } from 'lucide-react';
-import { fetchAPI } from '../services/api';
+import { Save, Loader2, ShoppingBag, CheckCircle2, Unlink } from 'lucide-react';
+import { fetchAPI, getToastStatus, startToastConnect, disconnectToast } from '../services/api';
 
 interface ProfileData {
   name: string;
@@ -10,6 +10,14 @@ interface ProfileData {
   hours_text: string;
   perk_label: string;
   custom_perk_cents: number | '';
+}
+
+interface ToastStatus {
+  connected: boolean;
+  restaurant_name?: string;
+  restaurant_guid?: string;
+  aov_cents?: number;
+  last_synced?: string;
 }
 
 export function Settings() {
@@ -26,6 +34,9 @@ export function Settings() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [toastStatus, setToastStatus] = useState<ToastStatus>({ connected: false });
+  const [toastConnecting, setToastConnecting] = useState(false);
+  const [toastDisconnecting, setToastDisconnecting] = useState(false);
 
   useEffect(() => {
     // Load current merchant data
@@ -46,7 +57,39 @@ export function Settings() {
         // Merchant might not have all fields yet
       })
       .finally(() => setLoading(false));
+
+    // Load Toast POS status
+    getToastStatus()
+      .then((status) => setToastStatus(status))
+      .catch(() => {
+        // Endpoint not available or not connected — default to not connected
+        setToastStatus({ connected: false });
+      });
   }, []);
+
+  const handleToastConnect = async () => {
+    setToastConnecting(true);
+    try {
+      const { auth_url } = await startToastConnect();
+      window.location.href = auth_url;
+    } catch (err: any) {
+      setError(err.message || 'Failed to start Toast connection');
+      setToastConnecting(false);
+    }
+  };
+
+  const handleToastDisconnect = async () => {
+    if (!window.confirm('Disconnect your Toast account? Order data will no longer sync.')) return;
+    setToastDisconnecting(true);
+    try {
+      await disconnectToast();
+      setToastStatus({ connected: false });
+    } catch (err: any) {
+      setError(err.message || 'Failed to disconnect Toast');
+    } finally {
+      setToastDisconnecting(false);
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -189,6 +232,62 @@ export function Settings() {
             {saving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
+      </div>
+
+      {/* POS Integration */}
+      <div className="bg-white rounded-xl border border-neutral-200 p-6 mt-6">
+        <h3 className="text-sm font-semibold text-neutral-900 mb-4">POS Integration</h3>
+
+        {toastStatus.connected ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-green-600" />
+              <span className="text-sm font-medium text-neutral-900">
+                Connected to {toastStatus.restaurant_name}
+              </span>
+            </div>
+            {toastStatus.aov_cents != null && (
+              <p className="text-sm text-neutral-600">
+                Average Order Value: ${(toastStatus.aov_cents / 100).toFixed(2)}
+              </p>
+            )}
+            {toastStatus.last_synced && (
+              <p className="text-xs text-neutral-400">
+                Last synced: {new Date(toastStatus.last_synced).toLocaleString()}
+              </p>
+            )}
+            <button
+              onClick={handleToastDisconnect}
+              disabled={toastDisconnecting}
+              className="flex items-center gap-1.5 text-sm text-red-600 hover:text-red-700 transition-colors disabled:opacity-50 mt-2"
+            >
+              <Unlink className="w-3.5 h-3.5" />
+              {toastDisconnecting ? 'Disconnecting...' : 'Disconnect'}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 mb-1">
+              <ShoppingBag className="w-5 h-5 text-neutral-500" />
+              <span className="text-sm font-medium text-neutral-700">Toast POS</span>
+            </div>
+            <p className="text-sm text-neutral-500">
+              Connect your Toast account to automatically track order data and optimize your EV driver campaigns.
+            </p>
+            <button
+              onClick={handleToastConnect}
+              disabled={toastConnecting}
+              className="flex items-center gap-2 bg-neutral-900 text-white px-5 py-2 rounded-lg hover:bg-neutral-800 transition-colors disabled:opacity-50 text-sm"
+            >
+              {toastConnecting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <ShoppingBag className="w-4 h-4" />
+              )}
+              {toastConnecting ? 'Connecting...' : 'Connect Toast'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

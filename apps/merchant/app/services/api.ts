@@ -380,6 +380,45 @@ export async function getLoyaltyStats(merchantId: string): Promise<LoyaltyStats>
   return fetchAPI<LoyaltyStats>(`/v1/loyalty/stats?merchant_id=${merchantId}`)
 }
 
+// --- Toast POS ---
+
+export async function getToastStatus(): Promise<{
+  connected: boolean;
+  restaurant_name?: string;
+  restaurant_guid?: string;
+  aov_cents?: number;
+  last_synced?: string;
+}> {
+  return fetchAPI('/v1/merchant/pos/status')
+}
+
+export async function startToastConnect(): Promise<{ auth_url: string; state: string }> {
+  return fetchAPI('/v1/merchant/pos/toast/connect')
+}
+
+export async function handleToastCallback(code: string, state: string): Promise<{
+  connected: boolean;
+  restaurant_name: string;
+  restaurant_guid: string;
+}> {
+  return fetchAPI('/v1/merchant/pos/toast/callback', {
+    method: 'POST',
+    body: JSON.stringify({ code, state }),
+  })
+}
+
+export async function disconnectToast(): Promise<{ ok: boolean }> {
+  return fetchAPI('/v1/merchant/pos/toast/disconnect', { method: 'POST' })
+}
+
+export async function getToastAOV(): Promise<{
+  aov_cents: number;
+  order_count: number;
+  period_days: number;
+}> {
+  return fetchAPI('/v1/merchant/pos/toast/aov')
+}
+
 // Auth
 export interface MerchantAuthRequest {
   id_token: string
