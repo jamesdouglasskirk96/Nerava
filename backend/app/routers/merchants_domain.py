@@ -173,9 +173,13 @@ def get_merchant_dashboard(
             detail="Merchant not found for user"
         )
     
-    # Get recent transactions
-    transactions = NovaService.get_merchant_transactions(db, merchant.id, limit=10)
-    
+    # Get recent transactions (wrapped — nova_transactions may have schema drift)
+    transactions = []
+    try:
+        transactions = NovaService.get_merchant_transactions(db, merchant.id, limit=10)
+    except Exception:
+        pass
+
     return MerchantDashboardResponse(
         merchant={
             "id": merchant.id,
