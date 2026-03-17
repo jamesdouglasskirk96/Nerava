@@ -1320,7 +1320,24 @@ async def start_nova_accrual():
     """Start Nova accrual service for demo mode - non-blocking startup"""
     print("[STARTUP] Startup event entered", flush=True)
     logger.info("[STARTUP] Startup event entered")
-    
+
+    # One-time exclusive title update (safe to remove after deploy)
+    try:
+        from .db import SessionLocal
+        from .models.while_you_charge import Merchant as _WYCMerchant, ChargerMerchant as _CM
+        from sqlalchemy import func as _func
+        _db = SessionLocal()
+        _mids = [m.id for m in _db.query(_WYCMerchant).filter(_func.lower(_WYCMerchant.name).contains("heights pizzeria")).all()]
+        if _mids:
+            _n = _db.query(_CM).filter(_CM.merchant_id.in_(_mids)).update({_CM.exclusive_title: "Free Garlic Knots"}, synchronize_session=False)
+            _db.commit()
+            print(f"[STARTUP] Updated {_n} links for Heights Pizzeria → Free Garlic Knots", flush=True)
+        else:
+            print("[STARTUP] No Heights Pizzeria WYC merchants found", flush=True)
+        _db.close()
+    except Exception as _e:
+        print(f"[STARTUP] Exclusive fix skipped: {_e}", flush=True)
+
     # Check startup mode (light mode skips optional workers for faster startup)
     startup_mode = os.getenv("APP_STARTUP_MODE", "light").lower()
     is_light_mode = startup_mode == "light"
