@@ -83,6 +83,23 @@ async def lifespan(app):
         logger.info("Weekly merchant report worker started")
         print("[STARTUP] Weekly merchant report worker started", flush=True)
 
+        # One-time exclusive title fix (safe to remove after first deploy)
+        try:
+            from app.db import SessionLocal
+            from app.models.while_you_charge import Merchant as WYCMerchant, ChargerMerchant
+            from sqlalchemy import func
+            _db = SessionLocal()
+            _fixes = {"heights pizzeria": "Free Garlic Knots"}
+            for _pattern, _title in _fixes.items():
+                _mids = [m.id for m in _db.query(WYCMerchant).filter(func.lower(WYCMerchant.name).contains(_pattern)).all()]
+                if _mids:
+                    _count = _db.query(ChargerMerchant).filter(ChargerMerchant.merchant_id.in_(_mids)).update({ChargerMerchant.exclusive_title: _title}, synchronize_session=False)
+                    print(f"[STARTUP] Updated {_count} links for '{_pattern}' → '{_title}'", flush=True)
+            _db.commit()
+            _db.close()
+        except Exception as e:
+            print(f"[STARTUP] Exclusive fix skipped: {e}", flush=True)
+
         # Test cache connection
         print("[STARTUP] Verifying cache connection...", flush=True)
         try:

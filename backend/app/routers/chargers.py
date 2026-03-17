@@ -906,7 +906,7 @@ async def seed_merchant_exclusives(
 
     # Define merchant exclusives: merchant name pattern → exclusive title
     EXCLUSIVES = {
-        "heights pizzeria": "$6 Off Any Pizza",
+        "heights pizzeria": "Free Garlic Knots",
         "asadas grill": "Free Margarita",
         "schlotzsky": "Free Drink with Sandwich",
     }
