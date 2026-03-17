@@ -4,6 +4,7 @@ PosOAuthState model — DB-backed OAuth state for POS integrations (Toast, etc.)
 """
 import json
 from datetime import datetime, timedelta
+from typing import Optional
 from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Index
 from sqlalchemy.orm import Session
 from ..db import Base
@@ -59,7 +60,7 @@ class PosOAuthState(Base):
         db.commit()
 
     @classmethod
-    def pop(cls, db: Session, state: str) -> dict | None:
+    def pop(cls, db: Session, state: str) -> Optional[dict]:
         row = db.query(cls).filter(cls.state == state).first()
         if not row:
             return None
