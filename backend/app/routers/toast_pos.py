@@ -82,6 +82,7 @@ async def toast_connect(
     redirect_uri = f"{settings.MERCHANT_PORTAL_URL}/toast/callback"
 
     result = toast_pos_service.get_auth_url(
+        db=db,
         merchant_account_id=str(merchant_account.id),
         redirect_uri=redirect_uri,
     )

@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.token_encryption import encrypt_token, decrypt_token
-from app.models.merchant_oauth_token import MerchantOAuthToken
+from app.models.merchant_oauth_token import MerchantOAuthToken, PosOAuthState
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +24,6 @@ logger = logging.getLogger(__name__)
 TOAST_API_BASE = "https://ws-api.toasttab.com"
 TOAST_OAUTH_AUTHORIZE_URL = f"{TOAST_API_BASE}/usermgmt/v1/oauth/authorize"
 TOAST_TOKEN_URL = f"{TOAST_API_BASE}/authentication/v1/authentication/login"
-
-# In-memory state store for OAuth CSRF protection
-_oauth_states: Dict[str, Dict] = {}
 
 # Toast config from environment
 TOAST_CLIENT_ID = getattr(settings, "TOAST_CLIENT_ID", "") or ""
@@ -40,32 +37,24 @@ def _is_mock_mode() -> bool:
 
 
 # ---------------------------------------------------------------------------
-# OAuth state management
+# OAuth state management (DB-backed, works across multiple instances)
 # ---------------------------------------------------------------------------
 
-def store_oauth_state(state: str, data: Optional[Dict] = None) -> None:
-    """Store OAuth state token for CSRF protection (in-memory, 10-minute TTL)."""
-    _oauth_states[state] = {
-        **(data or {}),
-        "created_at": datetime.utcnow(),
-    }
+def store_oauth_state(db: Session, state: str, data: Optional[Dict] = None) -> None:
+    """Store OAuth state token for CSRF protection (DB-backed, 10-minute TTL)."""
+    PosOAuthState.store(db, state, data or {}, ttl_minutes=10)
 
 
-def validate_oauth_state(state: str) -> Optional[Dict]:
+def validate_oauth_state(db: Session, state: str) -> Optional[Dict]:
     """Validate and consume an OAuth state token. Returns stored data or None."""
-    state_data = _oauth_states.pop(state, None)
-    if not state_data:
-        return None
-    if (datetime.utcnow() - state_data["created_at"]).total_seconds() > 600:
-        return None
-    return state_data
+    return PosOAuthState.pop(db, state)
 
 
 # ---------------------------------------------------------------------------
 # OAuth flow
 # ---------------------------------------------------------------------------
 
-def get_auth_url(merchant_account_id: str, redirect_uri: str) -> Dict[str, str]:
+def get_auth_url(db: Session, merchant_account_id: str, redirect_uri: str) -> Dict[str, str]:
     """
     Generate Toast OAuth authorization URL and state token.
 
@@ -73,7 +62,7 @@ def get_auth_url(merchant_account_id: str, redirect_uri: str) -> Dict[str, str]:
         {"auth_url": "...", "state": "..."}
     """
     state = secrets.token_urlsafe(32)
-    store_oauth_state(state, {"merchant_account_id": merchant_account_id})
+    store_oauth_state(db, state, {"merchant_account_id": merchant_account_id})
 
     if _is_mock_mode():
         # In mock mode, redirect directly to callback with a fake code
@@ -108,7 +97,7 @@ async def exchange_code(
     Raises:
         ValueError on invalid state or API error.
     """
-    state_data = validate_oauth_state(state)
+    state_data = validate_oauth_state(db, state)
     if not state_data:
         raise ValueError("Invalid or expired OAuth state")
 
