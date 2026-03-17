@@ -707,50 +707,11 @@ def list_exclusives(
     if not exclusives:
         _logger.info(f"Exclusives search: merchant.id={merchant.id}, name={merchant.name!r}, google_place_id={merchant.google_place_id!r}")
 
-        # Strategy: find ALL charger_merchant links with exclusives that belong to
-        # ANY WYC merchant matching by place_id OR by name (case-insensitive).
-        # This handles the case where there are multiple WYC records for the same business.
-        from sqlalchemy import func as sqlfunc
-
-        charger_links = []
-
-        # Method 1: via place_id
-        if merchant.google_place_id:
-            links_by_place = (
-                db.query(ChargerMerchant)
-                .join(WYCMerchant, ChargerMerchant.merchant_id == WYCMerchant.id)
-                .filter(
-                    WYCMerchant.place_id == merchant.google_place_id,
-                    ChargerMerchant.exclusive_title.isnot(None),
-                )
-                .all()
-            )
-            charger_links.extend(links_by_place)
-            _logger.info(f"Exclusives by place_id={merchant.google_place_id}: {len(links_by_place)} links")
-
-        # Method 2: via name match (catches seeded demo merchants with different place_id)
-        merchant_name = merchant.name or ""
-        if not merchant_name:
-            # Try to get name from the WYC merchant found by place_id
-            if merchant.google_place_id:
-                wyc = db.query(WYCMerchant).filter(WYCMerchant.place_id == merchant.google_place_id).first()
-                if wyc:
-                    merchant_name = wyc.name or ""
-        if merchant_name:
-            existing_link_ids = {(l.charger_id, l.merchant_id) for l in charger_links}
-            links_by_name = (
-                db.query(ChargerMerchant)
-                .join(WYCMerchant, ChargerMerchant.merchant_id == WYCMerchant.id)
-                .filter(
-                    sqlfunc.lower(WYCMerchant.name) == merchant_name.lower(),
-                    ChargerMerchant.exclusive_title.isnot(None),
-                )
-                .all()
-            )
-            for link in links_by_name:
-                if (link.charger_id, link.merchant_id) not in existing_link_ids:
-                    charger_links.append(link)
-            _logger.info(f"Exclusives by name={merchant_name!r}: {len(links_by_name)} links")
+        # Use the shared helper to find ALL ChargerMerchant links for this merchant
+        all_cm_links = _find_all_charger_merchant_links(db, merchant)
+        # Filter to only those with an active exclusive
+        charger_links = [l for l in all_cm_links if l.exclusive_title]
+        _logger.info(f"Found {len(all_cm_links)} total links, {len(charger_links)} with exclusives")
 
         # Deduplicate by title — multiple charger links may share the same exclusive offer
         now_str = datetime.utcnow().isoformat()
