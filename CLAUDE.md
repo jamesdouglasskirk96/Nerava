@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is Nerava
 
-Nerava is a programmable incentive and verification layer for the EV charging ecosystem. The platform transforms verified charging sessions into a data-driven engagement and monetization channel for energy providers, sponsors, and location partners. Drivers charge their EV, earn rewards (Nova points + cash via Stripe), and redeem at participating merchants. Sponsors create campaigns that pay drivers for charging at specific locations/times. External partners (charging networks, fleet platforms, driver apps) can submit sessions via the Partner Incentive API and receive campaign-matched rewards. The system has a driver-facing app, merchant portal, admin dashboard, sponsor console, landing page, iOS native shell, Android app, and a FastAPI backend.
+Nerava is **"Google Ads for EV charging dwell time"** — a verified commerce platform for the EV charging ecosystem. When drivers charge their EVs at supported locations, nearby merchants can reach them with offers during their 20-45 minute charging dwell time. The core billing event is **Claim + Presence**: a driver actively charging + within walking distance + taps "Claim Offer" = one qualified charging lead billed to the merchant. Merchants buy prepaid campaign credits (4% of AOV per claim). Sponsors can also create campaigns that reward drivers for charging at specific locations/times. The system has a driver-facing app, merchant portal, admin dashboard, sponsor console, landing page, iOS native shell, Android app, and a FastAPI backend.
 
 ## Repository Structure
 
@@ -839,28 +839,161 @@ Streaming is **18x cheaper**. Tesla explicitly says "the vehicle_data endpoint s
 - **Certs:** `infra/certs/` — EC keys (need rotation to Secrets Manager)
 - **Missing:** Real CA cert (Let's Encrypt), message queue, event-driven session processor, virtual key pairing UX
 
-## Receipt OCR Integration (Planned)
+## Merchant Exclusive System Architecture
 
-### Architecture
+### Two Merchant Models (Critical Gotcha)
 
-- **Provider:** Taggun API ($0.04-0.08/scan, 90%+ accuracy, <4s processing)
-- **Flow:** Driver uploads receipt photo → S3 → Taggun OCR → extract merchant name + total + timestamp → auto-validate → approve/reject grant
-- **Auto-approval:** OCR confidence ≥ 80%, merchant name fuzzy match ≥ 70%, total within campaign range, timestamp within session window
-- **Fallback:** Low-confidence receipts flagged for admin manual review
+There are **two separate merchant tables** that represent the same physical business:
 
-### New Tables (Planned)
+| Table | Model | ID Format | Purpose |
+|-------|-------|-----------|---------|
+| `domain_merchants` | `DomainMerchant` | UUID (`17047c8e-...`) | Merchant portal accounts, owned by logged-in merchant users |
+| `merchants` | `Merchant` (WYC) | String (`osm_123`, `google_ChIJ...`) | Driver-facing merchant data from OSM/Google seeding |
 
-- **`receipt_submissions`** — Links session to receipt image, stores OCR results, tracks approval status
-- **`promo_codes`** — Merchant/sponsor trial codes with credit amounts and redemption limits
-- **`campaign_deposits`** — Tracks all funding events (promo credits, Stripe payments) per campaign
-- **`driver_submissions`** — Data outcome submissions (reviews, surveys, photos) linked to sessions
+A single restaurant may have **multiple WYC Merchant records** (one from OSM seeding, one from Google Places) and **one DomainMerchant** record (created when the merchant claims their business via the portal).
 
-### Campaign Model Extensions (Planned)
+### ChargerMerchant Links
 
-- `campaign_type`: `session` (existing), `receipt` (spend outcomes), `data` (data outcomes)
-- Receipt campaigns add: `receipt_enabled`, `receipt_cashback_percent_bps`, `min_purchase_cents`, `eligible_merchant_ids`, `receipt_window_minutes`
-- Data campaigns add: `data_enabled`, `data_reward_cents`, `data_submission_type`, `data_submission_schema`
-- Grant unique constraint changes from `UNIQUE(session_event_id)` to `UNIQUE(session_event_id, grant_type)` to allow stacking
+`charger_merchants` is the junction table connecting chargers to nearby WYC merchants. Each link has:
+- `exclusive_title` — The offer shown in the driver app (e.g., "Free Garlic Knots")
+- `exclusive_description` — Offer detail text
+- `distance_m`, `walk_duration_s` — Proximity data
+
+**The driver app reads `ChargerMerchant.exclusive_title` directly** from the charger detail endpoint. This is the source of truth for what drivers see.
+
+### The Matching Problem
+
+When a merchant edits their exclusive via the portal, the system must find ALL ChargerMerchant links for their business across ALL WYC merchant variants. The `_find_all_charger_merchant_links()` helper in `merchants_domain.py` does this by matching:
+1. WYC merchants by `place_id` (matching DomainMerchant's `google_place_id`)
+2. WYC merchants by name (case-insensitive match on DomainMerchant's `name`)
+
+**Known issue:** If the DomainMerchant name doesn't exactly match any WYC merchant name (e.g., "The Heights Pizzeria and Drafthouse" vs "The Heights Pizzeria"), the lookup returns empty. Edits from the portal won't propagate to the driver app.
+
+### Exclusive CRUD Flow
+
+- **Create:** Sets `exclusive_title` on all ChargerMerchant links found by the helper
+- **Update:** Same — updates all links, WYC `perk_label`, and DomainMerchant `perk_label`
+- **Toggle (on/off):** Sets `exclusive_title = None` on all links when disabled
+- **List:** Uses the same helper, filters for `exclusive_title IS NOT NULL`, deduplicates by title
+- **IDs:** Exclusives from ChargerMerchant links use `cm_{link.id}` format (integer PK)
+
+### MerchantPerk Table (Legacy, DO NOT USE for new exclusives)
+
+`merchant_perks` has an FK to `merchants.id` (WYC table). The DomainMerchant UUID does NOT exist in the WYC table, so creating a MerchantPerk with a DomainMerchant ID causes **FK violation in PostgreSQL**. All exclusive operations now go through ChargerMerchant links directly.
+
+## Merchant Portal Auth & Claim Flow
+
+### Google SSO Flow
+
+1. Merchant clicks "Sign in with Google" on `/claim`
+2. Redirects to Google OAuth consent screen
+3. Returns to `/callback` with auth code
+4. `GoogleCallback.tsx` exchanges code → stores `access_token` in localStorage
+5. Calls `fetchMyMerchant()` to check if user already has a claimed business
+6. If merchant exists → sets `businessClaimed=true`, `merchant_id` → navigates to `/overview`
+7. If no merchant → navigates to `/claim/location` for business search
+
+### Claim Flow
+
+1. `/claim/location` (`SelectLocation.tsx`) — tries GBP locations first, falls back to Places search
+2. User searches, selects a business, clicks "Confirm Location"
+3. `POST /v1/merchant/claim` → creates `MerchantLocationClaim` + `DomainMerchant`
+4. Sets `businessClaimed=true` → navigates to `/overview`
+
+### Auth Guard
+
+`App.tsx` checks `localStorage.getItem('businessClaimed') === 'true'` to decide dashboard vs claim flow. This is fragile — clearing localStorage forces the full claim flow again.
+
+### Key localStorage Keys
+
+| Key | Purpose |
+|-----|---------|
+| `access_token` | JWT for API auth |
+| `merchant_id` | DomainMerchant UUID |
+| `merchant_name` | Display name |
+| `businessClaimed` | Gate for dashboard access |
+| `merchant_authenticated` | Skip Google login on claim page |
+| `place_id` | Google Place ID |
+
+## Claim-Based Merchant Billing (Current Direction)
+
+**Supersedes the receipt OCR model.** See `CHARGING_VERIFIED_COMMERCE.md` for full implementation plan.
+
+### Core Billing Event: Claim + Presence
+
+A billable event happens when:
+1. Driver is in an **active charging session** (Tesla/Smartcar verified)
+2. Driver is **within 250-350m** of the merchant (GPS verified)
+3. Driver taps **"Claim Offer"** (explicit intent)
+
+This is a **qualified EV charging lead** — stronger than a Google Ad click.
+
+### Pricing: AOV-Based Dynamic Pricing
+
+| AOV Bracket | Claim Cost (4% of AOV) |
+|------------|----------------------|
+| Under $10 | $0.40 |
+| $10-25 | $1.00 |
+| $25-50 | $2.00 |
+| $50-100 | $4.00 |
+
+Merchants prepay campaign budgets. Daily cap protects against overspend. Auto-pause when budget exhausted.
+
+### Toast POS Integration (Read-Only)
+
+**Purpose:** Auto-calibrate AOV from real order data, track claim-to-order conversion.
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /v1/merchant/pos/toast/connect` | Start OAuth flow |
+| `POST /v1/merchant/pos/toast/callback` | Exchange code for tokens |
+| `GET /v1/merchant/pos/status` | Connection status + AOV |
+| `POST /v1/merchant/pos/toast/disconnect` | Remove credentials |
+| `GET /v1/merchant/pos/toast/aov` | Calculate AOV from orders |
+
+- **Service:** `backend/app/services/toast_pos_service.py`
+- **Router:** `backend/app/routers/toast_pos.py`
+- **Token storage:** `MerchantOAuthToken` with `provider="toast"`, `gbp_account_id` reused for restaurant GUID
+- **Mock mode:** `TOAST_MOCK_MODE=true` (default) — returns realistic fake data
+- **OAuth state:** Falls back to in-memory dict if `pos_oauth_states` table not yet migrated
+- **Config:** `TOAST_CLIENT_ID`, `TOAST_CLIENT_SECRET`, `TOAST_MOCK_MODE`
+
+## Known Production Issues & Gotchas
+
+### Python 3.9 Constraint
+
+Production Docker image uses Python 3.9-slim. **Do NOT use PEP 604 union syntax** (`str | None`). Use `Optional[str]` instead. This caused a startup crash and rollback.
+
+### Schema Drift
+
+Some SQLAlchemy model columns don't exist in the production PostgreSQL database:
+- `nova_transactions.campaign_id` — commented out in model, not yet migrated
+- `pos_oauth_states` table — migration 111 exists but not applied to production
+
+When adding columns to models, **always create an Alembic migration** and apply it to production before deploying code that references the column.
+
+### App Runner Deployment
+
+- `main_simple.py` is the entry point, **NOT** `lifespan.py`
+- Startup events use `@app.on_event("startup")` in `main_simple.py` (line ~1314)
+- Default startup mode is "light" — skips optional background workers and returns early
+- Any startup code must go BEFORE the light mode early return
+- `print(flush=True)` stdout may not appear in CloudWatch logs — use `logger.info()` instead
+
+### Multi-Instance State
+
+App Runner can run multiple instances. **In-memory dicts don't share state** across instances. OAuth state tokens stored in-memory on instance A won't be found when the callback hits instance B. Use database-backed storage or pass state through the authenticated user.
+
+### Hardcoded Asadas Grill References
+
+~15 hardcoded references to "Asadas Grill" across backend code from the demo period:
+- `chargers.py` lines 222, 377: hardcoded photo URL path
+- `chargers.py` line 908: seed exclusive titles
+- `main_simple.py`: static file mount for photos
+- `bootstrap.py`: cluster setup, place ID matching
+- Various seed scripts in `backend/scripts/`
+
+These should be cleaned up as the system generalizes to support any merchant.
 
 ## Session Bug Fixes (Deployed 2026-03-12)
 
