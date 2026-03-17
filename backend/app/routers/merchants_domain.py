@@ -672,10 +672,13 @@ def list_exclusives(
         )
     
     from app.models.while_you_charge import ChargerMerchant
+    import logging as _log
+    _logger = _log.getLogger(__name__)
 
     # Find all ChargerMerchant links via the shared helper (place_id + name matching)
     all_cm_links = _find_all_charger_merchant_links(db, merchant)
     charger_links = [l for l in all_cm_links if l.exclusive_title]
+    _logger.info(f"list_exclusives: merchant={merchant.name!r}, place_id={merchant.google_place_id!r}, total_links={len(all_cm_links)}, with_title={len(charger_links)}")
 
     # Deduplicate by title — multiple charger links may share the same exclusive offer
     exclusives = []
