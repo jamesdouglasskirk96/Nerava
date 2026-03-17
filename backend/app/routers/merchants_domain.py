@@ -599,11 +599,20 @@ def _find_all_charger_merchant_links(db: Session, merchant: DomainMerchant):
             merchant_name = wyc.name or ""
 
     if merchant_name:
+        # Exact match first
         wyc_by_name = db.query(WYCMerchant).filter(
             sqlfunc.lower(WYCMerchant.name) == merchant_name.lower()
         ).all()
         for w in wyc_by_name:
             wyc_ids.add(w.id)
+        # Partial match: WYC name contained in DomainMerchant name or vice versa
+        if not wyc_by_name:
+            from sqlalchemy import text
+            wyc_by_name_partial = db.query(WYCMerchant).filter(
+                text("lower(:mname) LIKE '%' || lower(name) || '%'").bindparams(mname=merchant_name)
+            ).all()
+            for w in wyc_by_name_partial:
+                wyc_ids.add(w.id)
 
     if not wyc_ids:
         return []
