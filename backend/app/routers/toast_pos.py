@@ -102,12 +102,16 @@ async def toast_callback(
     """
     redirect_uri = f"{settings.MERCHANT_PORTAL_URL}/toast/callback"
 
+    # Pass merchant_account_id for mock mode (state may not survive multi-instance)
+    merchant_account = create_or_get_merchant_account(db, user.id)
+
     try:
         result = await toast_pos_service.exchange_code(
             db=db,
             code=body.code,
             state=body.state,
             redirect_uri=redirect_uri,
+            merchant_account_id_override=str(merchant_account.id),
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

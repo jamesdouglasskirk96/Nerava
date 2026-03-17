@@ -1,11 +1,20 @@
-import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { startGoogleOAuth } from '../services/api';
 
 export function ClaimBusiness() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // If already authenticated (came back from Google OAuth), skip to location selection
+  useEffect(() => {
+    const isAuthenticated = localStorage.getItem('access_token') && localStorage.getItem('merchant_authenticated');
+    if (isAuthenticated) {
+      navigate('/claim/location', { replace: true });
+    }
+  }, [navigate]);
 
   // Pre-fill business name from funnel if coming from /preview
   const businessName = searchParams.get('name') || '';
