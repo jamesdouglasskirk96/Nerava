@@ -105,6 +105,7 @@ async def exchange_code(
     code: str,
     state: str,
     redirect_uri: str,
+    merchant_account_id_override: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Exchange authorization code for tokens and store encrypted in DB.
@@ -116,10 +117,15 @@ async def exchange_code(
         ValueError on invalid state or API error.
     """
     state_data = validate_oauth_state(db, state)
-    if not state_data:
-        raise ValueError("Invalid or expired OAuth state")
 
-    merchant_account_id = state_data["merchant_account_id"]
+    if _is_mock_mode():
+        # In mock mode, state validation may fail across multi-instance deploys.
+        # Use override from the authenticated user if state data is missing.
+        merchant_account_id = (state_data or {}).get("merchant_account_id", "") or merchant_account_id_override or ""
+    elif not state_data:
+        raise ValueError("Invalid or expired OAuth state")
+    else:
+        merchant_account_id = state_data["merchant_account_id"]
 
     if _is_mock_mode():
         # Store mock credentials

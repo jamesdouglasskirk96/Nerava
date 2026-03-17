@@ -28,6 +28,9 @@ export function GoogleCallback() {
           localStorage.setItem('merchant_account_id', response.merchant_account_id);
         }
 
+        // Mark as authenticated so the claim flow doesn't show login again
+        localStorage.setItem('merchant_authenticated', 'true');
+
         // Check if user already has a claimed merchant — skip location selection if so
         try {
           const merchantData = await fetchMyMerchant();
