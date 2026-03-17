@@ -1,8 +1,11 @@
 """
 MerchantOAuthToken model — stores encrypted OAuth tokens for merchant Google Business Profile access.
+PosOAuthState model — DB-backed OAuth state for POS integrations (Toast, etc.) CSRF protection.
 """
-from datetime import datetime
+import json
+from datetime import datetime, timedelta
 from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Index
+from sqlalchemy.orm import Session
 from ..db import Base
 from ..core.uuid_type import UUIDType
 
@@ -29,3 +32,47 @@ class MerchantOAuthToken(Base):
     __table_args__ = (
         Index("uq_merchant_oauth_account_provider", "merchant_account_id", "provider", unique=True),
     )
+
+
+class PosOAuthState(Base):
+    """DB-backed OAuth state for POS integrations (Toast, etc.) — survives deploys and works across instances."""
+    __tablename__ = "pos_oauth_states"
+
+    state = Column(String(64), primary_key=True)
+    data_json = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+
+    __table_args__ = (
+        Index("idx_pos_oauth_states_expires", "expires_at"),
+    )
+
+    @classmethod
+    def store(cls, db: Session, state: str, data: dict, ttl_minutes: int = 10):
+        row = cls(
+            state=state,
+            data_json=json.dumps(data, default=str),
+            created_at=datetime.utcnow(),
+            expires_at=datetime.utcnow() + timedelta(minutes=ttl_minutes),
+        )
+        db.merge(row)
+        db.commit()
+
+    @classmethod
+    def pop(cls, db: Session, state: str) -> dict | None:
+        row = db.query(cls).filter(cls.state == state).first()
+        if not row:
+            return None
+        if row.expires_at < datetime.utcnow():
+            db.delete(row)
+            db.commit()
+            return None
+        data = json.loads(row.data_json)
+        db.delete(row)
+        db.commit()
+        return data
+
+    @classmethod
+    def cleanup_expired(cls, db: Session):
+        db.query(cls).filter(cls.expires_at < datetime.utcnow()).delete()
+        db.commit()

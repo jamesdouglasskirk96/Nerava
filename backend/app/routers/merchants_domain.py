@@ -671,68 +671,33 @@ def list_exclusives(
             detail="Merchant not found or access denied"
         )
     
-    from app.models.while_you_charge import MerchantPerk, ChargerMerchant
-    import json
+    from app.models.while_you_charge import ChargerMerchant
 
+    # Find all ChargerMerchant links via the shared helper (place_id + name matching)
+    all_cm_links = _find_all_charger_merchant_links(db, merchant)
+    charger_links = [l for l in all_cm_links if l.exclusive_title]
+
+    # Deduplicate by title — multiple charger links may share the same exclusive offer
     exclusives = []
-
-    # 1. Query MerchantPerk exclusives created via portal
-    perks = db.query(MerchantPerk).filter(
-        MerchantPerk.merchant_id == merchant_id
-    ).all()
-
-    for perk in perks:
-        try:
-            metadata = json.loads(perk.description or "{}")
-            if metadata.get("is_exclusive"):
-                exclusives.append(ExclusiveResponse(
-                    id=str(perk.id),
-                    merchant_id=merchant_id,
-                    title=perk.title,
-                    description=metadata.get("description") or "",
-                    daily_cap=metadata.get("daily_cap"),
-                    session_cap=metadata.get("session_cap"),
-                    eligibility=metadata.get("eligibility", "charging_only"),
-                    is_active=perk.is_active,
-                    created_at=perk.created_at.isoformat(),
-                    updated_at=perk.updated_at.isoformat()
-                ))
-        except:
+    now_str = datetime.utcnow().isoformat()
+    seen_titles = set()
+    for link in charger_links:
+        title = link.exclusive_title or ""
+        if title.lower() in seen_titles:
             continue
-
-    # 2. Also pull charger_merchant exclusives (seeded offers visible to drivers)
-    #    These may exist before the merchant portal was used
-    import logging as _logging
-    _logger = _logging.getLogger(__name__)
-    if not exclusives:
-        _logger.info(f"Exclusives search: merchant.id={merchant.id}, name={merchant.name!r}, google_place_id={merchant.google_place_id!r}")
-
-        # Use the shared helper to find ALL ChargerMerchant links for this merchant
-        all_cm_links = _find_all_charger_merchant_links(db, merchant)
-        # Filter to only those with an active exclusive
-        charger_links = [l for l in all_cm_links if l.exclusive_title]
-        _logger.info(f"Found {len(all_cm_links)} total links, {len(charger_links)} with exclusives")
-
-        # Deduplicate by title — multiple charger links may share the same exclusive offer
-        now_str = datetime.utcnow().isoformat()
-        seen_titles = set()
-        for link in charger_links:
-            title = link.exclusive_title or ""
-            if title.lower() in seen_titles:
-                continue
-            seen_titles.add(title.lower())
-            exclusives.append(ExclusiveResponse(
-                id=f"cm_{link.id}",
-                merchant_id=merchant_id,
-                title=title,
-                description=link.exclusive_description or "",
-                daily_cap=None,
-                session_cap=None,
-                eligibility="charging_only",
-                is_active=True,
-                created_at=now_str,
-                updated_at=now_str,
-            ))
+        seen_titles.add(title.lower())
+        exclusives.append(ExclusiveResponse(
+            id=f"cm_{link.id}",
+            merchant_id=merchant_id,
+            title=title,
+            description=link.exclusive_description or "",
+            daily_cap=None,
+            session_cap=None,
+            eligibility="charging_only",
+            is_active=True,
+            created_at=now_str,
+            updated_at=now_str,
+        ))
 
     return exclusives
 
