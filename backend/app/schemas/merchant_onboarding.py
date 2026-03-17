@@ -45,6 +45,8 @@ class LocationsListResponse(BaseModel):
 class ClaimLocationRequest(BaseModel):
     """Request to claim a location"""
     place_id: str
+    name: Optional[str] = None
+    address: Optional[str] = None
 
 
 class ClaimLocationResponse(BaseModel):
@@ -52,6 +54,7 @@ class ClaimLocationResponse(BaseModel):
     claim_id: str
     place_id: str
     status: str
+    merchant_id: Optional[str] = None
 
 
 class SetupIntentRequest(BaseModel):

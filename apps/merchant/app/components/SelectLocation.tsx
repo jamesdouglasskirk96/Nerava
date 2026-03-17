@@ -75,11 +75,16 @@ export function SelectLocation() {
     setClaiming(true);
     setError(null);
     try {
-      await claimLocation(loc.place_id, loc.name, loc.address);
+      const result = await claimLocation(loc.place_id, loc.name, loc.address);
       localStorage.setItem('businessClaimed', 'true');
       localStorage.setItem('place_id', loc.place_id);
       localStorage.setItem('merchant_name', loc.name);
-      navigate('/overview');
+      if (result.merchant_id) {
+        localStorage.setItem('merchant_id', result.merchant_id);
+      }
+      // Full page reload so App re-evaluates isClaimed from localStorage
+      const base = import.meta.env.BASE_URL || '/';
+      window.location.href = `${base}overview`;
     } catch (err: any) {
       setError(err.message || 'Failed to claim location');
     } finally {

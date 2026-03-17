@@ -247,9 +247,9 @@ async def claim_location_endpoint(
         )
 
         # Also create/update DomainMerchant record
-        name = getattr(request, "name", "") or ""
-        address = getattr(request, "address", "") or ""
-        link_location_to_merchant(
+        name = request.name or ""
+        address = request.address or ""
+        domain_merchant = link_location_to_merchant(
             db=db,
             user_id=current_user.id,
             place_id=request.place_id,
@@ -261,6 +261,7 @@ async def claim_location_endpoint(
             claim_id=claim_record.id,
             place_id=claim_record.place_id,
             status=claim_record.status,
+            merchant_id=str(domain_merchant.id) if domain_merchant else None,
         )
     except ValueError as e:
         raise HTTPException(

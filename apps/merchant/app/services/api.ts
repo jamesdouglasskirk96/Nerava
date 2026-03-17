@@ -245,7 +245,7 @@ export async function listGBPLocations(): Promise<{ locations: Array<{ location_
   return fetchAPI('/v1/merchant/locations')
 }
 
-export async function claimLocation(placeId: string, name?: string, address?: string): Promise<{ claim_id: string; place_id: string; status: string }> {
+export async function claimLocation(placeId: string, name?: string, address?: string): Promise<{ claim_id: string; place_id: string; status: string; merchant_id?: string }> {
   return fetchAPI('/v1/merchant/claim', {
     method: 'POST',
     body: JSON.stringify({ place_id: placeId, name, address }),
