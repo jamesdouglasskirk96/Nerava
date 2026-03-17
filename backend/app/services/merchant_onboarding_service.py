@@ -198,6 +198,30 @@ def link_location_to_merchant(
         db.refresh(existing)
         return existing
 
+    # Check if user already owns a merchant — reuse it with new place_id
+    user_merchant = (
+        db.query(DomainMerchant)
+        .filter(DomainMerchant.owner_user_id == user_id, DomainMerchant.status == "active")
+        .first()
+    )
+    if user_merchant:
+        user_merchant.google_place_id = place_id
+        if name:
+            user_merchant.name = name
+        if address:
+            addr_parts = [p.strip() for p in address.split(",")] if address else []
+            user_merchant.addr_line1 = addr_parts[0] if len(addr_parts) > 0 else ""
+            user_merchant.city = addr_parts[1] if len(addr_parts) > 1 else ""
+            user_merchant.state = addr_parts[2] if len(addr_parts) > 2 else ""
+            user_merchant.postal_code = addr_parts[3] if len(addr_parts) > 3 else ""
+        user_merchant.lat = lat
+        user_merchant.lng = lng
+        user_merchant.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(user_merchant)
+        logger.info(f"Updated existing merchant {user_merchant.id} with new place_id {place_id} for user {user_id}")
+        return user_merchant
+
     # Parse address components
     addr_parts = [p.strip() for p in address.split(",")] if address else []
 
