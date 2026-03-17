@@ -668,13 +668,13 @@ def list_exclusives(
     List all exclusives for a merchant.
     """
     # Verify merchant belongs to user
-    merchant = AuthService.get_user_merchant(db, current_user.id)
-    if not merchant or str(merchant.id) != merchant_id:
+    merchant = AuthService.get_user_merchant(db, current_user.id, merchant_id=merchant_id)
+    if not merchant:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Merchant not found or access denied"
         )
-    
+
     from app.models.while_you_charge import ChargerMerchant
     import logging as _log
     _logger = _log.getLogger(__name__)
@@ -739,8 +739,8 @@ def create_exclusive(
     MVP: Uses MerchantPerk model with is_exclusive flag (to be added).
     """
     # Verify merchant belongs to user
-    merchant = AuthService.get_user_merchant(db, current_user.id)
-    if not merchant or str(merchant.id) != merchant_id:
+    merchant = AuthService.get_user_merchant(db, current_user.id, merchant_id=merchant_id)
+    if not merchant:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Merchant not found or access denied"
@@ -810,8 +810,8 @@ def update_exclusive(
     current_user: User = Depends(require_merchant_admin)
 ):
     """Update an exclusive."""
-    merchant = AuthService.get_user_merchant(db, current_user.id)
-    if not merchant or str(merchant.id) != merchant_id:
+    merchant = AuthService.get_user_merchant(db, current_user.id, merchant_id=merchant_id)
+    if not merchant:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Merchant not found or access denied"
@@ -926,8 +926,8 @@ def get_merchant_visits_portal(
     List visits for a merchant (merchant portal view).
     Queries ExclusiveSessions as a proxy for visits.
     """
-    merchant = AuthService.get_user_merchant(db, current_user.id)
-    if not merchant or str(merchant.id) != merchant_id:
+    merchant = AuthService.get_user_merchant(db, current_user.id, merchant_id=merchant_id)
+    if not merchant:
         raise HTTPException(status_code=403, detail="Merchant not found or access denied")
 
     from app.models.exclusive_session import ExclusiveSession, ExclusiveSessionStatus
@@ -995,8 +995,8 @@ def toggle_exclusive(
 ):
     """Enable or disable an exclusive."""
     # Verify merchant belongs to user
-    merchant = AuthService.get_user_merchant(db, current_user.id)
-    if not merchant or str(merchant.id) != merchant_id:
+    merchant = AuthService.get_user_merchant(db, current_user.id, merchant_id=merchant_id)
+    if not merchant:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Merchant not found or access denied"
@@ -1085,8 +1085,8 @@ def update_brand_image(
     Update merchant brand image URL override.
     """
     # Verify merchant belongs to user
-    merchant = AuthService.get_user_merchant(db, current_user.id)
-    if not merchant or str(merchant.id) != merchant_id:
+    merchant = AuthService.get_user_merchant(db, current_user.id, merchant_id=merchant_id)
+    if not merchant:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Merchant not found or access denied"
@@ -1132,8 +1132,8 @@ def get_merchant_analytics(
     Get merchant analytics (MVP: activations, completes, unique drivers).
     """
     # Verify merchant belongs to user
-    merchant = AuthService.get_user_merchant(db, current_user.id)
-    if not merchant or str(merchant.id) != merchant_id:
+    merchant = AuthService.get_user_merchant(db, current_user.id, merchant_id=merchant_id)
+    if not merchant:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Merchant not found or access denied"

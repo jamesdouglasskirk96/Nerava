@@ -132,12 +132,15 @@ class AuthService:
         return role in roles
     
     @staticmethod
-    def get_user_merchant(db: Session, user_id: int) -> Optional[DomainMerchant]:
-        """Get merchant owned by user (if user is merchant_admin)"""
-        return db.query(DomainMerchant).filter(
+    def get_user_merchant(db: Session, user_id: int, merchant_id: Optional[str] = None) -> Optional[DomainMerchant]:
+        """Get merchant owned by user. If merchant_id given, verify that specific merchant is owned by user."""
+        query = db.query(DomainMerchant).filter(
             and_(
                 DomainMerchant.owner_user_id == user_id,
                 DomainMerchant.status == "active"
             )
-        ).first()
+        )
+        if merchant_id:
+            query = query.filter(DomainMerchant.id == merchant_id)
+        return query.first()
 
