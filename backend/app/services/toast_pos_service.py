@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.token_encryption import encrypt_token, decrypt_token
-from app.models.merchant_oauth_token import MerchantOAuthToken, PosOAuthState
+from app.models.merchant_oauth_token import MerchantOAuthToken
 
 logger = logging.getLogger(__name__)
 
@@ -37,17 +37,35 @@ def _is_mock_mode() -> bool:
 
 
 # ---------------------------------------------------------------------------
-# OAuth state management (DB-backed, works across multiple instances)
+# OAuth state management (in-memory fallback if DB table not yet migrated)
 # ---------------------------------------------------------------------------
 
+_oauth_states: Dict[str, Dict] = {}
+
+
 def store_oauth_state(db: Session, state: str, data: Optional[Dict] = None) -> None:
-    """Store OAuth state token for CSRF protection (DB-backed, 10-minute TTL)."""
-    PosOAuthState.store(db, state, data or {}, ttl_minutes=10)
+    """Store OAuth state token for CSRF protection."""
+    try:
+        from app.models.merchant_oauth_token import PosOAuthState
+        PosOAuthState.store(db, state, data or {}, ttl_minutes=10)
+    except Exception:
+        # Fallback to in-memory if pos_oauth_states table doesn't exist yet
+        _oauth_states[state] = {**(data or {}), "created_at": datetime.utcnow()}
 
 
 def validate_oauth_state(db: Session, state: str) -> Optional[Dict]:
     """Validate and consume an OAuth state token. Returns stored data or None."""
-    return PosOAuthState.pop(db, state)
+    try:
+        from app.models.merchant_oauth_token import PosOAuthState
+        return PosOAuthState.pop(db, state)
+    except Exception:
+        # Fallback to in-memory
+        state_data = _oauth_states.pop(state, None)
+        if not state_data:
+            return None
+        if (datetime.utcnow() - state_data.get("created_at", datetime.utcnow())).total_seconds() > 600:
+            return None
+        return state_data
 
 
 # ---------------------------------------------------------------------------
