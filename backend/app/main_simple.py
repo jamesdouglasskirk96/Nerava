@@ -908,6 +908,10 @@ app.include_router(merchant_arrivals.router)
 # Toast POS Integration
 from .routers import toast_pos
 app.include_router(toast_pos.router)  # /v1/merchant/pos/*
+
+# Merchant Reconciliation (claims-based billing)
+from .routers import merchant_reconciliation
+app.include_router(merchant_reconciliation.router)  # /v1/merchant/reconciliation/*
 app.include_router(twilio_sms_webhook.router)
 app.include_router(client_telemetry.router)
 app.include_router(arrival_router.router)

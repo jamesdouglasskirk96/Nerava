@@ -22,6 +22,7 @@ import { MerchantPreview } from './components/MerchantPreview';
 import { EVArrivals } from './components/EVArrivals';
 import { Insights } from './components/Insights';
 import { Loyalty } from './components/Loyalty';
+import { Reconciliation } from './components/Reconciliation';
 
 export default function App() {
   // Support admin preview via URL params
@@ -83,6 +84,7 @@ export default function App() {
           <Route path="nerava-ads" element={<NeravaAds />} />
           <Route path="pickup-packages" element={<PickupPackages />} />
           <Route path="pickup-packages/new" element={<CreatePickupPackage />} />
+          <Route path="reconciliation" element={<Reconciliation />} />
           <Route path="billing" element={<Billing />} />
           <Route path="settings" element={<Settings />} />
         </Route>

@@ -442,6 +442,48 @@ export async function merchantGoogleAuth(request: MerchantAuthRequest): Promise<
   return response
 }
 
+// --- Reconciliation ---
+
+export interface DailyClaims {
+  date: string
+  claims: number
+  redeemed: number
+}
+
+export interface ReconciliationSummary {
+  merchant_id: string
+  merchant_name: string
+  period_start: string
+  period_end: string
+  total_claims: number
+  total_redeemed: number
+  total_expired: number
+  daily_breakdown: DailyClaims[]
+}
+
+export async function getReconciliationSummary(
+  period: 'week' | 'month' | 'quarter' = 'month',
+  startDate?: string,
+  endDate?: string
+): Promise<ReconciliationSummary> {
+  const params = new URLSearchParams({ period })
+  if (startDate) params.append('start_date', startDate)
+  if (endDate) params.append('end_date', endDate)
+  return fetchAPI(`/v1/merchant/reconciliation/summary?${params.toString()}`)
+}
+
+export function getReconciliationExportUrl(
+  period: 'week' | 'month' | 'quarter' = 'month',
+  startDate?: string,
+  endDate?: string
+): string {
+  const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
+  const params = new URLSearchParams({ period })
+  if (startDate) params.append('start_date', startDate)
+  if (endDate) params.append('end_date', endDate)
+  return `${base}/v1/merchant/reconciliation/export?${params.toString()}`
+}
+
 /**
  * Logout: clear session and redirect to claim page
  */
