@@ -267,10 +267,26 @@ async def activate_exclusive(
                 }
             )
         
+        # Resolve merchant_id to WYC merchant ID (FK constraint requires it)
+        resolved_merchant_id = request.merchant_id
+        if resolved_merchant_id:
+            wyc_merchant = db.query(Merchant).filter(Merchant.id == resolved_merchant_id).first()
+            if not wyc_merchant and request.merchant_place_id:
+                wyc_merchant = db.query(Merchant).filter(Merchant.place_id == request.merchant_place_id).first()
+            if not wyc_merchant:
+                # Try place_id as merchant_id (common when frontend sends place_id)
+                wyc_merchant = db.query(Merchant).filter(Merchant.place_id == resolved_merchant_id).first()
+            if wyc_merchant:
+                resolved_merchant_id = wyc_merchant.id
+        elif request.merchant_place_id:
+            wyc_merchant = db.query(Merchant).filter(Merchant.place_id == request.merchant_place_id).first()
+            if wyc_merchant:
+                resolved_merchant_id = wyc_merchant.id
+
         # Create exclusive session
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(minutes=EXCLUSIVE_DURATION_MIN)
-        
+
         # Build intent_metadata dict if intent is provided
         intent_metadata = None
         if request.intent:
@@ -283,8 +299,8 @@ async def activate_exclusive(
         session = ExclusiveSession(
             id=generate_session_id(),
             driver_id=driver.id,
-            merchant_id=request.merchant_id,
-            merchant_place_id=request.merchant_place_id,
+            merchant_id=resolved_merchant_id,
+            merchant_place_id=request.merchant_place_id or request.merchant_id,
             charger_id=request.charger_id,
             charger_place_id=request.charger_place_id,
             intent_session_id=request.intent_session_id,
