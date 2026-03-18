@@ -156,9 +156,8 @@ async def activate_exclusive(
     Returns 401 if not authenticated, 428 if OTP not verified, 400 for invalid inputs, 500 for unexpected errors (with logging).
     """
     try:
-        # Verify OTP authentication: user must have auth_provider="phone"
-        # For v1, treat "driver JWT exists" as "OTP verified" if auth_provider is phone
-        if driver.auth_provider != "phone":
+        # Verify authentication: user must have a verified auth provider
+        if not driver.auth_provider or driver.auth_provider == "anonymous":
             raise HTTPException(
                 status_code=status.HTTP_428_PRECONDITION_REQUIRED,
                 detail="OTP_REQUIRED"
@@ -306,6 +305,8 @@ async def activate_exclusive(
             db.add(session)
             db.commit()
             db.refresh(session)
+        except HTTPException:
+            raise
         except Exception as e:
             db.rollback()
             # Check if error is due to unique constraint violation on idempotency_key
@@ -336,7 +337,7 @@ async def activate_exclusive(
                         ),
                         idempotent=True
                     )
-            logger.error("exclusive_activate_failed", extra={
+            logger.error("exclusive_activate_failed: %s", str(e), exc_info=True, extra={
                 "driver_id": driver.id,
                 "merchant_id": request.merchant_id,
                 "charger_id": request.charger_id,
