@@ -942,8 +942,22 @@ def get_merchant_visits_portal(
     from app.models.exclusive_session import ExclusiveSession, ExclusiveSessionStatus
     from datetime import timedelta
 
+    # Resolve WYC merchant IDs from DomainMerchant (ExclusiveSession stores WYC IDs, not UUIDs)
+    all_cm_links = _find_all_charger_merchant_links(db, merchant)
+    wyc_merchant_ids = list(set(link.merchant_id for link in all_cm_links))
+
+    # Also match by place_id (exclusive activate sends place_id as merchant_id)
+    if merchant.google_place_id:
+        wyc_merchant_ids.append(merchant.google_place_id)
+
+    if not wyc_merchant_ids:
+        return {
+            "visits": [], "total": 0, "verified_count": 0,
+            "period": period, "limit": limit, "offset": offset,
+        }
+
     query = db.query(ExclusiveSession).filter(
-        ExclusiveSession.merchant_id == merchant_id
+        ExclusiveSession.merchant_id.in_(wyc_merchant_ids)
     )
 
     # Period filter
@@ -968,9 +982,14 @@ def get_merchant_visits_portal(
 
     visits = []
     for s in sessions:
-        v_status = "VERIFIED" if s.status == ExclusiveSessionStatus.COMPLETED else (
-            "REJECTED" if s.status == ExclusiveSessionStatus.EXPIRED else "PARTIAL"
-        )
+        if s.status == ExclusiveSessionStatus.COMPLETED:
+            v_status = "VERIFIED"
+        elif s.status == ExclusiveSessionStatus.ACTIVE:
+            v_status = "ACTIVE"
+        elif s.status == ExclusiveSessionStatus.EXPIRED:
+            v_status = "REJECTED"
+        else:
+            v_status = "PARTIAL"
         visits.append({
             "id": str(s.id),
             "timestamp": s.created_at.isoformat() if s.created_at else now.isoformat(),

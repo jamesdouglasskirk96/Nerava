@@ -521,6 +521,28 @@ class SessionEventService:
             except Exception as e:
                 logger.debug("Charging detected push failed (non-fatal): %s", e)
 
+            # Send push for nearby Nerava merchants (best-effort)
+            if matched_charger_id:
+                try:
+                    from app.models.while_you_charge import ChargerMerchant, Merchant
+                    from app.services.push_service import send_nearby_merchant_push
+                    links = db.query(ChargerMerchant).filter(
+                        ChargerMerchant.charger_id == matched_charger_id,
+                        ChargerMerchant.exclusive_title.isnot(None),
+                        ChargerMerchant.exclusive_title != "",
+                    ).order_by(ChargerMerchant.distance_m.asc()).limit(1).all()
+                    for link in links:
+                        merch = db.query(Merchant).filter(Merchant.id == link.merchant_id).first()
+                        if merch:
+                            send_nearby_merchant_push(
+                                db, driver_id, merch.name,
+                                exclusive_title=link.exclusive_title,
+                                charger_id=matched_charger_id,
+                                merchant_place_id=merch.place_id or merch.id,
+                            )
+                except Exception as e:
+                    logger.debug("Nearby merchant push failed (non-fatal): %s", e)
+
             # Smart poll interval for client: halve remaining time, floor 2 min (120s)
             if minutes_remaining and minutes_remaining > 0:
                 recommended = max(120, int(minutes_remaining / 2.0 * 60))

@@ -132,7 +132,7 @@ export interface Visit {
   exclusive_id: string | null
   exclusive_title: string
   driver_id_anonymized: string
-  verification_status: 'VERIFIED' | 'PARTIAL' | 'REJECTED'
+  verification_status: 'VERIFIED' | 'ACTIVE' | 'PARTIAL' | 'REJECTED'
   duration_minutes: number | null
   charger_id: string | null
   location_name: string | null

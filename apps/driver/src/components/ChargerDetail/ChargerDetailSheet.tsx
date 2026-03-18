@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { X, Navigation, Zap, MapPin, Shield, Users, DollarSign, Phone, Globe, Coffee, ShoppingBag, Utensils, Dumbbell, TreePine, Popcorn, CircleDollarSign } from 'lucide-react'
-import { useChargerDetail, useDriverCampaigns } from '../../services/api'
+import { X, Navigation, Zap, MapPin, Shield, Users, DollarSign, Phone, Globe, Coffee, ShoppingBag, Utensils, Dumbbell, TreePine, Popcorn, CircleDollarSign, Gift, UserPlus, Clock, Footprints, CheckCircle } from 'lucide-react'
+import { useChargerDetail, useDriverCampaigns, useActivateExclusive, useRequestToJoin } from '../../services/api'
 import type { ChargerDetailNearbyMerchant, DriverCampaign } from '../../services/api'
 import { capture, DRIVER_EVENTS } from '../../analytics'
 import { openExternalUrl } from '../../utils/openExternal'
@@ -88,6 +88,16 @@ export function ChargerDetailSheet({
   const [sheetState, setSheetState] = useState<SheetState>('peek')
   const [activeTab, setActiveTab] = useState<Tab>('overview')
   const [actionMerchant, setActionMerchant] = useState<ChargerDetailNearbyMerchant | null>(null)
+  // Claim flow state
+  const [claimingMerchant, setClaimingMerchant] = useState<ChargerDetailNearbyMerchant | null>(null)
+  const [claimState, setClaimState] = useState<'idle' | 'confirming' | 'active' | 'done'>('idle')
+  const [claimStartTime, setClaimStartTime] = useState<number | null>(null)
+  const [claimElapsed, setClaimElapsed] = useState(0)
+  // Request to join state
+  const [requestingMerchant, setRequestingMerchant] = useState<ChargerDetailNearbyMerchant | null>(null)
+  const [requestSent, setRequestSent] = useState<Set<string>>(new Set())
+  const activateExclusive = useActivateExclusive()
+  const requestToJoin = useRequestToJoin()
   const sheetRef = useRef<HTMLDivElement>(null)
   const dragStartY = useRef(0)
   const dragStartTranslate = useRef(0)
@@ -190,6 +200,76 @@ export function ChargerDetailSheet({
       openExternalUrl(`https://www.google.com/maps/dir/?api=1&destination=${m.lat},${m.lng}`)
     }
     setActionMerchant(null)
+  }
+
+  // Claim reward handler
+  const handleClaimReward = async (m: ChargerDetailNearbyMerchant) => {
+    setActionMerchant(null)
+    setClaimingMerchant(m)
+    setClaimState('confirming')
+  }
+
+  const handleConfirmClaim = async () => {
+    if (!claimingMerchant) return
+    try {
+      await activateExclusive.mutateAsync({
+        merchant_id: claimingMerchant.place_id,
+        merchant_place_id: claimingMerchant.place_id,
+        charger_id: chargerId,
+        lat: userLat ?? 0,
+        lng: userLng ?? 0,
+      })
+      setClaimState('active')
+      setClaimStartTime(Date.now())
+      capture(DRIVER_EVENTS.EXCLUSIVE_ACTIVATE_SUCCESS, {
+        merchant_name: claimingMerchant.name,
+        charger_id: chargerId,
+      })
+    } catch {
+      setClaimState('idle')
+      setClaimingMerchant(null)
+    }
+  }
+
+  const handleCompleteClaim = () => {
+    setClaimState('done')
+    setTimeout(() => {
+      setClaimState('idle')
+      setClaimingMerchant(null)
+      setClaimStartTime(null)
+      setClaimElapsed(0)
+    }, 3000)
+  }
+
+  // Timer for active claim
+  useEffect(() => {
+    if (claimState !== 'active' || !claimStartTime) return
+    const interval = setInterval(() => {
+      setClaimElapsed(Math.floor((Date.now() - claimStartTime) / 1000))
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [claimState, claimStartTime])
+
+  // Request to join handler
+  const handleRequestToJoin = async (m: ChargerDetailNearbyMerchant) => {
+    setActionMerchant(null)
+    setRequestingMerchant(m)
+    try {
+      await requestToJoin.mutateAsync({
+        placeId: m.place_id,
+        merchantName: m.name,
+      })
+      setRequestSent((prev) => new Set(prev).add(m.place_id))
+      capture(DRIVER_EVENTS.MERCHANT_CLICKED, {
+        action: 'request_to_join',
+        merchant_name: m.name,
+        place_id: m.place_id,
+      })
+    } catch {
+      // Silently handle - may already be requested
+      setRequestSent((prev) => new Set(prev).add(m.place_id))
+    }
+    setTimeout(() => setRequestingMerchant(null), 2000)
   }
 
   return (
@@ -333,11 +413,59 @@ export function ChargerDetailSheet({
       {actionMerchant && (
         <MerchantActionSheet
           merchant={actionMerchant}
+          isCharging={isCharging}
           onCall={() => handleMerchantCall(actionMerchant)}
           onWebsite={() => handleMerchantWebsite(actionMerchant)}
           onDirections={() => handleMerchantDirections(actionMerchant)}
+          onClaimReward={() => handleClaimReward(actionMerchant)}
+          onRequestToJoin={() => handleRequestToJoin(actionMerchant)}
+          alreadyRequested={requestSent.has(actionMerchant.place_id)}
           onClose={() => setActionMerchant(null)}
         />
+      )}
+
+      {/* Claim Confirmation Modal */}
+      {claimState === 'confirming' && claimingMerchant && (
+        <ClaimConfirmModal
+          merchant={claimingMerchant}
+          isCharging={isCharging}
+          isLoading={activateExclusive.isPending}
+          onConfirm={handleConfirmClaim}
+          onClose={() => { setClaimState('idle'); setClaimingMerchant(null) }}
+        />
+      )}
+
+      {/* Active Visit Tracker */}
+      {claimState === 'active' && claimingMerchant && (
+        <ActiveVisitTracker
+          merchant={claimingMerchant}
+          chargerLat={detail?.lat ?? lat}
+          chargerLng={detail?.lng ?? lng}
+          elapsedSeconds={claimElapsed}
+          onComplete={handleCompleteClaim}
+        />
+      )}
+
+      {/* Claim Done Toast */}
+      {claimState === 'done' && claimingMerchant && (
+        <div className="fixed top-12 inset-x-4 z-[3200] bg-green-600 text-white rounded-2xl p-4 flex items-center gap-3 animate-slide-down shadow-lg">
+          <CheckCircle className="w-6 h-6 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold">Visit verified at {claimingMerchant.name}</p>
+            <p className="text-xs opacity-90">Your reward will be reflected in Reconciliation</p>
+          </div>
+        </div>
+      )}
+
+      {/* Request to Join Confirmation */}
+      {requestingMerchant && (
+        <div className="fixed top-12 inset-x-4 z-[3200] bg-[#1877F2] text-white rounded-2xl p-4 flex items-center gap-3 animate-slide-down shadow-lg">
+          <UserPlus className="w-6 h-6 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold">Request sent for {requestingMerchant.name}</p>
+            <p className="text-xs opacity-90">We'll notify them that drivers want them on Nerava</p>
+          </div>
+        </div>
       )}
     </>
   )
@@ -576,6 +704,11 @@ function AmenitiesTab({
                 Deal
               </span>
             )}
+            {!m.has_exclusive && (m.join_request_count ?? 0) > 0 && (
+              <span className="flex-shrink-0 px-2 py-1 bg-blue-50 border border-blue-200 rounded-full text-xs font-medium text-blue-600">
+                {m.join_request_count} requested
+              </span>
+            )}
           </button>
         )
       })}
@@ -601,17 +734,26 @@ function InfoRow({ icon, iconBg, title, value }: { icon: React.ReactNode; iconBg
 
 function MerchantActionSheet({
   merchant,
+  isCharging,
   onCall,
   onWebsite,
   onDirections,
+  onClaimReward,
+  onRequestToJoin,
+  alreadyRequested,
   onClose,
 }: {
   merchant: ChargerDetailNearbyMerchant
+  isCharging: boolean
   onCall: () => void
   onWebsite: () => void
   onDirections: () => void
+  onClaimReward: () => void
+  onRequestToJoin: () => void
+  alreadyRequested: boolean
   onClose: () => void
 }) {
+  const isNerava = merchant.is_nerava_merchant || merchant.has_exclusive
   return (
     <>
       <div className="fixed inset-0 bg-black/40 z-[3100]" onClick={onClose} />
@@ -624,6 +766,42 @@ function MerchantActionSheet({
           <p className="text-xs text-[#65676B]">{merchant.walk_time_min} min walk</p>
         </div>
         <div className="px-5 pb-6 space-y-1" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1.5rem)' }}>
+          {/* Primary action: Claim Reward or Request to Join */}
+          {isNerava && isCharging ? (
+            <button
+              onClick={onClaimReward}
+              className="w-full flex items-center gap-3 py-3 px-3 rounded-xl bg-green-50 active:bg-green-100 transition-colors"
+            >
+              <Gift className="w-5 h-5 text-green-600" />
+              <div className="flex-1 text-left">
+                <span className="text-sm font-semibold text-green-700">Claim Reward</span>
+                {merchant.exclusive_title && (
+                  <p className="text-xs text-green-600">{merchant.exclusive_title}</p>
+                )}
+              </div>
+            </button>
+          ) : !isNerava ? (
+            <button
+              onClick={onRequestToJoin}
+              disabled={alreadyRequested}
+              className={`w-full flex items-center gap-3 py-3 px-3 rounded-xl transition-colors ${
+                alreadyRequested ? 'bg-blue-50 opacity-60' : 'bg-blue-50 active:bg-blue-100'
+              }`}
+            >
+              <UserPlus className="w-5 h-5 text-[#1877F2]" />
+              <div className="flex-1 text-left">
+                <span className="text-sm font-semibold text-[#1877F2]">
+                  {alreadyRequested ? 'Requested' : 'Request to Join Nerava'}
+                </span>
+                {(merchant.join_request_count ?? 0) > 0 && (
+                  <p className="text-xs text-[#65676B]">
+                    {merchant.join_request_count} driver{(merchant.join_request_count ?? 0) !== 1 ? 's' : ''} requested
+                  </p>
+                )}
+              </div>
+            </button>
+          ) : null}
+
           {merchant.phone && (
             <button
               onClick={onCall}
@@ -658,5 +836,132 @@ function MerchantActionSheet({
         </div>
       </div>
     </>
+  )
+}
+
+// ─── Claim Confirmation Modal ────────────────────────────────────────────────
+
+function ClaimConfirmModal({
+  merchant,
+  isCharging,
+  isLoading,
+  onConfirm,
+  onClose,
+}: {
+  merchant: ChargerDetailNearbyMerchant
+  isCharging: boolean
+  isLoading: boolean
+  onConfirm: () => void
+  onClose: () => void
+}) {
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/50 z-[3200]" onClick={onClose} />
+      <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-[3201] bg-white rounded-3xl p-6 max-w-md mx-auto shadow-xl">
+        <h3 className="text-lg font-semibold text-[#050505] mb-2">Claim reward at {merchant.name}?</h3>
+
+        {!isCharging && (
+          <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 mb-4">
+            <p className="text-sm text-orange-700">You need to be actively charging to claim this reward.</p>
+          </div>
+        )}
+
+        {isCharging && (
+          <>
+            <p className="text-sm text-[#65676B] mb-4">
+              Walk over to {merchant.name} ({merchant.walk_time_min} min walk) and we'll track your visit.
+              {merchant.exclusive_title && (
+                <span className="font-medium text-green-700"> Reward: {merchant.exclusive_title}</span>
+              )}
+            </p>
+            <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-4 flex items-center gap-2">
+              <Zap className="w-4 h-4 text-green-600" />
+              <p className="text-sm text-green-700">Charging verified — you're eligible</p>
+            </div>
+          </>
+        )}
+
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 py-3 text-sm font-medium text-[#65676B] bg-gray-100 rounded-xl"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={!isCharging || isLoading}
+            className="flex-1 py-3 text-sm font-semibold text-white bg-green-600 rounded-xl disabled:opacity-50 active:scale-[0.98] transition-transform"
+          >
+            {isLoading ? 'Claiming...' : 'Claim Now'}
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ─── Active Visit Tracker ────────────────────────────────────────────────────
+
+function ActiveVisitTracker({
+  merchant,
+  chargerLat,
+  chargerLng,
+  elapsedSeconds,
+  onComplete,
+}: {
+  merchant: ChargerDetailNearbyMerchant
+  chargerLat?: number
+  chargerLng?: number
+  elapsedSeconds: number
+  onComplete: () => void
+}) {
+  const minutes = Math.floor(elapsedSeconds / 60)
+  const seconds = elapsedSeconds % 60
+
+  return (
+    <div className="fixed bottom-20 inset-x-4 z-[3150] bg-white rounded-2xl shadow-xl border border-green-200 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+          <span className="text-sm font-semibold text-green-700">Visit Active</span>
+        </div>
+        <div className="flex items-center gap-1.5 bg-gray-100 rounded-full px-3 py-1">
+          <Clock className="w-3.5 h-3.5 text-[#65676B]" />
+          <span className="text-sm font-mono font-medium text-[#050505]">
+            {minutes}:{seconds.toString().padStart(2, '0')}
+          </span>
+        </div>
+      </div>
+
+      {/* Walking path visualization */}
+      <div className="flex items-center gap-3 mb-3">
+        <div className="flex flex-col items-center gap-0.5">
+          <Zap className="w-4 h-4 text-green-600" />
+          <div className="w-0.5 h-6 bg-gray-200" />
+          <Footprints className="w-4 h-4 text-[#1877F2]" />
+        </div>
+        <div className="flex-1">
+          <p className="text-xs text-[#65676B]">Charger</p>
+          <div className="flex items-center gap-1 my-1">
+            <div className="flex-1 h-1 bg-green-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-green-500 rounded-full transition-all duration-1000"
+                style={{ width: `${Math.min(100, (elapsedSeconds / (merchant.walk_time_min * 60)) * 100)}%` }}
+              />
+            </div>
+            <span className="text-xs text-[#65676B]">{merchant.walk_time_min}m</span>
+          </div>
+          <p className="text-xs font-medium text-[#050505]">{merchant.name}</p>
+        </div>
+      </div>
+
+      <button
+        onClick={onComplete}
+        className="w-full py-3 bg-green-600 text-white text-sm font-semibold rounded-xl active:scale-[0.98] transition-transform"
+      >
+        I'm Done — Complete Visit
+      </button>
+    </div>
   )
 }
