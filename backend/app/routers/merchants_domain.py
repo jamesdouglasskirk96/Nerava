@@ -993,7 +993,7 @@ def get_merchant_visits_portal(
         visits.append({
             "id": str(s.id),
             "timestamp": s.created_at.isoformat() if s.created_at else now.isoformat(),
-            "exclusive_id": s.exclusive_id,
+            "exclusive_id": str(s.id),
             "exclusive_title": "",
             "driver_id_anonymized": f"driver_{s.driver_id}" if s.driver_id else "unknown",
             "verification_status": v_status,
