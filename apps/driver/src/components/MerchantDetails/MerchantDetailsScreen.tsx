@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useMerchantDetails, useActivateExclusive, useVerifyVisit, useCompleteExclusive, useVoteAmenity, useRequestToJoin, useClaimReward, useUploadReceipt, useLoyaltyProgress, claimLoyaltyReward, ApiError } from '../../services/api'
-import type { LoyaltyProgressItem } from '../../services/api'
 import { FEATURE_FLAGS } from '../../config/featureFlags'
 import { RefuelIntentModal, type RefuelDetails } from '../RefuelIntentModal'
 import { SpotSecuredModal } from '../SpotSecuredModal'

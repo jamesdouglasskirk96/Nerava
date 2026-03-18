@@ -905,8 +905,8 @@ function ClaimConfirmModal({
 
 function ActiveVisitTracker({
   merchant,
-  chargerLat,
-  chargerLng,
+  chargerLat: _chargerLat,
+  chargerLng: _chargerLng,
   elapsedSeconds,
   onComplete,
 }: {
