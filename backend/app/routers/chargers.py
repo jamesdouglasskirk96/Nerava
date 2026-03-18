@@ -105,6 +105,8 @@ class NearbyMerchantResponse(BaseModel):
     lat: Optional[float] = None
     lng: Optional[float] = None
     exclusive_title: Optional[str] = None
+    is_nerava_merchant: bool = False
+    join_request_count: int = 0
 
 
 class DiscoveryChargerResponse(BaseModel):
@@ -243,6 +245,7 @@ async def discovery(
                     lat=merchant.lat,
                     lng=merchant.lng,
                     exclusive_title=link.exclusive_title,
+                    is_nerava_merchant=has_exclusive,
                 ))
 
             charger_photo_url = f"/static/demo_chargers/{charger.id}/hero.jpg"
@@ -383,6 +386,18 @@ async def charger_detail(
             else:
                 photo_url = merchant.photo_url or ""
             has_exclusive = link.exclusive_title is not None and link.exclusive_title != ""
+            is_nerava = has_exclusive  # On Nerava = has an active exclusive/perk
+
+            # Get join request count for non-Nerava merchants
+            join_count = 0
+            if not is_nerava:
+                merchant_place_id = merchant.place_id or merchant.id
+                try:
+                    from app.services.merchant_reward_service import get_join_request_count
+                    join_count = get_join_request_count(db, merchant_place_id)
+                except Exception:
+                    pass
+
             nearby_merchants.append(NearbyMerchantResponse(
                 place_id=merchant.place_id or merchant.id,
                 name=merchant.name,
@@ -396,6 +411,8 @@ async def charger_detail(
                 lat=merchant.lat,
                 lng=merchant.lng,
                 exclusive_title=link.exclusive_title,
+                is_nerava_merchant=is_nerava,
+                join_request_count=join_count,
             ))
 
         # Drivers currently charging at this station

@@ -350,6 +350,33 @@ def send_charging_detected_push(
     )
 
 
+def send_nearby_merchant_push(
+    db: Session,
+    user_id: int,
+    merchant_name: str,
+    exclusive_title: Optional[str] = None,
+    charger_id: Optional[str] = None,
+    merchant_place_id: Optional[str] = None,
+) -> int:
+    """Send push notification when a Nerava merchant is nearby during charging."""
+    if exclusive_title:
+        body = f"{merchant_name} is nearby — claim your {exclusive_title} while you charge!"
+    else:
+        body = f"{merchant_name} is nearby and has a deal for you while you charge!"
+    return send_push_notification(
+        db,
+        user_id,
+        title=f"{merchant_name} nearby",
+        body=body,
+        data={
+            "type": "nearby_merchant",
+            "merchant_name": merchant_name,
+            "merchant_place_id": merchant_place_id or "",
+            "charger_id": charger_id or "",
+        },
+    )
+
+
 def send_payout_complete_push(
     db: Session,
     user_id: int,

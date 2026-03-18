@@ -692,6 +692,8 @@ export interface ChargerDetailNearbyMerchant {
   lat?: number | null
   lng?: number | null
   exclusive_title?: string | null
+  is_nerava_merchant?: boolean
+  join_request_count?: number
 }
 
 export interface ChargerDetail {
