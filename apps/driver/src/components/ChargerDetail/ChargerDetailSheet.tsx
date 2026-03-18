@@ -767,7 +767,7 @@ function MerchantActionSheet({
         </div>
         <div className="px-5 pb-6 space-y-1" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1.5rem)' }}>
           {/* Primary action: Claim Reward or Request to Join */}
-          {isNerava && isCharging ? (
+          {isNerava ? (
             <button
               onClick={onClaimReward}
               className="w-full flex items-center gap-3 py-3 px-3 rounded-xl bg-green-50 active:bg-green-100 transition-colors"
@@ -778,9 +778,12 @@ function MerchantActionSheet({
                 {merchant.exclusive_title && (
                   <p className="text-xs text-green-600">{merchant.exclusive_title}</p>
                 )}
+                {!isCharging && (
+                  <p className="text-xs text-orange-500">Plug in to claim</p>
+                )}
               </div>
             </button>
-          ) : !isNerava ? (
+          ) : (
             <button
               onClick={onRequestToJoin}
               disabled={alreadyRequested}
@@ -800,7 +803,7 @@ function MerchantActionSheet({
                 )}
               </div>
             </button>
-          ) : null}
+          )}
 
           {merchant.phone && (
             <button
