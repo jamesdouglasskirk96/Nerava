@@ -296,6 +296,35 @@ export async function getInvoices(limit = 20): Promise<{ invoices: Invoice[] }> 
   return fetchAPI(`/v1/merchant/billing/invoices?limit=${limit}`)
 }
 
+// --- Card-on-file billing ---
+
+export interface PaymentStatus {
+  has_card: boolean
+  card_last4: string | null
+  card_brand: string | null
+  billing_type: string
+  stripe_customer_id: string | null
+}
+
+export async function getPaymentStatus(): Promise<PaymentStatus> {
+  return fetchAPI('/v1/merchant/billing/payment-status')
+}
+
+export async function setupCard(): Promise<{ checkout_url: string; session_id: string }> {
+  return fetchAPI('/v1/merchant/billing/setup-card', { method: 'POST' })
+}
+
+export async function setBillingType(billingType: string): Promise<{ ok: boolean; billing_type: string }> {
+  return fetchAPI('/v1/merchant/billing/set-billing-type', {
+    method: 'POST',
+    body: JSON.stringify({ billing_type: billingType }),
+  })
+}
+
+export async function removeCard(): Promise<{ ok: boolean }> {
+  return fetchAPI('/v1/merchant/billing/remove-card', { method: 'POST' })
+}
+
 // --- Ad Stats ---
 
 export async function getAdStats(period: string = '30d'): Promise<any> {

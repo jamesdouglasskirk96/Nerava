@@ -111,6 +111,12 @@ class DomainMerchant(Base):
     custom_perk_cents = Column(Integer, nullable=True)
     perk_label = Column(String, nullable=True)  # e.g., "$3 off any order"
     
+    # Billing
+    stripe_customer_id = Column(String, nullable=True, index=True)
+    billing_type = Column(String, nullable=False, default="free")  # free, pay_as_you_go, campaign
+    card_last4 = Column(String(4), nullable=True)
+    card_brand = Column(String(20), nullable=True)
+
     # QR fields (for national checkout)
     qr_token = Column(String, unique=True, nullable=True, index=True)
     qr_created_at = Column(DateTime, nullable=True)
