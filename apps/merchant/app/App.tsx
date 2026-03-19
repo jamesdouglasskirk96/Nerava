@@ -11,16 +11,12 @@ import { Overview } from './components/Overview';
 import { Exclusives } from './components/Exclusives';
 import { CreateExclusive } from './components/CreateExclusive';
 import { NeravaAds } from './components/NeravaAds';
-import { PickupPackages } from './components/PickupPackages';
-import { CreatePickupPackage } from './components/CreatePickupPackage';
 import { Billing } from './components/Billing';
 import { Settings } from './components/Settings';
 import { CustomerExclusiveView } from './components/CustomerExclusiveView';
 import { Visits } from './components/Visits';
 import { FindBusiness } from './components/FindBusiness';
 import { MerchantPreview } from './components/MerchantPreview';
-import { EVArrivals } from './components/EVArrivals';
-import { Insights } from './components/Insights';
 import { Loyalty } from './components/Loyalty';
 
 export default function App() {
@@ -78,11 +74,7 @@ export default function App() {
           <Route path="exclusives/new" element={<CreateExclusive />} />
           <Route path="visits" element={<Visits />} />
           <Route path="loyalty" element={<Loyalty />} />
-          <Route path="ev-arrivals" element={<EVArrivals />} />
-          <Route path="insights" element={<Insights />} />
           <Route path="nerava-ads" element={<NeravaAds />} />
-          <Route path="pickup-packages" element={<PickupPackages />} />
-          <Route path="pickup-packages/new" element={<CreatePickupPackage />} />
           <Route path="billing" element={<Billing />} />
           <Route path="settings" element={<Settings />} />
         </Route>

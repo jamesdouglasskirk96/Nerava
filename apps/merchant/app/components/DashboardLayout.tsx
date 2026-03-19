@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from 'react-router-dom';
-import { LayoutDashboard, Sparkles, Megaphone, Package, CreditCard, Settings, Users, LogOut, Car, BarChart3, Heart } from 'lucide-react';
+import { LayoutDashboard, Sparkles, Megaphone, CreditCard, Settings, Users, LogOut, Heart } from 'lucide-react';
 import { logout, fetchMyMerchant } from '../services/api';
 import { useEffect, useState } from 'react';
 
@@ -48,12 +48,9 @@ export function DashboardLayout() {
   const navItems = [
     { to: '/overview', label: 'Overview', icon: LayoutDashboard },
     { to: '/exclusives', label: 'Exclusives', icon: Sparkles },
-    { to: '/ev-arrivals', label: 'EV Arrivals', icon: Car },
     { to: '/visits', label: 'Visits', icon: Users },
     { to: '/loyalty', label: 'Loyalty', icon: Heart },
-    { to: '/insights', label: 'Insights', icon: BarChart3 },
     { to: '/nerava-ads', label: 'Nerava Ads', icon: Megaphone },
-    { to: '/pickup-packages', label: 'Pickup Packages', icon: Package },
     { to: '/billing', label: 'Billing', icon: CreditCard },
     { to: '/settings', label: 'Settings', icon: Settings },
   ];
