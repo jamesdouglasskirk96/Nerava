@@ -226,20 +226,18 @@ def get_merchant_insights(
 
     since = datetime.utcnow() - timedelta(days=days)
 
-    # Count nearby sessions (sessions at chargers linked to this merchant)
-    # If no charger links, fall back to 0
-    from app.models.while_you_charge import ChargerMerchant
-    wyc = db.query(WYCMerchant).filter(WYCMerchant.place_id == merchant.google_place_id).first() if merchant.google_place_id else None
-    charger_ids = []
-    if wyc:
-        links = db.query(ChargerMerchant.charger_id).filter(ChargerMerchant.merchant_id == wyc.id).all()
-        charger_ids = [l[0] for l in links]
+    # Find charger IDs linked to this merchant via the shared helper
+    # (handles place_id + name matching across WYC merchant variants)
+    all_cm_links = _find_all_charger_merchant_links(db, merchant)
+    charger_ids = list(set(link.charger_id for link in all_cm_links))
 
     ev_sessions = 0
     unique_drivers = 0
     avg_duration = None
     avg_kwh = None
     peak_hours = []
+
+    dwell_distribution = None
 
     if charger_ids:
         base = db.query(SessionEvent).filter(
@@ -249,9 +247,9 @@ def get_merchant_insights(
         ev_sessions = base.count()
         unique_drivers = base.with_entities(SessionEvent.driver_user_id).distinct().count()
 
-        dur = base.with_entities(func.avg(SessionEvent.duration_seconds)).scalar()
+        dur = base.with_entities(func.avg(SessionEvent.duration_minutes)).scalar()
         if dur:
-            avg_duration = round(dur / 60, 1)
+            avg_duration = round(float(dur), 1)
 
         kwh = base.with_entities(func.avg(SessionEvent.kwh_added)).scalar()
         if kwh:
@@ -269,6 +267,20 @@ def get_merchant_insights(
         )
         peak_hours = [{"hour": int(h), "sessions": c} for h, c in hour_counts]
 
+        # Dwell time distribution (only completed sessions with duration)
+        completed = base.filter(SessionEvent.duration_minutes.isnot(None))
+        under_15 = completed.filter(SessionEvent.duration_minutes < 15).count()
+        min_15_30 = completed.filter(SessionEvent.duration_minutes >= 15, SessionEvent.duration_minutes < 30).count()
+        min_30_60 = completed.filter(SessionEvent.duration_minutes >= 30, SessionEvent.duration_minutes < 60).count()
+        over_60 = completed.filter(SessionEvent.duration_minutes >= 60).count()
+        if under_15 + min_15_30 + min_30_60 + over_60 > 0:
+            dwell_distribution = {
+                "under_15min": under_15,
+                "15_30min": min_15_30,
+                "30_60min": min_30_60,
+                "over_60min": over_60,
+            }
+
     return {
         "period": period,
         "ev_sessions_nearby": ev_sessions,
@@ -276,7 +288,7 @@ def get_merchant_insights(
         "avg_duration_minutes": avg_duration,
         "avg_kwh": avg_kwh,
         "peak_hours": peak_hours,
-        "dwell_distribution": None,
+        "dwell_distribution": dwell_distribution,
         "walk_traffic": None,
     }
 
@@ -1168,23 +1180,39 @@ def get_merchant_analytics(
         )
     
     from app.models.exclusive_session import ExclusiveSession, ExclusiveSessionStatus
-    
+
+    # Resolve WYC merchant IDs from DomainMerchant (ExclusiveSession stores WYC IDs, not UUIDs)
+    all_cm_links = _find_all_charger_merchant_links(db, merchant)
+    wyc_merchant_ids = list(set(link.merchant_id for link in all_cm_links))
+    # Also match by place_id (exclusive activate sends place_id as merchant_id)
+    if merchant.google_place_id:
+        wyc_merchant_ids.append(merchant.google_place_id)
+
+    if not wyc_merchant_ids:
+        return {
+            "merchant_id": merchant_id,
+            "activations": 0,
+            "completes": 0,
+            "unique_drivers": 0,
+            "completion_rate": 0,
+        }
+
     # Count activations (all exclusive sessions for this merchant)
     activations = db.query(ExclusiveSession).filter(
-        ExclusiveSession.merchant_id == merchant_id
+        ExclusiveSession.merchant_id.in_(wyc_merchant_ids)
     ).count()
-    
+
     # Count completes
     completes = db.query(ExclusiveSession).filter(
-        ExclusiveSession.merchant_id == merchant_id,
+        ExclusiveSession.merchant_id.in_(wyc_merchant_ids),
         ExclusiveSession.status == ExclusiveSessionStatus.COMPLETED
     ).count()
-    
+
     # Count unique drivers
     unique_drivers = db.query(ExclusiveSession.driver_id).filter(
-        ExclusiveSession.merchant_id == merchant_id
+        ExclusiveSession.merchant_id.in_(wyc_merchant_ids)
     ).distinct().count()
-    
+
     return {
         "merchant_id": merchant_id,
         "activations": activations,
