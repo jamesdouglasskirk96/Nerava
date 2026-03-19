@@ -897,12 +897,17 @@ When a merchant edits their exclusive via the portal, the system must find ALL C
 
 1. `/claim/location` (`SelectLocation.tsx`) — tries GBP locations first, falls back to Places search
 2. User searches, selects a business, clicks "Confirm Location"
-3. `POST /v1/merchant/claim` → creates `MerchantLocationClaim` + `DomainMerchant`
-4. Sets `businessClaimed=true` → navigates to `/overview`
+3. `POST /v1/merchant/claim` → creates `MerchantLocationClaim` + `DomainMerchant`, returns `merchant_id`
+4. Frontend stores `merchant_id`, `businessClaimed=true`, `place_id`, `merchant_name` in localStorage
+5. Full page reload via `window.location.href` to `/overview` (not React Router navigate — needed because `App.tsx` reads `isClaimed` from localStorage at render time, and client-side navigation doesn't re-render `App`)
 
 ### Auth Guard
 
-`App.tsx` checks `localStorage.getItem('businessClaimed') === 'true'` to decide dashboard vs claim flow. This is fragile — clearing localStorage forces the full claim flow again.
+`App.tsx` checks `localStorage.getItem('businessClaimed') === 'true'` to decide dashboard vs claim flow. Uses `window.location.href` (not `navigate()`) after claiming because React Router navigation doesn't re-render the parent `App` component to pick up the new localStorage value.
+
+### Merchant Ownership (Multiple DomainMerchant Records)
+
+A user can end up with multiple DomainMerchant records if they re-claim. `AuthService.get_user_merchant(db, user_id, merchant_id=)` accepts an optional `merchant_id` to verify ownership of a specific record. All dashboard endpoints pass the requested `merchant_id` to this check. `link_location_to_merchant()` now reuses existing DomainMerchant records when the same user re-claims.
 
 ### Key localStorage Keys
 
@@ -1004,3 +1009,60 @@ Three critical fixes deployed to production (`session-fix-20260312-1005`):
 3. **Incentive evaluation on all end paths** — `_close_stale_session()` and `end_session_manual()` now both call `IncentiveEngine.evaluate_session()`, fixing silent reward loss
 
 Also fixed: `charge_data` → `charge_state` variable name bug in reopening logic that would have caused `NameError` at runtime.
+
+## Driver Claim Flow (Deployed 2026-03-18)
+
+Claim Reward and Request to Join CTAs added to the driver app's charger detail amenities tab.
+
+### Claim Reward Flow (Nerava Merchants)
+
+1. Driver taps merchant in Amenities tab → `MerchantActionSheet` opens
+2. Nerava merchants (`is_nerava_merchant=true`) show green "Claim Reward" button with exclusive title
+3. If not charging, shows "Plug in to claim" hint (button still visible)
+4. Tap → `ClaimConfirmModal` with charging eligibility check
+5. Confirm → `POST /v1/exclusive/activate` creates `ExclusiveSession` (ACTIVE)
+6. `ActiveVisitTracker` appears: walking path visualization, elapsed timer, progress bar
+7. "I'm Done — Complete Visit" → marks session COMPLETED
+
+### Request to Join Flow (Non-Nerava Merchants)
+
+1. Non-Nerava merchants show blue "Request to Join Nerava" button
+2. Tap → `POST /v1/merchants/{placeId}/request-join` with merchant name
+3. Toast confirmation: "Request sent for {name}"
+4. Badge shows request count on amenities tab (e.g., "3 requested")
+5. Already-requested merchants show disabled "Requested" button
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `apps/driver/src/components/ChargerDetail/ChargerDetailSheet.tsx` | Action sheet, claim modal, visit tracker |
+| `backend/app/routers/exclusive.py` | Exclusive session activation/verification/completion |
+| `backend/app/routers/chargers.py` | `is_nerava_merchant` + `join_request_count` on nearby merchants |
+| `backend/app/services/push_service.py` | `send_nearby_merchant_push()` on charging detection |
+
+### Charger Detail API Fields (NearbyMerchantResponse)
+
+Two new fields added to `/v1/chargers/{id}/detail` and `/v1/chargers/discovery`:
+- `is_nerava_merchant: bool` — true if merchant has an active exclusive/perk
+- `join_request_count: int` — number of drivers who requested this merchant join Nerava
+
+### Merchant Portal Visits
+
+The Visits page (`merchant.nerava.network/visits`) queries `ExclusiveSession` records. Since `ExclusiveSession.merchant_id` stores WYC merchant IDs (not DomainMerchant UUIDs), the endpoint uses `_find_all_charger_merchant_links()` to resolve WYC IDs from the DomainMerchant, plus matches by `google_place_id`. Statuses: ACTIVE (blue), VERIFIED/COMPLETED (green), EXPIRED/REJECTED (red).
+
+### Session Trail Map (GPS Breadcrumbs)
+
+The session trail map on `SessionCard` renders GPS points collected during charging:
+- Points stored in `session_events.session_metadata["location_trail"]` as `[{lat, lng, ts}, ...]`
+- Collected from the phone's `navigator.geolocation` on each poll (`POST /v1/charging-sessions/poll`)
+- One point per poll (~60s intervals), capped at 120 points
+- **Requires app to be in foreground** — polling pauses when backgrounded (`usePageVisibility`)
+- Rendered via Leaflet `Polyline` in `SessionTrailMap.tsx`
+
+### Exclusive Activation Gotchas
+
+- **Auth provider check:** Accepts any verified provider (phone, google, apple). Previously blocked Google SSO users with 428.
+- **Merchant ID resolution:** Frontend sends Google Place ID as `merchant_id`, but `exclusive_sessions` has FK to WYC `merchants` table. Backend resolves `place_id` → WYC `merchant.id` before insert.
+- **HTTPException swallowing:** The catch-all `except Exception` was catching `HTTPException` and re-raising as 500. Now re-raises `HTTPException` before the catch-all.
+- **Name matching:** `_find_all_charger_merchant_links()` uses partial name matching (SQL LIKE) as fallback when exact match fails (e.g., "The Heights Pizzeria" vs "The Heights Pizzeria and Drafthouse").
