@@ -2588,6 +2588,70 @@ async def debug_driver_sessions(
 
 
 # ---------------------------------------------------------------------------
+# Seed a charger (admin-only)
+# ---------------------------------------------------------------------------
+
+class SeedChargerRequest(BaseModel):
+    charger_id: str
+    name: str
+    lat: float
+    lng: float
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
+    network_name: Optional[str] = "Tesla"
+    connector_types: Optional[str] = "Tesla"
+    power_kw: Optional[float] = 250.0
+    num_evse: Optional[int] = None
+
+
+@router.post("/seed-charger")
+def admin_seed_charger(
+    request: SeedChargerRequest,
+    db: Session = Depends(get_db),
+    x_bootstrap_key: Optional[str] = Header(None, alias="X-Bootstrap-Key"),
+):
+    """Create or update a charger. Protected by BOOTSTRAP_KEY."""
+    bootstrap_key = os.getenv("BOOTSTRAP_KEY") or os.getenv("JWT_SECRET")
+    if not x_bootstrap_key or x_bootstrap_key != bootstrap_key:
+        raise HTTPException(status_code=401, detail="Invalid X-Bootstrap-Key")
+
+    from app.models.while_you_charge import Charger
+
+    charger = db.query(Charger).filter(Charger.id == request.charger_id).first()
+    if charger:
+        charger.name = request.name
+        charger.lat = request.lat
+        charger.lng = request.lng
+        charger.address = request.address
+        charger.network_name = request.network_name
+        charger.updated_at = datetime.utcnow()
+        action = "updated"
+    else:
+        charger = Charger(
+            id=request.charger_id,
+            name=request.name,
+            lat=request.lat,
+            lng=request.lng,
+            address=request.address,
+            city=request.city,
+            state=request.state,
+            zip_code=request.zip_code,
+            network_name=request.network_name,
+            connector_types=request.connector_types,
+            power_kw=request.power_kw,
+            num_evse=request.num_evse,
+            is_public=True,
+            status="operational",
+        )
+        db.add(charger)
+        action = "created"
+
+    db.commit()
+    return {"ok": True, "charger_id": request.charger_id, "action": action}
+
+
 # Seed a merchant near a charger (admin-only)
 # ---------------------------------------------------------------------------
 
