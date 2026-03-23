@@ -19,6 +19,7 @@ import android.view.View
 import android.webkit.*
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -91,25 +92,29 @@ class MainActivity : AppCompatActivity() {
         retryButton = errorView.findViewById(R.id.retryButton)
 
         // Initialize services
-        tokenStore = (application as NeravaApplication).tokenStore
-        locationService = LocationService(this)
-        geofenceManager = GeofenceManager(this)
-        apiClient = APIClient(
-            baseUrl = BuildConfig.API_BASE_URL,
-            onAuthRequired = { bridge.sendToWeb(network.nerava.app.bridge.BridgeMessage.AuthRequired) }
-        )
+        try {
+            tokenStore = (application as NeravaApplication).tokenStore
+            locationService = LocationService(this)
+            geofenceManager = GeofenceManager(this)
+            apiClient = APIClient(
+                baseUrl = BuildConfig.API_BASE_URL,
+                onAuthRequired = { bridge.sendToWeb(network.nerava.app.bridge.BridgeMessage.AuthRequired) }
+            )
 
-        // Load saved auth token
-        tokenStore.getAccessToken()?.let { apiClient.accessToken = it }
+            // Load saved auth token
+            tokenStore.getAccessToken()?.let { apiClient.accessToken = it }
 
-        // Initialize bridge and engine
-        bridge = NativeBridge(locationService, tokenStore)
-        sessionEngine = SessionEngine(this, locationService, geofenceManager, tokenStore, apiClient)
-        bridge.sessionEngine = sessionEngine
-        sessionEngine.bridge = bridge
+            // Initialize bridge and engine
+            bridge = NativeBridge(locationService, tokenStore)
+            sessionEngine = SessionEngine(this, locationService, geofenceManager, tokenStore, apiClient)
+            bridge.sessionEngine = sessionEngine
+            sessionEngine.bridge = bridge
 
-        // Set up location permission callback
-        locationService.onRequestBackgroundPermission = { requestBackgroundLocation() }
+            // Set up location permission callback
+            locationService.onRequestBackgroundPermission = { requestBackgroundLocation() }
+        } catch (e: Exception) {
+            Log.e(TAG, "Service initialization failed", e)
+        }
 
         // Configure WebView
         configureWebView()
@@ -129,10 +134,18 @@ class MainActivity : AppCompatActivity() {
         requestInitialPermissions()
 
         // Start session engine
-        sessionEngine.start()
+        try {
+            sessionEngine.start()
+        } catch (e: Exception) {
+            Log.e(TAG, "Session engine start failed", e)
+        }
 
         // Register FCM
-        registerFCM()
+        try {
+            registerFCM()
+        } catch (e: Exception) {
+            Log.e(TAG, "FCM registration failed", e)
+        }
 
         // Handle deep link (if launched via one)
         handleIntent(intent)
@@ -417,21 +430,39 @@ class MainActivity : AppCompatActivity() {
     // MARK: - Permissions
 
     private fun requestInitialPermissions() {
-        // Location (foreground)
+        // Location (foreground) — show prominent disclosure first
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED
         ) {
-            locationPermissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION,
-                )
-            )
+            showLocationDisclosure()
         } else {
             locationService.startLocationUpdates()
+            requestNotificationPermission()
         }
+    }
 
-        // Notifications (Android 13+)
+    private fun showLocationDisclosure() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.location_permission_title)
+            .setMessage(R.string.location_permission_body)
+            .setPositiveButton("Continue") { _, _ ->
+                locationPermissionLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                    )
+                )
+                requestNotificationPermission()
+            }
+            .setNegativeButton("Not now") { dialog, _ ->
+                dialog.dismiss()
+                requestNotificationPermission()
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    private fun requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED
@@ -445,7 +476,17 @@ class MainActivity : AppCompatActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
             != PackageManager.PERMISSION_GRANTED
         ) {
-            backgroundLocationPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            AlertDialog.Builder(this)
+                .setTitle(R.string.background_location_title)
+                .setMessage(R.string.background_location_body)
+                .setPositiveButton("Continue") { _, _ ->
+                    backgroundLocationPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                }
+                .setNegativeButton("Not now") { dialog, _ ->
+                    dialog.dismiss()
+                }
+                .setCancelable(false)
+                .show()
         }
     }
 

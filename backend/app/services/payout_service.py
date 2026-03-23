@@ -194,6 +194,11 @@ class PayoutService:
                 "capabilities": {
                     "transfers": {"requested": True},
                 },
+                "business_profile": {
+                    "product_description": "EV charging rewards recipient",
+                    "mcc": "7299",  # Miscellaneous recreation services
+                    "url": "https://nerava.network",
+                },
                 "metadata": {
                     "driver_id": str(driver_id),
                     "platform": "nerava",
@@ -515,9 +520,10 @@ class PayoutService:
             payout.failure_reason = str(e)
             payout.updated_at = datetime.utcnow()
 
-            # Revert funds from pending to available
+            # Revert funds from pending to available (amount + fee)
+            fee_cents = getattr(payout, '_fee_cents', 0) or calculate_withdrawal_fee(payout.amount_cents)
             wallet.pending_balance_cents -= payout.amount_cents
-            wallet.balance_cents += payout.amount_cents
+            wallet.balance_cents += payout.amount_cents + fee_cents
             wallet.updated_at = datetime.utcnow()
 
             db.commit()
@@ -608,13 +614,14 @@ class PayoutService:
 
         wallet = db.query(DriverWallet).filter(DriverWallet.id == payout.wallet_id).first()
 
-        # Revert funds
+        # Revert funds (amount + fee that was deducted on request)
         payout.status = "failed"
         payout.failure_reason = transfer_data.get("failure_message", "Unknown failure")
         payout.updated_at = datetime.utcnow()
 
+        fee_cents = calculate_withdrawal_fee(payout.amount_cents)
         wallet.pending_balance_cents -= payout.amount_cents
-        wallet.balance_cents += payout.amount_cents
+        wallet.balance_cents += payout.amount_cents + fee_cents
         wallet.updated_at = datetime.utcnow()
 
         db.commit()

@@ -8,9 +8,9 @@
     <string name="error_generic">An error occurred loading the page.</string>
     <string name="retry_button">Try Again</string>
     <string name="location_permission_title">Location Access</string>
-    <string name="location_permission_body">Nerava needs your location to find nearby EV chargers and local merchants with exclusive deals.</string>
+    <string name="location_permission_body">Nerava collects your location data to detect nearby EV chargers, show local merchant deals within walking distance, and verify your presence for charging rewards. Your location is sent to our servers to match you with chargers and merchants. Location data is not shared with third parties.</string>
     <string name="background_location_title">Background Location</string>
-    <string name="background_location_body">Nerava needs background location to notify you when you arrive at the merchant and automatically verify your visit for exclusive deals.</string>
+    <string name="background_location_body">Nerava collects your location in the background to notify you when you arrive at a merchant and automatically verify your visit for exclusive deals, even when the app is not open. Background location data is used only for arrival detection and visit verification.</string>
     <string name="notification_channel_session">Session Updates</string>
     <string name="notification_channel_session_desc">Notifications about your active charging session</string>
     <string name="notification_channel_general">General</string>

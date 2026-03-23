@@ -847,6 +847,9 @@ async def bootstrap_trigger_seed(
     seed_type: str = "chargers",
     states: Optional[str] = None,
     max_cells: Optional[int] = None,
+    lat: Optional[float] = None,
+    lng: Optional[float] = None,
+    radius_km: Optional[float] = 15.0,
     db: Session = Depends(get_db),
     _: str = Depends(verify_bootstrap_key),
 ):
@@ -857,6 +860,7 @@ async def bootstrap_trigger_seed(
     seed_type: 'chargers' or 'merchants'
     states: comma-separated state codes (optional, for chargers)
     max_cells: max grid cells (optional, for merchants)
+    lat/lng/radius_km: target a specific area for merchant seeding
     """
     if seed_type == "chargers":
         from scripts.seed_chargers_bulk import seed_chargers
@@ -865,7 +869,19 @@ async def bootstrap_trigger_seed(
         return {"ok": True, "type": "chargers", "result": result}
     elif seed_type == "merchants":
         from scripts.seed_merchants_free import seed_merchants
-        result = await seed_merchants(db, max_cells=max_cells)
+        chargers_override = None
+        if lat is not None and lng is not None:
+            # Target a specific area — only seed chargers near lat/lng
+            import math
+            from app.models.while_you_charge import Charger
+            lat_delta = radius_km / 111.0
+            lng_delta = radius_km / (111.0 * max(math.cos(math.radians(lat)), 0.01))
+            chargers_override = db.query(Charger).filter(
+                Charger.lat.between(lat - lat_delta, lat + lat_delta),
+                Charger.lng.between(lng - lng_delta, lng + lng_delta),
+            ).all()
+            logger.info(f"[TriggerSeed] Targeting {len(chargers_override)} chargers near ({lat}, {lng}) r={radius_km}km")
+        result = await seed_merchants(db, max_cells=max_cells, chargers_override=chargers_override)
         return {"ok": True, "type": "merchants", "result": result}
     else:
         raise HTTPException(status_code=400, detail="seed_type must be 'chargers' or 'merchants'")
