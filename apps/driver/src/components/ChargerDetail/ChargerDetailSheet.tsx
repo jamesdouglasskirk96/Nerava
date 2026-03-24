@@ -19,6 +19,8 @@ interface ChargerDetailSheetProps {
   onClose: () => void
   isCharging: boolean
   onViewSession?: () => void
+  isAuthenticated?: boolean
+  onLoginRequired?: () => void
 }
 
 const NETWORK_COLORS: Record<string, string> = {
@@ -81,6 +83,8 @@ export function ChargerDetailSheet({
   onClose,
   isCharging,
   onViewSession,
+  isAuthenticated = false,
+  onLoginRequired,
 }: ChargerDetailSheetProps) {
   const { data: detail, isLoading } = useChargerDetail(chargerId, userLat, userLng)
   const { data: campaignsData } = useDriverCampaigns(userLat, userLng, chargerId)
@@ -204,6 +208,11 @@ export function ChargerDetailSheet({
 
   // Claim reward handler
   const handleClaimReward = async (m: ChargerDetailNearbyMerchant) => {
+    if (!isAuthenticated) {
+      setActionMerchant(null)
+      onLoginRequired?.()
+      return
+    }
     setActionMerchant(null)
     setClaimingMerchant(m)
     setClaimState('confirming')
@@ -252,6 +261,11 @@ export function ChargerDetailSheet({
 
   // Request to join handler
   const handleRequestToJoin = async (m: ChargerDetailNearbyMerchant) => {
+    if (!isAuthenticated) {
+      setActionMerchant(null)
+      onLoginRequired?.()
+      return
+    }
     setActionMerchant(null)
     setRequestingMerchant(m)
     try {

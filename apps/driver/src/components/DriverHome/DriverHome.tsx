@@ -25,6 +25,7 @@ import { CompletionFeedbackModal } from '../CompletionFeedbackModal/CompletionFe
 import { PreferencesModal } from '../Preferences/PreferencesModal'
 import { AnalyticsDebugPanel } from '../Debug/AnalyticsDebugPanel'
 import { AccountPage } from '../Account/AccountPage'
+import { LoginModal } from '../Account/LoginModal'
 import { WalletModal } from '../Wallet/WalletModal'
 import { TabBar, type TabId } from '../shared/TabBar'
 import { groupMerchantsIntoSets, groupChargersIntoSets } from '../../utils/dataMapping'
@@ -250,6 +251,7 @@ export function DriverHome() {
     // Check if user has access token
     return !!localStorage.getItem('access_token')
   })
+  const [showLoginModal, setShowLoginModal] = useState(false)
   const [inlineError, setInlineError] = useState<string | null>(null)
 
   // Sync authentication state when tokens change
@@ -1279,27 +1281,43 @@ export function DriverHome() {
         {/* Wallet Tab */}
         {currentTab === 'wallet' && (
           <div className="flex-1 overflow-hidden">
-            <WalletModal
-              isOpen={true}
-              asPage={true}
-              onClose={() => setCurrentTab('stations')}
-              balance={walletBalance}
-              pendingBalance={walletPending}
-              stripeOnboardingComplete={walletData?.stripe_onboarding_complete ?? false}
-              recentTransactions={
-                sessionsData?.sessions
-                  ?.filter((s) => s.incentive && s.incentive.amount_cents > 0)
-                  .map((s) => ({
-                    id: s.id,
-                    type: 'credit' as const,
-                    description: `Charging reward${s.charger_network ? ` \u2022 ${s.charger_network}` : ''}`,
-                    amount: s.incentive!.amount_cents,
-                    timestamp: s.incentive!.granted_at || s.session_end || s.session_start || new Date().toISOString(),
-                  })) || []
-              }
-              onBalanceChanged={() => refetchWallet()}
-              userEmail={(() => { try { const u = JSON.parse(localStorage.getItem('nerava_user') || '{}'); return u.email || ''; } catch { return ''; } })()}
-            />
+            {!isAuthenticated ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+                <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4">
+                  <svg className="w-8 h-8 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" /></svg>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Sign in to view your wallet</h3>
+                <p className="text-sm text-gray-500 mb-6">Earn rewards from charging sessions and withdraw to your bank.</p>
+                <button
+                  onClick={() => setShowLoginModal(true)}
+                  className="px-6 py-3 bg-blue-600 text-white text-sm font-semibold rounded-xl"
+                >
+                  Sign In
+                </button>
+              </div>
+            ) : (
+              <WalletModal
+                isOpen={true}
+                asPage={true}
+                onClose={() => setCurrentTab('stations')}
+                balance={walletBalance}
+                pendingBalance={walletPending}
+                stripeOnboardingComplete={walletData?.stripe_onboarding_complete ?? false}
+                recentTransactions={
+                  sessionsData?.sessions
+                    ?.filter((s) => s.incentive && s.incentive.amount_cents > 0)
+                    .map((s) => ({
+                      id: s.id,
+                      type: 'credit' as const,
+                      description: `Charging reward${s.charger_network ? ` \u2022 ${s.charger_network}` : ''}`,
+                      amount: s.incentive!.amount_cents,
+                      timestamp: s.incentive!.granted_at || s.session_end || s.session_start || new Date().toISOString(),
+                    })) || []
+                }
+                onBalanceChanged={() => refetchWallet()}
+                userEmail={(() => { try { const u = JSON.parse(localStorage.getItem('nerava_user') || '{}'); return u.email || ''; } catch { return ''; } })()}
+              />
+            )}
           </div>
         )}
 
@@ -1348,6 +1366,8 @@ export function DriverHome() {
           userLng={effectiveCoordinates?.lng}
           onClose={() => setSelectedCharger(null)}
           isCharging={sessionPolling.isActive}
+          isAuthenticated={isAuthenticated}
+          onLoginRequired={() => setShowLoginModal(true)}
           onViewSession={() => {
             capture(DRIVER_EVENTS.CHARGING_ACTIVITY_OPENED)
             setShowSessionActivity(true)
@@ -1453,6 +1473,16 @@ export function DriverHome() {
           </div>
         </div>
       )}
+
+      {/* Login Modal (triggered by auth-required actions) */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        onSuccess={() => {
+          setShowLoginModal(false)
+          setIsAuthenticated(true)
+        }}
+      />
 
       {/* Analytics Debug Panel (dev only) */}
       <AnalyticsDebugPanel />
