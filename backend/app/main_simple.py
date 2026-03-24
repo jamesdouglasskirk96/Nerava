@@ -926,6 +926,14 @@ from .routers import partner_api, admin_partners
 app.include_router(partner_api.router)        # /v1/partners/*
 app.include_router(admin_partners.router)     # /v1/admin/partners/*
 
+# Admin Analytics
+from .routers import admin_analytics
+app.include_router(admin_analytics.router)   # /v1/admin/analytics/*
+
+# Admin Charger Management
+from .routers import admin_chargers
+app.include_router(admin_chargers.router)    # /v1/admin/chargers/*
+
 # Consolidated Stripe Webhooks
 from .routers import stripe_webhooks
 app.include_router(stripe_webhooks.router)    # /v1/stripe/webhooks

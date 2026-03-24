@@ -44,9 +44,16 @@ class StripePayoutProvider(PayoutProvider):
             type="express",
             country="US",
             email=email or None,
+            business_type="individual",
             capabilities={"transfers": {"requested": True}},
+            business_profile={
+                "product_description": "EV charging rewards recipient",
+                "mcc": "7299",
+                "url": "https://nerava.network",
+            },
             metadata={"driver_id": str(user_id), "platform": "nerava"},
         )
+
         logger.info(f"Created Stripe Express account {account.id} for driver {user_id}")
         return account.id
 

@@ -587,30 +587,51 @@ async def search_chargers(
                 "name": "Map area",
             }
         elif q.strip():
-            # Try to geocode the query
-            api_key = os.environ.get("GOOGLE_PLACES_API_KEY", "")
-            if api_key:
-                try:
-                    async with httpx.AsyncClient() as client:
-                        resp = await client.get(
-                            "https://maps.googleapis.com/maps/api/geocode/json",
-                            params={"address": q, "key": api_key},
-                            timeout=5.0,
-                        )
-                        if resp.status_code == 200:
-                            data = resp.json()
-                            results = data.get("results", [])
-                            if results:
-                                loc = results[0]["geometry"]["location"]
-                                search_lat = loc["lat"]
-                                search_lng = loc["lng"]
-                                geocoded_location = {
-                                    "lat": search_lat,
-                                    "lng": search_lng,
-                                    "name": results[0].get("formatted_address", q),
-                                }
-                except Exception as e:
-                    logger.warning(f"Geocoding failed for '{q}': {e}")
+            # Geocode query — use free Nominatim, fall back to Google if configured
+            try:
+                async with httpx.AsyncClient() as client:
+                    resp = await client.get(
+                        "https://nominatim.openstreetmap.org/search",
+                        params={"q": q, "format": "json", "limit": 1},
+                        headers={"User-Agent": "Nerava/1.0"},
+                        timeout=5.0,
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if data:
+                            search_lat = float(data[0]["lat"])
+                            search_lng = float(data[0]["lon"])
+                            geocoded_location = {
+                                "lat": search_lat,
+                                "lng": search_lng,
+                                "name": data[0].get("display_name", q),
+                            }
+            except Exception as e:
+                logger.warning(f"Nominatim geocoding failed for '{q}': {e}")
+                # Fall back to Google Geocoding if API key is available
+                api_key = os.environ.get("GOOGLE_PLACES_API_KEY", "")
+                if api_key:
+                    try:
+                        async with httpx.AsyncClient() as client:
+                            resp = await client.get(
+                                "https://maps.googleapis.com/maps/api/geocode/json",
+                                params={"address": q, "key": api_key},
+                                timeout=5.0,
+                            )
+                            if resp.status_code == 200:
+                                data = resp.json()
+                                results = data.get("results", [])
+                                if results:
+                                    loc = results[0]["geometry"]["location"]
+                                    search_lat = loc["lat"]
+                                    search_lng = loc["lng"]
+                                    geocoded_location = {
+                                        "lat": search_lat,
+                                        "lng": search_lng,
+                                        "name": results[0].get("formatted_address", q),
+                                    }
+                    except Exception as e2:
+                        logger.warning(f"Google geocoding fallback also failed for '{q}': {e2}")
 
         if search_lat is None or search_lng is None:
             return {"chargers": [], "location": None}

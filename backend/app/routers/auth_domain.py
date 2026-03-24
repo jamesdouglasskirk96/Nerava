@@ -61,9 +61,13 @@ router = APIRouter(prefix="/v1/auth", tags=["auth-v1"])
 from app.routers.auth import (
     otp_start,
     otp_verify,
+    email_otp_start,
+    email_otp_verify,
     OTPStartRequest,
     OTPStartResponse,
     OTPVerifyRequest,
+    EmailOTPStartRequest,
+    EmailOTPVerifyRequest,
     TokenResponse,
 )
 
@@ -86,6 +90,26 @@ async def otp_verify_v1_alias(
 ):
     """Alias for /auth/otp/verify to support /v1/auth/otp/verify path"""
     return await otp_verify(payload, request, db)
+
+
+@router.post("/email-otp/start", response_model=OTPStartResponse, include_in_schema=True)
+async def email_otp_start_v1_alias(
+    payload: EmailOTPStartRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Email OTP start — free via AWS SES"""
+    return await email_otp_start(payload, request, db)
+
+
+@router.post("/email-otp/verify", include_in_schema=True)
+async def email_otp_verify_v1_alias(
+    payload: EmailOTPVerifyRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Email OTP verify — free via AWS SES"""
+    return await email_otp_verify(payload, request, db)
 
 
 # Helper Functions

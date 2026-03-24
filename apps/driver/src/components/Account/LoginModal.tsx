@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { X } from 'lucide-react'
-import { otpStart, otpVerify, ApiError } from '../../services/auth'
+import { otpStart, otpVerify, emailOtpStart, emailOtpVerify, ApiError } from '../../services/auth'
 
 interface LoginModalProps {
   isOpen: boolean
@@ -9,15 +9,17 @@ interface LoginModalProps {
 }
 
 export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
-  const [step, setStep] = useState<'phone' | 'code'>('phone')
+  const [step, setStep] = useState<'input' | 'code'>('input')
+  const [mode, setMode] = useState<'email' | 'phone'>('email')
   const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [countdown, setCountdown] = useState(0)
 
   const codeInputRef = useRef<HTMLInputElement>(null)
-  const phoneInputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   // Countdown timer for resend
   useEffect(() => {
@@ -29,7 +31,7 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
   // Auto-focus inputs
   useEffect(() => {
     if (!isOpen) return
-    if (step === 'phone') phoneInputRef.current?.focus()
+    if (step === 'input') inputRef.current?.focus()
     if (step === 'code') codeInputRef.current?.focus()
   }, [isOpen, step])
 
@@ -48,15 +50,30 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
     setError(null)
   }
 
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEmail(e.target.value)
+    setError(null)
+  }
+
+  const isValidEmail = (val: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim())
+
   const handleSendCode = async () => {
-    if (phone.length < 10) {
+    if (mode === 'phone' && phone.length < 10) {
       setError('Please enter a valid 10-digit phone number.')
+      return
+    }
+    if (mode === 'email' && !isValidEmail(email)) {
+      setError('Please enter a valid email address.')
       return
     }
     setLoading(true)
     setError(null)
     try {
-      await otpStart(phone)
+      if (mode === 'email') {
+        await emailOtpStart(email)
+      } else {
+        await otpStart(phone)
+      }
       setStep('code')
       setCountdown(60)
     } catch (err) {
@@ -78,7 +95,11 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
     setLoading(true)
     setError(null)
     try {
-      await otpVerify(phone, code)
+      if (mode === 'email') {
+        await emailOtpVerify(email, code)
+      } else {
+        await otpVerify(phone, code)
+      }
       onSuccess()
     } catch (err) {
       if (err instanceof ApiError) {
@@ -96,7 +117,11 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
     setLoading(true)
     setError(null)
     try {
-      await otpStart(phone)
+      if (mode === 'email') {
+        await emailOtpStart(email)
+      } else {
+        await otpStart(phone)
+      }
       setCountdown(60)
       setCode('')
     } catch (err) {
@@ -111,8 +136,9 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
   }
 
   const handleClose = () => {
-    setStep('phone')
+    setStep('input')
     setPhone('')
+    setEmail('')
     setCode('')
     setError(null)
     setCountdown(0)
@@ -120,10 +146,20 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
   }
 
   const handleBack = () => {
-    setStep('phone')
+    setStep('input')
     setCode('')
     setError(null)
   }
+
+  const switchMode = () => {
+    setMode(mode === 'email' ? 'phone' : 'email')
+    setError(null)
+  }
+
+  const canSend = mode === 'email' ? isValidEmail(email) : phone.length >= 10
+  const sentTo = mode === 'email'
+    ? email.trim()
+    : `+1 ${formatPhone(phone)}`
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[3100] flex items-end sm:items-center justify-center">
@@ -142,7 +178,7 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
               </button>
             )}
             <h2 className="text-xl font-bold">
-              {step === 'phone' ? 'Sign in' : 'Enter code'}
+              {step === 'input' ? 'Sign in' : 'Enter code'}
             </h2>
           </div>
           <button
@@ -159,33 +195,54 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
           </div>
         )}
 
-        {step === 'phone' ? (
+        {step === 'input' ? (
           <>
             <p className="text-[#65676B] text-sm mb-4">
-              Enter your phone number to sign in or create an account.
+              {mode === 'email'
+                ? 'Enter your email to sign in or create an account.'
+                : 'Enter your phone number to sign in or create an account.'}
             </p>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Phone number
-              </label>
-              <div className="flex items-center border border-gray-300 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-[#1877F2] focus-within:border-transparent">
-                <span className="pl-4 pr-2 text-gray-500 text-sm">+1</span>
-                <input
-                  ref={phoneInputRef}
-                  type="tel"
-                  value={formatPhone(phone)}
-                  onChange={handlePhoneChange}
-                  placeholder="(555) 123-4567"
-                  className="flex-1 py-3 pr-4 text-base outline-none"
-                  onKeyDown={e => e.key === 'Enter' && handleSendCode()}
-                />
-              </div>
+              {mode === 'email' ? (
+                <>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Email address
+                  </label>
+                  <input
+                    ref={inputRef}
+                    type="email"
+                    value={email}
+                    onChange={handleEmailChange}
+                    placeholder="you@example.com"
+                    className="w-full py-3 px-4 text-base border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-[#1877F2] focus:border-transparent"
+                    onKeyDown={e => e.key === 'Enter' && handleSendCode()}
+                  />
+                </>
+              ) : (
+                <>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Phone number
+                  </label>
+                  <div className="flex items-center border border-gray-300 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-[#1877F2] focus-within:border-transparent">
+                    <span className="pl-4 pr-2 text-gray-500 text-sm">+1</span>
+                    <input
+                      ref={inputRef}
+                      type="tel"
+                      value={formatPhone(phone)}
+                      onChange={handlePhoneChange}
+                      placeholder="(555) 123-4567"
+                      className="flex-1 py-3 pr-4 text-base outline-none"
+                      onKeyDown={e => e.key === 'Enter' && handleSendCode()}
+                    />
+                  </div>
+                </>
+              )}
             </div>
 
             <button
               onClick={handleSendCode}
-              disabled={loading || phone.length < 10}
+              disabled={loading || !canSend}
               className="w-full py-3 bg-[#1877F2] text-white font-semibold rounded-xl hover:bg-[#166FE5] disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
             >
               {loading ? (
@@ -194,11 +251,18 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
                 'Send Code'
               )}
             </button>
+
+            <button
+              onClick={switchMode}
+              className="w-full text-sm text-[#1877F2] font-medium mt-3"
+            >
+              {mode === 'email' ? 'Use phone number instead' : 'Use email instead'}
+            </button>
           </>
         ) : (
           <>
             <p className="text-[#65676B] text-sm mb-4">
-              We sent a 6-digit code to <span className="font-medium text-gray-900">+1 {formatPhone(phone)}</span>
+              We sent a 6-digit code to <span className="font-medium text-gray-900">{sentTo}</span>
             </p>
 
             <div className="mb-4">

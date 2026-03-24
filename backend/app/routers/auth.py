@@ -60,12 +60,21 @@ class OTPStartRequest(BaseModel):
     phone: str
 
 
+class EmailOTPStartRequest(BaseModel):
+    email: EmailStr
+
+
 class OTPStartResponse(BaseModel):
     otp_sent: bool
 
 
 class OTPVerifyRequest(BaseModel):
     phone: str
+    code: str
+
+
+class EmailOTPVerifyRequest(BaseModel):
+    email: EmailStr
     code: str
 
 
@@ -579,6 +588,136 @@ async def otp_verify(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Verification service error. Please request a new code."
         )
+
+
+# ============================================
+# Email OTP Endpoints (free via AWS SES)
+# ============================================
+
+@router.post("/email-otp/start", response_model=OTPStartResponse)
+async def email_otp_start(
+    payload: EmailOTPStartRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Start email OTP flow: generate and send OTP code via email.
+    Uses AWS SES (free tier: 62K emails/month from App Runner).
+    """
+    import logging
+    from ..services.email_otp_service import EmailOTPService
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        EmailOTPService.send_code(db, payload.email)
+        db.commit()
+        return OTPStartResponse(otp_sent=True)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[Auth][EmailOTP] Send failed: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to send code. Try again later."
+        )
+
+
+@router.post("/email-otp/verify", response_model=TokenResponse)
+async def email_otp_verify(
+    payload: EmailOTPVerifyRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Verify email OTP code and authenticate user.
+    Creates user if email is new.
+    """
+    import logging
+    from ..services.email_otp_service import EmailOTPService
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        EmailOTPService.verify_code(db, payload.email, payload.code)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[Auth][EmailOTP] Verify error: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Verification service error. Please request a new code."
+        )
+
+    # Find or create user by email
+    email = payload.email.strip().lower()
+    user = db.query(User).filter(User.email == email).first()
+    is_new_user = False
+
+    if not user:
+        import uuid
+        user = User(
+            public_id=str(uuid.uuid4()),
+            email=email,
+            auth_provider="email",
+            role_flags="driver",
+            is_active=True
+        )
+        db.add(user)
+        db.flush()
+        db.add(UserPreferences(user_id=user.id))
+        db.commit()
+        db.refresh(user)
+        is_new_user = True
+
+        # Emit driver_signed_up event (non-blocking)
+        try:
+            from ..events.domain import DriverSignedUpEvent
+            from ..events.outbox import store_outbox_event
+            event = DriverSignedUpEvent(
+                user_id=str(user.id),
+                email=email,
+                auth_provider="email",
+                created_at=datetime.utcnow()
+            )
+            store_outbox_event(db, event)
+        except Exception as e:
+            logger.warning(f"Failed to emit driver_signed_up event: {e}")
+
+    # Create tokens
+    access_token = create_access_token(
+        user.public_id,
+        auth_provider=user.auth_provider,
+        role="driver"
+    )
+    refresh_token_plain, refresh_token_model = RefreshTokenService.create_refresh_token(db, user)
+
+    db.commit()
+
+    # PostHog
+    analytics = get_analytics_client()
+    analytics.capture(
+        event="email_otp_verified",
+        distinct_id=user.public_id,
+        properties={
+            "is_new_user": is_new_user,
+            "source": "driver"
+        }
+    )
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token_plain,
+        token_type="bearer",
+        user={
+            "public_id": user.public_id,
+            "auth_provider": user.auth_provider,
+            "email": user.email,
+            "phone": user.phone,
+            "name": user.display_name,
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+        }
+    )
 
 
 # ============================================

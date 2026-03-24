@@ -5,6 +5,7 @@ from .otp_provider import OTPProvider
 from .twilio_verify import TwilioVerifyProvider
 from .twilio_sms import TwilioSMSProvider
 from .stub_provider import StubOTPProvider
+from .email_otp_provider import EmailOTPProvider
 from .google_oauth import GoogleOAuthService
 from .tokens import create_token_with_role
 from .rate_limit import RateLimitService, get_rate_limit_service
@@ -16,6 +17,7 @@ __all__ = [
     "TwilioVerifyProvider",
     "TwilioSMSProvider",
     "StubOTPProvider",
+    "EmailOTPProvider",
     "GoogleOAuthService",
     "create_token_with_role",
     "RateLimitService",

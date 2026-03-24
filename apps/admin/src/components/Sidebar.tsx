@@ -1,4 +1,4 @@
-import { LayoutDashboard, Store, MapPin, Zap, Star, ShieldAlert, FileText, Rocket, Database } from 'lucide-react';
+import { LayoutDashboard, Store, MapPin, Zap, Star, ShieldAlert, FileText, Rocket, Database, Users, Plug, Target } from 'lucide-react';
 
 interface SidebarProps {
   activeScreen: string;
@@ -9,9 +9,12 @@ interface SidebarProps {
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'merchants', label: 'Merchants', icon: Store },
+  { id: 'chargers', label: 'Chargers', icon: Plug },
   { id: 'charging-locations', label: 'Charging Locations', icon: MapPin },
   { id: 'active-sessions', label: 'Charging Sessions', icon: Zap },
+  { id: 'campaigns', label: 'Campaigns', icon: Target },
   { id: 'exclusives', label: 'Exclusives', icon: Star },
+  { id: 'users', label: 'Users', icon: Users },
   { id: 'overrides', label: 'Overrides', icon: ShieldAlert },
   { id: 'deployments', label: 'Deployments', icon: Rocket },
   { id: 'logs', label: 'Logs', icon: FileText },

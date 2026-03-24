@@ -1,6 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Store, MapPin, Activity, AlertTriangle, Zap, Car, CreditCard, Target, DollarSign, TrendingUp } from 'lucide-react';
 import { fetchAPI, getActiveSessions, getAuditLogs, type AuditLog } from '../services/api';
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+  Area,
+  AreaChart,
+} from 'recharts';
 
 interface RevenueBreakdown {
   campaign_gross_cents: number;
@@ -30,6 +44,77 @@ interface OverviewResponse {
   revenue?: RevenueBreakdown;
 }
 
+// ---------------------------------------------------------------------------
+// Analytics types
+// ---------------------------------------------------------------------------
+
+interface DailySessionCount {
+  date: string;
+  count: number;
+  total_kwh: number;
+}
+
+interface DailyDriverCount {
+  date: string;
+  active_drivers: number;
+  new_drivers: number;
+}
+
+interface DailyRevenue {
+  date: string;
+  grants_cents: number;
+  payouts_cents: number;
+}
+
+type PeriodDays = 7 | 30 | 90;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Format "2026-03-15" as "Mar 15" */
+function formatDateLabel(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+/** Format cents as "$X.XX" */
+function centsToUSD(cents: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(cents / 100);
+}
+
+// ---------------------------------------------------------------------------
+// Chart card wrapper
+// ---------------------------------------------------------------------------
+
+function ChartCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-white border border-neutral-200 rounded-lg">
+      <div className="px-6 py-4 border-b border-neutral-200">
+        <h2 className="text-lg text-neutral-900">{title}</h2>
+      </div>
+      <div className="p-6" style={{ height: 320 }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,9 +122,39 @@ export function Dashboard() {
   const [activeSessionsCount, setActiveSessionsCount] = useState(0);
   const [recentLogs, setRecentLogs] = useState<AuditLog[]>([]);
 
+  // Analytics state
+  const [period, setPeriod] = useState<PeriodDays>(30);
+  const [sessionsSeries, setSessionsSeries] = useState<DailySessionCount[]>([]);
+  const [driversSeries, setDriversSeries] = useState<DailyDriverCount[]>([]);
+  const [revenueSeries, setRevenueSeries] = useState<DailyRevenue[]>([]);
+  const [chartsLoading, setChartsLoading] = useState(false);
+
   useEffect(() => {
     loadData();
   }, []);
+
+  // Fetch chart data whenever period changes
+  const loadCharts = useCallback(async (days: PeriodDays) => {
+    setChartsLoading(true);
+    try {
+      const [sessions, drivers, revenue] = await Promise.all([
+        fetchAPI<DailySessionCount[]>(`/v1/admin/analytics/sessions?days=${days}`),
+        fetchAPI<DailyDriverCount[]>(`/v1/admin/analytics/drivers?days=${days}`),
+        fetchAPI<DailyRevenue[]>(`/v1/admin/analytics/revenue?days=${days}`),
+      ]);
+      setSessionsSeries(sessions);
+      setDriversSeries(drivers);
+      setRevenueSeries(revenue);
+    } catch (err) {
+      console.error('Failed to load analytics charts:', err);
+    } finally {
+      setChartsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCharts(period);
+  }, [period, loadCharts]);
 
   const loadData = async () => {
     try {
@@ -301,6 +416,219 @@ export function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Analytics Charts                                                    */}
+      {/* ------------------------------------------------------------------ */}
+
+      {/* Period selector */}
+      <div className="flex items-center justify-between mt-10 mb-4">
+        <h2 className="text-xl text-neutral-900">Analytics</h2>
+        <div className="flex gap-2">
+          {([7, 30, 90] as PeriodDays[]).map((d) => (
+            <button
+              key={d}
+              onClick={() => setPeriod(d)}
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                period === d
+                  ? 'bg-neutral-900 text-white'
+                  : 'bg-white border border-neutral-200 text-neutral-600 hover:bg-neutral-50'
+              }`}
+            >
+              {d}d
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {chartsLoading ? (
+        <div className="text-center py-12 text-neutral-500">Loading charts...</div>
+      ) : (
+        <div className="grid grid-cols-2 gap-6">
+          {/* 1. Sessions Over Time */}
+          <ChartCard title="Sessions Over Time">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={sessionsSeries}>
+                <defs>
+                  <linearGradient id="sessionFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={formatDateLabel}
+                  tick={{ fontSize: 12, fill: '#6b7280' }}
+                  tickLine={false}
+                  axisLine={{ stroke: '#e5e7eb' }}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  tick={{ fontSize: 12, fill: '#6b7280' }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <Tooltip
+                  labelFormatter={formatDateLabel}
+                  formatter={(value: number, name: string) => {
+                    if (name === 'count') return [value, 'Sessions'];
+                    return [value, name];
+                  }}
+                  contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }}
+                />
+                <Legend formatter={(value) => (value === 'count' ? 'Sessions' : value)} />
+                <Area
+                  type="monotone"
+                  dataKey="count"
+                  stroke="#3b82f6"
+                  strokeWidth={2}
+                  fill="url(#sessionFill)"
+                  dot={false}
+                  activeDot={{ r: 4, fill: '#3b82f6' }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </ChartCard>
+
+          {/* 2. Active Drivers Over Time */}
+          <ChartCard title="Active Drivers Over Time">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={driversSeries}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={formatDateLabel}
+                  tick={{ fontSize: 12, fill: '#6b7280' }}
+                  tickLine={false}
+                  axisLine={{ stroke: '#e5e7eb' }}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  tick={{ fontSize: 12, fill: '#6b7280' }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <Tooltip
+                  labelFormatter={formatDateLabel}
+                  formatter={(value: number, name: string) => {
+                    if (name === 'active_drivers') return [value, 'Active Drivers'];
+                    if (name === 'new_drivers') return [value, 'New Drivers'];
+                    return [value, name];
+                  }}
+                  contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }}
+                />
+                <Legend
+                  formatter={(value) => {
+                    if (value === 'active_drivers') return 'Active Drivers';
+                    if (value === 'new_drivers') return 'New Drivers';
+                    return value;
+                  }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="active_drivers"
+                  stroke="#3b82f6"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4, fill: '#3b82f6' }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="new_drivers"
+                  stroke="#22c55e"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4, fill: '#22c55e' }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </ChartCard>
+
+          {/* 3. Revenue Over Time */}
+          <ChartCard title="Revenue Over Time">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={revenueSeries}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={formatDateLabel}
+                  tick={{ fontSize: 12, fill: '#6b7280' }}
+                  tickLine={false}
+                  axisLine={{ stroke: '#e5e7eb' }}
+                />
+                <YAxis
+                  tick={{ fontSize: 12, fill: '#6b7280' }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v: number) => centsToUSD(v)}
+                />
+                <Tooltip
+                  labelFormatter={formatDateLabel}
+                  formatter={(value: number, name: string) => {
+                    if (name === 'grants_cents') return [centsToUSD(value), 'Grants'];
+                    if (name === 'payouts_cents') return [centsToUSD(value), 'Payouts'];
+                    return [centsToUSD(value), name];
+                  }}
+                  contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }}
+                />
+                <Legend
+                  formatter={(value) => {
+                    if (value === 'grants_cents') return 'Grants';
+                    if (value === 'payouts_cents') return 'Payouts';
+                    return value;
+                  }}
+                />
+                <Bar dataKey="grants_cents" stackId="revenue" fill="#22c55e" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="payouts_cents" stackId="revenue" fill="#ef4444" radius={[2, 2, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
+
+          {/* 4. Energy Delivered (bonus — uses session data) */}
+          <ChartCard title="Energy Delivered (kWh)">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={sessionsSeries}>
+                <defs>
+                  <linearGradient id="kwhFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={formatDateLabel}
+                  tick={{ fontSize: 12, fill: '#6b7280' }}
+                  tickLine={false}
+                  axisLine={{ stroke: '#e5e7eb' }}
+                />
+                <YAxis
+                  tick={{ fontSize: 12, fill: '#6b7280' }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v: number) => `${v} kWh`}
+                />
+                <Tooltip
+                  labelFormatter={formatDateLabel}
+                  formatter={(value: number) => [`${value.toFixed(1)} kWh`, 'Energy']}
+                  contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }}
+                />
+                <Legend formatter={() => 'Total kWh'} />
+                <Area
+                  type="monotone"
+                  dataKey="total_kwh"
+                  stroke="#f59e0b"
+                  strokeWidth={2}
+                  fill="url(#kwhFill)"
+                  dot={false}
+                  activeDot={{ r: 4, fill: '#f59e0b' }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        </div>
+      )}
     </div>
   );
 }

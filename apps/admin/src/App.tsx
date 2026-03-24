@@ -10,6 +10,9 @@ import { Overrides } from './components/Overrides';
 import { Deployments } from './components/Deployments';
 import { Logs } from './components/Logs';
 import { SeedManager } from './components/SeedManager';
+import UsersPage from './pages/Users';
+import ChargersPage from './pages/Chargers';
+import CampaignsPage from './pages/Campaigns';
 import './App.css'
 
 export default function App() {
@@ -33,12 +36,18 @@ export default function App() {
         return <Dashboard />;
       case 'merchants':
         return <Merchants />;
+      case 'chargers':
+        return <ChargersPage />;
       case 'charging-locations':
         return <ChargingLocations />;
       case 'active-sessions':
         return <ActiveSessions />;
+      case 'campaigns':
+        return <CampaignsPage />;
       case 'exclusives':
         return <Exclusives />;
+      case 'users':
+        return <UsersPage />;
       case 'overrides':
         return <Overrides />;
       case 'deployments':

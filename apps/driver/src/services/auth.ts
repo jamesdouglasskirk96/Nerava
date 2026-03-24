@@ -21,12 +21,21 @@ export interface OTPStartRequest {
   phone: string
 }
 
+export interface EmailOTPStartRequest {
+  email: string
+}
+
 export interface OTPStartResponse {
   otp_sent: boolean
 }
 
 export interface OTPVerifyRequest {
   phone: string
+  code: string
+}
+
+export interface EmailOTPVerifyRequest {
+  email: string
   code: string
 }
 
@@ -147,6 +156,80 @@ export async function otpVerify(phone: string, code: string): Promise<TokenRespo
   // Notify same-window listeners (storage event only fires cross-tab)
   window.dispatchEvent(new Event('nerava:auth-changed'))
 
+  return data
+}
+
+/**
+ * Start email OTP flow (free via AWS SES)
+ */
+export async function emailOtpStart(email: string): Promise<OTPStartResponse> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 15000)
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/v1/auth/email-otp/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      signal: controller.signal,
+    })
+
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      let errorData: { detail?: string; message?: string; error?: string } = {}
+      try { errorData = await response.json() } catch {}
+      const errorMessage = errorData.message || errorData.detail || response.statusText
+      if (response.status === 429) {
+        throw new ApiError(429, 'rate_limit', 'Too many requests. Please try again in a moment.')
+      }
+      throw new ApiError(response.status, errorData.error, errorMessage)
+    }
+    return await response.json()
+  } catch (err) {
+    clearTimeout(timeoutId)
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new ApiError(408, 'timeout', 'Request timed out. Please try again.')
+    }
+    throw err
+  }
+}
+
+/**
+ * Verify email OTP and get access token (free via AWS SES)
+ */
+export async function emailOtpVerify(email: string, code: string): Promise<TokenResponse> {
+  const response = await fetch(`${API_BASE_URL}/v1/auth/email-otp/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim().toLowerCase(), code }),
+  })
+
+  if (!response.ok) {
+    let errorData: { detail?: string; message?: string; error?: string } = {}
+    try { errorData = await response.json() } catch {}
+    const errorMessage = errorData.message || errorData.detail || response.statusText
+    if (response.status === 401) {
+      throw new ApiError(401, 'invalid_code', 'Incorrect code. Please try again.')
+    }
+    if (response.status === 429) {
+      throw new ApiError(429, 'rate_limit', 'Too many requests. Please try again in a moment.')
+    }
+    throw new ApiError(response.status, errorData.error, errorMessage)
+  }
+
+  const data = await response.json()
+
+  localStorage.setItem('access_token', data.access_token)
+  if (data.refresh_token) {
+    localStorage.setItem('refresh_token', data.refresh_token)
+  }
+  syncTokenToNative(data.access_token)
+  if (data.user) {
+    localStorage.setItem('nerava_user', JSON.stringify(data.user))
+  }
+
+  window.dispatchEvent(new Event('nerava:auth-changed'))
   return data
 }
 
