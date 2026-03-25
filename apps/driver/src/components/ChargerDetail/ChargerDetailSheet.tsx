@@ -234,10 +234,8 @@ export function ChargerDetailSheet({
       })
       setClaimState('idle')
       setClaimingMerchant(null)
-      // Navigate to wallet (claim card lives there now)
-      if (onClaimActivated && result.exclusive_session?.id) {
-        onClaimActivated(result.exclusive_session.id)
-      }
+      // Navigate to active claim view via stations tab
+      onClaimActivated?.(result.exclusive_session?.id || '')
     } catch {
       setClaimState('idle')
       setClaimingMerchant(null)

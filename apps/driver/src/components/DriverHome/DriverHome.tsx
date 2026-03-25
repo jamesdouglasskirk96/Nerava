@@ -1389,7 +1389,8 @@ export function DriverHome() {
           }}
           onClaimActivated={() => {
             setSelectedCharger(null)
-            setCurrentTab('wallet')
+            // Stay on stations tab — ExclusiveActiveView will render
+            setCurrentTab('stations')
           }}
         />
       )}
