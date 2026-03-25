@@ -171,34 +171,10 @@ export function DiscoveryView({
       )
     })
 
-    const filteredMerchants = merchants.filter((m) => {
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase()
-        const nameMatch = m.name.toLowerCase().includes(q)
-        const typeMatch = (m.types || []).some((t) => t.toLowerCase().includes(q))
-        if (!nameMatch && !typeMatch) return false
-      }
-
-      if (selectedFilters.length > 0) {
-        const types = (m.types || []).map((t) => t.toLowerCase())
-        return selectedFilters.every((filter) => {
-          switch (filter) {
-            case 'bathroom': return true
-            case 'food': return types.some(t => t.includes('restaurant') || t.includes('food') || t.includes('cafe') || t.includes('bakery'))
-            case 'wifi': return types.some(t => t.includes('cafe') || t.includes('restaurant') || t.includes('coffee'))
-            case 'pets': return types.some(t => t.includes('pet') || t.includes('veterinary'))
-            default: return false
-          }
-        })
-      }
-      return true
-    })
-
+    // Only show chargers in the discovery list — merchants appear in the
+    // charger detail "Nearby" tab after a charger is selected
     for (const charger of filteredChargers) {
       items.push({ type: 'charger', data: charger })
-    }
-    for (const merchant of filteredMerchants) {
-      items.push({ type: 'merchant', data: merchant })
     }
 
     return items

@@ -37,8 +37,6 @@ export function DiscoveryCard({
     type === 'charger' && data.campaign_reward_cents && data.campaign_reward_cents > 0
       ? formatReward(data.campaign_reward_cents)
       : null
-  const isExclusive =
-    type === 'merchant' && data.badges?.includes('Exclusive')
   const photoUrl =
     type === 'merchant' ? data.photo_url : null
 
@@ -52,10 +50,6 @@ export function DiscoveryCard({
     : chargerData?.power_kw && chargerData.power_kw > 50
       ? 'bg-blue-50 text-[#1877F2]'
       : 'bg-emerald-50 text-emerald-700'
-  const pricingLabel = chargerData?.pricing_per_kwh != null
-    ? `$${chargerData.pricing_per_kwh.toFixed(2)}/kWh`
-    : null
-  const activeDrivers = chargerData?.active_drivers ?? 0
 
   // Network logo for chargers
   const chargerImage =
@@ -106,8 +100,8 @@ export function DiscoveryCard({
         </div>
         <p className="text-[14px] text-[#656A6B] truncate">{subtitle}</p>
 
-        {/* Pills */}
-        <div className="flex gap-1.5 mt-1 flex-wrap">
+        {/* Pills — keep to max 3 for visual clarity */}
+        <div className="flex gap-1.5 mt-1">
           <span className="px-2 py-0.5 text-xs rounded-full bg-[#E7F3FF] text-[#1877F2]">
             {distancePill}
           </span>
@@ -119,22 +113,6 @@ export function DiscoveryCard({
           {rewardPill && (
             <span className="px-2 py-0.5 text-xs rounded-full bg-[#E8F5E9] text-[#2E7D32]">
               {rewardPill}
-            </span>
-          )}
-          {pricingLabel && (
-            <span className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-[#65676B]">
-              {pricingLabel}
-            </span>
-          )}
-          {activeDrivers > 0 && (
-            <span className="px-2 py-0.5 text-xs rounded-full bg-green-50 text-green-700 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-              {activeDrivers} active
-            </span>
-          )}
-          {isExclusive && (
-            <span className="px-2 py-0.5 text-xs rounded-full bg-[#F3E5F5] text-[#7B1FA2]">
-              Exclusive
             </span>
           )}
         </div>
