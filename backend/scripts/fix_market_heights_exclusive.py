@@ -67,7 +67,7 @@ def main():
             print(f"  link_id={link.id}  merchant_id={link.merchant_id}  name={merchant_name}  exclusive={exclusive}  distance={link.distance_m}m")
             if merchant_name and "heights pizzeria" in merchant_name.lower():
                 heights_link = link
-            if merchant_name and merchant_name.lower().strip() == "test":
+            if merchant_name and merchant_name.lower().strip() in ("test", "test2"):
                 test_links.append(link)
 
         # 3. Set exclusive on Heights Pizzeria
@@ -93,7 +93,22 @@ def main():
         else:
             print("\nNo 'Test' merchant links found (already clean).")
 
-        # 5. Also check for this exclusive on OTHER chargers and remove it
+        # 5. Remove duplicate Heights Pizzeria links (keep only the one with exclusive)
+        heights_links = [
+            link for link, name in links
+            if name and "heights pizzeria" in name.lower()
+        ]
+        if len(heights_links) > 1:
+            # Keep the one with the exclusive, remove the rest
+            to_keep = next((l for l in heights_links if l.exclusive_title), heights_links[0])
+            for link in heights_links:
+                if link.id != to_keep.id:
+                    dup_name = db.query(Merchant.name).filter(Merchant.id == link.merchant_id).scalar()
+                    print(f"\nREMOVING duplicate Heights Pizzeria link (id={link.id}, merchant_id={link.merchant_id}, name={dup_name})")
+                    db.delete(link)
+            db.commit()
+
+        # 6. Also check for this exclusive on OTHER chargers and remove it
         # (the exclusive should only be on the Market Heights charger)
         other_exclusive_links = (
             db.query(ChargerMerchant)

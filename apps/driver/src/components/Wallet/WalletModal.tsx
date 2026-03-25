@@ -395,7 +395,7 @@ export function WalletModal({
 
           {/* Active Claim Card */}
           {activeClaim && claimRemaining > 0 && (
-            <ClaimActiveCard session={activeClaim} remainingSeconds={claimRemaining} />
+            <ClaimActiveCard session={activeClaim} remainingSeconds={claimRemaining} onTap={onClose} />
           )}
 
           {/* Error banner (for connect bank failures) */}
