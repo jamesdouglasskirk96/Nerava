@@ -6,7 +6,7 @@ import { capture, DRIVER_EVENTS } from '../../analytics'
 import { openExternalUrl } from '../../utils/openExternal'
 
 type SheetState = 'peek' | 'expanded' | 'dismissed'
-type Tab = 'overview' | 'rewards' | 'amenities'
+type Tab = 'overview' | 'rewards' | 'nearby'
 
 interface ChargerDetailSheetProps {
   chargerId: string
@@ -371,7 +371,7 @@ export function ChargerDetailSheet({
 
         {/* Tabs */}
         <div className="flex-shrink-0 flex border-b border-gray-100 px-5">
-          {(['overview', 'rewards', 'amenities'] as Tab[]).map((tab) => (
+          {(['overview', 'rewards', 'nearby'] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -400,7 +400,7 @@ export function ChargerDetailSheet({
           ) : activeTab === 'rewards' ? (
             <RewardsTab rewardCents={rewardCents} detail={detail} campaigns={campaigns} />
           ) : (
-            <AmenitiesTab
+            <NearbyTab
               merchants={detail?.nearby_merchants ?? []}
               onMerchantTap={setActionMerchant}
             />
@@ -631,9 +631,9 @@ function RewardsTab({ rewardCents, detail, campaigns }: { rewardCents: number; d
   )
 }
 
-// ─── Amenities Tab ───────────────────────────────────────────────────────────
+// ─── Nearby Tab ─────────────────────────────────────────────────────────────
 
-function AmenitiesTab({
+function NearbyTab({
   merchants,
   onMerchantTap,
 }: {
@@ -646,7 +646,7 @@ function AmenitiesTab({
         <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
           <MapPin className="w-7 h-7 text-gray-400" />
         </div>
-        <p className="text-sm font-medium text-[#050505]">No nearby amenities</p>
+        <p className="text-sm font-medium text-[#050505]">No nearby places</p>
         <p className="text-xs text-[#65676B] mt-1">We haven't found merchants near this charger yet</p>
       </div>
     )

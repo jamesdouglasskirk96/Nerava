@@ -207,21 +207,6 @@ export function DiscoveryMap({
         marker.on('click', () => onPinTap(id))
         marker.addTo(map)
         markersRef.current.push(marker)
-      } else {
-        const iconHtml = `<div style="width:22px;height:22px;background:#656A6B;border:2px solid white;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.2);"></div>`
-
-        const icon = L.divIcon({
-          html: iconHtml,
-          className: '',
-          iconSize: [22, 22],
-          iconAnchor: [11, 11],
-        })
-
-        const marker = L.marker([lat, lng], { icon })
-        marker.bindTooltip(name, { permanent: false, direction: 'top' })
-        marker.on('click', () => onPinTap(id))
-        marker.addTo(map)
-        markersRef.current.push(marker)
       }
     })
   }, [items, selectedId, onPinTap, userLat, userLng, activeChargerId])
