@@ -737,10 +737,21 @@ export function DriverHome() {
       const session = activeExclusiveData.exclusive_session
       if (!activeExclusive && !manualClearRef.current) {
         // Convert backend session to ExclusiveMerchant
+        const distanceM = session.merchant_distance_m
+        const distanceLabel = distanceM != null
+          ? (distanceM < 1000 ? `${Math.round(distanceM)}m` : `${(distanceM / 1609.34).toFixed(1)} miles`)
+          : undefined
+        const walkMin = session.merchant_walk_time_min
         const exclusiveMerchant: ExclusiveMerchant = {
           id: session.merchant_id || '',
-          name: '', // Will be populated from merchant details
-          walkTime: '5 min',
+          name: session.merchant_name || '',
+          category: session.merchant_category || undefined,
+          walkTime: walkMin != null ? `${walkMin} min walk` : '5 min',
+          imageUrl: session.merchant_photo_url || null,
+          exclusiveOffer: session.exclusive_title || undefined,
+          distance: distanceLabel,
+          lat: session.merchant_lat ?? undefined,
+          lng: session.merchant_lng ?? undefined,
           expiresAt: session.expires_at,
         }
         activateExclusiveLocal(exclusiveMerchant, session.expires_at)

@@ -163,6 +163,19 @@ export function ExclusiveActiveView({
             <p className="text-sm text-[#65676B] mb-6">{merchant.category}</p>
           )}
 
+          {/* Exclusive Offer */}
+          {merchant.exclusiveOffer && (
+            <div className="bg-green-50 border border-green-200 rounded-2xl p-4 mb-4 flex items-center gap-3">
+              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <span className="text-lg">🎁</span>
+              </div>
+              <div>
+                <p className="text-xs text-green-600 font-medium">Your Reward</p>
+                <p className="text-sm font-semibold text-green-800">{merchant.exclusiveOffer}</p>
+              </div>
+            </div>
+          )}
+
           {/* Instruction */}
           <div className="bg-[#F7F8FA] rounded-2xl p-4 mb-4">
             <p className="text-sm text-[#050505] text-center">

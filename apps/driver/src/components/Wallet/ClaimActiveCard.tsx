@@ -20,7 +20,7 @@ export function ClaimActiveCard({ session, remainingSeconds }: ClaimActiveCardPr
 
   return (
     <button
-      onClick={() => navigate(`/claim/${session.id}`)}
+      onClick={() => navigate('/')}
       className="w-full bg-white rounded-2xl border-2 border-green-200 p-4 text-left transition-transform active:scale-[0.98] shadow-sm"
     >
       {/* Header row */}
