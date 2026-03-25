@@ -12,9 +12,10 @@ from pydantic import BaseModel, field_validator
 
 from app.db import get_db
 from app.models import User
-from app.models.while_you_charge import Charger, Merchant
+from app.models.while_you_charge import Charger, Merchant, ChargerMerchant
 from app.models.exclusive_session import ExclusiveSession, ExclusiveSessionStatus
 from app.models.verified_visit import VerifiedVisit
+from app.models.session_event import SessionEvent
 from app.dependencies.driver import get_current_driver, get_current_driver_optional
 from app.services.geo import haversine_m
 from app.core.config import settings
@@ -63,6 +64,20 @@ class ExclusiveSessionResponse(BaseModel):
     expires_at: str
     activated_at: str
     remaining_seconds: int
+    # Enriched fields for claim card / claim details
+    merchant_name: Optional[str] = None
+    merchant_place_id: Optional[str] = None
+    exclusive_title: Optional[str] = None
+    merchant_lat: Optional[float] = None
+    merchant_lng: Optional[float] = None
+    merchant_distance_m: Optional[float] = None
+    merchant_walk_time_min: Optional[int] = None
+    merchant_category: Optional[str] = None
+    merchant_photo_url: Optional[str] = None
+    charger_name: Optional[str] = None
+    verification_code: Optional[str] = None
+    charging_active: Optional[bool] = None
+    charging_session_ended_at: Optional[str] = None
 
 
 class ActivateExclusiveResponse(BaseModel):
@@ -103,6 +118,111 @@ class VerifyVisitResponse(BaseModel):
 def generate_session_id() -> str:
     """Generate a UUID string for session ID"""
     return str(uuid.uuid4())
+
+
+def _compute_effective_expiry(
+    db: Session,
+    session: ExclusiveSession,
+) -> datetime:
+    """
+    Compute effective expiry: max(original expires_at, charging_session_end + 60min).
+    If charging session is still active, keep original expiry (will be extended on next check).
+    """
+    base_expiry = session.expires_at
+    if session.charging_session_id:
+        cs = db.query(SessionEvent).filter(SessionEvent.id == session.charging_session_id).first()
+        if cs and cs.session_end:
+            post_charge_expiry = cs.session_end + timedelta(minutes=EXCLUSIVE_DURATION_MIN)
+            if post_charge_expiry > base_expiry:
+                # Update in DB so the extended expiry persists
+                session.expires_at = post_charge_expiry
+                session.updated_at = datetime.now(timezone.utc)
+                db.flush()
+                return post_charge_expiry
+    return base_expiry
+
+
+def _enrich_session_response(
+    db: Session,
+    session: ExclusiveSession,
+    remaining_seconds: int,
+) -> ExclusiveSessionResponse:
+    """Build an enriched ExclusiveSessionResponse with merchant/charger details."""
+    merchant_name = None
+    merchant_place_id = session.merchant_place_id
+    exclusive_title = None
+    merchant_lat = None
+    merchant_lng = None
+    merchant_distance_m = session.activation_distance_to_charger_m
+    merchant_walk_time_min = None
+    merchant_category = None
+    merchant_photo_url = None
+    charger_name = None
+
+    # Enrich merchant data
+    if session.merchant_id:
+        wyc_merchant = db.query(Merchant).filter(Merchant.id == session.merchant_id).first()
+        if wyc_merchant:
+            merchant_name = wyc_merchant.name
+            merchant_lat = wyc_merchant.lat
+            merchant_lng = wyc_merchant.lng
+            merchant_category = wyc_merchant.category
+            merchant_photo_url = getattr(wyc_merchant, 'photo_url', None)
+            if not merchant_place_id:
+                merchant_place_id = getattr(wyc_merchant, 'place_id', None)
+
+        # Get exclusive title from charger-merchant link
+        if session.charger_id:
+            cm_link = db.query(ChargerMerchant).filter(
+                ChargerMerchant.charger_id == session.charger_id,
+                ChargerMerchant.merchant_id == session.merchant_id,
+            ).first()
+            if cm_link:
+                exclusive_title = cm_link.exclusive_title
+                if cm_link.distance_m is not None:
+                    merchant_distance_m = cm_link.distance_m
+                if cm_link.walk_duration_s is not None:
+                    merchant_walk_time_min = max(1, round(cm_link.walk_duration_s / 60))
+
+    # Enrich charger data
+    if session.charger_id:
+        charger = db.query(Charger).filter(Charger.id == session.charger_id).first()
+        if charger:
+            charger_name = charger.name
+
+    # Check charging session status for dynamic expiry
+    charging_active = None
+    charging_session_ended_at = None
+    if session.charging_session_id:
+        cs = db.query(SessionEvent).filter(SessionEvent.id == session.charging_session_id).first()
+        if cs:
+            if cs.session_end:
+                charging_active = False
+                charging_session_ended_at = cs.session_end.isoformat()
+            else:
+                charging_active = True
+
+    return ExclusiveSessionResponse(
+        id=str(session.id),
+        merchant_id=session.merchant_id,
+        charger_id=session.charger_id,
+        expires_at=session.expires_at.isoformat(),
+        activated_at=session.activated_at.isoformat(),
+        remaining_seconds=max(0, remaining_seconds),
+        merchant_name=merchant_name,
+        merchant_place_id=merchant_place_id,
+        exclusive_title=exclusive_title,
+        merchant_lat=merchant_lat,
+        merchant_lng=merchant_lng,
+        merchant_distance_m=merchant_distance_m,
+        merchant_walk_time_min=merchant_walk_time_min,
+        merchant_category=merchant_category,
+        merchant_photo_url=merchant_photo_url,
+        charger_name=charger_name,
+        verification_code=session.verification_code,
+        charging_active=charging_active,
+        charging_session_ended_at=charging_session_ended_at,
+    )
 
 
 def validate_charger_radius(
@@ -283,6 +403,16 @@ async def activate_exclusive(
             if wyc_merchant:
                 resolved_merchant_id = wyc_merchant.id
 
+        # Find the driver's active charging session (if any) for post-charge expiry
+        active_charging_session = db.query(SessionEvent).filter(
+            SessionEvent.driver_user_id == driver.id,
+            SessionEvent.session_end.is_(None),  # Still active (no end time)
+        ).order_by(SessionEvent.session_start.desc()).first()
+
+        charging_session_id = None
+        if active_charging_session:
+            charging_session_id = active_charging_session.id
+
         # Create exclusive session
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(minutes=EXCLUSIVE_DURATION_MIN)
@@ -296,6 +426,34 @@ async def activate_exclusive(
                 'is_to_go': request.is_to_go,
             }
         
+        # Generate verification code eagerly (for QR code display)
+        verification_code = None
+        if resolved_merchant_id:
+            wyc_m = db.query(Merchant).filter(Merchant.id == resolved_merchant_id).first()
+            if wyc_m:
+                if not wyc_m.short_code:
+                    base_code = ''.join(c for c in wyc_m.name.upper() if c.isalnum())[:6]
+                    existing_code = db.query(Merchant).filter(Merchant.short_code == base_code).first()
+                    if existing_code and existing_code.id != wyc_m.id:
+                        for i in range(1, 100):
+                            new_code = f"{base_code[:5]}{i}"
+                            if not db.query(Merchant).filter(Merchant.short_code == new_code).first():
+                                base_code = new_code
+                                break
+                    wyc_m.short_code = base_code
+                    wyc_m.region_code = wyc_m.region_code or "ATX"
+                    db.flush()
+                region_code = wyc_m.region_code or "ATX"
+                from sqlalchemy import func as sa_func
+                from datetime import date
+                today_start = datetime.combine(date.today(), datetime.min.time())
+                max_visit = db.query(sa_func.max(VerifiedVisit.visit_number)).filter(
+                    VerifiedVisit.merchant_id == wyc_m.id,
+                    VerifiedVisit.verified_at >= today_start
+                ).scalar()
+                visit_number = (max_visit or 0) + 1
+                verification_code = f"{region_code}-{wyc_m.short_code}-{str(visit_number).zfill(3)}"
+
         session = ExclusiveSession(
             id=generate_session_id(),
             driver_id=driver.id,
@@ -304,6 +462,8 @@ async def activate_exclusive(
             charger_id=request.charger_id,
             charger_place_id=request.charger_place_id,
             intent_session_id=request.intent_session_id,
+            charging_session_id=charging_session_id,
+            verification_code=verification_code,
             status=ExclusiveSessionStatus.ACTIVE,
             activated_at=now,
             expires_at=expires_at,
@@ -434,14 +594,7 @@ async def activate_exclusive(
 
         return ActivateExclusiveResponse(
             status="ACTIVE",
-            exclusive_session=ExclusiveSessionResponse(
-                id=str(session.id),
-                merchant_id=session.merchant_id,
-                charger_id=session.charger_id,
-                expires_at=expires_at.isoformat(),
-                activated_at=now.isoformat(),
-                remaining_seconds=remaining_seconds
-            )
+            exclusive_session=_enrich_session_response(db, session, remaining_seconds)
         )
     except HTTPException:
         # Re-raise HTTP exceptions (they already have proper status codes)
@@ -654,36 +807,33 @@ async def get_active_exclusive(
     
     if not active_session:
         return ActiveExclusiveResponse(exclusive_session=None)
-    
+
+    # Compute effective expiry (may extend if charging session ended)
+    effective_expiry = _compute_effective_expiry(db, active_session)
+
     # Check if expired
-    if active_session.expires_at < datetime.now(timezone.utc):
+    if effective_expiry < datetime.now(timezone.utc):
         # Mark as expired
         active_session.status = ExclusiveSessionStatus.EXPIRED
         active_session.updated_at = datetime.now(timezone.utc)
         db.commit()
-        
+
         log_event("exclusive_expired", {
             "driver_id": driver.id,
             "exclusive_session_id": str(active_session.id),
             "merchant_id": active_session.merchant_id,
         })
-        
+
         if include_expired:
             remaining_seconds = 0
         else:
             return ActiveExclusiveResponse(exclusive_session=None)
     else:
-        remaining_seconds = int((active_session.expires_at - datetime.now(timezone.utc)).total_seconds())
-    
+        remaining_seconds = int((effective_expiry - datetime.now(timezone.utc)).total_seconds())
+        db.commit()  # Persist any expiry extension from _compute_effective_expiry
+
     return ActiveExclusiveResponse(
-        exclusive_session=ExclusiveSessionResponse(
-            id=str(active_session.id),
-            merchant_id=active_session.merchant_id,
-            charger_id=active_session.charger_id,
-            expires_at=active_session.expires_at.isoformat(),
-            activated_at=active_session.activated_at.isoformat(),
-            remaining_seconds=max(0, remaining_seconds)
-        )
+        exclusive_session=_enrich_session_response(db, active_session, remaining_seconds)
     )
 
 

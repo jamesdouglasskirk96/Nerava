@@ -21,6 +21,7 @@ const MerchantDetailsScreen = lazy(() => import('./components/MerchantDetails/Me
 const EarningsScreen = lazy(() => import('./components/Earnings/EarningsScreen').then(m => ({ default: m.EarningsScreen })))
 const MerchantArrivalScreen = lazy(() => import('./components/EVArrival/MerchantArrivalScreen').then(m => ({ default: m.MerchantArrivalScreen })))
 const PreChargingScreen = lazy(() => import('./components/PreCharging/PreChargingScreen').then(m => ({ default: m.PreChargingScreen })))
+const ClaimDetailsScreen = lazy(() => import('./components/ClaimDetails/ClaimDetailsScreen').then(m => ({ default: m.ClaimDetailsScreen })))
 
 function NotFoundScreen() {
   const navigate = useNavigate()
@@ -89,6 +90,8 @@ function App() {
             <Route path="/pre-charging" element={<PreChargingScreen />} />
             {/* Phase 0 phone-first EV arrival flow */}
             <Route path="/m/:merchantId" element={<MerchantArrivalScreen />} />
+            {/* Claim details (from wallet active claim card) */}
+            <Route path="/claim/:sessionId" element={<ClaimDetailsScreen />} />
             {/* Earnings / transaction history */}
             <Route path="/earnings" element={<EarningsScreen />} />
             {/* Merchant details route */}

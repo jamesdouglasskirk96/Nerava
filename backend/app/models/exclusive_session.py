@@ -42,6 +42,12 @@ class ExclusiveSession(Base):
     
     # Link to intent capture session
     intent_session_id = Column(UUIDType(), ForeignKey("intent_sessions.id"), nullable=True, index=True)
+
+    # Link to charging session (for post-charge expiry)
+    charging_session_id = Column(UUIDType(), ForeignKey("session_events.id"), nullable=True, index=True)
+
+    # Verification code (generated at activation for QR code display)
+    verification_code = Column(String(50), nullable=True)
     
     # Status
     status = Column(SQLEnum(ExclusiveSessionStatus), nullable=False, default=ExclusiveSessionStatus.ACTIVE, index=True)
@@ -71,6 +77,7 @@ class ExclusiveSession(Base):
     merchant = relationship("Merchant", foreign_keys=[merchant_id])
     charger = relationship("Charger", foreign_keys=[charger_id])
     intent_session = relationship("IntentSession", foreign_keys=[intent_session_id])
+    charging_session = relationship("SessionEvent", foreign_keys=[charging_session_id])
     
     __table_args__ = (
         # Indexes for common queries

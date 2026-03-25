@@ -65,6 +65,20 @@ export const ExclusiveSessionResponseSchema = z.object({
   expires_at: z.string(), // ISO datetime string
   activated_at: z.string(), // ISO datetime string
   remaining_seconds: z.number().optional(),
+  // Enriched fields for claim card / claim details
+  merchant_name: z.string().nullable().optional(),
+  merchant_place_id: z.string().nullable().optional(),
+  exclusive_title: z.string().nullable().optional(),
+  merchant_lat: z.number().nullable().optional(),
+  merchant_lng: z.number().nullable().optional(),
+  merchant_distance_m: z.number().nullable().optional(),
+  merchant_walk_time_min: z.number().nullable().optional(),
+  merchant_category: z.string().nullable().optional(),
+  merchant_photo_url: z.string().nullable().optional(),
+  charger_name: z.string().nullable().optional(),
+  verification_code: z.string().nullable().optional(),
+  charging_active: z.boolean().nullable().optional(),
+  charging_session_ended_at: z.string().nullable().optional(),
 })
 
 export type ExclusiveSessionResponse = z.infer<typeof ExclusiveSessionResponseSchema>

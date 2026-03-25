@@ -6,8 +6,10 @@ import {
   createStripeAccountLink,
   requestWithdrawal,
   checkStripeStatus,
+  useActiveExclusive,
 } from '../../services/api'
 import { BankLinkFlow } from './BankLinkFlow'
+import { ClaimActiveCard } from './ClaimActiveCard'
 
 export interface Transaction {
   id: string
@@ -95,6 +97,22 @@ export function WalletModal({
     document.addEventListener('visibilitychange', handleVisibility)
     return () => document.removeEventListener('visibilitychange', handleVisibility)
   }, [isOpen, onBalanceChanged])
+
+  // Active claim data
+  const { data: activeExclusiveData } = useActiveExclusive()
+  const activeClaim = activeExclusiveData?.exclusive_session ?? null
+  const [claimRemaining, setClaimRemaining] = useState(0)
+
+  useEffect(() => {
+    if (!activeClaim) { setClaimRemaining(0); return }
+    const update = () => {
+      const expiresAt = new Date(activeClaim.expires_at).getTime()
+      setClaimRemaining(Math.max(0, Math.floor((expiresAt - Date.now()) / 1000)))
+    }
+    update()
+    const interval = setInterval(update, 1000)
+    return () => clearInterval(interval)
+  }, [activeClaim])
 
   if (!isOpen) return null
 
@@ -374,6 +392,11 @@ export function WalletModal({
               </div>
             )}
           </div>
+
+          {/* Active Claim Card */}
+          {activeClaim && claimRemaining > 0 && (
+            <ClaimActiveCard session={activeClaim} remainingSeconds={claimRemaining} />
+          )}
 
           {/* Error banner (for connect bank failures) */}
           {errorMessage && withdrawStep === 'idle' && (
