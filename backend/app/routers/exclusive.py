@@ -167,7 +167,12 @@ def _enrich_session_response(
             merchant_lat = wyc_merchant.lat
             merchant_lng = wyc_merchant.lng
             merchant_category = wyc_merchant.category
-            merchant_photo_url = getattr(wyc_merchant, 'photo_url', None)
+            # Photo fallback: primary_photo_url > photo_urls[0] > photo_url
+            merchant_photo_url = (
+                getattr(wyc_merchant, 'primary_photo_url', None)
+                or (getattr(wyc_merchant, 'photo_urls', None) or [None])[0]
+                or getattr(wyc_merchant, 'photo_url', None)
+            )
             if not merchant_place_id:
                 merchant_place_id = getattr(wyc_merchant, 'place_id', None)
 

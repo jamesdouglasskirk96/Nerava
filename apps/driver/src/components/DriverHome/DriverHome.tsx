@@ -818,19 +818,23 @@ export function DriverHome() {
             intent_session_id: sessionId || undefined,
           })
 
-          // Convert MockMerchant to ExclusiveMerchant
+          // Convert response + local merchant to ExclusiveMerchant
+          // Prefer backend-enriched fields (photo, category) over local mock data
+          const sess = response.exclusive_session
           const exclusiveMerchant: ExclusiveMerchant = {
             id: merchant.id,
-            name: merchant.name,
-            category: merchant.category,
-            walkTime: merchant.walkTime,
-            imageUrl: merchant.imageUrl,
+            name: sess.merchant_name || merchant.name,
+            category: sess.merchant_category || merchant.category,
+            walkTime: sess.merchant_walk_time_min != null ? `${sess.merchant_walk_time_min} min walk` : merchant.walkTime,
+            imageUrl: sess.merchant_photo_url || merchant.imageUrl,
             badge: merchant.badges?.includes('Exclusive') ? '⭐ Exclusive' : undefined,
             distance: merchant.distance,
             hours: merchant.hours,
             hoursStatus: merchant.hoursStatus,
             description: merchant.description,
-            exclusiveOffer: merchant.exclusiveOffer,
+            exclusiveOffer: sess.exclusive_title || merchant.exclusiveOffer,
+            lat: sess.merchant_lat ?? undefined,
+            lng: sess.merchant_lng ?? undefined,
           }
 
           activateExclusiveLocal(exclusiveMerchant, response.exclusive_session.expires_at)
