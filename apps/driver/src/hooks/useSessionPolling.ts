@@ -199,8 +199,11 @@ export function useSessionPolling() {
     durationMinutes = Math.floor((Date.now() - startMs) / 60000)
   }
 
+  // Debug mock charging: override isActive when toggled by test user
+  const mockCharging = typeof window !== 'undefined' && localStorage.getItem('debug_mock_charging') === 'true'
+
   const state: SessionPollingState = {
-    isActive: data?.active ?? false,
+    isActive: mockCharging || (data?.active ?? false),
     sessionId: session?.id ?? null,
     durationMinutes,
     kwhDelivered: session?.kwh_delivered ?? null,

@@ -49,6 +49,15 @@ export function AccountPage({ onClose, onViewActivity, onViewVehicle, onChargerS
   const [profileSaving, setProfileSaving] = useState(false)
   const navigate = useNavigate()
 
+  // Debug mock charging (only for test user 7133056318)
+  const [mockCharging, setMockCharging] = useState(() => localStorage.getItem('debug_mock_charging') === 'true')
+  const isTestUser = (() => {
+    try {
+      const u = JSON.parse(localStorage.getItem('nerava_user') || '{}')
+      return u.phone?.endsWith('6318') || false
+    } catch { return false }
+  })()
+
   // Preferences state
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
     return localStorage.getItem(NOTIFICATIONS_KEY) !== 'false'
@@ -672,6 +681,37 @@ export function AccountPage({ onClose, onViewActivity, onViewVehicle, onChargerS
                 {distanceUnit === 'miles' ? 'mi' : 'km'}
               </button>
             </div>
+            {/* Mock Charging toggle — test user only */}
+            {isTestUser && (
+              <div className="flex items-center justify-between p-4 border-t border-[#E4E6EB]">
+                <div className="flex items-center gap-3">
+                  <Zap className="w-5 h-5 text-orange-500" />
+                  <div>
+                    <p className="font-medium text-[#050505]">Mock Charging</p>
+                    <p className="text-sm text-[#65676B]">Simulate active session for testing</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    const next = !mockCharging
+                    setMockCharging(next)
+                    localStorage.setItem('debug_mock_charging', String(next))
+                  }}
+                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+                    mockCharging ? 'bg-orange-500' : 'bg-gray-300'
+                  }`}
+                  role="switch"
+                  aria-checked={mockCharging}
+                  aria-label="Toggle mock charging"
+                >
+                  <span
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
+                      mockCharging ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Test Push Notification — TEMPORARY */}
