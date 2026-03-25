@@ -1,14 +1,13 @@
 import { Zap, Clock, MapPin, ChevronRight, Gift } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
 import type { ExclusiveSessionResponse } from '../../services/api'
 
 interface ClaimActiveCardProps {
   session: ExclusiveSessionResponse
   remainingSeconds: number
+  onTap?: () => void
 }
 
-export function ClaimActiveCard({ session, remainingSeconds }: ClaimActiveCardProps) {
-  const navigate = useNavigate()
+export function ClaimActiveCard({ session, remainingSeconds, onTap }: ClaimActiveCardProps) {
   const minutes = Math.floor(remainingSeconds / 60)
   const seconds = remainingSeconds % 60
 
@@ -20,7 +19,7 @@ export function ClaimActiveCard({ session, remainingSeconds }: ClaimActiveCardPr
 
   return (
     <button
-      onClick={() => navigate('/')}
+      onClick={onTap}
       className="w-full bg-white rounded-2xl border-2 border-green-200 p-4 text-left transition-transform active:scale-[0.98] shadow-sm"
     >
       {/* Header row */}

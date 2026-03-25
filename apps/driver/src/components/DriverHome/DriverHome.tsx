@@ -1060,8 +1060,8 @@ export function DriverHome() {
     )
   }
 
-  // If exclusive is active, show exclusive view (ignore other states)
-  if (activeExclusive && (activeExclusive || chargingState.state === 'EXCLUSIVE_ACTIVE')) {
+  // If exclusive is active and user is on stations tab, show exclusive view
+  if (activeExclusive && currentTab === 'stations') {
     return (
       <>
         <ExclusiveActiveView
