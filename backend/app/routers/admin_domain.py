@@ -2744,6 +2744,9 @@ def admin_seed_merchant(
         link.distance_m = request.distance_m
         link.walk_duration_s = request.walk_duration_s
         link.is_primary = True
+        if request.perk_title:
+            link.exclusive_title = request.perk_title
+            link.exclusive_description = request.perk_description
         link.updated_at = datetime.utcnow()
     else:
         link = ChargerMerchant(
@@ -2752,6 +2755,8 @@ def admin_seed_merchant(
             distance_m=request.distance_m,
             walk_duration_s=request.walk_duration_s,
             is_primary=True,
+            exclusive_title=request.perk_title,
+            exclusive_description=request.perk_description,
         )
         db.add(link)
 
