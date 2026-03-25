@@ -212,15 +212,29 @@ async def discovery(
 
             nearby_merchants = []
             seen_names = set()
+            _test_names = {"test", "test2", "test3", "test merchant"}
             for link, merchant in links_by_charger.get(charger.id, []):
-                # Deduplicate by name (multiple WYC records for same business)
-                dedup_key = (merchant.name or "").lower()
+                merchant_name_lower = (merchant.name or "").lower().strip()
+                # Skip test merchants
+                if merchant_name_lower in _test_names:
+                    continue
+                # Deduplicate: substring match (e.g. "Heights Pizzeria" vs "Heights Pizzeria & Drafthouse")
+                is_dup = False
+                for seen in list(seen_names):
+                    if merchant_name_lower in seen or seen in merchant_name_lower:
+                        if link.exclusive_title:
+                            seen_names.discard(seen)
+                            nearby_merchants[:] = [m for m in nearby_merchants if m.name and m.name.lower() != seen]
+                        else:
+                            is_dup = True
+                        break
+                if is_dup:
+                    continue
+                dedup_key = merchant_name_lower
                 if dedup_key in seen_names:
                     continue
                 seen_names.add(dedup_key)
                 walk_time_min = max(1, math.ceil(link.distance_m / 80))
-
-                merchant_name_lower = merchant.name.lower() if merchant.name else ""
                 if "asadas" in merchant_name_lower and "grill" in merchant_name_lower:
                     photo_url = "/static/merchant_photos_asadas_grill/asadas_grill_01.jpg"
                 elif getattr(merchant, 'primary_photo_url', None):
@@ -366,12 +380,31 @@ async def charger_detail(
 
         nearby_merchants = []
         seen_merchant_names = set()
+        # Names that are clearly test/placeholder data
+        _test_names = {"test", "test2", "test3", "test merchant"}
         for link in merchant_links:
             merchant = db.query(Merchant).filter(Merchant.id == link.merchant_id).first()
             if not merchant:
                 continue
-            # Deduplicate by name (multiple WYC records for same business)
-            dedup_key = (merchant.name or "").lower()
+            merchant_name_lower = (merchant.name or "").lower().strip()
+            # Skip test merchants
+            if merchant_name_lower in _test_names:
+                continue
+            # Deduplicate: skip if this name is a substring of an already-seen name
+            # or if an already-seen name is a substring of this one
+            is_dup = False
+            for seen in list(seen_merchant_names):
+                if merchant_name_lower in seen or seen in merchant_name_lower:
+                    # Keep the one with the exclusive, or the longer name
+                    if link.exclusive_title:
+                        seen_merchant_names.discard(seen)
+                        nearby_merchants[:] = [m for m in nearby_merchants if m.name and m.name.lower() != seen]
+                    else:
+                        is_dup = True
+                    break
+            if is_dup:
+                continue
+            dedup_key = merchant_name_lower
             if dedup_key in seen_merchant_names:
                 continue
             seen_merchant_names.add(dedup_key)
