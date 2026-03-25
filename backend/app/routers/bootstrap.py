@@ -811,17 +811,19 @@ async def get_bootstrap_schema():
 
 @router.post("/create-admin")
 def bootstrap_create_admin(
+    email: Optional[str] = None,
+    password: Optional[str] = None,
     db: Session = Depends(get_db),
     _: str = Depends(verify_bootstrap_key),
 ):
     """
     Create or update admin user. Protected by BOOTSTRAP_KEY.
-    Uses ADMIN_EMAIL / ADMIN_PASSWORD env vars.
+    Pass email/password as query params, or falls back to env vars.
     """
     from app.core.security import hash_password
 
-    email = os.getenv("ADMIN_EMAIL", "james@nerava.network")
-    password = os.getenv("ADMIN_PASSWORD", "BIGAppleNerava")
+    email = email or os.getenv("ADMIN_EMAIL", "james@nerava.network")
+    password = password or os.getenv("ADMIN_PASSWORD", "BIGAppleNerava")
 
     user = db.query(User).filter(User.email == email).first()
     if user:

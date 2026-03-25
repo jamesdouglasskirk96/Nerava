@@ -2670,6 +2670,7 @@ class SeedMerchantRequest(BaseModel):
     walk_duration_s: int = 60
     rating: float = 4.5
     website: Optional[str] = None
+    photo_url: Optional[str] = None
     perk_title: Optional[str] = None
     perk_description: Optional[str] = None
     perk_nova_reward: Optional[int] = None
@@ -2711,6 +2712,9 @@ def admin_seed_merchant(
         merchant.website = request.website
         merchant.place_id = request.place_id
         merchant.short_code = request.short_code
+        if request.photo_url:
+            merchant.photo_url = request.photo_url
+            merchant.primary_photo_url = request.photo_url
         merchant.updated_at = datetime.utcnow()
     else:
         merchant = Merchant(
