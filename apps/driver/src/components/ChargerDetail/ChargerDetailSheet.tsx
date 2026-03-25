@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { X, Navigation, Zap, MapPin, Shield, Users, DollarSign, Phone, Globe, Coffee, ShoppingBag, Utensils, Dumbbell, TreePine, Popcorn, CircleDollarSign, Gift, UserPlus, Clock, Footprints, CheckCircle } from 'lucide-react'
+import { X, Navigation, Zap, MapPin, Shield, Users, DollarSign, Phone, Globe, Coffee, ShoppingBag, Utensils, Dumbbell, TreePine, Popcorn, CircleDollarSign, Gift, UserPlus } from 'lucide-react'
 import { useChargerDetail, useDriverCampaigns, useActivateExclusive, useRequestToJoin } from '../../services/api'
 import type { ChargerDetailNearbyMerchant, DriverCampaign } from '../../services/api'
 import { capture, DRIVER_EVENTS } from '../../analytics'
@@ -21,6 +21,7 @@ interface ChargerDetailSheetProps {
   onViewSession?: () => void
   isAuthenticated?: boolean
   onLoginRequired?: () => void
+  onClaimActivated?: (sessionId: string) => void
 }
 
 const NETWORK_COLORS: Record<string, string> = {
@@ -85,6 +86,7 @@ export function ChargerDetailSheet({
   onViewSession,
   isAuthenticated = false,
   onLoginRequired,
+  onClaimActivated,
 }: ChargerDetailSheetProps) {
   const { data: detail, isLoading } = useChargerDetail(chargerId, userLat, userLng)
   const { data: campaignsData } = useDriverCampaigns(userLat, userLng, chargerId)
@@ -94,9 +96,7 @@ export function ChargerDetailSheet({
   const [actionMerchant, setActionMerchant] = useState<ChargerDetailNearbyMerchant | null>(null)
   // Claim flow state
   const [claimingMerchant, setClaimingMerchant] = useState<ChargerDetailNearbyMerchant | null>(null)
-  const [claimState, setClaimState] = useState<'idle' | 'confirming' | 'active' | 'done'>('idle')
-  const [claimStartTime, setClaimStartTime] = useState<number | null>(null)
-  const [claimElapsed, setClaimElapsed] = useState(0)
+  const [claimState, setClaimState] = useState<'idle' | 'confirming'>('idle')
   // Request to join state
   const [requestingMerchant, setRequestingMerchant] = useState<ChargerDetailNearbyMerchant | null>(null)
   const [requestSent, setRequestSent] = useState<Set<string>>(new Set())
@@ -221,43 +221,28 @@ export function ChargerDetailSheet({
   const handleConfirmClaim = async () => {
     if (!claimingMerchant) return
     try {
-      await activateExclusive.mutateAsync({
+      const result = await activateExclusive.mutateAsync({
         merchant_id: claimingMerchant.place_id,
         merchant_place_id: claimingMerchant.place_id,
         charger_id: chargerId,
         lat: userLat ?? 0,
         lng: userLng ?? 0,
       })
-      setClaimState('active')
-      setClaimStartTime(Date.now())
       capture(DRIVER_EVENTS.EXCLUSIVE_ACTIVATE_SUCCESS, {
         merchant_name: claimingMerchant.name,
         charger_id: chargerId,
       })
+      setClaimState('idle')
+      setClaimingMerchant(null)
+      // Navigate to wallet (claim card lives there now)
+      if (onClaimActivated && result.exclusive_session?.id) {
+        onClaimActivated(result.exclusive_session.id)
+      }
     } catch {
       setClaimState('idle')
       setClaimingMerchant(null)
     }
   }
-
-  const handleCompleteClaim = () => {
-    setClaimState('done')
-    setTimeout(() => {
-      setClaimState('idle')
-      setClaimingMerchant(null)
-      setClaimStartTime(null)
-      setClaimElapsed(0)
-    }, 3000)
-  }
-
-  // Timer for active claim
-  useEffect(() => {
-    if (claimState !== 'active' || !claimStartTime) return
-    const interval = setInterval(() => {
-      setClaimElapsed(Math.floor((Date.now() - claimStartTime) / 1000))
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [claimState, claimStartTime])
 
   // Request to join handler
   const handleRequestToJoin = async (m: ChargerDetailNearbyMerchant) => {
@@ -449,27 +434,6 @@ export function ChargerDetailSheet({
         />
       )}
 
-      {/* Active Visit Tracker */}
-      {claimState === 'active' && claimingMerchant && (
-        <ActiveVisitTracker
-          merchant={claimingMerchant}
-          chargerLat={detail?.lat ?? lat}
-          chargerLng={detail?.lng ?? lng}
-          elapsedSeconds={claimElapsed}
-          onComplete={handleCompleteClaim}
-        />
-      )}
-
-      {/* Claim Done Toast */}
-      {claimState === 'done' && claimingMerchant && (
-        <div className="fixed top-12 inset-x-4 z-[3200] bg-green-600 text-white rounded-2xl p-4 flex items-center gap-3 animate-slide-down shadow-lg">
-          <CheckCircle className="w-6 h-6 flex-shrink-0" />
-          <div>
-            <p className="text-sm font-semibold">Visit verified at {claimingMerchant.name}</p>
-            <p className="text-xs opacity-90">Your reward will be reflected in Reconciliation</p>
-          </div>
-        </div>
-      )}
 
       {/* Request to Join Confirmation */}
       {requestingMerchant && (
@@ -918,67 +882,3 @@ function ClaimConfirmModal({
   )
 }
 
-// ─── Active Visit Tracker ────────────────────────────────────────────────────
-
-function ActiveVisitTracker({
-  merchant,
-  chargerLat: _chargerLat,
-  chargerLng: _chargerLng,
-  elapsedSeconds,
-  onComplete,
-}: {
-  merchant: ChargerDetailNearbyMerchant
-  chargerLat?: number
-  chargerLng?: number
-  elapsedSeconds: number
-  onComplete: () => void
-}) {
-  const minutes = Math.floor(elapsedSeconds / 60)
-  const seconds = elapsedSeconds % 60
-
-  return (
-    <div className="fixed bottom-20 inset-x-4 z-[3150] bg-white rounded-2xl shadow-xl border border-green-200 p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-sm font-semibold text-green-700">Visit Active</span>
-        </div>
-        <div className="flex items-center gap-1.5 bg-gray-100 rounded-full px-3 py-1">
-          <Clock className="w-3.5 h-3.5 text-[#65676B]" />
-          <span className="text-sm font-mono font-medium text-[#050505]">
-            {minutes}:{seconds.toString().padStart(2, '0')}
-          </span>
-        </div>
-      </div>
-
-      {/* Walking path visualization */}
-      <div className="flex items-center gap-3 mb-3">
-        <div className="flex flex-col items-center gap-0.5">
-          <Zap className="w-4 h-4 text-green-600" />
-          <div className="w-0.5 h-6 bg-gray-200" />
-          <Footprints className="w-4 h-4 text-[#1877F2]" />
-        </div>
-        <div className="flex-1">
-          <p className="text-xs text-[#65676B]">Charger</p>
-          <div className="flex items-center gap-1 my-1">
-            <div className="flex-1 h-1 bg-green-200 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-green-500 rounded-full transition-all duration-1000"
-                style={{ width: `${Math.min(100, (elapsedSeconds / (merchant.walk_time_min * 60)) * 100)}%` }}
-              />
-            </div>
-            <span className="text-xs text-[#65676B]">{merchant.walk_time_min}m</span>
-          </div>
-          <p className="text-xs font-medium text-[#050505]">{merchant.name}</p>
-        </div>
-      </div>
-
-      <button
-        onClick={onComplete}
-        className="w-full py-3 bg-green-600 text-white text-sm font-semibold rounded-xl active:scale-[0.98] transition-transform"
-      >
-        I'm Done — Complete Visit
-      </button>
-    </div>
-  )
-}

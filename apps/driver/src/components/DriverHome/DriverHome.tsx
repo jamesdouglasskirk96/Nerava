@@ -1372,6 +1372,10 @@ export function DriverHome() {
             capture(DRIVER_EVENTS.CHARGING_ACTIVITY_OPENED)
             setShowSessionActivity(true)
           }}
+          onClaimActivated={() => {
+            setSelectedCharger(null)
+            setCurrentTab('wallet')
+          }}
         />
       )}
 

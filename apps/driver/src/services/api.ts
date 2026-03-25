@@ -428,6 +428,20 @@ export interface ExclusiveSessionResponse {
   expires_at: string
   activated_at: string
   remaining_seconds: number
+  // Enriched fields for claim card / claim details
+  merchant_name?: string | null
+  merchant_place_id?: string | null
+  exclusive_title?: string | null
+  merchant_lat?: number | null
+  merchant_lng?: number | null
+  merchant_distance_m?: number | null
+  merchant_walk_time_min?: number | null
+  merchant_category?: string | null
+  merchant_photo_url?: string | null
+  charger_name?: string | null
+  verification_code?: string | null
+  charging_active?: boolean | null
+  charging_session_ended_at?: string | null
 }
 
 export interface ActivateExclusiveResponse {
