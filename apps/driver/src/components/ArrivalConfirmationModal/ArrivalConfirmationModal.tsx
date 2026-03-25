@@ -38,7 +38,12 @@ export function ArrivalConfirmationModal({
 
   // Call verify endpoint when modal opens
   useEffect(() => {
-    if (isOpen && exclusiveSessionId && !verificationData) {
+    if (isOpen && !verificationData && !isLoading) {
+      if (!exclusiveSessionId) {
+        // No session ID yet — skip verification, still show the modal
+        setError(null)
+        return
+      }
       setIsLoading(true)
       setError(null)
 
@@ -73,7 +78,7 @@ export function ArrivalConfirmationModal({
           setIsLoading(false)
         })
     }
-  }, [isOpen, exclusiveSessionId, merchantId, merchantName, lat, lng, verificationData])
+  }, [isOpen, exclusiveSessionId, merchantId, merchantName, lat, lng, verificationData, isLoading])
 
   // Reset state when modal closes
   useEffect(() => {

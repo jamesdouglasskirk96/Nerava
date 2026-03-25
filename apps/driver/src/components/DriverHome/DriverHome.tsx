@@ -1081,9 +1081,15 @@ export function DriverHome() {
           }}
           onToggleLike={handleToggleLike}
           onShare={() => {
-            // Share functionality
-            const url = `https://nerava.com/merchant/${activeExclusive.id}`
-            navigator.clipboard.writeText(url)
+            const text = `Check out ${activeExclusive.name} on Nerava! ${activeExclusive.exclusiveOffer ? `They're offering: ${activeExclusive.exclusiveOffer}` : ''}`
+            const url = `https://app.nerava.network`
+            if (navigator.share) {
+              navigator.share({ title: activeExclusive.name, text, url }).catch(() => {})
+            } else {
+              navigator.clipboard.writeText(`${text} ${url}`).then(() => {
+                alert('Link copied to clipboard!')
+              }).catch(() => {})
+            }
           }}
           isLiked={isFavorite(activeExclusive.id)}
         />
