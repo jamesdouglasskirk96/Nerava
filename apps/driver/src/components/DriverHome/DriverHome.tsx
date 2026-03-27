@@ -110,6 +110,7 @@ export function DriverHome() {
   const [selectedCharger, setSelectedCharger] = useState<{ id: string; name: string; network_name?: string; lat?: number; lng?: number } | null>(null)
   const [showActivateModal, setShowActivateModal] = useState(false)
   const [showArrivalModal, setShowArrivalModal] = useState(false)
+  const [localExclusiveSessionId, setLocalExclusiveSessionId] = useState<string | null>(null)
   const [showCompletionModal, setShowCompletionModal] = useState(false)
   const [showPreferencesModal, setShowPreferencesModal] = useState(false)
   const [checkedIn, setCheckedIn] = useState(false)
@@ -755,6 +756,7 @@ export function DriverHome() {
           expiresAt: session.expires_at,
         }
         activateExclusiveLocal(exclusiveMerchant, session.expires_at)
+        setLocalExclusiveSessionId(session.id)
         chargingState.transitionTo('EXCLUSIVE_ACTIVE')
         setAppChargingState('EXCLUSIVE_ACTIVE')
       }
@@ -838,9 +840,10 @@ export function DriverHome() {
           }
 
           activateExclusiveLocal(exclusiveMerchant, response.exclusive_session.expires_at)
+          setLocalExclusiveSessionId(response.exclusive_session.id)
           chargingState.transitionTo('EXCLUSIVE_ACTIVE')
           setAppChargingState('EXCLUSIVE_ACTIVE')
-          
+
           capture(DRIVER_EVENTS.EXCLUSIVE_ACTIVATE_SUCCESS, {
             merchant_id: merchant.id,
             exclusive_id: response.exclusive_session.id,
@@ -932,6 +935,7 @@ export function DriverHome() {
     setCheckedIn(true)
     // Prevent sync logic from recreating the exclusive from stale cache
     manualClearRef.current = true
+    setLocalExclusiveSessionId(null)
     clearExclusive()
     chargingState.transitionTo('PRE_CHARGING')
     setAppChargingState('PRE_CHARGING')
@@ -1098,7 +1102,7 @@ export function DriverHome() {
           merchantName={activeExclusive.name}
           merchantId={activeExclusive.id}
           exclusiveBadge={activeExclusive.badge}
-          exclusiveSessionId={activeExclusiveData?.exclusive_session?.id}
+          exclusiveSessionId={activeExclusiveData?.exclusive_session?.id || localExclusiveSessionId || undefined}
           lat={effectiveCoordinates?.lat}
           lng={effectiveCoordinates?.lng}
           onDone={handleArrivalDone}
