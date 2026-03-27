@@ -1033,9 +1033,9 @@ async def verify_visit(
         try:
             db.commit()
             db.refresh(verified_visit)
-        except Exception as commit_err:
+        except Exception:
             db.rollback()
-            # Likely duplicate verification code — return existing visit
+            # Likely duplicate verification code — check for existing visit
             existing = db.query(VerifiedVisit).filter(
                 VerifiedVisit.exclusive_session_id == session.id
             ).first()
@@ -1047,7 +1047,19 @@ async def verify_visit(
                     merchant_name=merchant.name,
                     verified_at=existing.verified_at.isoformat()
                 )
-            raise commit_err
+            # No existing visit — retry with unique suffix
+            import random
+            retry_code = f"{verification_code}-{random.randint(10,99)}"
+            verified_visit.verification_code = retry_code
+            verified_visit.visit_number = visit_number
+            db.add(verified_visit)
+            if session.status == ExclusiveSessionStatus.ACTIVE:
+                session.status = ExclusiveSessionStatus.COMPLETED
+                session.completed_at = now
+                session.updated_at = now
+            db.commit()
+            db.refresh(verified_visit)
+            verification_code = retry_code
 
         # Log the verification event
         log_event("visit_verified", {
