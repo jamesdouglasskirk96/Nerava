@@ -962,6 +962,18 @@ def get_merchant_visits_portal(
     if merchant.google_place_id:
         wyc_merchant_ids.append(merchant.google_place_id)
 
+    # Also match by name (WYC merchants seeded with m_ prefix IDs)
+    if merchant.name:
+        from app.models.while_you_charge import Merchant as WYCMerchant
+        wyc_by_name = db.query(WYCMerchant).filter(
+            WYCMerchant.name.ilike(f"%{merchant.name.split()[0]}%{merchant.name.split()[-1]}%")
+        ).all()
+        for wm in wyc_by_name:
+            if wm.id not in wyc_merchant_ids:
+                wyc_merchant_ids.append(wm.id)
+            if wm.place_id and wm.place_id not in wyc_merchant_ids:
+                wyc_merchant_ids.append(wm.place_id)
+
     if not wyc_merchant_ids:
         return {
             "visits": [], "total": 0, "verified_count": 0,

@@ -1395,6 +1395,8 @@ export function DriverHome() {
           }}
           onClaimActivated={() => {
             setSelectedCharger(null)
+            // Force refetch so wallet shows the claim card immediately
+            queryClient.invalidateQueries({ queryKey: ['active-exclusive'] })
             setCurrentTab('wallet')
           }}
         />

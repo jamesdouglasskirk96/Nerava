@@ -103,7 +103,7 @@ export function ArrivalConfirmationModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-[60] p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-[3100] p-4">
       <div className="bg-white rounded-3xl p-8 max-w-md w-full mb-8 shadow-2xl">
         {/* Icon */}
         <div className="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
