@@ -125,6 +125,12 @@ export const DRIVER_EVENTS = {
   CHARGER_DIRECTIONS_CLICKED: 'driver.charger.directions_clicked',
   CHARGER_MERCHANT_CLICKED: 'driver.charger.merchant_clicked',
 
+  // POS Ordering / Commerce WebView
+  ORDERING_WEBVIEW_OPENED: 'ordering.webview_opened',
+  ORDERING_WEBVIEW_CLOSED_WITHOUT_ORDER: 'ordering.webview_closed_without_order',
+  ORDER_COMPLETED: 'ordering.order_completed',
+  ORDER_NOW_CLICKED: 'ordering.order_now_clicked',
+
   // Search
   SEARCH_QUERY: 'driver.search.query',
 

@@ -708,6 +708,16 @@ export interface ChargerDetailNearbyMerchant {
   exclusive_title?: string | null
   is_nerava_merchant?: boolean
   join_request_count?: number
+  // POS ordering fields
+  ordering_enabled?: boolean
+  pos_type?: string | null
+  ordering_url?: string | null
+  nerava_offer?: string | null
+  nerava_discount_code?: string | null
+  discount_injection_method?: string | null
+  discount_param_key?: string | null
+  phone_field_selector?: string | null
+  confirmation_url_pattern?: string | null
 }
 
 export interface ChargerDetail {

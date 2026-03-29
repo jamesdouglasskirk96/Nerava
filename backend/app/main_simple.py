@@ -908,6 +908,19 @@ app.include_router(merchant_arrivals.router)
 # Toast POS Integration
 from .routers import toast_pos
 app.include_router(toast_pos.router)  # /v1/merchant/pos/*
+
+# POS Ordering & Commerce WebView
+from .routers import merchant_ordering
+app.include_router(merchant_ordering.router)  # /v1/ordering/*
+
+# Charger Intelligence & Cluster Scoring
+from .routers import cluster_intelligence
+app.include_router(cluster_intelligence.router)  # /v1/intelligence/*
+
+# Sponsor Campaigns (push notification pipeline)
+from .routers import sponsor_campaigns
+app.include_router(sponsor_campaigns.router)  # /v1/sponsor-campaigns/*
+
 app.include_router(twilio_sms_webhook.router)
 app.include_router(client_telemetry.router)
 app.include_router(arrival_router.router)

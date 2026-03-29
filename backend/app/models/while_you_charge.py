@@ -113,6 +113,16 @@ class Merchant(Base):
     ordering_app_scheme = Column(String(100), nullable=True)  # e.g., "toastapp://"
     ordering_instructions = Column(Text, nullable=True)  # "Order at counter"
 
+    # POS ordering config (Part 1: POS Adapter Abstraction Layer)
+    ordering_enabled = Column(Boolean, default=False, nullable=False, server_default="false")
+    pos_type = Column(String(20), nullable=True)  # "toast" | "square" | "shopify" | "other"
+    discount_injection_method = Column(String(20), nullable=True)  # "url_param" | "js_inject" | "promo_code"
+    discount_param_key = Column(String(100), nullable=True)
+    phone_field_selector = Column(String(200), nullable=True)  # CSS selector for phone input
+    confirmation_url_pattern = Column(String(500), nullable=True)  # regex to detect order success
+    nerava_offer = Column(String(200), nullable=True)  # e.g. "Free Garlic Knots", "10% off"
+    nerava_discount_code = Column(String(100), nullable=True)  # generated per session
+
     # Corporate chain flag (e.g., Starbucks, McDonald's) — still shown in app, may not have incentives
     is_corporate = Column(Boolean, default=False, nullable=False, server_default="false", index=True)
 

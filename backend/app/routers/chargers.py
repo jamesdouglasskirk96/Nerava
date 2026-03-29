@@ -107,6 +107,16 @@ class NearbyMerchantResponse(BaseModel):
     exclusive_title: Optional[str] = None
     is_nerava_merchant: bool = False
     join_request_count: int = 0
+    # POS ordering fields
+    ordering_enabled: bool = False
+    pos_type: Optional[str] = None
+    ordering_url: Optional[str] = None
+    nerava_offer: Optional[str] = None
+    nerava_discount_code: Optional[str] = None
+    discount_injection_method: Optional[str] = None
+    discount_param_key: Optional[str] = None
+    phone_field_selector: Optional[str] = None
+    confirmation_url_pattern: Optional[str] = None
 
 
 class DiscoveryChargerResponse(BaseModel):
@@ -260,6 +270,15 @@ async def discovery(
                     lng=merchant.lng,
                     exclusive_title=link.exclusive_title,
                     is_nerava_merchant=has_exclusive,
+                    ordering_enabled=getattr(merchant, 'ordering_enabled', False) or False,
+                    pos_type=getattr(merchant, 'pos_type', None),
+                    ordering_url=getattr(merchant, 'ordering_url', None),
+                    nerava_offer=getattr(merchant, 'nerava_offer', None),
+                    nerava_discount_code=getattr(merchant, 'nerava_discount_code', None),
+                    discount_injection_method=getattr(merchant, 'discount_injection_method', None),
+                    discount_param_key=getattr(merchant, 'discount_param_key', None),
+                    phone_field_selector=getattr(merchant, 'phone_field_selector', None),
+                    confirmation_url_pattern=getattr(merchant, 'confirmation_url_pattern', None),
                 ))
 
             charger_photo_url = f"/static/demo_chargers/{charger.id}/hero.jpg"
@@ -446,6 +465,15 @@ async def charger_detail(
                 exclusive_title=link.exclusive_title,
                 is_nerava_merchant=is_nerava,
                 join_request_count=join_count,
+                ordering_enabled=getattr(merchant, 'ordering_enabled', False) or False,
+                pos_type=getattr(merchant, 'pos_type', None),
+                ordering_url=getattr(merchant, 'ordering_url', None),
+                nerava_offer=getattr(merchant, 'nerava_offer', None),
+                nerava_discount_code=getattr(merchant, 'nerava_discount_code', None),
+                discount_injection_method=getattr(merchant, 'discount_injection_method', None),
+                discount_param_key=getattr(merchant, 'discount_param_key', None),
+                phone_field_selector=getattr(merchant, 'phone_field_selector', None),
+                confirmation_url_pattern=getattr(merchant, 'confirmation_url_pattern', None),
             ))
 
         # Drivers currently charging at this station

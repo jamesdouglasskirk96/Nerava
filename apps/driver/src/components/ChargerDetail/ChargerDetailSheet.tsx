@@ -1,9 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { X, Navigation, Zap, MapPin, Shield, Users, DollarSign, Phone, Globe, Coffee, ShoppingBag, Utensils, Dumbbell, TreePine, Popcorn, CircleDollarSign, Gift, UserPlus } from 'lucide-react'
+import { X, Navigation, Zap, MapPin, Shield, Users, DollarSign, Phone, Globe, Coffee, ShoppingBag, Utensils, Dumbbell, TreePine, Popcorn, CircleDollarSign, Gift, UserPlus, ShoppingCart, CheckCircle } from 'lucide-react'
 import { useChargerDetail, useDriverCampaigns, useActivateExclusive, useRequestToJoin } from '../../services/api'
 import type { ChargerDetailNearbyMerchant, DriverCampaign } from '../../services/api'
 import { capture, DRIVER_EVENTS } from '../../analytics'
 import { openExternalUrl } from '../../utils/openExternal'
+import { CommerceWebViewScreen } from '../CommerceWebView/CommerceWebViewScreen'
+import type { MerchantOrderingConfig } from '../../services/posAdapters'
 
 type SheetState = 'peek' | 'expanded' | 'dismissed'
 type Tab = 'overview' | 'rewards' | 'nearby'
@@ -100,6 +102,9 @@ export function ChargerDetailSheet({
   // Request to join state
   const [requestingMerchant, setRequestingMerchant] = useState<ChargerDetailNearbyMerchant | null>(null)
   const [requestSent, setRequestSent] = useState<Set<string>>(new Set())
+  // Commerce ordering state
+  const [orderingMerchant, setOrderingMerchant] = useState<ChargerDetailNearbyMerchant | null>(null)
+  const [orderedMerchants, setOrderedMerchants] = useState<Set<string>>(new Set())
   const activateExclusive = useActivateExclusive()
   const requestToJoin = useRequestToJoin()
   const sheetRef = useRef<HTMLDivElement>(null)
@@ -240,6 +245,31 @@ export function ChargerDetailSheet({
       setClaimState('idle')
       setClaimingMerchant(null)
     }
+  }
+
+  // Order Now handler
+  const handleOrderNow = (m: ChargerDetailNearbyMerchant) => {
+    if (!isAuthenticated) {
+      setActionMerchant(null)
+      onLoginRequired?.()
+      return
+    }
+    setActionMerchant(null)
+    capture(DRIVER_EVENTS.ORDER_NOW_CLICKED, {
+      merchant_name: m.name,
+      place_id: m.place_id,
+      pos_type: m.pos_type,
+      charger_id: chargerId,
+      is_charging: isCharging,
+    })
+    setOrderingMerchant(m)
+  }
+
+  const handleOrderCompleted = (_method: 'auto_url' | 'manual_button') => {
+    if (orderingMerchant) {
+      setOrderedMerchants((prev) => new Set(prev).add(orderingMerchant.place_id))
+    }
+    setOrderingMerchant(null)
   }
 
   // Request to join handler
@@ -401,6 +431,8 @@ export function ChargerDetailSheet({
             <NearbyTab
               merchants={detail?.nearby_merchants ?? []}
               onMerchantTap={setActionMerchant}
+              isCharging={isCharging}
+              orderedMerchants={orderedMerchants}
             />
           )}
         </div>
@@ -416,7 +448,9 @@ export function ChargerDetailSheet({
           onDirections={() => handleMerchantDirections(actionMerchant)}
           onClaimReward={() => handleClaimReward(actionMerchant)}
           onRequestToJoin={() => handleRequestToJoin(actionMerchant)}
+          onOrderNow={() => handleOrderNow(actionMerchant)}
           alreadyRequested={requestSent.has(actionMerchant.place_id)}
+          alreadyOrdered={orderedMerchants.has(actionMerchant.place_id)}
           onClose={() => setActionMerchant(null)}
         />
       )}
@@ -442,6 +476,29 @@ export function ChargerDetailSheet({
             <p className="text-xs opacity-90">We'll notify them that drivers want them on Nerava</p>
           </div>
         </div>
+      )}
+
+      {/* Commerce WebView (POS Ordering) */}
+      {orderingMerchant && orderingMerchant.ordering_enabled && orderingMerchant.ordering_url && (
+        <CommerceWebViewScreen
+          merchantName={orderingMerchant.name}
+          merchantId={orderingMerchant.place_id}
+          merchantConfig={{
+            ordering_enabled: true,
+            pos_type: (orderingMerchant.pos_type as 'toast' | 'square' | 'shopify' | 'other') || 'other',
+            ordering_url: orderingMerchant.ordering_url,
+            discount_injection_method: (orderingMerchant.discount_injection_method as 'url_param' | 'js_inject' | 'promo_code') || null,
+            discount_param_key: orderingMerchant.discount_param_key || null,
+            phone_field_selector: orderingMerchant.phone_field_selector || null,
+            confirmation_url_pattern: orderingMerchant.confirmation_url_pattern || null,
+            nerava_offer: orderingMerchant.nerava_offer || null,
+            nerava_discount_code: orderingMerchant.nerava_discount_code || null,
+          }}
+          sessionId={`${chargerId}-${Date.now()}`}
+          chargerId={chargerId}
+          onClose={() => setOrderingMerchant(null)}
+          onOrderCompleted={handleOrderCompleted}
+        />
       )}
     </>
   )
@@ -634,9 +691,13 @@ function RewardsTab({ rewardCents, detail, campaigns }: { rewardCents: number; d
 function NearbyTab({
   merchants,
   onMerchantTap,
+  isCharging,
+  orderedMerchants,
 }: {
   merchants: ChargerDetailNearbyMerchant[]
   onMerchantTap: (m: ChargerDetailNearbyMerchant) => void
+  isCharging: boolean
+  orderedMerchants: Set<string>
 }) {
   if (merchants.length === 0) {
     return (
@@ -654,6 +715,7 @@ function NearbyTab({
     <div className="space-y-1">
       {merchants.map((m) => {
         const Icon = getCategoryIcon(m.category)
+        const hasOrdered = orderedMerchants.has(m.place_id)
         return (
           <button
             key={m.place_id}
@@ -670,21 +732,35 @@ function NearbyTab({
                 {m.category && ` · ${m.category}`}
               </p>
             </div>
-            {m.has_exclusive && m.exclusive_title && (
+            {/* Ordering badge states */}
+            {m.ordering_enabled && hasOrdered ? (
+              <span className="flex-shrink-0 px-2 py-1 bg-green-50 border border-green-200 rounded-full text-xs font-medium text-green-700 flex items-center gap-1">
+                <CheckCircle className="w-3 h-3" />
+                Order placed
+              </span>
+            ) : m.ordering_enabled && isCharging ? (
+              <span className="flex-shrink-0 px-2 py-1 bg-[#1877F2]/10 border border-[#1877F2]/20 rounded-full text-xs font-medium text-[#1877F2] flex items-center gap-1">
+                <ShoppingCart className="w-3 h-3" />
+                Order Now
+              </span>
+            ) : m.ordering_enabled && !isCharging ? (
+              <span className="flex-shrink-0 px-2 py-1 bg-gray-50 border border-gray-200 rounded-full text-xs font-medium text-gray-400 flex items-center gap-1">
+                <ShoppingCart className="w-3 h-3" />
+                Plug in to order
+              </span>
+            ) : m.has_exclusive && m.exclusive_title ? (
               <span className="flex-shrink-0 px-2 py-1 bg-amber-50 border border-amber-200 rounded-full text-xs font-medium text-amber-700">
                 {m.exclusive_title}
               </span>
-            )}
-            {m.has_exclusive && !m.exclusive_title && (
+            ) : m.has_exclusive && !m.exclusive_title ? (
               <span className="flex-shrink-0 px-2 py-1 bg-amber-50 border border-amber-200 rounded-full text-xs font-medium text-amber-700">
                 Deal
               </span>
-            )}
-            {!m.has_exclusive && (m.join_request_count ?? 0) > 0 && (
+            ) : !m.has_exclusive && (m.join_request_count ?? 0) > 0 ? (
               <span className="flex-shrink-0 px-2 py-1 bg-blue-50 border border-blue-200 rounded-full text-xs font-medium text-blue-600">
                 {m.join_request_count} requested
               </span>
-            )}
+            ) : null}
           </button>
         )
       })}
@@ -716,7 +792,9 @@ function MerchantActionSheet({
   onDirections,
   onClaimReward,
   onRequestToJoin,
+  onOrderNow,
   alreadyRequested,
+  alreadyOrdered,
   onClose,
 }: {
   merchant: ChargerDetailNearbyMerchant
@@ -726,10 +804,13 @@ function MerchantActionSheet({
   onDirections: () => void
   onClaimReward: () => void
   onRequestToJoin: () => void
+  onOrderNow: () => void
   alreadyRequested: boolean
+  alreadyOrdered: boolean
   onClose: () => void
 }) {
   const isNerava = merchant.is_nerava_merchant || merchant.has_exclusive
+  const canOrder = merchant.ordering_enabled && merchant.ordering_url
   return (
     <>
       <div className="fixed inset-0 bg-black/40 z-[3100]" onClick={onClose} />
@@ -742,6 +823,38 @@ function MerchantActionSheet({
           <p className="text-xs text-[#65676B]">{merchant.walk_time_min} min walk</p>
         </div>
         <div className="px-5 pb-6 space-y-1" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1.5rem)' }}>
+          {/* Order Now button (POS ordering) */}
+          {canOrder && (
+            <button
+              onClick={onOrderNow}
+              disabled={!isCharging || alreadyOrdered}
+              className={`w-full flex items-center gap-3 py-3 px-3 rounded-xl transition-colors ${
+                alreadyOrdered
+                  ? 'bg-green-50 opacity-60'
+                  : isCharging
+                    ? 'bg-[#1877F2]/10 active:bg-[#1877F2]/20'
+                    : 'bg-gray-50 opacity-60'
+              }`}
+            >
+              {alreadyOrdered ? (
+                <CheckCircle className="w-5 h-5 text-green-600" />
+              ) : (
+                <ShoppingCart className="w-5 h-5 text-[#1877F2]" />
+              )}
+              <div className="flex-1 text-left">
+                <span className={`text-sm font-semibold ${alreadyOrdered ? 'text-green-700' : 'text-[#1877F2]'}`}>
+                  {alreadyOrdered ? 'Order placed' : 'Order Now'}
+                </span>
+                {merchant.nerava_offer && !alreadyOrdered && (
+                  <p className="text-xs text-[#1877F2]">{merchant.nerava_offer}</p>
+                )}
+                {!isCharging && !alreadyOrdered && (
+                  <p className="text-xs text-orange-500">Plug in to order</p>
+                )}
+              </div>
+            </button>
+          )}
+
           {/* Primary action: Claim Reward or Request to Join */}
           {isNerava ? (
             <button
