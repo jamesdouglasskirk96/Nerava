@@ -277,3 +277,87 @@ def analytics_campaigns(
         )
         for campaign, total_granted_cents, grant_count in rows
     ]
+
+
+# ─── Charger Availability History ────────────────────────────────────────────
+
+
+@router.get("/availability/{charger_id}")
+def get_charger_availability_history(
+    charger_id: str,
+    hours: int = Query(24, ge=1, le=168),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Get availability snapshots for a charger over the last N hours."""
+    from app.models.charger_availability import ChargerAvailabilitySnapshot
+
+    since = datetime.utcnow() - timedelta(hours=hours)
+    snapshots = (
+        db.query(ChargerAvailabilitySnapshot)
+        .filter(
+            ChargerAvailabilitySnapshot.charger_id == charger_id,
+            ChargerAvailabilitySnapshot.recorded_at >= since,
+        )
+        .order_by(ChargerAvailabilitySnapshot.recorded_at.desc())
+        .all()
+    )
+    return {
+        "charger_id": charger_id,
+        "hours": hours,
+        "snapshots": [
+            {
+                "recorded_at": s.recorded_at.isoformat(),
+                "total_ports": s.total_ports,
+                "available_ports": s.available_ports,
+                "occupied_ports": s.occupied_ports,
+                "out_of_service_ports": s.out_of_service_ports,
+                "connector_details": s.connector_details,
+                "source": s.source,
+            }
+            for s in snapshots
+        ],
+    }
+
+
+@router.get("/availability")
+def get_all_availability_latest(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Get the latest availability snapshot for all monitored chargers."""
+    from app.models.charger_availability import ChargerAvailabilitySnapshot
+    from sqlalchemy import func
+
+    # Subquery for max recorded_at per charger
+    latest_sub = (
+        db.query(
+            ChargerAvailabilitySnapshot.charger_id,
+            func.max(ChargerAvailabilitySnapshot.recorded_at).label("max_ts"),
+        )
+        .group_by(ChargerAvailabilitySnapshot.charger_id)
+        .subquery()
+    )
+    snapshots = (
+        db.query(ChargerAvailabilitySnapshot)
+        .join(
+            latest_sub,
+            (ChargerAvailabilitySnapshot.charger_id == latest_sub.c.charger_id)
+            & (ChargerAvailabilitySnapshot.recorded_at == latest_sub.c.max_ts),
+        )
+        .all()
+    )
+    return {
+        "stations": [
+            {
+                "charger_id": s.charger_id,
+                "recorded_at": s.recorded_at.isoformat(),
+                "total_ports": s.total_ports,
+                "available_ports": s.available_ports,
+                "occupied_ports": s.occupied_ports,
+                "out_of_service_ports": s.out_of_service_ports,
+                "source": s.source,
+            }
+            for s in snapshots
+        ],
+    }

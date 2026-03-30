@@ -1359,6 +1359,16 @@ async def start_nova_accrual():
     startup_mode = os.getenv("APP_STARTUP_MODE", "light").lower()
     is_light_mode = startup_mode == "light"
     
+    # Availability collector runs in ALL modes (lightweight: 10 API calls every 5 min)
+    try:
+        from .workers.availability_collector import run_collector
+        asyncio.create_task(run_collector())
+        print("[STARTUP] Charger availability collector started", flush=True)
+        logger.info("[STARTUP] Charger availability collector started")
+    except Exception as e:
+        print(f"[STARTUP WARNING] Availability collector failed to start: {e}", flush=True)
+        logger.warning(f"Availability collector failed to start: {e}")
+
     if is_light_mode:
         print("[STARTUP] Light mode: skipping optional background workers", flush=True)
         logger.info("[STARTUP] Light mode: skipping optional background workers")
