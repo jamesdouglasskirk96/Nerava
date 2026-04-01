@@ -152,7 +152,7 @@ export function WalletModal({
         window.location.href = url
       }
     } catch (e: any) {
-      setErrorMessage(e?.message || 'Failed to start bank setup')
+      setErrorMessage(e?.message || 'Failed to start card setup')
       setConnectingBank(false)
     }
   }
@@ -251,7 +251,7 @@ export function WalletModal({
                       disabled={!canWithdraw}
                       className="w-full mt-4 py-3 bg-white text-[#1877F2] font-semibold rounded-xl hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
                     >
-                      Withdraw to Bank
+                      Withdraw to Card
                     </button>
                   ) : (
                     <div className="mt-4 bg-white/10 rounded-xl p-3">
@@ -266,7 +266,7 @@ export function WalletModal({
                       disabled={!canWithdraw}
                       className="w-full mt-4 py-3 bg-white text-[#1877F2] font-semibold rounded-xl hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
                     >
-                      Withdraw to Bank
+                      Withdraw to Card
                     </button>
                   ) : (
                     <button
@@ -277,7 +277,7 @@ export function WalletModal({
                       {connectingBank || checkingStripeStatus ? (
                         <><Loader2 className="w-4 h-4 animate-spin" /> {checkingStripeStatus ? 'Checking...' : 'Setting up...'}</>
                       ) : (
-                        <><ExternalLink className="w-4 h-4" /> Connect Your Bank</>
+                        <><ExternalLink className="w-4 h-4" /> Connect Your Card</>
                       )}
                     </button>
                   )
@@ -354,7 +354,7 @@ export function WalletModal({
                   <CheckCircle className="w-8 h-8" />
                   <p className="font-semibold">Withdrawal submitted</p>
                   <p className="text-sm opacity-80">
-                    {formatCurrency(parsedAmountCents)} is on its way to your bank
+                    {formatCurrency(parsedAmountCents)} is on its way to your card
                     {feeCents > 0 && ` (${formatCurrency(feeCents)} fee applied)`}
                   </p>
                 </div>
@@ -419,7 +419,7 @@ export function WalletModal({
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-[#1877F2]">•</span>
-                Withdraw anytime to your bank
+                Withdraw anytime to your card
               </li>
             </ul>
           </div>

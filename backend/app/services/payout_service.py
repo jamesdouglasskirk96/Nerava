@@ -193,6 +193,12 @@ class PayoutService:
                 "business_type": "individual",
                 "capabilities": {
                     "transfers": {"requested": True},
+                    "card_payments": {"requested": True},
+                },
+                "settings": {
+                    "payouts": {
+                        "debit_negative_balances": True,
+                    },
                 },
                 "business_profile": {
                     "product_description": "EV charging rewards recipient",
