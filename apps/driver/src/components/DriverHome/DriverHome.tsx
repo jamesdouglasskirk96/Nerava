@@ -1047,8 +1047,15 @@ export function DriverHome() {
     }
   }, [locationPermission, locationFix, coordinates, browseMode, effectiveCoordinates, intentRequest, appChargingState, sessionId, intentLoading, intentData, intentError])
 
-  // Show location denied screen if location is denied or error (and not skipped/browse mode)
-  const showLocationDenied = (locationPermission === 'denied' || locationFix === 'error') && !browseMode && locationPermission !== 'skipped'
+  // Auto-enter browse mode when location is denied (never block the UI)
+  useEffect(() => {
+    if ((locationPermission === 'denied' || locationFix === 'error') && !browseMode) {
+      setBrowseMode(true)
+    }
+  }, [locationPermission, locationFix, browseMode])
+
+  // Never show location denied screen — always fall through to browse mode
+  const showLocationDenied = false
 
   const handleTryAgain = () => {
     requestLocationPermission()
@@ -1145,25 +1152,8 @@ export function DriverHome() {
               className="mx-4 mb-2"
             />
 
-            {!effectiveCoordinates && !useMockData ? (
-              <div className="flex-1 flex flex-col items-center justify-center py-12 px-6">
-                <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                  <svg className="w-10 h-10 text-gray-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-medium text-[#050505] mb-1">Finding your location...</h3>
-                <p className="text-sm text-[#65676B] text-center mb-4">
-                  Enable location access to see chargers and merchants near you.
-                </p>
-                <button
-                  onClick={() => requestLocationPermission()}
-                  className="px-6 py-2.5 bg-[#1877F2] text-white text-sm font-medium rounded-full hover:bg-[#166FE5] active:scale-[0.98] transition-all"
-                >
-                  Enable Location
-                </button>
-              </div>
+            {false ? (
+              null
             ) : (
               <DiscoveryView
                 chargers={chargersSource}
