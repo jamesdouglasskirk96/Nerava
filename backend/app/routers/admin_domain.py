@@ -2169,6 +2169,59 @@ def start_merchant_seed_key(
     return {"job_id": job_id, "status": "started"}
 
 
+def _run_seed_grid_job(job_id: str, states: Optional[List[str]], batch_size: int):
+    """Background thread for grid-based charger seeding."""
+    from app.db import SessionLocal
+    from scripts.seed_chargers_grid import seed_chargers_grid
+    import asyncio
+
+    def on_progress(metro_name, total_unique, total_metros):
+        _seed_jobs[job_id]["progress"] = {
+            "current_metro": metro_name,
+            "total_unique": total_unique,
+            "total_metros": total_metros,
+        }
+
+    db = SessionLocal()
+    try:
+        result = asyncio.run(seed_chargers_grid(db, states=states, batch_size=batch_size, progress_callback=on_progress))
+        _seed_jobs[job_id]["status"] = "completed"
+        _seed_jobs[job_id]["result"] = result
+    except Exception as e:
+        _seed_jobs[job_id]["status"] = "failed"
+        _seed_jobs[job_id]["error"] = str(e)
+        logger.error(f"Grid seed job {job_id} failed: {e}")
+    finally:
+        db.close()
+
+
+@router.post("/seed-key/chargers-grid")
+def start_grid_seed_key(
+    states: Optional[str] = None,
+    batch_size: int = 0,
+    reset: bool = False,
+    x_seed_key: Optional[str] = Header(None),
+):
+    """Start grid-based charger seed (covers all US metros). No JWT needed."""
+    from app.core.config import settings as cfg
+    if not x_seed_key or x_seed_key != cfg.JWT_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    # Check for running grid job
+    for jid, job in _seed_jobs.items():
+        if job["type"] == "chargers_grid" and job["status"] == "running":
+            return {"job_id": jid, "status": "already_running", "progress": job.get("progress")}
+    if reset:
+        import os
+        progress_file = "/tmp/nrel_grid_progress.json"
+        if os.path.exists(progress_file):
+            os.remove(progress_file)
+    job_id = f"grid_seed_{uuid.uuid4().hex[:8]}"
+    state_list = states.split(",") if states else None
+    _seed_jobs[job_id] = {"type": "chargers_grid", "status": "running", "started_at": datetime.now(tz.utc).isoformat(), "started_by": 0, "progress": {}, "result": None, "error": None}
+    threading.Thread(target=_run_seed_grid_job, args=(job_id, state_list, batch_size), daemon=True).start()
+    return {"job_id": job_id, "status": "started"}
+
+
 @router.get("/seed-key/status")
 def get_seed_status_key(
     x_seed_key: Optional[str] = Header(None),
