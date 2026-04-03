@@ -2233,6 +2233,38 @@ def get_seed_status_key(
     return {"jobs": _seed_jobs}
 
 
+@router.post("/db-query")
+def admin_db_query(
+    query: str = Body(..., embed=True),
+    x_seed_key: Optional[str] = Header(None, alias="X-Seed-Key"),
+    db: Session = Depends(get_db),
+):
+    """Execute a read-only SQL query against the production DB. Protected by seed key.
+    Only SELECT queries are allowed — no INSERT/UPDATE/DELETE/DROP/ALTER/TRUNCATE."""
+    from app.core.config import settings as cfg
+    if not x_seed_key or x_seed_key != cfg.JWT_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    # Block write operations
+    q = query.strip().upper()
+    blocked = ["INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE", "CREATE", "GRANT", "REVOKE", "EXEC"]
+    for word in blocked:
+        if q.startswith(word) or f" {word} " in q or f";{word}" in q:
+            raise HTTPException(status_code=400, detail=f"Write operations not allowed: {word}")
+
+    if not q.startswith("SELECT") and not q.startswith("WITH") and not q.startswith("EXPLAIN"):
+        raise HTTPException(status_code=400, detail="Only SELECT/WITH/EXPLAIN queries allowed")
+
+    from sqlalchemy import text
+    try:
+        result = db.execute(text(query))
+        columns = list(result.keys()) if result.returns_rows else []
+        rows = [dict(zip(columns, row)) for row in result.fetchall()] if result.returns_rows else []
+        return {"columns": columns, "rows": rows[:1000], "row_count": len(rows), "truncated": len(rows) > 1000}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Query error: {str(e)}")
+
+
 @router.get("/seed-key/stats")
 def get_seed_stats_key(
     x_seed_key: Optional[str] = Header(None),
