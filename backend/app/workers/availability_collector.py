@@ -14,7 +14,7 @@ from typing import Optional, List, Dict, Any
 logger = logging.getLogger(__name__)
 
 TOMTOM_API_KEY = os.getenv("TOMTOM_API_KEY", "")
-POLL_INTERVAL_SECONDS = 180  # 3 minutes (TomTom free tier refresh rate)
+POLL_INTERVAL_SECONDS = 600  # 10 minutes (~2,880 calls/day for 20 stations, ~$6/mo)
 FIELD_ALERT_THRESHOLD_PCT = 60  # Alert when occupancy exceeds this %
 BUSINESS_HOURS = (7, 21)  # 7am-9pm local time for alerts
 
