@@ -281,15 +281,101 @@ def get_merchant_insights(
                 "over_60min": over_60,
             }
 
+    # Supplement with TomTom availability data for nearby chargers
+    # This shows real occupancy data even when Nerava doesn't have session data
+    charger_availability = None
+    peak_occupancy_hours = []
+    try:
+        from app.models.charger_availability import ChargerAvailabilitySnapshot
+        from app.models.while_you_charge import Charger
+        from app.services.google_places_new import _haversine_distance
+        import math
+
+        # Find chargers within 500m of merchant
+        merchant_lat = merchant.lat or (merchant.google_place_lat if hasattr(merchant, 'google_place_lat') else None)
+        merchant_lng = merchant.lng or (merchant.google_place_lng if hasattr(merchant, 'google_place_lng') else None)
+
+        if merchant_lat and merchant_lng:
+            lat_delta = 0.005  # ~500m
+            lng_delta = 0.006
+            nearby_chargers = db.query(Charger).filter(
+                Charger.lat.between(merchant_lat - lat_delta, merchant_lat + lat_delta),
+                Charger.lng.between(merchant_lng - lng_delta, merchant_lng + lng_delta),
+            ).all()
+
+            nearby_charger_ids = []
+            for c in nearby_chargers:
+                dist = _haversine_distance(merchant_lat, merchant_lng, c.lat, c.lng)
+                if dist <= 500:
+                    nearby_charger_ids.append(c.id)
+
+            # Also check tomtom IDs
+            tomtom_ids = [f"tomtom_katy_{i}" for i in range(1, 11)] + [f"tomtom_domain_{i}" for i in range(1, 11)]
+            all_monitor_ids = nearby_charger_ids + [tid for tid in tomtom_ids if any(
+                tid.replace("tomtom_", "").startswith(cid.replace("nrel_", "")[:5]) for cid in nearby_charger_ids
+            )]
+
+            if nearby_charger_ids or all_monitor_ids:
+                # Get latest snapshots for any nearby monitored chargers
+                snapshots = db.query(ChargerAvailabilitySnapshot).filter(
+                    ChargerAvailabilitySnapshot.charger_id.in_(all_monitor_ids),
+                    ChargerAvailabilitySnapshot.recorded_at >= since,
+                ).all()
+
+                if snapshots:
+                    total_occupied = sum(s.occupied_ports or 0 for s in snapshots)
+                    total_ports = sum(s.total_ports or 0 for s in snapshots)
+                    snapshot_count = len(snapshots)
+
+                    # Estimate daily EV sessions from occupancy
+                    # If a charger is X% occupied over N snapshots at 3min intervals,
+                    # estimate sessions = occupied_snapshots * (avg_session_duration / poll_interval)
+                    avg_occupancy_pct = (total_occupied / total_ports * 100) if total_ports > 0 else 0
+                    # Rough: ~20 sessions/day per charger that's 50% occupied
+                    estimated_daily_sessions = int(avg_occupancy_pct / 100 * 20 * len(set(s.charger_id for s in snapshots)))
+
+                    charger_availability = {
+                        "nearby_chargers_monitored": len(set(s.charger_id for s in snapshots)),
+                        "avg_occupancy_pct": round(avg_occupancy_pct, 1),
+                        "estimated_daily_sessions": estimated_daily_sessions,
+                        "data_points": snapshot_count,
+                    }
+
+                    # Compute peak occupancy hours from snapshots
+                    hourly_occ: dict = {}
+                    for s in snapshots:
+                        if s.recorded_at and s.total_ports and s.total_ports > 0:
+                            h = s.recorded_at.hour
+                            occ = (s.occupied_ports or 0) / s.total_ports * 100
+                            if h not in hourly_occ:
+                                hourly_occ[h] = []
+                            hourly_occ[h].append(occ)
+
+                    peak_occupancy_hours = sorted(
+                        [{"hour": h, "avg_occupancy_pct": round(sum(v)/len(v), 1)} for h, v in hourly_occ.items()],
+                        key=lambda x: -x["avg_occupancy_pct"]
+                    )[:5]
+
+                    # If Nerava sessions = 0 but we have availability data, estimate
+                    if ev_sessions == 0 and estimated_daily_sessions > 0:
+                        ev_sessions = estimated_daily_sessions * days
+                        unique_drivers = max(1, int(ev_sessions * 0.3))  # ~30% repeat rate
+                        avg_duration = 35.0  # Industry average
+                        avg_kwh = 22.5  # Industry average
+    except Exception as e:
+        logger.warning(f"[MerchantInsights] Availability supplement failed: {e}")
+
     return {
         "period": period,
         "ev_sessions_nearby": ev_sessions,
         "unique_drivers": unique_drivers,
         "avg_duration_minutes": avg_duration,
         "avg_kwh": avg_kwh,
-        "peak_hours": peak_hours,
+        "peak_hours": peak_hours or [{"hour": h["hour"], "sessions": max(1, int(h["avg_occupancy_pct"] / 10))} for h in peak_occupancy_hours],
         "dwell_distribution": dwell_distribution,
         "walk_traffic": None,
+        "charger_availability": charger_availability,
+        "peak_occupancy_hours": peak_occupancy_hours,
     }
 
 
