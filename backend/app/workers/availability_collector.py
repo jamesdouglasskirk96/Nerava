@@ -14,7 +14,7 @@ from typing import Optional, List, Dict, Any
 logger = logging.getLogger(__name__)
 
 TOMTOM_API_KEY = os.getenv("TOMTOM_API_KEY", "")
-POLL_INTERVAL_SECONDS = 600  # 10 minutes (~2,880 calls/day for 20 stations, ~$6/mo)
+POLL_INTERVAL_SECONDS = 900  # 15 minutes (25 stations × 96 polls/day = 2,400 < 2,500 free tier)
 FIELD_ALERT_THRESHOLD_PCT = 60  # Alert when occupancy exceeds this %
 BUSINESS_HOURS = (7, 21)  # 7am-9pm local time for alerts
 
@@ -42,6 +42,12 @@ MONITORED_STATIONS: List[Dict[str, str]] = [
     {"charger_id": "tomtom_katy_8", "name": "Vineyard Apts REVS @ Provincial Blvd", "avail_id": "97e8ad5a-7e2a-41a1-9be9-d959d316383a", "region": "katy"},
     {"charger_id": "tomtom_katy_9", "name": "ChargePoint @ 24932 Katy Ranch Rd", "avail_id": "1f3eb99d-899c-8d17-aaa8-e15541749770", "region": "katy"},
     {"charger_id": "tomtom_katy_10", "name": "Seacrest Apts @ Provincial Blvd", "avail_id": "14f75fda-0d64-816d-bb9b-74f24ac036a9", "region": "katy"},
+    # ── Austin Downtown (diverse networks) ──
+    {"charger_id": "tomtom_atx_downtown_1", "name": "301 E 8th St (non-CP)", "avail_id": "2fea4e5e-0755-8f50-811b-eb1db2e893fa", "region": "austin_downtown"},
+    {"charger_id": "tomtom_atx_downtown_2", "name": "ChargePoint @ 701 Brazos St", "avail_id": "0d9640e0-9698-47ca-84f3-bb91f4fd1271", "region": "austin_downtown"},
+    {"charger_id": "tomtom_atx_downtown_3", "name": "ChargePoint @ 710 Trinity St", "avail_id": "593c807e-a046-4221-8935-86993c46a4ae", "region": "austin_downtown"},
+    {"charger_id": "tomtom_atx_downtown_4", "name": "ChargePoint @ 205 E 7th St", "avail_id": "8d059a15-9e93-445a-82a4-32bf3fc07cf0", "region": "austin_downtown"},
+    {"charger_id": "tomtom_atx_downtown_5", "name": "ChargePoint @ 515 Congress Ave", "avail_id": "69a49afb-8aa5-4a7b-bb88-7fca6f762dbe", "region": "austin_downtown"},
 ]
 
 
