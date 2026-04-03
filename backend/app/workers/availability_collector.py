@@ -14,21 +14,34 @@ from typing import Optional, List, Dict, Any
 logger = logging.getLogger(__name__)
 
 TOMTOM_API_KEY = os.getenv("TOMTOM_API_KEY", "")
-POLL_INTERVAL_SECONDS = 300  # 5 minutes
+POLL_INTERVAL_SECONDS = 180  # 3 minutes (TomTom free tier refresh rate)
+FIELD_ALERT_THRESHOLD_PCT = 60  # Alert when occupancy exceeds this %
+BUSINESS_HOURS = (7, 21)  # 7am-9pm local time for alerts
 
-# Austin Domain area ChargePoint stations with TomTom availability IDs
-# These are the initial 10 stations to monitor. More can be added via admin API.
+# Monitored stations across all regions
 MONITORED_STATIONS: List[Dict[str, str]] = [
-    {"charger_id": "tomtom_domain_1", "name": "ChargePoint @ 11505 Domain Dr", "avail_id": "a70292d8-fde5-41eb-b9c0-61829cda02c0"},
-    {"charger_id": "tomtom_domain_2", "name": "ChargePoint @ 11811 Domain Dr", "avail_id": "3b359414-28af-48c6-9554-29bd34aee61c"},
-    {"charger_id": "tomtom_domain_3", "name": "ChargePoint @ 11600 Alterra Pkwy", "avail_id": "b0c3386d-89ba-4b46-95a8-58b0f6a44b44"},
-    {"charger_id": "tomtom_domain_4", "name": "ChargePoint @ 3004 Palm Way (A)", "avail_id": "623d43b7-7768-4739-add0-4f9f859fbff7"},
-    {"charger_id": "tomtom_domain_5", "name": "ChargePoint @ 3004 Palm Way (B)", "avail_id": "1283fbc0-6385-4b8b-8432-7ba103a7e5cf"},
-    {"charger_id": "tomtom_domain_6", "name": "ChargePoint @ 3000 Kramer Ln", "avail_id": "b1e3f371-8538-4839-b940-d50673105ba4"},
-    {"charger_id": "tomtom_domain_7", "name": "ChargePoint @ 11500 N MoPac", "avail_id": "edfce375-5a14-4943-ac46-32c582963b3b"},
-    {"charger_id": "tomtom_domain_8", "name": "ChargePoint @ 11800 Alterra Pkwy", "avail_id": "3c75c68f-934b-40fa-926b-98d699cd7c47"},
-    {"charger_id": "tomtom_domain_9", "name": "ChargePoint @ 11920 Domain Dr", "avail_id": "91e497ef-bbb5-476b-885f-2d220ee9e4de"},
-    {"charger_id": "tomtom_domain_10", "name": "ChargePoint @ Domain Dr", "avail_id": "3f909562-f9b1-4377-890d-92265c55442c"},
+    # ── Austin Domain area ──
+    {"charger_id": "tomtom_domain_1", "name": "ChargePoint @ 11505 Domain Dr", "avail_id": "a70292d8-fde5-41eb-b9c0-61829cda02c0", "region": "austin"},
+    {"charger_id": "tomtom_domain_2", "name": "ChargePoint @ 11811 Domain Dr", "avail_id": "3b359414-28af-48c6-9554-29bd34aee61c", "region": "austin"},
+    {"charger_id": "tomtom_domain_3", "name": "ChargePoint @ 11600 Alterra Pkwy", "avail_id": "b0c3386d-89ba-4b46-95a8-58b0f6a44b44", "region": "austin"},
+    {"charger_id": "tomtom_domain_4", "name": "ChargePoint @ 3004 Palm Way (A)", "avail_id": "623d43b7-7768-4739-add0-4f9f859fbff7", "region": "austin"},
+    {"charger_id": "tomtom_domain_5", "name": "ChargePoint @ 3004 Palm Way (B)", "avail_id": "1283fbc0-6385-4b8b-8432-7ba103a7e5cf", "region": "austin"},
+    {"charger_id": "tomtom_domain_6", "name": "ChargePoint @ 3000 Kramer Ln", "avail_id": "b1e3f371-8538-4839-b940-d50673105ba4", "region": "austin"},
+    {"charger_id": "tomtom_domain_7", "name": "ChargePoint @ 11500 N MoPac", "avail_id": "edfce375-5a14-4943-ac46-32c582963b3b", "region": "austin"},
+    {"charger_id": "tomtom_domain_8", "name": "ChargePoint @ 11800 Alterra Pkwy", "avail_id": "3c75c68f-934b-40fa-926b-98d699cd7c47", "region": "austin"},
+    {"charger_id": "tomtom_domain_9", "name": "ChargePoint @ 11920 Domain Dr", "avail_id": "91e497ef-bbb5-476b-885f-2d220ee9e4de", "region": "austin"},
+    {"charger_id": "tomtom_domain_10", "name": "ChargePoint @ Domain Dr", "avail_id": "3f909562-f9b1-4377-890d-92265c55442c", "region": "austin"},
+    # ── Katy TX area (field activation target) ──
+    {"charger_id": "tomtom_katy_1", "name": "ChargePoint @ 23005 Katy Fwy", "avail_id": "2995cd98-7c1d-4076-a6ff-2a67408aac4c", "region": "katy"},
+    {"charger_id": "tomtom_katy_2", "name": "ChargePoint @ 23414 W Fernhurst Dr", "avail_id": "2fc1a596-24a1-4150-8aa4-c8ba12ac6fd9", "region": "katy"},
+    {"charger_id": "tomtom_katy_3", "name": "Premier at Katy @ Bella Dolce Ln", "avail_id": "dd0e0b0d-644e-4c7f-a4d1-d68534ef75b0", "region": "katy"},
+    {"charger_id": "tomtom_katy_4", "name": "Memorial Hermann Katy Hospital", "avail_id": "d0c82ee8-8f00-4bc4-af80-591eda5cfa41", "region": "katy"},
+    {"charger_id": "tomtom_katy_5", "name": "ChargePoint @ 107 New Hope Ln", "avail_id": "3d0ab5c6-a827-8878-98f2-a6bddc62d1e8", "region": "katy"},
+    {"charger_id": "tomtom_katy_6", "name": "ChargePoint @ 1330 Park West Green Dr", "avail_id": "40733c29-cf08-4251-8e10-efdd127b74c9", "region": "katy"},
+    {"charger_id": "tomtom_katy_7", "name": "ChargePoint @ 21001 Katy Fwy", "avail_id": "6a500a27-638f-4f91-8e4c-cf1758700f70", "region": "katy"},
+    {"charger_id": "tomtom_katy_8", "name": "Vineyard Apts REVS @ Provincial Blvd", "avail_id": "97e8ad5a-7e2a-41a1-9be9-d959d316383a", "region": "katy"},
+    {"charger_id": "tomtom_katy_9", "name": "ChargePoint @ 24932 Katy Ranch Rd", "avail_id": "1f3eb99d-899c-8d17-aaa8-e15541749770", "region": "katy"},
+    {"charger_id": "tomtom_katy_10", "name": "Seacrest Apts @ Provincial Blvd", "avail_id": "14f75fda-0d64-816d-bb9b-74f24ac036a9", "region": "katy"},
 ]
 
 
@@ -122,6 +135,19 @@ async def _collect_once():
             db.add(snapshot)
             collected += 1
 
+            # Task 2-4: Field alert threshold check
+            total = parsed["total_ports"]
+            occupied = parsed["occupied_ports"]
+            if total > 0:
+                occupancy_pct = (occupied / total) * 100
+                current_hour = datetime.utcnow().hour - 5  # Rough CT offset (UTC-5)
+                if current_hour < 0:
+                    current_hour += 24
+                is_business = BUSINESS_HOURS[0] <= current_hour < BUSINESS_HOURS[1]
+
+                if occupancy_pct >= FIELD_ALERT_THRESHOLD_PCT and is_business:
+                    _log_field_alert(db, station, occupancy_pct, total, occupied)
+
         db.commit()
         logger.info(f"[AvailCollector] Collected {collected}/{len(MONITORED_STATIONS)} stations")
     except Exception as e:
@@ -131,8 +157,37 @@ async def _collect_once():
         db.close()
 
 
+def _log_field_alert(db, station: Dict[str, str], occupancy_pct: float, total: int, occupied: int):
+    """Log a field alert when charger occupancy exceeds threshold during business hours."""
+    from sqlalchemy import text
+
+    charger_id = station["charger_id"]
+    name = station["name"]
+    region = station.get("region", "unknown")
+
+    # Check if we already alerted for this charger in the last 30 minutes
+    try:
+        last_alert = db.execute(
+            text(
+                "SELECT recorded_at FROM charger_availability_snapshots "
+                "WHERE charger_id = :cid AND occupied_ports * 100.0 / NULLIF(total_ports, 0) >= :threshold "
+                "ORDER BY recorded_at DESC LIMIT 1"
+            ),
+            {"cid": charger_id, "threshold": FIELD_ALERT_THRESHOLD_PCT},
+        ).fetchone()
+
+        # Only log if this is a new spike (not already logged in last 30 min)
+        if not last_alert or (datetime.utcnow() - last_alert[0]).total_seconds() > 1800:
+            logger.info(
+                f"[FieldAlert] {name} ({region}): {occupancy_pct:.0f}% occupied "
+                f"({occupied}/{total} stalls in use)"
+            )
+    except Exception:
+        pass  # Don't let alert logic crash the collector
+
+
 async def run_collector():
-    """Main loop: collect availability every 5 minutes."""
+    """Main loop: collect availability every 3 minutes."""
     logger.info(f"[AvailCollector] Starting — monitoring {len(MONITORED_STATIONS)} stations every {POLL_INTERVAL_SECONDS}s")
     while True:
         try:
