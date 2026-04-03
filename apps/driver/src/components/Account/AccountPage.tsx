@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Heart, LogOut, ChevronRight, X, User, Mail, Car, LogIn, Bell, BellOff, Ruler, ExternalLink, HelpCircle, Zap, Trash2, AlertTriangle, MessageSquare, Loader2, Send, Activity, Pencil, Phone, Check } from 'lucide-react'
+import { ArrowLeft, Heart, LogOut, ChevronRight, X, User, Mail, Car, LogIn, Bell, BellOff, Ruler, ExternalLink, HelpCircle, Zap, Trash2, AlertTriangle, MessageSquare, Loader2, Activity, Pencil, Phone, Check } from 'lucide-react'
 import { useFavorites } from '../../contexts/FavoritesContext'
 import { ShareNerava } from './ShareNerava'
 import { LoginModal } from './LoginModal'
@@ -41,8 +41,7 @@ export function AccountPage({ onClose, onViewActivity, onViewVehicle, onChargerS
   const [feedbackText, setFeedbackText] = useState('')
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false)
   const [feedbackSent, setFeedbackSent] = useState(false)
-  const [pushTestState, setPushTestState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
-  const [pushDiagnostic, setPushDiagnostic] = useState<string | null>(null)
+  // Test push state removed for production
   const [editingProfile, setEditingProfile] = useState(false)
   const [editName, setEditName] = useState('')
   const [editEmail, setEditEmail] = useState('')
@@ -227,23 +226,6 @@ export function AccountPage({ onClose, onViewActivity, onViewVehicle, onChargerS
     }
   }
 
-  const handleTestPush = async () => {
-    setPushTestState('sending')
-    setPushDiagnostic(null)
-    try {
-      const result = await api.post<{ sent: number; message: string; device_count: number; apns_configured: boolean }>('/v1/notifications/send-test', {})
-      const hasLocalToken = !!localStorage.getItem('nerava_device_token')
-      setPushDiagnostic(
-        `${result.message} | Devices in DB: ${result.device_count} | APNs: ${result.apns_configured ? 'yes' : 'no'} | Local token: ${hasLocalToken ? 'yes' : 'no'}`
-      )
-      setPushTestState(result.sent > 0 ? 'sent' : 'error')
-      setTimeout(() => setPushTestState('idle'), 8000)
-    } catch {
-      setPushDiagnostic('API call failed')
-      setPushTestState('error')
-      setTimeout(() => setPushTestState('idle'), 5000)
-    }
-  }
 
   if (showShareNerava) {
     return <ShareNerava onClose={() => setShowShareNerava(false)} referralCode={referralCode} />
@@ -714,36 +696,7 @@ export function AccountPage({ onClose, onViewActivity, onViewVehicle, onChargerS
             )}
           </div>
 
-          {/* Test Push Notification — TEMPORARY */}
-          {isAuthenticated && (
-            <button
-              onClick={handleTestPush}
-              disabled={pushTestState === 'sending'}
-              className={`w-full p-4 rounded-2xl flex items-center gap-3 transition-colors border ${
-                pushTestState === 'sent'
-                  ? 'bg-green-50 border-green-200'
-                  : pushTestState === 'error'
-                  ? 'bg-red-50 border-red-200'
-                  : 'bg-orange-50 border-orange-200 hover:bg-orange-100 active:bg-orange-200'
-              }`}
-            >
-              <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
-                {pushTestState === 'sending' ? (
-                  <Loader2 className="w-5 h-5 text-orange-600 animate-spin" />
-                ) : (
-                  <Send className="w-5 h-5 text-orange-600" />
-                )}
-              </div>
-              <div className="flex-1 text-left">
-                <p className="font-medium text-orange-800">Test Push Notification</p>
-                <p className="text-sm text-orange-600">
-                  {pushTestState === 'sending' ? 'Sending...' :
-                   pushDiagnostic ? pushDiagnostic :
-                   'Tap to send a test notification'}
-                </p>
-              </div>
-            </button>
-          )}
+          {/* Test Push button removed for production */}
 
           {/* Support */}
           <a

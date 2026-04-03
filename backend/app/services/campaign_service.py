@@ -319,48 +319,55 @@ class CampaignService:
     @staticmethod
     def decrement_budget_atomic(db: Session, campaign_id: str, amount_cents: int) -> bool:
         """
-        Atomically decrement campaign budget. Returns False if insufficient.
-        Uses raw SQL to prevent race conditions.
+        Atomically decrement campaign budget using SELECT FOR UPDATE.
+        Returns False if insufficient budget or campaign not active.
         """
-        result = db.execute(
-            text(
-                "UPDATE campaigns "
-                "SET spent_cents = spent_cents + :amount, "
-                "    sessions_granted = sessions_granted + 1, "
-                "    updated_at = :now "
-                "WHERE id = :id "
-                "AND spent_cents + :amount <= budget_cents "
-                "AND status = 'active'"
-            ),
-            {"amount": amount_cents, "id": campaign_id, "now": datetime.utcnow()},
+        # Lock the campaign row to prevent concurrent grants
+        campaign = (
+            db.query(Campaign)
+            .filter(
+                Campaign.id == campaign_id,
+                Campaign.status == "active",
+            )
+            .with_for_update()
+            .first()
         )
-        if result.rowcount == 0:
+
+        if not campaign:
+            logger.info(f"Budget decrement failed for {campaign_id}: not found or not active")
+            return False
+
+        if campaign.spent_cents + amount_cents > campaign.budget_cents:
             logger.info(
-                f"Budget decrement failed for campaign {campaign_id}: "
-                f"rowcount=0 (budget full, status not active, or ID mismatch)"
+                f"Budget decrement failed for {campaign_id}: "
+                f"spent={campaign.spent_cents} + {amount_cents} > budget={campaign.budget_cents}"
             )
             return False
 
+        # Check max_sessions cap
+        if campaign.max_sessions and campaign.sessions_granted >= campaign.max_sessions:
+            logger.info(f"Budget decrement failed for {campaign_id}: max sessions reached")
+            return False
+
+        # Increment via ORM (tracked in same transaction, commits with everything else)
+        campaign.spent_cents += amount_cents
+        campaign.sessions_granted += 1
+        campaign.updated_at = datetime.utcnow()
+
         logger.info(
-            f"Budget decremented for campaign {campaign_id}: +{amount_cents}c spent, +1 session"
+            f"Budget decremented for {campaign_id}: spent={campaign.spent_cents}c "
+            f"(+{amount_cents}c), sessions={campaign.sessions_granted}"
         )
 
-        # Flush the raw SQL and expire ORM cache so subsequent reads
-        # see the updated spent_cents/sessions_granted values
-        db.flush()
-        db.expire_all()
-
-        # Check if budget is now exhausted → auto-pause
-        campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
-        if campaign and campaign.spent_cents >= campaign.budget_cents:
+        # Auto-pause if budget exhausted
+        if campaign.spent_cents >= campaign.budget_cents:
             campaign.status = "exhausted"
             logger.info(f"Campaign {campaign_id} budget exhausted, auto-paused")
-
-        # Check max_sessions cap
-        if campaign and campaign.max_sessions and campaign.sessions_granted >= campaign.max_sessions:
+        elif campaign.max_sessions and campaign.sessions_granted >= campaign.max_sessions:
             campaign.status = "exhausted"
             logger.info(f"Campaign {campaign_id} max sessions reached, auto-paused")
 
+        db.flush()
         return True
 
     @staticmethod

@@ -742,9 +742,13 @@ class SessionEventService:
         """
         score = 50  # baseline
 
-        # Duration bonus: longer sessions are more likely genuine
+        # Duration scoring: reward normal sessions, penalize anomalies
         if session.duration_minutes:
-            if session.duration_minutes >= 15:
+            if session.duration_minutes > 1440:  # > 24 hours — certainly invalid
+                return 0
+            elif session.duration_minutes > 240:  # > 4 hours — likely stale/zombie
+                score -= 50
+            elif session.duration_minutes >= 15:
                 score += 20
             elif session.duration_minutes >= 5:
                 score += 10

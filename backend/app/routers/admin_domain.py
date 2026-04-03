@@ -2265,6 +2265,151 @@ def admin_db_query(
         raise HTTPException(status_code=400, detail=f"Query error: {str(e)}")
 
 
+# ─── P0 Fix Endpoints ─────────────────────────────────────────────────────────
+
+
+@router.post("/sessions/{session_id}/force-close")
+def admin_force_close_session(
+    session_id: str,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Force-close a zombie session. Sets quality_score=0, ended_reason=admin_force_close."""
+    from app.models.session_event import SessionEvent
+    session = db.query(SessionEvent).filter(SessionEvent.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.session_end:
+        return {"ok": True, "action": "already_ended", "session_id": session_id}
+    session.session_end = datetime.utcnow()
+    session.duration_minutes = int((session.session_end - session.session_start).total_seconds() / 60) if session.session_start else 0
+    session.quality_score = 0
+    session.ended_reason = "admin_force_close"
+    session.updated_at = datetime.utcnow()
+    db.commit()
+    return {"ok": True, "action": "force_closed", "session_id": session_id, "duration_minutes": session.duration_minutes}
+
+
+@router.post("/payouts/{payout_id}/force-fail")
+def admin_force_fail_payout(
+    payout_id: str,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Force-fail a stuck payout and restore the driver's wallet balance."""
+    from app.models.driver_wallet import DriverWallet, Payout, WalletLedger
+    from app.services.payout_service import calculate_withdrawal_fee
+    payout = db.query(Payout).filter(Payout.id == payout_id).first()
+    if not payout:
+        raise HTTPException(status_code=404, detail="Payout not found")
+    if payout.status in ("paid", "failed"):
+        return {"ok": True, "action": "already_" + payout.status, "payout_id": payout_id}
+
+    wallet = db.query(DriverWallet).filter(DriverWallet.id == payout.wallet_id).first()
+    if not wallet:
+        raise HTTPException(status_code=404, detail="Wallet not found")
+
+    fee_cents = calculate_withdrawal_fee(payout.amount_cents)
+    payout.status = "failed"
+    payout.failure_reason = "admin_force_fail_reconciliation"
+    payout.updated_at = datetime.utcnow()
+    wallet.pending_balance_cents -= payout.amount_cents
+    wallet.balance_cents += payout.amount_cents + fee_cents
+    wallet.updated_at = datetime.utcnow()
+
+    # Create reversal ledger entry
+    reversal = WalletLedger(
+        id=str(uuid.uuid4()),
+        wallet_id=wallet.id,
+        driver_id=payout.driver_id,
+        amount_cents=payout.amount_cents + fee_cents,
+        balance_after_cents=wallet.balance_cents,
+        transaction_type="reversal",
+        reference_type="payout_force_fail",
+        reference_id=payout.id,
+        description=f"Admin force-fail reversal for payout {payout_id}",
+    )
+    db.add(reversal)
+    db.commit()
+    return {"ok": True, "action": "force_failed", "payout_id": payout_id, "restored_cents": payout.amount_cents + fee_cents, "new_balance": wallet.balance_cents}
+
+
+@router.post("/campaigns/reconcile")
+def admin_reconcile_campaigns(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Reconcile all campaign spent_cents and sessions_granted from actual grants."""
+    from app.models.campaign import Campaign
+    from app.models.session_event import IncentiveGrant
+    from sqlalchemy import func
+
+    campaigns = db.query(Campaign).all()
+    fixed = []
+    for c in campaigns:
+        actual_spent = db.query(func.coalesce(func.sum(IncentiveGrant.amount_cents), 0)).filter(
+            IncentiveGrant.campaign_id == c.id
+        ).scalar()
+        actual_count = db.query(func.count(IncentiveGrant.id)).filter(
+            IncentiveGrant.campaign_id == c.id
+        ).scalar()
+
+        if c.spent_cents != actual_spent or c.sessions_granted != actual_count:
+            old_spent = c.spent_cents
+            old_count = c.sessions_granted
+            c.spent_cents = actual_spent
+            c.sessions_granted = actual_count
+            c.updated_at = datetime.utcnow()
+            # Auto-exhaust if over budget
+            if c.spent_cents >= c.budget_cents and c.status == "active":
+                c.status = "exhausted"
+            fixed.append({
+                "campaign_id": str(c.id),
+                "name": c.name,
+                "old_spent": old_spent,
+                "new_spent": actual_spent,
+                "old_sessions": old_count,
+                "new_sessions": actual_count,
+                "status": c.status,
+            })
+
+    db.commit()
+    return {"ok": True, "campaigns_fixed": len(fixed), "details": fixed}
+
+
+@router.post("/wallets/reconcile-nova")
+def admin_reconcile_nova(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Reconcile nova_balance from nova_transactions for all wallets."""
+    from app.models.driver_wallet import DriverWallet
+    from sqlalchemy import func, text
+
+    # Check if nova_transactions table exists and has data
+    try:
+        result = db.execute(text(
+            "SELECT driver_id, SUM(CASE WHEN type IN ('driver_earn','admin_grant') THEN amount ELSE -amount END) as balance "
+            "FROM nova_transactions GROUP BY driver_id"
+        ))
+        nova_balances = {row[0]: int(row[1] or 0) for row in result}
+    except Exception:
+        nova_balances = {}
+
+    wallets = db.query(DriverWallet).all()
+    fixed = []
+    for w in wallets:
+        expected = nova_balances.get(w.driver_id, 0)
+        if w.nova_balance != expected:
+            old = w.nova_balance
+            w.nova_balance = max(0, expected)
+            w.updated_at = datetime.utcnow()
+            fixed.append({"driver_id": w.driver_id, "old_nova": old, "new_nova": w.nova_balance})
+
+    db.commit()
+    return {"ok": True, "wallets_fixed": len(fixed), "details": fixed}
+
+
 @router.get("/seed-key/stats")
 def get_seed_stats_key(
     x_seed_key: Optional[str] = Header(None),
