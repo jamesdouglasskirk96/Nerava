@@ -456,8 +456,10 @@ export function DriverHome() {
     }
   }, [locationPermission, browseMode, coordinates, requestLocationPermission])
 
-  // Use real coordinates only - never fall back to hardcoded location
-  const effectiveCoordinates = coordinates
+  // Use real coordinates, fall back to Austin TX center for browse mode
+  // This ensures chargers load even when location is denied (Google Play reviewer scenario)
+  const BROWSE_FALLBACK = { lat: 30.2672, lng: -97.7431, accuracy_m: 50 }
+  const effectiveCoordinates = coordinates || (browseMode ? BROWSE_FALLBACK : null)
 
   // Intent capture request - only when location is available (or browse mode) and not in EXCLUSIVE_ACTIVE
   // Use useMemo to prevent infinite fetch loops - the request object must be stable
